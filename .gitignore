@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.pyc
+docs/_build/
+
+# SwiftPM
+.build/
+*.xcodeproj/
+
+# IDE state
+.idea/
+.vscode/
+
+# Local workspace state
+.worktrees/
+.claude/worktrees/
+
+# Superpowers SDD runtime state -- briefs, reports, and review diffs written
+# during a task run. Durable output belongs in docs/superpowers/, not here.
+.superpowers/
+
+# Capture output. `swiftstar-drive` writes NDJSON, timestamp sidecars, and
+# telemetry logs here; committed fixtures live under Tests/ instead, chosen
+# deliberately rather than by accumulation.
+captures/
