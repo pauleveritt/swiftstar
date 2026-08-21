@@ -73,6 +73,48 @@ Quoting the number without these is misuse.
 - **Short duration.** The longest capture was ~24.5 minutes. Thermal and
   memory-pressure effects emerging over an hour or more were not observed.
 
+## What the predecessor's UI prototype learned, before it was retired
+
+Between 2026-08-21 and this project's start, DS4 Control prototyped the dials
+this finding implies. Four commits (`352da22`, `c3a3545`, `d635b01`,
+`995589b`) produced results worth more than the code, and SwiftStar inherits
+the results rather than the widgets.
+
+- **Fraction is the wrong anchor, and this was caught rather than shipped.**
+  The context dial first colored by `ctx_used / ctx_size` with thresholds shaped
+  from the curve above (warning at 25%, critical at 50% — deliberately not the
+  generic 70/90). A review found the anchor unsound: the degradation tracks
+  *absolute* `ctx_used`, and `ctx_size` ranges 256k–1M by RAM and variant plus
+  any user override, so the same percentage is a different token count on a
+  different machine. It fires late on a big context and early on a small one.
+  The prototype documented the caveat rather than silently trusting it.
+  **SwiftStar anchors on absolute tokens.**
+- **A live numeric readout jitters unless it is fixed-width.** Embedding a rate
+  in a variable-length string moves the whole line left and right on every tick.
+  The fix was structural: the numbers get a fixed-width prefix and only the
+  trailing message moves. Same reasoning made the dial a fixed-size ring —
+  jitter-proof by construction rather than by positioning.
+- **The wire reports one rate at a time.** `prefillTPS` and `genTPS` are never
+  both non-zero, so a readout showing both must ratchet — hold the last non-zero
+  value for each — or it flickers to zero every other tick. **This is a wire
+  fact and belongs in the parser's model, not in a view.**
+- **A stroked ring is almost unhoverable by default.** SwiftUI hit-tests a
+  stroked `Circle` on the stroke line itself, not the enclosed area, so a 15pt
+  ring's tooltip is nearly unreachable until the hit region is widened to the
+  whole frame.
+- **Memory and context want different thresholds.** The prototype's second dial
+  — child footprint against planned budget — deliberately kept generic severity
+  thresholds, and has a test asserting it does *not* inherit the context ring's
+  curve-shaped ones. Two dials, two anchors, on purpose.
+- **"Prompt" and "Decode" are the user-facing words** for prefill and
+  generation.
+
+One structural note worth more than any of them: every one of these behaviors
+was tested as a **pure function** — threshold color, fraction, ratchet, tooltip
+text, fixed-width formatting — with no view instantiated. That is the
+`SwiftStarKit` split working before the split existed, and it is the strongest
+available evidence that the split is right.
+
 ## What SwiftStar does about it
 
 1. **Metrics (P4)** leads with `ctx_used` and prefill throughput, alongside

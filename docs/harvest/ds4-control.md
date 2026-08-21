@@ -19,6 +19,7 @@ only with the citation attached and a fresh test written here.
 | Chat | `ChatService`, `ChatSSEParser`, `MarkdownText` | `content` is the answer and `reasoning_content` is thinking; they are separate streams on one SSE connection |
 | Agent mode | `AgentSession`, `AgentEventParser`, `AgentEvent` | NDJSON on stdout with `text`/`think`/`tool`/`status`/`ready`/`queued`; prompts arrive on **stdin**, submitted after 200ms of quiet |
 | Telemetry | `TelemetryLog`, `AgentProcessMemory` | Per-session telemetry to disk; per-pid memory attribution via `proc_pid_rusage`, verified against `ps` |
+| Live dials | `AgentView`, `MetricCardView`, `ValueGaugeView` | A fixed-size ring is jitter-proof by construction; a variable-width numeric string is not. See [telemetry-findings.md](telemetry-findings.md) |
 | Agent launcher | `AgentLauncher` | Opening a terminal agent against the local server is a wrapper script plus `osascript`, not a library call |
 
 ## Gardened facts, with citations to fetch before transplanting
@@ -43,6 +44,16 @@ before a GA release — never carried forward unchanged.
 - **The wire carries no timestamps**
   (`external/ds4/docs/json-events.md`). SwiftStar fixes this rather than
   inheriting it.
+- **`prefillTPS` and `genTPS` are never both non-zero on the wire.** A readout
+  showing both must ratchet the last non-zero value for each. Cite the emitter,
+  not the view.
+- **Context-degradation thresholds must be anchored on absolute `ctx_used`, not
+  on `ctx_used / ctx_size`.** `ctx_size` ranges 256k–1M by RAM and variant plus
+  user override. Cite the curve's measured anchor (150,000) alongside any
+  threshold, and re-anchor before trusting it elsewhere.
+- **SwiftUI hit-tests a stroked shape on its stroke, not its area.** A ring's
+  tooltip needs its hit region widened to the frame. Platform behavior; cite the
+  fix, not a version.
 
 ## Incidents to re-earn deliberately
 
@@ -58,6 +69,15 @@ Carry each as a sentence in the phase that needs it. Do not transplant the test.
   session starts.
 - **Chat scroll froze under streaming markdown.** The state machine, not the
   view, was the cause.
+- **A live tokens/sec readout jittered the whole status line every tick**,
+  because the rate was embedded in a variable-length string. Fixed width for the
+  numbers; only the message moves.
+- **A 15pt ring's tooltip was effectively unreachable** until its hit region was
+  widened past the stroke.
+- **A context dial was colored by percentage of the context window**, using
+  thresholds derived from data measured at one context size. Caught in review,
+  not in the field — but the anchor was wrong and would have misled on any
+  machine with a different `ctx_size`.
 
 ## The design trail worth reading before planning a phase
 

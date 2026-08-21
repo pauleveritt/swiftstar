@@ -98,7 +98,9 @@ Three consequences bind this project:
 1. **Context length is the dial with a real, measured, growing cost curve
    behind it.** Round-trip count and idle draw were both measured and both look
    fine. The metrics surface leads with `ctx_used` and prefill throughput, not
-   only with memory and watts.
+   only with memory and watts. **The degradation tracks *absolute* `ctx_used`,
+   not a percentage of the context window** — a distinction earned the hard way
+   in the predecessor's prototype, see below.
 2. **The diagnostics surface has a concrete first job** — tell the user they
    are at 92K, that prefill is 44 tok/s, that this is ~7x off their own
    session's baseline, and that compaction will not fix it because the prefix
@@ -107,11 +109,21 @@ Three consequences bind this project:
    nicety: cheap fresh sessions, condensing tool results *before* they enter
    KV, and context-isolated subagents.
 
-**Two limits travel with the finding and must not be dropped when it is
+**Three limits travel with the finding and must not be dropped when it is
 quoted.** Compaction was never observed at the everyday ctx 150,000 setting
-across two real attempts — only at 32,768. And the captures were taken on an
-idle machine with no organic think-time, over sessions no longer than ~24.5
-minutes.
+across two real attempts — only at 32,768. The captures were taken on an idle
+machine with no organic think-time, over sessions no longer than ~24.5 minutes.
+
+And the third, which is a design constraint rather than a caveat: **the curve
+was measured at one context size, and it tracks absolute tokens.** The
+predecessor's first metrics prototype colored a context dial by
+`ctx_used / ctx_size` with thresholds shaped from this data — then caught the
+error itself: `ctx_size` varies from 256k to 1M by RAM and variant, plus any
+user override, so the same percentage means a wildly different absolute token
+count. Fraction-anchored thresholds fire too late on a large context and too
+early on a small one. **Anchor on absolute `ctx_used`, and re-anchor against
+fresh measurement before trusting any threshold far from where it was
+measured.**
 
 ## Architecture, settled
 
