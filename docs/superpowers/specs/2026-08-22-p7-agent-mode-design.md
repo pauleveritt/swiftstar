@@ -3,6 +3,10 @@
 **Date:** 2026-08-22
 **Status:** approved by delegation ("proceed through the spec and plan, following your
 own recommendations"). Consent direction A (spawn-time flags) approved explicitly.
+**Revised 2026-08-22 (deep review):** D12 added — the roadmap's outcome-telemetry
+requirement (main `0ee5f6c`, landed after this spec was first written) is now designed
+in; D9's deferral of the live metrics wiring now records its deviation from the P4
+roadmap bullet explicitly.
 **Phase:** P7 — Agent mode.
 
 This spec is the authority on *how* P7 is done. It does not reopen the phase list, the
@@ -16,10 +20,19 @@ deterministic diagnostics analyzer. P7 makes the **Agent** tab real: it spawns a
 with **tool cards**, applies two consent controls — a **workspace grant** and a **shell
 toggle** — and supports **interruptible turns**.
 
-`ROADMAP.md` states the phase in one line: "Spawn `ds4-agent`, NDJSON transcript, tool
-cards, workspace grant, shell toggle, interruptible turns." `BRIEF.md` states the split:
+`ROADMAP.md` states the phase in one line: "Spawn `ds4-agent`, NDJSON transcript and
+capture-grade turn/tool outcomes, tool cards, workspace grant, shell toggle,
+interruptible turns." `BRIEF.md` states the split:
 "Chat and Agent stay separate: they are different wires (SSE vs NDJSON), different consent
 models, and different products."
+
+The roadmap's **outcome telemetry** dependency bullet (main `0ee5f6c`, "require outcome
+telemetry before handoff packets", landed after this spec was first written) also binds
+P7: visible prose is not evidence of action — a model can claim files were written and
+tests passed while executing neither — so P7's turn outcome must identify the
+model/build/sampler and task, token and context use, stop reason (EOS, limit,
+interrupt, timeout, or context-full), and each tool lifecycle transition (emitted,
+parsed, rejected, or executed). D12 designs this in.
 
 ## The consent model (the decision that shapes the phase)
 
@@ -87,6 +100,12 @@ The authoritative wire contract is `external/ds4/docs/json-events.md` (derived f
   set already ships the turn-interrupt + stale-interrupt latch.
 - **`--json-events` requires `--non-interactive`** (startup error otherwise); the agent
   reads one prompt per stdin line and emits a `ready` event when idle and waiting for stdin.
+- **The wire carries no stop reason.** The generation loop knows why it stopped (loop
+  break conditions in `ds4_agent.c` ~:12135–12260: the stop token → EOS,
+  `generated >= max_tokens` → limit, the latched interrupt, `room <= 1` → context-full),
+  and a turn is multiple generation rounds (tool rounds resume generation), but none of
+  it is emitted: there is no turn-end event at all — only `status.state → idle` — and
+  `ready` carries just the memory plan. This is the gap D12 closes.
 
 The existing `fixtures/agent/golden.ndjson` (P5 recapture) is **text-only** — it carries
 `hello`/`status`/`ready`/`text` and **no** `tool`/`queued`/`think` events, because P5's
@@ -124,12 +143,42 @@ prompts were deliberately simple. P7 therefore needs a **tool-event fixture** (D
   surface; re-wiring Metrics/Diagnostics to the live agent's status/trace is not in P7's
   scope (it is a later, separate concern; the live process's `status` events are already
   parseable by `AgentWireParser` when that wiring happens).
+  *Deviation recorded (2026-08-22, deep review):* the roadmap's P4 sequencing bullet
+  says the live wiring "lands with P7's `ds4-agent` migration." P7 deliberately defers
+  it: the phase row for P7 does not include metrics wiring, and P7's plate already
+  carries the consent patch, the outcome wire, two fixtures, and a new tab. The P4
+  bullet gets a dated correction at close (the same way P6 corrected the P11 bullet).
 - **D10 — think is handled, not toggled.** `--think` is left at the engine default; the
   parser and transcript handle `think` events defensively. A think-effort control is out
   of P7 scope.
 - **D11 — web tools out of consent scope.** `--shell` gates only the `bash` tools.
   `google_search`/`visit_page` keep the engine's existing terminal-UI approval (which is
   not on the wire); their consent is a P9/wire concern.
+- **D12 — capture-grade turn outcomes (roadmap `0ee5f6c`).** A typed `TurnOutcome` record
+  per turn, built app-side from the wire plus the app-known facts the wire cannot carry:
+  the task text, whether the app sent ETX, and the spawn-time identification
+  (model = model path; build = the submodule SHA resolved once per spawn, the same fact
+  the capture provenance records; sampler = the argv's sampler slice — none in P7, so
+  "engine-defaults"). Token/context use and the tool lifecycle transitions come off the
+  wire (`status.ctx_used`/`generated`; tool phases: `tool` = emitted, clean `finish` =
+  parsed + executed — dispatch is synchronous — `finish` with a `status` = rejected,
+  `output` = executed). The **stop reason** is not on the wire today, so the engine gains
+  it: the turn-end `ready` event carries optional `stop_reason` (`eos` | `limit` |
+  `interrupt` | `context_full`), `generated`, and `ctx_used` (a fork divergence row of
+  its own; `v1`/`caps` unchanged, startup `ready` omits them). Timeout stays app-side by
+  definition — the case exists in the vocabulary so the record is complete, and a later
+  phase can add the policy. Options weighed:
+  - *app-side only* (record interrupt/"ended"): rejected — it cannot distinguish EOS,
+    limit, or context-full, and P10's handoff packets would consume a record that
+    mistakes a context-full stall for a clean finish.
+  - *a new turn-end event kind*: rejected — a bigger wire change for the same
+    information; `ready` already fires exactly once per turn end in the persistent loop
+    (the P5 driver counts it for exactly that), so the fields ride the existing event.
+  - *stop reason on `ready`* (chosen): smallest wire change, lands at the exact
+    turn-end moment, and repeats like the memory-plan fields (recovery semantics stay).
+  The engine demonstrably knows the reason at the loop exit; the patch classifies it
+  where the turn actually ends (a non-tool round exit) and the `ready` emitter reads it
+  from worker state.
 
 ## Components
 
@@ -137,10 +186,17 @@ prompts were deliberately simple. P7 therefore needs a **tool-event fixture** (D
 
 - `AgentWireParser.swift` — `AgentEvent` (hello/status/ready/text/think/tool/queued/
   ignored/refused), `ToolEvent` (phase + idx), `AgentWireParser`. Binding rule 7: first
-  non-blank line must be a v1 `hello` whose `caps ⊇ {text, tool, status, ts}`.
+  non-blank line must be a v1 `hello` whose `caps ⊇ {text, tool, status, ts}`. The
+  `ready` case carries the turn-outcome fields (plannedBytes + D12's stopReason/
+  generated/ctxUsed, all optional).
 - `AgentTranscript.swift` — `ToolParam`, `ToolCard` (name/params/output/status),
   `AgentTranscriptRow` (thinking/content/tool/system), `AgentTranscript` reducer. Pure,
   tested with hand-built event sequences in the fast tier.
+- `TurnOutcome.swift` — `TurnOutcome` (model/build/sampler/task/generatedTokens/
+  ctxUsed/stopReason/toolCalls), `TurnStopReason` (eos/limit/interrupt/timeout/
+  contextFull), `ToolCallOutcome` + `ToolLifecycle` (emitted/parsed/rejected/executed),
+  and `TurnOutcomeBuilder` — a pure reducer from a turn's `AgentEvent`s plus the
+  app-known facts (D12).
 - `AgentCommand.swift` — `AgentSettings` (engineDir/modelPath/contextSize/workspace/
   shellAllowed) and `AgentCommand.argv`/`binaryPath`. The one argv contract, validated by
   the fake agent and unit-tested.
@@ -151,7 +207,12 @@ prompts were deliberately simple. P7 therefore needs a **tool-event fixture** (D
 
 - `AgentController.swift` — spawns `ds4-agent` (stdin/stdout/stderr pipes), drains stdout
   line-by-line through `AgentWireParser` → `AgentTranscript`, tracks turn state, writes
-  ETX on interrupt, enforces the spawn-time consent flags.
+  ETX on interrupt, enforces the spawn-time consent flags, and builds one `TurnOutcome`
+  per turn (D12): a builder is opened on `send` with the task text and the spawn-time
+  identification (model/build/sampler), fed the wire events, and finished when the
+  turn-end `ready` arrives — the app's own interrupt/timeout overriding the wire's
+  reason — with the record written to the `SWIFTSTAR_LOG` trail (persistence beyond
+  that belongs to P9/P10, when handoff packets consume it).
 - `AgentView.swift` — status bar, transcript with tool cards, composer, interrupt button,
   consent controls (workspace picker + shell toggle). Replaces the Agent placeholder in
   `MainView.swift`.
@@ -160,6 +221,11 @@ prompts were deliberately simple. P7 therefore needs a **tool-event fixture** (D
 
 - `--workspace DIR` and `--shell on|off` flags; file-tool path confinement (fail closed);
   bash gating in schema + dispatch. A fork-ledger row (divergence #8).
+- Turn-outcome fields on the `ready` event (D12): classify the turn-end stop reason
+  where the generation loop actually ends the turn (a non-tool round exit), hold it in
+  worker state, and extend `agent_emit_ready_event` with optional
+  `stop_reason`/`generated`/`ctx_used`. A fork-ledger row (divergence #9) and a
+  `json-events.md` addendum.
 
 **Fixtures:**
 
@@ -171,16 +237,22 @@ prompts were deliberately simple. P7 therefore needs a **tool-event fixture** (D
 - **Fast tier** (`just test`): parser (hand-built NDJSON lines + `golden.ndjson` +
   `golden-tools.ndjson` via `#filePath`), transcript reducer (hand-built event sequences,
   including the leading-newline quirk and the post-`finish` `output` attribution),
+  `TurnOutcomeBuilder` (hand-built turn sequences + a `golden-tools` turn),
   `AgentCommand.argv`, `FakeAgentSource` determinism. No process/socket (tripwire).
 - **Integration tier** (`just integration`): a fake `ds4-agent` (generated from the real
   tool capture) is spawned via the production `AgentCommand` argv; the harness asserts argv
   validation (including `--workspace`/`--shell`), a full stream → transcript with tool
-  cards, and interrupt (ETX → the fake emits an interrupted `finish` and stops).
+  cards, and interrupt (ETX → the fake emits an interrupted `finish`, a `ready` carrying
+  `stop_reason: interrupt`, and stops).
 - **Live tier** (`just capture`, never CI): the recapture that produces `golden.ndjson` and
-  `golden-tools.ndjson` against the real engine and real weights.
+  `golden-tools.ndjson` against the real engine and real weights; the golden-tools
+  capture's turn-end `ready` events must carry `stop_reason` (the fixture proves the
+  D12 wire addition against the real binary).
 - **Evidence floor (binding rule 6):** the parser accepts both `golden.ndjson` and
-  `golden-tools.ndjson` (naming the fixtures) and refuses a non-handshake first line; the
-  fake agent is generated from the real tool capture, not hand-authored.
+  `golden-tools.ndjson` (naming the fixtures) and refuses a non-handshake first line;
+  `golden-tools.ndjson` yields turn outcomes whose tool calls show the full lifecycle and
+  whose stop reasons are present; the fake agent is generated from the real tool capture,
+  not hand-authored.
 - **Binding rule 2:** every new test is shown to fail before its implementation passes
   (in a compiled language, "fail" = the test target does not compile or the assertion fails).
 
