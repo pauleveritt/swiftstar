@@ -20,6 +20,6 @@ docs/_build/
 .superpowers/
 
 # Capture output. `swiftstar-drive` writes NDJSON, timestamp sidecars, and
-# telemetry logs here; committed fixtures live under Tests/ instead, chosen
+# telemetry logs here; committed fixtures live under fixtures/ instead, chosen
 # deliberately rather than by accumulation.
 captures/
