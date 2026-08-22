@@ -13,6 +13,7 @@ let package = Package(
         .target(
             name: "SwiftStarAppKit",
             dependencies: ["SwiftStarKit"],
+            resources: [.process("Resources")],
             linkerSettings: [
                 // Private dyld-cache lib for power (Apple Silicon); cited from
                 // ds4-control's Package.swift (facts cross, code does not).
