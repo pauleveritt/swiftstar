@@ -34,7 +34,7 @@
 - **No Python** in the capture script (D11: Python is docs-only). `date +%s%N` works on this Mac (epoch ns).
 - **No app, no Swift, no Mellum on the integration, no `--subagent-pool`, no upstream PRs.** All out of scope.
 - **Weights:** `~/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf` (48GB, Laguna S 2.1) for captures.
-- **The Metal env-var gotcha:** running `ds4-agent`/`ds4-server` *from inside* `external/ds4/` needs no env vars; running from elsewhere needs all 21 `DS4_METAL_<NAME>_SOURCE` vars (paths relative to CWD otherwise). Always `cd` into the submodule before running the binary.
+- **The Metal env-var gotcha:** running `ds4-agent`/`ds4-server` *from inside* `external/ds4/` needs no env vars; running from elsewhere needs all 21 `DS4_METAL_<NAME>_SOURCE` vars (paths relative to CWD otherwise). Always `cd` into the submodule before running the binary — **but note `--chdir` defeats the `cd`**: the process CWD switches to the work dir *before* the Metal shader load, so capture runs that use `--chdir` need all 21 `DS4_METAL_*_SOURCE` vars as absolute paths (see correction at Task 6 Step 3 and `fixtures/agent/provenance.md` gotcha #1).
 
 ---
 
@@ -489,6 +489,16 @@ cd ~/projects/pauleveritt/swiftstar/external/ds4   # metal/*.metal resolve relat
 ```
 (Launch in background with `& AGENT_PID=$!`; `tee` writes the wire byte-for-byte to the capture; the timestamper only records receive times.)
 Expected: agent launches; the `ready` event appears in `golden.ndjson` within ~30-60s (model load). Watch `tail -f /tmp/ds4-capture-agent/golden.ndjson` until the first `{"t":"ready",...}` with the four memory fields.
+
+> **Correction (2026-08-22, recorded per the SDD retraction convention):** this
+> command **fails as written.** `--chdir /tmp/ds4-capture-agent/work` switches the
+> process CWD *before* the Metal shader load, so the relative `metal/*.metal`
+> defaults no longer resolve and the run dies with `Metal source
+> metal/flash_attn.metal not found`. The working invocation requires all 21
+> `DS4_METAL_<BASENAME_UPPERCASED>_SOURCE` env vars (absolute paths to
+> `external/ds4/metal/*.metal`), plus `DS4_LOCK_FILE` for instance isolation and
+> the FIFO-keepalive loop (gotchas #1–#3 in `fixtures/agent/provenance.md`, which
+> is the authoritative method). `REBASING.md` step 5 points here too.
 
 - [ ] **Step 4: Send the prompts one at a time, waiting for idle between turns**
 
