@@ -25,6 +25,7 @@ let package = Package(
             dependencies: ["SwiftStarKit", "SwiftStarAppKit"],
             resources: [.process("Resources")]
         ),
+        .executableTarget(name: "swiftstar-drive", dependencies: ["SwiftStarKit"]),
         .testTarget(
             name: "SwiftStarKitTests",
             dependencies: ["SwiftStarKit"],
