@@ -2,8 +2,8 @@ import Foundation
 
 /// Host memory snapshot (Darwin). "Available" = free + inactive pages
 /// (matching Activity Monitor's notion), converted to bytes.
-enum MemorySnapshot {
-    static func availableBytes() -> Int64 {
+public enum MemorySnapshot {
+    public static func availableBytes() -> Int64 {
         var stats = vm_statistics64_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
         let result = withUnsafeMutablePointer(to: &stats) { ptr in

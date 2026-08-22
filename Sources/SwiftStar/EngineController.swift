@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftStarKit
+import SwiftStarAppKit
 
 @MainActor
 @Observable
