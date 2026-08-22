@@ -24,18 +24,35 @@ struct FakeServerIntegrationTests {
         return (binary, argv)
     }
 
+    /// Waits (up to 10s) for the fake's listening announcement on stderr,
+    /// capturing the raw bytes so a failure shows the actual stderr.
+    private func waitForListening(_ fake: FakeProcess, port: Int) throws {
+        let handle = fake.stderr.fileHandleForReading
+        let deadline = Date().addingTimeInterval(10)
+        var data = Data()
+        while Date() < deadline {
+            let chunk = handle.availableData
+            if chunk.isEmpty { break }  // EOF: the fake exited
+            data.append(chunk)
+            if String(data: data, encoding: .utf8)?.contains("listening on http://127.0.0.1:\(port)") == true {
+                return
+            }
+        }
+        let seen = String(data: data, encoding: .utf8) ?? "<no stderr>"
+        Issue.record("fake never announced listening; stderr was: \(seen)")
+    }
+
     @Test func fakeReplaysCaptureEventsEquivalently() throws {
         let port = try FakeServerHarness.freePort()
         let settings = makeSettings(port: port)
         let (binary, argv) = try buildFake(fixture: "golden", settings: settings)
 
         let fake = try FakeServerHarness.spawn(binary, arguments: argv, env: ["FAKE_SPEED": "0"])
-
-        // Wait for the fake to bind+listen before connecting (it announces on
-        // stderr; the supervisor's ready detection uses the same line).
-        let listening = fake.stderr.fileHandleForReading.availableData
-        let announcement = String(data: listening, encoding: .utf8) ?? ""
-        #expect(announcement.contains("listening on http://127.0.0.1:\(port)"))
+        defer {
+            fake.process.terminate()
+            fake.process.waitUntilExit()
+        }
+        try waitForListening(fake, port: port)
 
         // Expected: the same event sequence as parsing the fixture directly.
         let capture = try Data(contentsOf: FakeServerHarness.fixture("golden.sse"))
@@ -47,9 +64,6 @@ struct FakeServerIntegrationTests {
 
         let actual = try FakeServerHarness.readEvents(port: port)
         #expect(actual == expected, "fake replay must produce the same events as the capture")
-
-        fake.process.terminate()
-        fake.process.waitUntilExit()
     }
 
     @Test func fakeRefusesWrongArgv() throws {
@@ -61,6 +75,10 @@ struct FakeServerIntegrationTests {
         var wrong = settings
         wrong.contextSize = 16384
         let fake = try FakeServerHarness.spawn(binary, arguments: ServerCommand.argv(settings: wrong), env: ["FAKE_SPEED": "0"])
+        defer {
+            fake.process.terminate()
+            fake.process.waitUntilExit()
+        }
         fake.process.waitUntilExit()
         let stderr = String(data: fake.stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         #expect(fake.process.terminationStatus != 0)
@@ -73,14 +91,12 @@ struct FakeServerIntegrationTests {
         let (binary, argv) = try buildFake(fixture: "golden.short", settings: settings)
 
         let fake = try FakeServerHarness.spawn(binary, arguments: argv, env: ["FAKE_SPEED": "0"])
-
+        defer {
+            fake.process.terminate()
+            fake.process.waitUntilExit()
+        }
         // The fake must print the listening line on stderr (the supervisor's
         // ready detection depends on it).
-        let lineData = fake.stderr.fileHandleForReading.availableData
-        let line = String(data: lineData, encoding: .utf8) ?? ""
-        #expect(line.contains("listening on http://127.0.0.1:\(port)"))
-
-        fake.process.terminate()
-        fake.process.waitUntilExit()
+        try waitForListening(fake, port: port)
     }
 }

@@ -36,13 +36,22 @@ public struct SSEParser: Sendable {
             let choices = object["choices"] as? [[String: Any]],
             let choice = choices.first
         else { return .ignored(payload) }
+        // Delta first, finish second: a terminal chunk that carries both content
+        // and finish_reason must not drop the content. The one-event-per-line
+        // signature means the finish of such a chunk is deferred to the next
+        // line (the [DONE] that follows); precedence here is content-over-finish.
+        if let delta = choice["delta"] as? [String: Any] {
+            if let role = delta["role"] as? String, role == "assistant" { return .roleAssistant }
+            if let reasoning = delta["reasoning_content"] as? String, !reasoning.isEmpty {
+                return .reasoning(reasoning)
+            }
+            if let content = delta["content"] as? String, !content.isEmpty {
+                return .content(content)
+            }
+        }
         if let reason = choice["finish_reason"] as? String, !reason.isEmpty {
             return .finish(reason == "stop" ? .stop : .other(reason))
         }
-        guard let delta = choice["delta"] as? [String: Any] else { return .ignored(payload) }
-        if let role = delta["role"] as? String, role == "assistant" { return .roleAssistant }
-        if let reasoning = delta["reasoning_content"] as? String { return .reasoning(reasoning) }
-        if let content = delta["content"] as? String { return .content(content) }
         return .ignored(payload)
     }
 }
