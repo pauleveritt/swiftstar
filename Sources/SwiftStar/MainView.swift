@@ -3,6 +3,7 @@ import SwiftUI
 struct MainView: View {
     @State private var engineController = EngineController()
     @State private var metricsModel = MetricsModel()
+    @State private var diagnosticsModel = DiagnosticsModel()
 
     var body: some View {
         TabView {
@@ -12,13 +13,16 @@ struct MainView: View {
                 .tabItem { Label("Agent", systemImage: "person.crop.circle") }
             MetricsView(model: metricsModel)
                 .tabItem { Label("Metrics", systemImage: "gauge") }
-            PlaceholderView(title: "Diagnostics", phase: "P6")
+            DiagnosticsView(model: diagnosticsModel)
                 .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
             PlaceholderView(title: "Help", phase: "P13")
                 .tabItem { Label("Help", systemImage: "questionmark.circle") }
         }
         .frame(minWidth: 800, minHeight: 560)
-        .onAppear { metricsModel.start(enginePid: engineController.runningPid) }
+        .onAppear {
+            metricsModel.start(enginePid: engineController.runningPid)
+            diagnosticsModel.start()
+        }
         .onChange(of: engineController.runningPid) { _, newPid in
             metricsModel.start(enginePid: newPid)
         }
