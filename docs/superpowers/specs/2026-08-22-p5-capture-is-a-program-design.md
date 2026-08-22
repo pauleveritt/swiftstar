@@ -96,11 +96,10 @@ A new engine patch, the seventh divergence in the fork ledger:
 - **Handshake.** The first non-blank NDJSON line is
   `{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":<µs>}`
   emitted once at worker start when `--json-events` is active, before any other event.
-- **Timestamps.** Every event gains a `ts` field — monotonic microseconds since engine
-  start (`clock_gettime(CLOCK_MONOTONIC)`), written by one shared helper called from all
-  five emitters and the handshake. Monotonic because P6 reasons about durations; the
-  provenance records the wall-clock start, so absolute correlation (and mapping onto the
-  trace's wall-clock stamps) is a single addition.
+- **Timestamps.** Every event gains a `ts` field — monotonic microseconds since
+  boot (`clock_gettime(CLOCK_MONOTONIC)`; only deltas are meaningful), written by one
+  shared helper called from all five emitters and the handshake. The provenance
+  records the wall-clock start for absolute anchoring.
 
 The patch lands as ledger divergence #7 (retires when upstream lands structured
 events with a version/timestamp), and extends upstream proposal #1. The

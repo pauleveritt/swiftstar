@@ -82,6 +82,7 @@ final class DriveState: @unchecked Sendable {
     private var ready = 0
     private var parser = WireEventParser()
     private var lineBuf = Data()
+    private var refusedReason: String?
 
     /// Called only from the stdout readabilityHandler (serial per handle).
     func onStdoutData(_ d: Data) {
@@ -92,8 +93,12 @@ final class DriveState: @unchecked Sendable {
             let lineData = lineBuf[..<nl]
             lineBuf.removeSubrange(lineBuf.startIndex...nl)
             if let line = String(data: lineData, encoding: .utf8),
-               let event = parser.feed(line), case .ready = event {
-                ready += 1
+               let event = parser.feed(line) {
+                switch event {
+                case .ready: ready += 1
+                case .refused(let reason): if refusedReason == nil { refusedReason = reason }
+                default: break
+                }
             }
         }
         lock.unlock()
@@ -104,6 +109,8 @@ final class DriveState: @unchecked Sendable {
     }
 
     var readyCount: Int { lock.lock(); defer { lock.unlock() }; return ready }
+    /// Non-nil when the first wire line was not a valid handshake (binding rule 7).
+    var refusal: String? { lock.lock(); defer { lock.unlock() }; return refusedReason }
     var snapshot: (stdout: Data, stderr: Data) {
         lock.lock(); defer { lock.unlock() }; return (stdoutData, stderrData)
     }
@@ -125,7 +132,7 @@ process.arguments = [
 ]
 process.currentDirectoryURL = engineDir
 var engineEnv = ProcessInfo.processInfo.environment
-engineEnv["DS4_LOCK_FILE"] = "/tmp/ds4-capture.lock"
+engineEnv["DS4_LOCK_FILE"] = "/tmp/ds4-capture-\(ProcessInfo.processInfo.processIdentifier).lock"
 process.environment = engineEnv
 
 let stdinPipe = Pipe()
@@ -175,6 +182,10 @@ if !waitReady(1, timeout: loadTimeout) {
     logProgress("FATAL: no ready event before load timeout")
     failed = true
 }
+if let refusal = state.refusal {
+    logProgress("FATAL: wire handshake refused: \(refusal)")
+    failed = true
+}
 
 if !failed {
     for (i, prompt) in prompts.enumerated() {
@@ -196,6 +207,12 @@ if process.isRunning { process.terminate() }
 process.waitUntilExit()
 stdoutHandle.readabilityHandler = nil
 stderrHandle.readabilityHandler = nil
+// Final drain: the handlers may not have processed the last (EOF-delivered)
+// batch before we nil'd them — read whatever the OS still has buffered.
+let outRest = stdoutHandle.readDataToEndOfFile()
+if !outRest.isEmpty { state.onStdoutData(outRest) }
+let errRest = stderrHandle.readDataToEndOfFile()
+if !errRest.isEmpty { state.onStderrData(errRest) }
 
 // MARK: - Write the capture
 

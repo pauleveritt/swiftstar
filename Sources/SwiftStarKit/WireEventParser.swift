@@ -2,7 +2,8 @@ import Foundation
 
 /// One wire-carried metrics sample from a `status` event. `power` (throttle %)
 /// and `error` are deliberately not extracted (Settings/supervisor concerns).
-/// `ts` is monotonic microseconds since engine start (P5, fork divergence #7).
+/// `ts` is monotonic microseconds since boot (`clock_gettime(CLOCK_MONOTONIC)`);
+/// only deltas are meaningful (P5, fork divergence #7).
 public struct StatusSnapshot: Equatable, Sendable {
     public let ctxUsed: Int
     public let ctxSize: Int

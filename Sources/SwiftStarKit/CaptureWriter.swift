@@ -51,8 +51,9 @@ public enum CaptureWriter {
 
         Captured by `swiftstar-drive`. The `wire.ndjson` and `wire.stderr` files are
         byte-for-byte verbatim (the verbatim-raw rule); `wire.trace` is the engine's
-        `--trace` output. Timestamps are on the wire (`ts`), and this file records the
-        wall-clock start for correlation with the trace's wall-clock stamps.
+        `--trace` output. Timestamps are on the wire (`ts`, monotonic since boot — only
+        deltas are meaningful); this file records the wall-clock start for absolute
+        anchoring.
         """
     }
 }
