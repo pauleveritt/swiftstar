@@ -10,13 +10,10 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P6 — Diagnostics that can't lie.** Next up; not started. A deterministic
-analyzer over captures, with the model only phrasing the findings. P5 landed the
-inputs it needs: the timestamped wire (`ts`) and the `--trace` channel
-(compaction rebuild stats) are both in the capture format, so "would compaction
-help" — the diagnostics surface's first job — is answerable from recorded fact.
+**Phase P7 — Agent mode.** Next up; not started. Spawn `ds4-agent`, NDJSON
+transcript, tool cards, workspace grant, shell toggle, interruptible turns.
 
-*P0–P5 are complete; their summaries live in [Prior work](#prior-work), not
+*P0–P6 are complete; their summaries live in [Prior work](#prior-work), not
 here, so this section stays a true "what's happening now."*
 
 ## Concept budget
@@ -41,6 +38,14 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 - **trace** — the engine's `--trace` channel, a separate timestamped file carrying
   what the wire suppresses (compaction rebuild stats); captured alongside the wire.
 - **fixture** — a committed capture used by tests.
+- **finding** (P6) — a machine-computed diagnostic result: a typed value with a
+  severity and the computed numbers it reports; phrased by a deterministic
+  renderer now, a model later.
+- **baseline** (P6) — a session's own early prefill throughput (highest
+  `prefill_tps` at `ctx_used ≤ 8,192`), against which later throughput is
+  compared; the session measures itself, no external calibration.
+- **diagnostic** (P6) — a finding the analyzer computes from a capture, never a
+  model's judgment. The model only phrases.
 
 ## Phases
 
@@ -52,7 +57,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P3 | It can get its weights | Chunked parallel download with bitmap resume across restarts, and a launch that refuses infeasibly with an explanation a person can act on | complete (2026-08-22) |
 | P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | complete (2026-08-22) |
 | P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | complete (2026-08-22) |
-| P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | planned |
+| P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | complete (2026-08-22) |
 | P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript, tool cards, workspace grant, shell toggle, interruptible turns | planned |
 | P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | planned |
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | planned |
@@ -350,6 +355,22 @@ Completed phases move here when the roadmap outgrows the front page.
   The `--trace` channel (compaction rebuild stats) is now captured, which is what
   P6's "would compaction help" needs.
   Spec: [`docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md`](docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md).
+
+- **P6 — Diagnostics that can't lie (2026-08-22).** `SwiftStarKit` gains
+  `TraceParser` (parses the `--trace` channel: `compacted` rebuild stats and both
+  `prefill sync done` shapes), `DiagnosticsLogic` (baseline/current prefill
+  extraction, degradation and cache-health bands, all re-anchorable constants),
+  the typed `Finding`/`CompactionVerdict` model, `DeterministicPhraser` (the
+  "compute vs. phrase" seam — a model phraser can replace it later), and
+  `DiagnosticsAnalyzer`, which computes the BRIEF's first job deterministically:
+  where you are in context, current prefill throughput, drift off your own
+  session's baseline, and — deep *and* degraded — whether compaction would help
+  (distinguishing "cache healthy → won't fix the rate" from "cache missing → may
+  recover"). The Diagnostics tab replaces its placeholder with a fixture-driven
+  list of findings. Evidence floor met: the analyzer accepts the real `golden`
+  capture and rejects a committed synthetic `pathological` fixture reproducing
+  the measured 7x curve. No live engine, no model, no engine patch.
+  Spec: [`docs/superpowers/specs/2026-08-22-p6-diagnostics-that-cant-lie-design.md`](docs/superpowers/specs/2026-08-22-p6-diagnostics-that-cant-lie-design.md).
 
 ## Workflow
 
