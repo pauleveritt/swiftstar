@@ -47,7 +47,9 @@ final class MetricsModel {
 
     func stop() {
         collectTask?.cancel()
+        collectTask = nil
         replayTask?.cancel()
+        replayTask = nil
         isReplayingWire = false
     }
 

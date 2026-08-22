@@ -54,6 +54,30 @@ saturating CPU deltas, the replay cadence parameter, and the badge→banner
 wording. The IOReport linker flag was not caught by that review — it was found
 by the build.
 
+## GLM 5.2 implementation review (applied post-implementation)
+
+The committed implementation was reviewed by GLM 5.2 (OpenRouter `z-ai/glm-5.2`)
+and the accepted findings applied:
+
+1. **IOReport subscription was re-created every sample (leak).** The first
+   `IOReportPower.totalWatts()` created a fresh subscription + channel set on
+   every call (once/second) and never released the `subscribed` output — a
+   continuous leak. Fixed by restructuring `IOReportPower` into a class that
+   subscribes once in `init` and reuses the cached handles, releasing the
+   `subscribed` output immediately (mirroring `ds4-control`'s working
+   `IOReportBridge`).
+2. **`stop()` did not nil out its tasks**, so `start()` could not restart after
+   a stop. Fixed by clearing `collectTask`/`replayTask` in `stop()`.
+3. **GPU utilization had no upper clamp** (CPU already clamped to 100); added
+   `min(100.0, …)` for consistency.
+
+Dismissed after verification: "use `subscribed` not `chanPtr` for samples" (the
+working predecessor uses the original channels and releases `subscribed`
+immediately), "fixture not bundled" (the byte-equality integration test proves
+the bundle contains `golden.ndjson`), and "test counts are vacuous" (the
+`> 0` invariants deliberately match the P2 SSEParser test's "real invariants,
+not counts" stance, so a recapture does not break them).
+
 ## Concept budget
 
 No new terms. **fixture** already covers the replay source; "replay" earns no

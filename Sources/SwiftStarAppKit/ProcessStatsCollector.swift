@@ -5,8 +5,11 @@ import SwiftStarKit
 
 public actor ProcessStatsCollector {
     private var previousCPUTicks: [UInt64]?
+    private let power: IOReportPower?
 
-    public init() {}
+    public init() {
+        self.power = IOReportPower()
+    }
 
     /// Returns a sanitized snapshot. `pid` nil → residentBytes nil (per-process);
     /// watts/GPU/CPU are system-wide and always collected. Actor-isolated so the
@@ -14,7 +17,7 @@ public actor ProcessStatsCollector {
     /// delta state is serialized across polls.
     public func collect(pid: pid_t?) async -> MachineSnapshot {
         let resident: Int64? = pid.flatMap { residentBytes(pid: $0) }
-        let watts = await IOReportPower.totalWatts()
+        let watts = (await power?.totalWatts()) ?? 0
         return DialLogic.sanitize(MachineSnapshot(
             residentBytes: resident,
             watts: watts,
@@ -96,6 +99,6 @@ public actor ProcessStatsCollector {
             if utilization > 0 { break }
             service = IOIteratorNext(iterator)
         }
-        return utilization
+        return min(100.0, utilization)
     }
 }

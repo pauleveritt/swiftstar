@@ -5,7 +5,7 @@ import CoreFoundation
 // Private IOReport FFI for system power (watts). Approach and channel keys
 // from vladkens/macmon (MIT) via ds4-control's PowerCollector/IOReportBridge
 // (facts cross with citation; this implementation is written fresh). Apple
-// Silicon only — Intel returns 0.
+// Silicon only — Intel returns nil.
 
 @_silgen_name("IOReportCopyChannelsInGroup")
 private func IOReportCopyChannelsInGroup(_ group: OpaquePointer?, _ subgroup: OpaquePointer?, _ c: UInt64, _ d: UInt64, _ e: UInt64) -> OpaquePointer?
@@ -24,28 +24,43 @@ private func IOReportChannelGetUnitLabel(_ a: OpaquePointer) -> OpaquePointer?
 @_silgen_name("IOReportSimpleGetIntegerValue")
 private func IOReportSimpleGetIntegerValue(_ a: OpaquePointer, _ b: Int32) -> Int64
 
-enum IOReportPower {
-    /// Total system power in watts, sampled over `windowMs`. Suspends for
-    /// `windowMs` while sampling (async, never blocks a thread). Returns 0 on
-    /// Intel or any failure.
-    static func totalWatts(windowMs: UInt32 = 100) async -> Double {
+/// Cached IOReport subscription for the "Energy Model" group. The subscription
+/// is created once and reused for every sample — creating a new subscription per
+/// sample would leak (there is no public release for it), so this mirrors the
+/// predecessor's IOReportBridge design: subscribe in init, sample repeatedly.
+/// `@unchecked Sendable`: all stored state is immutable `let` (read-only after
+/// init); the deinit release is the only mutation and happens after the last
+/// reference is gone.
+final class IOReportPower: @unchecked Sendable {
+    private let subscription: OpaquePointer
+    private let channels: OpaquePointer
+
+    init?() {
         let group = "Energy Model" as CFString
         guard let chanPtr = IOReportCopyChannelsInGroup(
             OpaquePointer(Unmanaged.passUnretained(group).toOpaque()), nil, 0, 0, 0
-        ) else { return 0 }
+        ) else { return nil }
         var subscribed: OpaquePointer?
         guard let subs = IOReportCreateSubscription(nil, chanPtr, &subscribed, 0, nil) else {
             Unmanaged<CFDictionary>.fromOpaque(UnsafeRawPointer(chanPtr)).release()
-            return 0
+            return nil
         }
-        defer {
-            // Channel dict is +1 retained; the subscription has no public
-            // release and is effectively permanent for the process lifetime.
-            Unmanaged<CFMutableDictionary>.fromOpaque(UnsafeRawPointer(chanPtr)).release()
+        // The subscription's output channel set is not needed beyond setup;
+        // release it immediately (the subscription keeps its own reference).
+        if let subscribed {
+            Unmanaged<CFMutableDictionary>.fromOpaque(UnsafeRawPointer(subscribed)).release()
         }
-        guard let s1 = IOReportCreateSamples(subs, chanPtr, nil) else { return 0 }
+        self.subscription = subs
+        self.channels = chanPtr
+    }
+
+    /// Total system power in watts, sampled over `windowMs`. Suspends for
+    /// `windowMs` while sampling (async, never blocks a thread). Returns 0 on
+    /// Intel or any failure.
+    func totalWatts(windowMs: UInt32 = 100) async -> Double {
+        guard let s1 = IOReportCreateSamples(subscription, channels, nil) else { return 0 }
         try? await Task.sleep(nanoseconds: UInt64(windowMs) * 1_000_000)
-        guard let s2 = IOReportCreateSamples(subs, chanPtr, nil) else {
+        guard let s2 = IOReportCreateSamples(subscription, channels, nil) else {
             Unmanaged<CFDictionary>.fromOpaque(UnsafeRawPointer(s1)).release()
             return 0
         }
@@ -59,7 +74,13 @@ enum IOReportPower {
             Unmanaged<CFDictionary>.fromOpaque(UnsafeRawPointer(s2)).release()
             Unmanaged<CFDictionary>.fromOpaque(UnsafeRawPointer(delta)).release()
         }
-        return sumWatts(delta: delta, elapsedMs: Double(windowMs))
+        return Self.sumWatts(delta: delta, elapsedMs: Double(windowMs))
+    }
+
+    deinit {
+        // Channel dict is +1 retained; the subscription has no public release
+        // and is effectively permanent for the process lifetime.
+        Unmanaged<CFMutableDictionary>.fromOpaque(UnsafeRawPointer(channels)).release()
     }
 
     private static func sumWatts(delta: OpaquePointer, elapsedMs: Double) -> Double {
