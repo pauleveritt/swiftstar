@@ -425,7 +425,7 @@ public enum DialLogic {
 
 **Interfaces:**
 - Consumes: `MachineSnapshot`, `DialLogic.sanitize` (Task 3).
-- Produces: `ProcessStatsCollector` (`init()`, `func collect(pid: pid_t?) -> MachineSnapshot` — sanitized).
+- Produces: `ProcessStatsCollector` (`actor`, `init()`, `func collect(pid: pid_t?) async -> MachineSnapshot` — sanitized).
 
 **Facts (cited, not copied):** footprint via `proc_pid_rusage` → `ri_phys_footprint`; CPU% via `host_processor_info` tick delta; GPU% via `IOServiceMatching("IOAccelerator")` → `PerformanceStatistics` → `"GPU Activity(%)"` (fallbacks `"Device Utilization %"`, `"gpuActivity"`); watts via private `IOReport` group `"Energy Model"`, channels `"GPU Energy"`/`*"CPU Energy"`/`"ANE"` prefix, units `mJ`/`uJ`/`nJ`. Sources: `~/projects/ds4-control` (PowerCollector/GPUCollector/CPUCollector/IOReportBridge) and vladkens/macmon (MIT). **This task is the one discovery-driven risk: the IOReport piece may need compile/run iteration against real hardware; the smoke test below is the gate.**
 
@@ -437,15 +437,19 @@ import Darwin
 import IOKit
 import SwiftStarKit
 
-final class ProcessStatsCollector {
+actor ProcessStatsCollector {
     private var previousCPUTicks: [UInt64]?
 
     /// Returns a sanitized snapshot. `pid` nil → residentBytes nil (per-process);
-    /// watts/GPU/CPU are system-wide and always collected.
-    func collect(pid: pid_t?) -> MachineSnapshot {
-        DialLogic.sanitize(MachineSnapshot(
-            residentBytes: pid.flatMap(residentBytes(pid:)),
-            watts: IOReportPower.totalWatts(),
+    /// watts/GPU/CPU are system-wide and always collected. Actor-isolated so the
+    /// IOReport sampling never runs on the main actor and the `previousCPUTicks`
+    /// delta state is serialized across polls.
+    func collect(pid: pid_t?) async -> MachineSnapshot {
+        let resident: Int64? = pid.flatMap { residentBytes(pid: $0) }
+        let watts = await IOReportPower.totalWatts()
+        return DialLogic.sanitize(MachineSnapshot(
+            residentBytes: resident,
+            watts: watts,
             gpuUtilization: gpuUtilization(),
             cpuUtilization: cpuUtilization()
         ))
@@ -490,14 +494,15 @@ final class ProcessStatsCollector {
         defer { previousCPUTicks = current }
         guard let prev = previousCPUTicks, prev.count == current.count else { return 0 }
 
+        func delta(_ cur: UInt64, _ prev: UInt64) -> UInt64 { cur > prev ? cur - prev : 0 }
         var busy: UInt64 = 0, idle: UInt64 = 0
         for core in 0..<Int(numCPUs) {
             let base = core * stateCount
-            busy += (current[base] &- prev[base]) + (current[base + 1] &- prev[base + 1]) + (current[base + 3] &- prev[base + 3])
-            idle += current[base + 2] &- prev[base + 2]
+            busy += delta(current[base], prev[base]) + delta(current[base + 1], prev[base + 1]) + delta(current[base + 3], prev[base + 3])
+            idle += delta(current[base + 2], prev[base + 2])
         }
         let total = busy + idle
-        return total > 0 ? Double(busy) / Double(total) * 100.0 : 0
+        return total > 0 ? min(100.0, Double(busy) / Double(total) * 100.0) : 0
     }
 
     // MARK: GPU — IOAccelerator registry, PerformanceStatistics
@@ -511,7 +516,6 @@ final class ProcessStatsCollector {
         var utilization = 0.0
         var service = IOIteratorNext(iterator)
         while service != 0 {
-            defer { IOObjectRelease(service) }
             var props: Unmanaged<CFMutableDictionary>?
             if IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
                let dict = props?.takeRetainedValue() as? [String: Any],
@@ -519,8 +523,9 @@ final class ProcessStatsCollector {
                 for key in ["GPU Activity(%)", "Device Utilization %", "gpuActivity"] {
                     if let v = (perf[key] as? NSNumber)?.doubleValue, v > 0 { utilization = v; break }
                 }
-                if utilization > 0 { IOObjectRelease(service); break }
             }
+            IOObjectRelease(service)  // release exactly once per iteration
+            if utilization > 0 { break }
             service = IOIteratorNext(iterator)
         }
         return utilization
@@ -558,9 +563,10 @@ private func IOReportChannelGetUnitLabel(_ a: OpaquePointer) -> OpaquePointer?
 private func IOReportSimpleGetIntegerValue(_ a: OpaquePointer, _ b: Int32) -> Int64
 
 enum IOReportPower {
-    /// Total system power in watts, sampled over `windowMs`. Blocks for
-    /// `windowMs` while sampling. Returns 0 on Intel or any failure.
-    static func totalWatts(windowMs: UInt32 = 100) -> Double {
+    /// Total system power in watts, sampled over `windowMs`. Suspends for
+    /// `windowMs` while sampling (async, never blocks a thread). Returns 0 on
+    /// Intel or any failure.
+    static func totalWatts(windowMs: UInt32 = 100) async -> Double {
         let group = "Energy Model" as CFString
         guard let chanPtr = IOReportCopyChannelsInGroup(
             OpaquePointer(Unmanaged.passUnretained(group).toOpaque()), nil, 0, 0, 0
@@ -576,7 +582,7 @@ enum IOReportPower {
             Unmanaged<CFMutableDictionary>.fromOpaque(UnsafeRawPointer(chanPtr)).release()
         }
         guard let s1 = IOReportCreateSamples(subs, chanPtr, nil) else { return 0 }
-        Thread.sleep(forTimeInterval: Double(windowMs) / 1000.0)
+        try? await Task.sleep(nanoseconds: UInt64(windowMs) * 1_000_000)
         guard let s2 = IOReportCreateSamples(subs, chanPtr, nil) else {
             Unmanaged<CFDictionary>.fromOpaque(UnsafeRawPointer(s1)).release()
             return 0
@@ -636,7 +642,7 @@ import Foundation
 
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct ProcessStatsCollectorTests {
-    @Test func collectReturnsSanitizedSnapshot() throws {
+    @Test func collectReturnsSanitizedSnapshot() async throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sleep")
         process.arguments = ["2"]
@@ -644,7 +650,7 @@ struct ProcessStatsCollectorTests {
         defer { process.terminate() }
 
         let collector = ProcessStatsCollector()
-        let snap = collector.collect(pid: process.processIdentifier)
+        let snap = await collector.collect(pid: process.processIdentifier)
         #expect(snap.residentBytes != nil)
         #expect((snap.residentBytes ?? 0) > 0)
         #expect(snap.watts >= 0 && snap.watts.isFinite)
@@ -652,9 +658,9 @@ struct ProcessStatsCollectorTests {
         #expect(snap.cpuUtilization >= 0 && snap.cpuUtilization <= 100)
     }
 
-    @Test func collectWithoutPidReturnsNilResident() {
+    @Test func collectWithoutPidReturnsNilResident() async {
         let collector = ProcessStatsCollector()
-        let snap = collector.collect(pid: nil)
+        let snap = await collector.collect(pid: nil)
         #expect(snap.residentBytes == nil)
         #expect(snap.watts >= 0 && snap.watts.isFinite)
     }
@@ -663,7 +669,7 @@ struct ProcessStatsCollectorTests {
 
 - [ ] **Step 4: Run to verify pass** — `just integration` green (the IOReport part returns finite watts on Apple Silicon; if `totalWatts()` returns 0 due to a key mismatch, that is a *real* finding to fix, not a test to weaken — the smoke asserts finiteness, not a non-zero floor).
 
-- [ ] **Step 5: Shown-fail** — in `collect`, remove the `DialLogic.sanitize` wrapper and return the raw snapshot; a unit-style check of `collect(pid:)` for a negative-injection isn't possible (hardware is non-negative), so instead break the CPU delta path: change `busy += ...` to `busy = 0` — the smoke still passes (CPU can legitimately be 0), so the meaningful shown-fail for this task is `DialLogicTests.sanitizeClampsGarbage` from Task 3. Record that cross-reference; no local break needed.
+- [ ] **Step 5: Shown-fail** — break the footprint path: in `residentBytes`, change `guard result == 0 else { return nil }` to an unconditional `return nil`; `collectReturnsSanitizedSnapshot` fails on `snap.residentBytes != nil`; restore; green. This pins the one behavior the smoke owns — a real pid yields a real footprint.
 
 - [ ] **Step 6: Commit** — `git commit -m "P4: OS collectors — memory, CPU, GPU, IOReport power (AppKit)"`
 
@@ -703,9 +709,9 @@ Edit `Package.swift` — the `SwiftStarAppKit` target gains `resources: [.proces
 import Foundation
 
 /// Replays the bundled `golden.ndjson` capture through the wire parser so the
-/// lead dials have data before P7. Single pass, no loop; ~30 lines/sec.
+/// lead dials have data before P7. Single pass, no loop; default ~30 lines/sec.
 public enum FixtureReplay {
-    public static func lines() -> AsyncStream<String> {
+    public static func lines(cadenceNanoseconds: UInt64 = 33_000_000) -> AsyncStream<String> {
         AsyncStream { continuation in
             let task = Task {
                 guard let url = Bundle.module.url(forResource: "golden", withExtension: "ndjson"),
@@ -719,7 +725,7 @@ public enum FixtureReplay {
                     guard !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                     continuation.yield(s)
                     do {
-                        try await Task.sleep(nanoseconds: 33_000_000)
+                        try await Task.sleep(nanoseconds: cadenceNanoseconds)
                     } catch {
                         break  // cancelled: stop yielding to a terminated stream
                     }
@@ -760,7 +766,7 @@ struct FixtureReplayTests {
         var reducer = MetricsReducer()
         var state = MetricsState()
         var sawStatus = false, sawBudget = false
-        for await line in FixtureReplay.lines() {
+        for await line in FixtureReplay.lines(cadenceNanoseconds: 1_000) {
             if let event = parser.feed(line) {
                 reducer.reduce(&state, event)
                 if case .status = event { sawStatus = true }
@@ -775,7 +781,7 @@ struct FixtureReplayTests {
 }
 ```
 
-- [ ] **Step 4: Run to verify pass** — `just integration` green (replay of 2136 lines at ~30/s takes ~70 s; that is acceptable for the integration tier, but if it is too slow, raise the cadence constant — the assertions are cadence-independent).
+- [ ] **Step 4: Run to verify pass** — `just integration` green (the test passes `cadenceNanoseconds: 1_000` so the 2136-line replay runs in ~2 s; the app's default 33 ms cadence is unchanged).
 
 - [ ] **Step 5: Shown-fail** — in `FixtureReplay`, change the guard `!s.trimmingCharacters(...).isEmpty` to always `continue` (drops every line); `replayYieldsStatusAndReadyThroughReducer` fails; restore; green.
 
@@ -829,7 +835,7 @@ final class MetricsModel {
             collectTask = Task { [weak self] in
                 while !Task.isCancelled {
                     guard let self else { break }
-                    self.tick()
+                    await self.tick()
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
             }
@@ -863,8 +869,8 @@ final class MetricsModel {
         EngineController.lastKnownPlannedBytes ?? state.memoryBudgetPlannedBytes
     }
 
-    private func tick() {
-        machine = collector.collect(pid: enginePid)
+    private func tick() async {
+        machine = await collector.collect(pid: enginePid)
     }
 }
 ```
@@ -1073,3 +1079,5 @@ struct MainView: View {
 **Type consistency:** `StatusSnapshot`/`WireEvent` (T1) used by T2/T5/T6; `MetricsState`/`MetricsReducer` (T2) used by T5/T6; `MachineSnapshot`/`DialLogic`/`Severity` (T3) used by T4/T6; `ProcessStatsCollector` (T4) and `FixtureReplay` (T5) used by T6; `EngineController.lastKnownPlannedBytes` (P3) and `runningPid` (T6) used by T6. `@testable import SwiftStarAppKit` + `SwiftStarKit` in the integration tests matches the target dependencies in `Package.swift`.
 
 **Risk flag:** Task 4's IOReport piece is the one place compile/run iteration against real hardware is expected; its gate is the smoke test asserting finite, non-negative, sanitized values (finiteness is the invariant — a zero-watts result that is *finite* is a key-mismatch finding to fix, not a test to relax).
+
+**GLM 5.2 review (2026-08-22, applied):** adversarial review of spec + plan against BRIEF.md, telemetry-findings.md, the sequencing note, and ROADMAP.md. Accepted and applied: (1) `ProcessStatsCollector` is now an `actor` with `async collect`, and `IOReportPower.totalWatts` is `async` with `Task.sleep` — the old `Thread.sleep` would have blocked the main actor via `MetricsModel.tick()`; (2) the GPU-util loop no longer uses `defer { IOObjectRelease(service) }` (which captured `service` by reference, leaking every handle and double-releasing on the break path) — it releases exactly once per iteration; (3) Task 4's skipped shown-fail was replaced with a real break of the footprint path (binding rule 2); (4) `cpuUtilization` uses saturating deltas and clamps to 100; (5) `FixtureReplay.lines` takes a cadence parameter so the integration test runs in ~2 s instead of ~70 s; (6) the spec's per-dial badge became a single replay banner (matching the plan). Dismissed after verification: the `EngineController.lastKnownPlannedBytes` static-vs-instance concern (it is a `static var`), and the `proc_pid_rusage`/`vm_address_t` compile concerns (canonical patterns; the build steps verify).

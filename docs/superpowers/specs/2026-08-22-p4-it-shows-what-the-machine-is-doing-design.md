@@ -145,8 +145,8 @@ takes the engine pid from `EngineController` (already owns the `ds4-server` `Pro
 `MetricsView` replaces the Metrics placeholder with the six dials, rendered through
 `DialLogic`, with:
 
-- a **"capture replay" badge** on the context and throughput dials whenever
-  `isReplayingWire` is true — recorded numbers are never presented as live (the machine
+- a visible **"capture replay" banner** whenever `isReplayingWire` is true — the replayed
+  context and throughput numbers are attributed and never presented as live (the machine
   dials are never badged);
 - the memory dial comparing live footprint against the **live** planned budget
   (`lastKnownPlannedBytes` from the P3 boot-line parser when known, else
