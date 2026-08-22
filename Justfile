@@ -33,3 +33,7 @@ engine:
 # Arrives in P5.
 capture:
     swift run swiftstar-drive
+
+# Assemble .build/SwiftStar.app (release build + Info.plist + icon)
+app:
+    Tools/make-app.sh
