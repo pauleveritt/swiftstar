@@ -25,7 +25,7 @@ public struct MetricsReducer: Sendable {
             if s.genTPS != 0 { state.genTPS = s.genTPS }
         case .ready(let plannedBytes):
             state.memoryBudgetPlannedBytes = plannedBytes
-        case .ignored:
+        case .hello, .refused, .ignored:
             break
         }
     }
