@@ -15,7 +15,7 @@ toolchain, the Superpowers structure, `BRIEF.md`, this file, and the harvest
 briefs in [`docs/harvest/`](docs/harvest/index.md). No Swift yet, deliberately:
 P1's output is what P2's fake engine is generated from.
 
-**Phase P1 — The fork, consolidated. Complete (2026-08-21).** `pauleveritt/ds4` exists as a
+**Phase P1 — The fork, consolidated. Complete (2026-08-22).** `pauleveritt/ds4` exists as a
 fork of `antirez/ds4`; the app-required patch set (`--json-events`,
 turn-interrupt, status marker, stale-interrupt latch, startup memory plan) is
 absorbed from `notatestuser/ds4` and from the local `paul/laguna` work into one
@@ -59,7 +59,7 @@ needs each one lands: **seam**, **wire**, **capture**, **fixture**, **variant**,
 | # | Phase | Direction (one sentence) | Status |
 |---|---|---|---|
 | P0 | Scaffolding | Repository, docs toolchain, brief, roadmap, harvest briefs | **complete** |
-| P1 | The fork, consolidated | One command builds `ds4-server` and `ds4-agent` from a pinned SHA on the shipped integration branch, with a ledger and a golden capture | complete (2026-08-21) |
+| P1 | The fork, consolidated | One command builds `ds4-server` and `ds4-agent` from a pinned SHA on the shipped integration branch, with a ledger and a golden capture | complete (2026-08-22) |
 | P2 | It launches and answers | A regular macOS app with a real icon, a window, and a `Settings` scene starts the server and streams one chat turn — with the fast tier, the tripwire, and fake engines generated from P1's captures | planned |
 | P3 | It can get its weights | Chunked parallel download with bitmap resume across restarts, and a launch that refuses infeasibly with an explanation a person can act on | planned |
 | P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | planned |
