@@ -14,6 +14,10 @@ final class EngineController {
     private(set) var transcript = ChatTranscript()
     private(set) var stderrTail: [String] = []
 
+    /// The running engine's pid, if the child process is alive (nil otherwise).
+    /// Read by `MetricsModel` to attribute per-process memory to the engine.
+    var runningPid: pid_t? { process?.processIdentifier }
+
     var settings: EngineSettings
     /// `nonisolated(unsafe)`: mutated only on MainActor; deinit (nonisolated in
     /// Swift 6) reads it for teardown.

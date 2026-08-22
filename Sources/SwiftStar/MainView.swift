@@ -1,13 +1,16 @@
 import SwiftUI
 
 struct MainView: View {
+    @State private var engineController = EngineController()
+    @State private var metricsModel = MetricsModel()
+
     var body: some View {
         TabView {
-            ChatView()
+            ChatView(controller: engineController)
                 .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
             PlaceholderView(title: "Agent", phase: "P7")
                 .tabItem { Label("Agent", systemImage: "person.crop.circle") }
-            PlaceholderView(title: "Metrics", phase: "P4")
+            MetricsView(model: metricsModel)
                 .tabItem { Label("Metrics", systemImage: "gauge") }
             PlaceholderView(title: "Diagnostics", phase: "P6")
                 .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
@@ -15,6 +18,10 @@ struct MainView: View {
                 .tabItem { Label("Help", systemImage: "questionmark.circle") }
         }
         .frame(minWidth: 800, minHeight: 560)
+        .onAppear { metricsModel.start(enginePid: engineController.runningPid) }
+        .onChange(of: engineController.runningPid) { _, newPid in
+            metricsModel.start(enginePid: newPid)
+        }
     }
 }
 

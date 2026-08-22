@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftStarKit
 
 struct ChatView: View {
-    @State private var controller = EngineController()
+    @Bindable var controller: EngineController
     @State private var input = ""
 
     var body: some View {
