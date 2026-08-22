@@ -94,11 +94,21 @@ Tested against the literal bytes of `fixtures/server/golden.sse` and
 ### D5 — Server command builder in Kit: one argv contract
 
 `EngineSettings` (engineDir, modelPath, contextSize, port, host) and
-`ServerCommand.argv` produce the exact argv the app will spawn:
+`ServerCommand.argv` produce the exact argv the app passes to `Process`:
 
 ```
-[<engineDir>/ds4-server, -m, <modelPath>, -c, <contextSize>, --host, 127.0.0.1, --port, <port>]
+[-m, <modelPath>, -c, <contextSize>, --host, 127.0.0.1, --port, <port>]
 ```
+
+**Correction (2026-08-22, recorded per the SDD retraction convention):** the
+original contract included `<engineDir>/ds4-server` as the first element. That
+was wrong: `Process` prepends the executable path as argv[0] itself, so the
+real engine received its own path as an unknown option. The fake engine
+validated the same wrong contract self-consistently, so the integration tier
+could not catch it — the live smoke against the real binary did
+(`ds4-server: unknown option: …/ds4-server`). The binary path now lives in
+`ServerCommand.binaryPath(settings:)`; `Process` is spawned with
+`executableURL` = binary path and `arguments` = the array above.
 
 This is the argv the fake engine validates strictly (D7) and the argv the app uses for the
 real engine. `engineDir` defaults to `DS4_DIR` or the submodule path
