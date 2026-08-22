@@ -43,16 +43,65 @@ should be a queue over one serialized engine, not a scheduler over concurrent
 sessions.
 
 **What it does *not* change:** the isolation hypothesis. Its mechanism is the
-context tax, not parallelism, and the tax argument works sequentially.
-Integrating the measured prefill curve, one 131,072-token context prefilled
-once costs ~2,100s while 8 × 16,384-token contexts prefilled **sequentially**
-cost ~475–500s — an up-to-~4x win with zero concurrency. Treat 4x as an upper
-bound: it prices two context *shapes*, not one task done two ways (shared
-preamble repeated per session, results reported back into a growing parent,
-cross-chunk reasoning lost). The harvest doc's measurement gate — "does the
+context tax, not parallelism, and the tax argument works sequentially — see
+the next section, which is the finding P11 is actually built on.
+
+## The finding under P11: splitting context wins ~4x with zero parallelism
+
+This is the measured prefill curve (`docs/harvest/telemetry-findings.md`)
+integrated piecewise: the cost of prefilling one deep context versus the
+same token count as several shallow contexts, **run one after another** — no
+concurrency assumed anywhere, because Correction 1 says there is none.
+
+```bash
+# recompute (rates from the findings doc; the last point is EXTRAPOLATED past
+# the measured 92.5k — holding the rate flat at 43.5 instead still gives ~4.2x):
+python3 - <<'EOF'
+pts=[(0,350),(3400,330),(20700,165),(36400,95),(56900,66),(75200,54.5),(92500,43.5),(131072,33)]
+def cost(n):
+    t=0.0
+    for (a,ra),(b,rb) in zip(pts,pts[1:]):
+        if n<=a: break
+        hi=min(n,b); t+=(hi-a)/((ra+rb)/2)
+        if n<=b: break
+    return t
+one=cost(131072); eight=8*cost(16384)
+print(f"one 131,072-token prefill: {one:.0f}s   8 x 16,384 sequential: {eight:.0f}s   ratio {one/eight:.1f}x")
+EOF
+# -> one 131,072-token prefill: 2121s   8 x 16,384 sequential: 500s   ratio 4.2x
+```
+
+**Treat 4.2x as an upper bound, not a projected win.** It prices two context
+*shapes*, not one task done two ways: each shallow session repeats the shared
+preamble (any K shared tokens cost 7K extra prefill across 8 sessions),
+results report back into a parent whose context then grows and re-prefills,
+and cross-chunk reasoning is simply lost. The real-world gain is materially
+lower; how much lower is exactly what P11's measurement gate measures.
+
+**This is the RLM pattern, and the engine is unusually well suited to it.**
+Recursive Language Models (Zhang et al., arXiv:2512.24601) keep the root
+model's context small by treating a large input as an external store the
+model programmatically decomposes and recursively sub-queries over slices;
+the paper's headline claim is flat scaling with input length *provided chunk
+size stays constant*. The curve above is the local-hardware argument for
+exactly that: growing the context is the expensive thing, so don't. Three
+engine facts make it concrete rather than aspirational — the agent already
+pages external state through bounded `read`/`more`, KV reuse rewards
+shallow sessions that share an exact prefix (the system prompt via
+`sysprompt.kv`), and compaction is *already* a degenerate recursive
+sub-query (a bounded summarizer whose result folds back into the parent).
+The part that is *not* free here, and that a naive reading of the paper
+misses: sessions are not cheap objects on Laguna (Correction 2), so the
+ephemeral sub-query tier should be a small-ctx template session kept alive
+and `rewind`-ed between queries, not a fresh allocation per query.
+
+This unifies three things the roadmap currently treats separately — a
+project (long-lived session), a subagent (short-lived, shares the parent's
+root), and an RLM sub-query (ephemeral, over a slice) — into **one pool with
+three lifetime policies.** The harvest doc's measurement gate — "does the
 wall-clock win correlate with subagent context staying small" — is already
-aimed at the right mechanism; the expectation to delete is any parallel-
-throughput win.
+aimed at this mechanism; the expectation to delete is any parallel-throughput
+win.
 
 ## Correction 2 — the engine's memory plan omits ~6.1 GB of per-session scratch
 

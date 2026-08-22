@@ -98,12 +98,17 @@ That directory is empty today; each plan is written as its phase begins.
   verification: `ds4_sessions_eval_batch_metal_supported()` excludes
   `DS4_MODEL_FAMILY_LAGUNA` unconditionally, and the fallback is a sequential
   eval loop, so the pool's workers run one at a time on any Laguna variant,
-  ssd_streaming or not. The isolation hypothesis survives intact — its
-  mechanism is the context tax, which works sequentially (up to ~4x from the
-  measured prefill curve in the perfectly-decomposable limit) — but P11's
-  measurement gate must not expect a parallel-throughput win, and its memory
-  math must budget ~6.1 GB of per-session GPU scratch that the engine's own
-  `planned_bytes` omits. Constraints, arithmetic, and recompute commands:
+  ssd_streaming or not. The isolation hypothesis survives intact — **its
+  mechanism is the context tax, which works sequentially: integrating the
+  measured prefill curve, one 131k-token context costs ~2,100s to prefill
+  while eight 16k contexts prefilled one after another cost ~500s — up to
+  ~4.2x with zero concurrency, an upper bound in the perfectly-decomposable
+  limit.** This is the RLM pattern (recursive sub-queries over slices, root
+  context kept small; see the Backlog entry), and it is the finding P11 is
+  built on. P11's measurement gate must not expect a parallel-throughput win,
+  and its memory math must budget ~6.1 GB of per-session GPU scratch that the
+  engine's own `planned_bytes` omits. Constraints, arithmetic, and recompute
+  commands:
   [`docs/superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md`](docs/superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md).
 - **P3's feasibility gate inherits an engine under-report.** The gate is
   arithmetic on the engine's `planned_bytes` — the right design — but on
@@ -233,6 +238,26 @@ Deferred, each with the condition that reopens it.
   ships the same under-report with a nicer interface. *Reopens with the
   upstream proposal for the P3 correction, or when P9's budgeting needs
   token counts.* Source: same note.
+- **Recursive sub-queries — the RLM pattern as P11's third lifetime tier.**
+  A project is a long-lived session; a subagent is a short-lived one sharing
+  the parent's root; an RLM sub-query is an *ephemeral* session over a slice
+  of a large input, whose result folds back into a root context that is
+  deliberately kept small (Recursive Language Models, arXiv:2512.24601: flat
+  scaling with input length *provided chunk size stays constant*). Same pool,
+  three lifetime policies. The economics are this hardware's own: splitting
+  a 131k prefill into eight sequential 16k prefills is up to ~4.2x cheaper by
+  the measured curve, with no concurrency required — which is fortunate,
+  since none exists (P11 bullet above). Two constraints a naive reading of
+  the paper misses: a sub-query session must be a small-ctx *template kept
+  alive and rewound*, not a fresh allocation (each Laguna session pins
+  ~6.1 GB of scratch), and the shared preamble is repeated per sub-query, so
+  the win shrinks with preamble size. Compaction is already a degenerate
+  instance — a bounded summarizer whose output folds back into the parent.
+  *Reopens when P11's pool exists and a task is observed needing more input
+  than fits one shallow context — a large-file read, a multi-file review —
+  which is the measurement that tells us the real gain under the 4.2x
+  ceiling.* Source: `2026-08-22-p11-engine-constraints-and-corrections.md`,
+  "The finding under P11."
 - **Multi-project residency** — N long-lived project sessions sharing one
   engine, switched without reload. Priced honestly: KV is
   `49,152 × ctx + 72 MiB` per session *plus* ~6.1 GB scratch each, so five

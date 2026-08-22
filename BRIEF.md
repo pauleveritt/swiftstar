@@ -109,7 +109,11 @@ Three consequences bind this project:
    nicety: context-cheap fresh sessions (context-cheap, not memory-free — a
    Laguna session also holds ~6.1 GB of lifetime GPU scratch; see
    "Architecture, settled"), condensing tool results *before* they enter
-   KV, and context-isolated subagents.
+   KV, context-isolated subagents, and — further out — recursive sub-queries
+   over slices of a large input with the root context held small (the RLM
+   pattern, Backlog). The number behind all four: by the measured curve,
+   eight 16k-token prefills run *one after another* cost ~4x less than one
+   131k prefill. The win is in the curve, not in concurrency.
 
 **Three limits travel with the finding and must not be dropped when it is
 quoted.** Compaction was never observed at the everyday ctx 150,000 setting
