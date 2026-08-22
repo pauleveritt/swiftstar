@@ -73,21 +73,39 @@ func submoduleSHA(_ dir: URL) -> String {
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 }
 
-// MARK: - Shared drive state (lock-protected; @unchecked Sendable for the pipe callbacks)
+// MARK: - Drive state (callback-driven; @unchecked Sendable for the handlers)
 
 final class DriveState: @unchecked Sendable {
     private let lock = NSLock()
     private var stdoutData = Data()
     private var stderrData = Data()
     private var ready = 0
+    private var parser = WireEventParser()
+    private var lineBuf = Data()
 
-    func appendStdout(_ d: Data) { lock.lock(); stdoutData.append(d); lock.unlock() }
-    func appendStderr(_ d: Data) { lock.lock(); stderrData.append(d); lock.unlock() }
-    func noteReady() { lock.lock(); ready += 1; lock.unlock() }
+    /// Called only from the stdout readabilityHandler (serial per handle).
+    func onStdoutData(_ d: Data) {
+        lock.lock()
+        stdoutData.append(d)
+        lineBuf.append(d)
+        while let nl = lineBuf.firstIndex(of: 0x0A) {
+            let lineData = lineBuf[..<nl]
+            lineBuf.removeSubrange(lineBuf.startIndex...nl)
+            if let line = String(data: lineData, encoding: .utf8),
+               let event = parser.feed(line), case .ready = event {
+                ready += 1
+            }
+        }
+        lock.unlock()
+    }
+
+    func onStderrData(_ d: Data) {
+        lock.lock(); stderrData.append(d); lock.unlock()
+    }
+
     var readyCount: Int { lock.lock(); defer { lock.unlock() }; return ready }
     var snapshot: (stdout: Data, stderr: Data) {
-        lock.lock(); defer { lock.unlock() }
-        return (stdoutData, stderrData)
+        lock.lock(); defer { lock.unlock() }; return (stdoutData, stderrData)
     }
 }
 
@@ -106,7 +124,9 @@ process.arguments = [
     "--trace", tracePath.path,
 ]
 process.currentDirectoryURL = engineDir
-process.environment = ["DS4_LOCK_FILE": "/tmp/ds4-capture.lock"]
+var engineEnv = ProcessInfo.processInfo.environment
+engineEnv["DS4_LOCK_FILE"] = "/tmp/ds4-capture.lock"
+process.environment = engineEnv
 
 let stdinPipe = Pipe()
 let stdoutPipe = Pipe()
@@ -121,42 +141,24 @@ let stderrHandle = stderrPipe.fileHandleForReading
 logProgress("spawning \(engineBinary.lastPathComponent) -m \(modelSlug) -c \(ctx)")
 try process.run()
 
-// stderr: verbatim tee on a background queue (no logic).
+stdoutHandle.readabilityHandler = { handle in
+    let data = handle.availableData
+    if data.isEmpty { handle.readabilityHandler = nil; return }
+    state.onStdoutData(data)
+}
 stderrHandle.readabilityHandler = { handle in
     let data = handle.availableData
-    if data.isEmpty {
-        handle.readabilityHandler = nil
-        return
-    }
-    state.appendStderr(data)
+    if data.isEmpty { handle.readabilityHandler = nil; return }
+    state.onStderrData(data)
 }
 
-// MARK: - stdout line reader (main thread; owns the parser)
+// MARK: - Drive (poll the ready-count; never block on the pipe)
 
-var parser = WireEventParser()
-var lineBuf = Data()
-
-/// Read stdout until `predicate` is satisfied or EOF. Tees every byte and feeds
-/// complete lines to the parser (counting `ready` events). Returns false on EOF
-/// or deadline.
-@discardableResult
-@MainActor
-func drainStdout(until predicate: () -> Bool, deadline: Date) -> Bool {
-    while !predicate() {
+func waitReady(_ target: Int, timeout: Double) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while state.readyCount < target {
         if Date() > deadline { return false }
-        let data = stdoutHandle.availableData
-        if data.isEmpty { return false }  // EOF
-        state.appendStdout(data)
-        lineBuf.append(data)
-        while let nl = lineBuf.firstIndex(of: 0x0A) {
-            let lineData = lineBuf[..<nl]
-            lineBuf.removeSubrange(lineBuf.startIndex...nl)
-            if let line = String(data: lineData, encoding: .utf8) {
-                if let event = parser.feed(line), case .ready = event {
-                    state.noteReady()
-                }
-            }
-        }
+        Thread.sleep(forTimeInterval: 0.2)
     }
     return true
 }
@@ -166,13 +168,10 @@ func writePrompt(_ prompt: String) {
     stdinPipe.fileHandleForWriting.write(Data((prompt + "\n").utf8))
 }
 
-// MARK: - Drive
-
 var failed = false
 
 logProgress("waiting for model load (ready event)…")
-let loadDeadline = Date().addingTimeInterval(loadTimeout)
-if !drainStdout(until: { state.readyCount >= 1 }, deadline: loadDeadline) {
+if !waitReady(1, timeout: loadTimeout) {
     logProgress("FATAL: no ready event before load timeout")
     failed = true
 }
@@ -182,8 +181,7 @@ if !failed {
         let target = state.readyCount + 1
         logProgress("sending prompt \(i + 1)/\(prompts.count)…")
         writePrompt(prompt)
-        let turnDeadline = Date().addingTimeInterval(turnTimeout)
-        if !drainStdout(until: { state.readyCount >= target }, deadline: turnDeadline) {
+        if !waitReady(target, timeout: turnTimeout) {
             logProgress("FATAL: turn \(i + 1) did not finish before timeout")
             failed = true
             break
@@ -191,12 +189,13 @@ if !failed {
     }
 }
 
-// Drain trailing output to EOF (or a short grace), then stop.
-_ = drainStdout(until: { false }, deadline: Date().addingTimeInterval(10))
+// Stop the engine: EOF on stdin, a short grace for trailing output, then SIGTERM.
 try? stdinPipe.fileHandleForWriting.close()
+Thread.sleep(forTimeInterval: 2)
 if process.isRunning { process.terminate() }
 process.waitUntilExit()
 stdoutHandle.readabilityHandler = nil
+stderrHandle.readabilityHandler = nil
 
 // MARK: - Write the capture
 
