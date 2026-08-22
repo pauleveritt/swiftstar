@@ -28,7 +28,7 @@ struct FeasibilityTests {
         // The message must carry the numbers and an actionable lever.
         #expect(reason.message.contains("46.5"))
         #expect(reason.message.contains("24.0"))
-        #expect(reason.message.contains("close"))
+        #expect(reason.message.lowercased().contains("close"))
         #expect(reason.message.contains("smaller"))
     }
 
