@@ -1,9 +1,18 @@
 import Foundation
 
-public enum Severity: Equatable, Sendable {
+public enum Severity: Equatable, Hashable, Sendable {
     case healthy
     case warning
     case critical
+
+    /// Deterministic label for phrasing (Kit, not view, concern).
+    public var label: String {
+        switch self {
+        case .healthy: return "healthy"
+        case .warning: return "warning"
+        case .critical: return "critical"
+        }
+    }
 }
 
 /// One live machine sample from the OS collectors. `residentBytes` is nil when
