@@ -53,6 +53,32 @@ engine-side fix (the estimator's Laguna branch multiplying by `prefill_cap` rows
 is upstream-bound and **deferred** — see the "engine-side memory-plan / tokenize
 CLI" backlog entry.
 
+## GLM 5.2 implementation review (applied post-implementation)
+
+The committed implementation was reviewed by GLM 5.2 (OpenRouter `z-ai/glm-5.2`);
+accepted findings applied (commit `865178e`):
+
+1. **`ts` was documented as "since engine start" but is monotonic-since-boot.**
+   `clock_gettime(CLOCK_MONOTONIC)` returns boot-relative time; the comment, the
+   Swift doc, the provenance render, and the spec all claimed "since engine
+   start", and the prose promised wall-clock correlation that is unfulfillable
+   without recording the monotonic start. Fixed the wording everywhere (only
+   deltas are meaningful; the provenance records wall-clock start for anchoring)
+   rather than adding a start-delta that would force another recapture.
+2. **The driver ignored a refused handshake.** `DriveState.onStdoutData` only
+   counted `.ready`; a wrong-build engine (no `hello`) would capture silently,
+   violating binding rule 7. Added a `refusal` flag; the driver aborts with
+   `FATAL: wire handshake refused: …`.
+3. **Trailing bytes could be lost after exit.** `readabilityHandler = nil` after
+   `waitUntilExit` without a final drain. Added `readDataToEndOfFile()` on both
+   pipes after exit.
+4. **Hardcoded `DS4_LOCK_FILE`** became pid-unique so a stale/concurrent capture
+   cannot collide.
+
+Dismissed after verification: "handshake missing outside non-interactive" —
+`--json-events` requires `--non-interactive` (a startup error otherwise), so
+`run_agent_non_interactive` is the only valid entry point.
+
 ## Concept budget
 
 **handshake** and **trace** are now defined (see ROADMAP); **capture** is re-worded
