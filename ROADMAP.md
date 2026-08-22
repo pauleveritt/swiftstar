@@ -10,38 +10,25 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P0 — Scaffolding. Complete (2026-08-21).** The repository, the docs
-toolchain, the Superpowers structure, `BRIEF.md`, this file, and the harvest
-briefs in [`docs/harvest/`](docs/harvest/index.md). No Swift yet, deliberately:
-P1's output is what P2's fake engine is generated from.
+**Phase P5 — Capture is a program, not a lost file.** In progress on branch
+`p5-capture-is-a-program`: design spec and plan committed; the engine patch
+(ledger divergence #7 — `ds4-agent --json-events` emits a version/capability
+handshake first and `ts` on every event) is bumped into the submodule;
+`swiftstar-drive` is committed and produces a capture directory with
+`wire.ndjson`/`wire.stderr`/`wire.trace`/`provenance.md`/`progress.log`, all
+byte-verbatim; fixtures are recaptured (`golden.ndjson` carries the handshake
+and `ts`, `golden.trace` and `golden.stderr` are committed, the old
+`.sidecar` file is gone). Remaining before done-when is met: this file
+marked complete and the concept budget reviewed for **handshake** and
+**trace**. Full done-when list:
+[`docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md`](docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md).
 
-**Phase P1 — The fork, consolidated. Complete (2026-08-22).** `pauleveritt/ds4` exists as a
-fork of `antirez/ds4`; the app-required patch set (`--json-events`,
-turn-interrupt, status marker, stale-interrupt latch, startup memory plan) is
-absorbed from `notatestuser/ds4` and from the local `paul/laguna` work into one
-shipped integration branch; a documented command builds `ds4-server` and
-`ds4-agent` from the submodule; the fork ledger and `docs/upstream-proposals.md`
-are in place; and **two golden captures are taken from the real binaries** — an
-SSE capture from `ds4-server` and an NDJSON capture from `ds4-agent`.
+Note for whoever closes this phase: `wire.trace` already captures the
+engine's `--trace` channel, which independently satisfies the P5/P6
+dependency bullet below — no further action needed there.
 
-This is the phase where the "copy the engine work directly" exception is spent.
-It is deliberately first because nothing else can be built against an engine
-that does not build, and deliberately *not* combined with the walking skeleton:
-its merge conflicts are real and its done-when does not require an app.
-
-**Done when:** one command builds both binaries from a pinned SHA on the shipped
-integration branch; the ledger has a row per divergence naming what would retire
-it; **both** golden captures are committed — SSE from `ds4-server` for chat,
-NDJSON plus its timestamp sidecar from `ds4-agent` — and the
-recapture-on-submodule-bump rule is written down where a future rebase will
-find it.
-
-**How P1 captures, given that no Swift exists yet.** `swiftstar-drive` arrives at
-P5, so P1's bootstrap captures are taken by driving the real binaries directly
-with a throwaway line-stamping script. The verbatim-raw rule still applies: the
-wire is stored byte-for-byte, and receive times go in a sidecar. The script is
-throwaway by design — P5 replaces it, and from P5 onward `swiftstar-drive` is
-the only sanctioned source of a fixture.
+*P0–P4 are complete; their summaries live in [Prior work](#prior-work), not
+here, so this section stays a true "what's happening now."*
 
 ## Concept budget
 
@@ -70,7 +57,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P2 | It launches and answers | A regular macOS app with a real icon, a window, and a `Settings` scene starts the server and streams one chat turn — with the fast tier, the tripwire, and fake engines generated from P1's captures | complete (2026-08-22) |
 | P3 | It can get its weights | Chunked parallel download with bitmap resume across restarts, and a launch that refuses infeasibly with an explanation a person can act on | complete (2026-08-22) |
 | P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | complete (2026-08-22) |
-| P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | planned |
+| P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | in progress |
 | P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | planned |
 | P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript, tool cards, workspace grant, shell toggle, interruptible turns | planned |
 | P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | planned |
@@ -304,6 +291,18 @@ Completed phases move here when the roadmap outgrows the front page.
   the adversarial review that corrected two of them, is recorded in
   [`docs/superpowers/specs/2026-08-21-swiftstar-design.md`](docs/superpowers/specs/2026-08-21-swiftstar-design.md).
 
+- **P1 — The fork, consolidated (2026-08-22).** `pauleveritt/ds4` exists as a
+  fork of `antirez/ds4`; the app-required patch set (`--json-events`,
+  turn-interrupt, status marker, stale-interrupt latch, startup memory plan)
+  is absorbed into one shipped integration branch; a documented command
+  builds `ds4-server` and `ds4-agent` from the submodule; the fork ledger and
+  `docs/upstream-proposals.md` are in place; two golden captures — SSE from
+  `ds4-server`, NDJSON from `ds4-agent` — are taken from the real binaries by
+  a throwaway line-stamping script (`swiftstar-drive` did not exist yet;
+  P5 replaced the script and is the only sanctioned source of a fixture from
+  P5 onward). Spec:
+  [`docs/superpowers/specs/2026-08-21-p1-fork-consolidated-design.md`](docs/superpowers/specs/2026-08-21-p1-fork-consolidated-design.md).
+
 - **P2 — It launches and answers (2026-08-22).** `SwiftStarKit` (pure: SSE
   parser, server argv builder, supervisor state machine, chat transcript
   reducer, fake-engine source generator) and `SwiftStar` (the SwiftUI app:
@@ -314,6 +313,23 @@ Completed phases move here when the roadmap outgrows the front page.
   live-tier bugs the fake tier could not catch (the argv contract — `Process`
   prepends argv[0] — and the metal-source/CWD gotcha) were found and fixed.
   Spec: [`docs/superpowers/specs/2026-08-22-p2-it-launches-and-answers-design.md`](docs/superpowers/specs/2026-08-22-p2-it-launches-and-answers-design.md).
+
+- **P3 — It can get its weights (2026-08-22).** A chunked parallel HTTP-Range
+  downloader (`ChunkedDownload` + `DownloadBitmap`, resume-safe across
+  restarts) and `Feasibility.check` — pure arithmetic on the engine's own
+  `planned_bytes` from a real `ds4: memory:` boot line, refusing an
+  infeasible launch with an actionable message rather than a percentage
+  heuristic. Two real bugs found by the tests, not review: the range test
+  server died on SIGPIPE and served the wrong byte range on an early client
+  close; `SwiftStarAppKit` was split out of the app target because
+  `@testable import SwiftStar` (an executable importing SwiftUI) fails to
+  link — the download runner and its state moved to the testable library,
+  the app stayed thin. *(Later correction, 2026-08-22: `Feasibility.check`'s
+  design is right, but on Laguna the engine's own `planned_bytes` itself
+  omits ~6.1 GB of per-session GPU scratch — see the P3 dependency bullet
+  above and
+  `docs/superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md`.)*
+  Spec: [`docs/superpowers/specs/2026-08-22-p3-it-can-get-its-weights-design.md`](docs/superpowers/specs/2026-08-22-p3-it-can-get-its-weights-design.md).
 
 - **P4 — It shows what the machine is doing (2026-08-22).** `SwiftStarKit` gains
   the wire telemetry model (`WireEventParser` for NDJSON `status`/`ready`, the
