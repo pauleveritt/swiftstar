@@ -69,7 +69,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P1 | The fork, consolidated | One command builds `ds4-server` and `ds4-agent` from a pinned SHA on the shipped integration branch, with a ledger and a golden capture | complete (2026-08-22) |
 | P2 | It launches and answers | A regular macOS app with a real icon, a window, and a `Settings` scene starts the server and streams one chat turn — with the fast tier, the tripwire, and fake engines generated from P1's captures | complete (2026-08-22) |
 | P3 | It can get its weights | Chunked parallel download with bitmap resume across restarts, and a launch that refuses infeasibly with an explanation a person can act on | complete (2026-08-22) |
-| P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | planned |
+| P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | complete (2026-08-22) |
 | P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | planned |
 | P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | planned |
 | P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript, tool cards, workspace grant, shell toggle, interruptible turns | planned |
@@ -200,6 +200,20 @@ Completed phases move here when the roadmap outgrows the front page.
   live-tier bugs the fake tier could not catch (the argv contract — `Process`
   prepends argv[0] — and the metal-source/CWD gotcha) were found and fixed.
   Spec: [`docs/superpowers/specs/2026-08-22-p2-it-launches-and-answers-design.md`](docs/superpowers/specs/2026-08-22-p2-it-launches-and-answers-design.md).
+
+- **P4 — It shows what the machine is doing (2026-08-22).** `SwiftStarKit` gains
+  the wire telemetry model (`WireEventParser` for NDJSON `status`/`ready`, the
+  ratcheting `MetricsReducer`, and `DialLogic` — absolute context thresholds,
+  generic memory thresholds, fixed-width formatting, sanitization) plus the
+  `MachineSnapshot` type. `SwiftStarAppKit` gains `ProcessStatsCollector`
+  (`proc_pid_rusage` footprint, `host_processor_info` CPU, `IOAccelerator` GPU,
+  private `IOReport` watts — linked via `.linkedLibrary("IOReport")`) and
+  `FixtureReplay` (bundled `golden.ndjson`). `SwiftStar` gains the `MetricsModel`
+  + `MetricsView`, replacing the placeholder: a severity-colored context ring
+  with a widened hit region, fixed-width Prompt/Decode readouts, and a
+  capture-replay banner. The lead dials (`ctx_used`, throughput) are
+  fixture-replayed until P7's agent migration; memory/GPU/CPU/power are live.
+  Spec: [`docs/superpowers/specs/2026-08-22-p4-it-shows-what-the-machine-is-doing-design.md`](docs/superpowers/specs/2026-08-22-p4-it-shows-what-the-machine-is-doing-design.md).
 
 ## Workflow
 
