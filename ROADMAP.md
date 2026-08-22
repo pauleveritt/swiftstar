@@ -78,6 +78,17 @@ That directory is empty today; each plan is written as its phase begins.
 - **P9 is the schedule risk.** It is a protocol design, and everything from P10
   on depends on it. A bidirectional wire also needs a fake *app* side; that cost
   belongs to P9 and must not be discovered inside it.
+- **P9 owns the validation cadence, and it has costs to price up front.** Once
+  the host executes tools, lint/type/test can run host-side and their findings
+  ride back on the triggering tool result rather than costing a tool round of
+  their own. Worth roughly one round each — a structural win, *not* the large
+  condensation win it is easy to bundle it with. Three costs belong in P9's
+  budget rather than being discovered inside it: silence-means-clean needs a
+  system-prompt contract a small model may not honor (measurable — count
+  model-initiated linter calls in a capture); silent auto-fix breaks `edit`'s
+  exact-match on files in the model's active window; and asynchronous findings
+  need tree-state provenance to stay actionable.
+  [`docs/superpowers/research/2026-08-22-p9-host-side-validation.md`](docs/superpowers/research/2026-08-22-p9-host-side-validation.md)
 - **Outcome telemetry precedes P10.** The Mellum agent evaluation showed that
   visible prose is not evidence of action: a model can claim files were written
   and tests passed while executing neither. P7's capture-grade turn outcome must
