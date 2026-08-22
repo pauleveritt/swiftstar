@@ -119,6 +119,20 @@ That directory is empty today; each plan is written as its phase begins.
   [`docs/harvest/telemetry-findings.md`](docs/harvest/telemetry-findings.md)
   before planning P4; every one of those behaviors was proven testable as a pure
   function, which is what `SwiftStarKit` is for.
+- **P4's telemetry data lives on the agent wire, not the chat wire.** The
+  metrics tab's lead numbers — absolute `ctx_used` and prefill throughput — are
+  the `ds4-agent --json-events` `status`/`ready` events, already shipped in the
+  fork and already captured in `fixtures/agent/golden.ndjson` (1053 `status`
+  and 7 `ready` events, plus `text`/`think`/`tool`). The chat wire
+  (`ds4-server` SSE) carries none of it. P4 therefore ships **fixture-driven**:
+  the parser and widgets are built and tested against `golden.ndjson` in the
+  fast tier — no engine, no model, no subprocess — while the live engine stays
+  `ds4-server` for chat. The live wiring — the app's engine process emitting
+  real `status`/`ready` — lands with P7's `ds4-agent` migration, which is where
+  the agent's safety surface (workspace grant, shell toggle) is designed and
+  where two ~48 GiB model loads stop being a constraint. **P4 must not spawn
+  `ds4-agent` live** ahead of that migration. See
+  [`docs/superpowers/research/2026-08-22-p4-sequencing-findings.md`](docs/superpowers/research/2026-08-22-p4-sequencing-findings.md).
 
 ## Backlog
 
