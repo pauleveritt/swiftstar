@@ -97,6 +97,16 @@ final class EngineController {
         }
     }
 
+    /// The model (last path component) the persisted plan was measured on.
+    static var lastKnownPlannedModel: String? {
+        get {
+            UserDefaults.standard.string(forKey: "lastKnownPlannedModel")
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "lastKnownPlannedModel")
+        }
+    }
+
     static func probeFreePort() -> Int {
         let s = socket(AF_INET, SOCK_STREAM, 0)
         defer { close(s) }
@@ -139,7 +149,12 @@ final class EngineController {
         }
         // Feasibility: refuse before spawning with a computed, actionable
         // message (P3). plannedBytes comes from the engine's own boot line,
-        // persisted from the last run; unknown plans defer to the engine.
+        // persisted with the model it was measured on; a changed model
+        // invalidates the stale plan (a refusal must never pair an old model's
+        // bytes with a new model's name). Unknown plans defer to the engine.
+        if EngineController.lastKnownPlannedModel != settings.modelPath.lastPathComponent {
+            EngineController.lastKnownPlannedBytes = nil
+        }
         if let planned = EngineController.lastKnownPlannedBytes {
             let verdict = Feasibility.check(
                 plannedBytes: planned,
@@ -242,10 +257,12 @@ final class EngineController {
         stderrTail.append(line)
         if stderrTail.count > 20 { stderrTail.removeFirst(stderrTail.count - 20) }
         log(line)
-        // Persist the engine's own startup memory plan so future launches can
-        // refuse infeasibly before spawning (P3).
+        // Persist the engine's own startup memory plan (keyed by the model it
+        // was measured on) so future launches can refuse infeasibly before
+        // spawning (P3).
         if let planned = BootLineParser.plannedBytes(from: line) {
             EngineController.lastKnownPlannedBytes = planned
+            EngineController.lastKnownPlannedModel = settings.modelPath.lastPathComponent
         }
         state = Supervisor.transition(from: state, event: .stderrLine(line), port: settings.port, stderrTail: stderrTail)
     }

@@ -20,3 +20,15 @@ struct BootLineParserTests {
         #expect(BootLineParser.plannedBytes(from: "ds4: memory: KV 1.57 GiB") == nil)
     }
 }
+
+    @Test func garbageValueReturnsNil() {
+        // A nonsense magnitude must return nil, not trap on overflow.
+        #expect(BootLineParser.plannedBytes(from: "ds4: memory: = 1e20 GiB planned") == nil)
+        #expect(BootLineParser.plannedBytes(from: "ds4: memory: = -4 GiB planned") == nil)
+    }
+
+    @Test func earlierEqualsDoNotMislead() {
+        // An "=" earlier in the line (e.g. a KV pair) must not break parsing.
+        let line = "ds4: memory: name=test KV 1.57 GiB + resident model 44.94 GiB = 46.51 GiB planned"
+        #expect(BootLineParser.plannedBytes(from: line) != nil)
+    }

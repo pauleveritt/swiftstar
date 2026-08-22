@@ -7,7 +7,7 @@ import SwiftStarAppKit
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct DownloadIntegrationTests {
 
-    private func makeFileAndServer(bytes: Int, chunkSize: Int) throws -> (source: URL, log: URL, port: Int, dir: URL) {
+    private func makeFileAndServer(bytes: Int, chunkSize: Int) throws -> (source: URL, log: URL, port: Int, dir: URL, server: FakeProcess) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("p3-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let source = dir.appendingPathComponent("source.bin")
@@ -18,12 +18,23 @@ struct DownloadIntegrationTests {
         let log = dir.appendingPathComponent("ranges.log")
         let binary = try FakeServerHarness.compileFile(at: FakeServerHarness.repoRoot.appendingPathComponent("Tools/RangeFileServer.swift"), into: dir)
         let server = try FakeServerHarness.spawn(binary, arguments: ["--port", "\(port)", "--file", source.path, "--log", log.path], env: [:])
-        _ = server.stderr.fileHandleForReading.availableData  // wait for listening line
-        return (source, log, port, dir)
+        // Real wait for the listening line (availableData is non-blocking).
+        let stderr = server.stderr.fileHandleForReading
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            let d = stderr.availableData
+            if !d.isEmpty, String(data: d, encoding: .utf8)?.contains("listening") == true { break }
+            usleep(20_000)
+        }
+        return (source, log, port, dir, server)
     }
 
     @Test func fullDownloadIsByteIdentical() async throws {
-        let (source, _, port, _) = try makeFileAndServer(bytes: 1_000_000, chunkSize: 100_000)
+        let (source, _, port, dir, server) = try makeFileAndServer(bytes: 1_000_000, chunkSize: 100_000)
+        defer {
+            server.process.terminate()
+            try? FileManager.default.removeItem(at: dir)
+        }
         let dest = source.deletingLastPathComponent().appendingPathComponent("out.bin")
         let runner = DownloadRunner()
         await runner.start(spec: DownloadSpec(
@@ -37,22 +48,26 @@ struct DownloadIntegrationTests {
     }
 
     @Test func resumeDownloadsOnlyMissingChunks() async throws {
-        let (source, log, port, _) = try makeFileAndServer(bytes: 1_000_000, chunkSize: 100_000)
+        let (source, log, port, testDir, server) = try makeFileAndServer(bytes: 1_000_000, chunkSize: 100_000)
+        defer {
+            server.process.terminate()
+            try? FileManager.default.removeItem(at: testDir)
+        }
         let dest = source.deletingLastPathComponent().appendingPathComponent("out2.bin")
         // Seed the first two chunks + bitmap, as if a prior run died mid-way.
-        let dir = URL(fileURLWithPath: dest.path + ".dld")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let seedDir = URL(fileURLWithPath: dest.path + ".dld")
+        try FileManager.default.createDirectory(at: seedDir, withIntermediateDirectories: true)
         let plan = ChunkedPlan(chunkSize: 100_000)
         let total = Int64(1_000_000)
         let full = try Data(contentsOf: source)
         for i in 0..<2 {
             let r = plan.range(forChunk: i, totalBytes: total)
-            try full.subdata(in: Int(r.lowerBound)..<Int(r.upperBound)).write(to: dir.appendingPathComponent("\(i).part"))
+            try full.subdata(in: Int(r.lowerBound)..<Int(r.upperBound)).write(to: seedDir.appendingPathComponent("\(i).part"))
         }
         var bm = DownloadBitmap(chunkCount: plan.chunkCount(forTotalBytes: total))
         bm.set(0)
         bm.set(1)
-        try bm.serialize().write(to: dir.appendingPathComponent("bitmap.bin"))
+        try bm.serialize().write(to: seedDir.appendingPathComponent("bitmap.bin"))
 
         // A fresh runner is a "restart".
         let runner = DownloadRunner()
@@ -72,7 +87,11 @@ struct DownloadIntegrationTests {
     }
 
     @Test func serverErrorFailsCleanly() async throws {
-        let (_, _, port, _) = try makeFileAndServer(bytes: 100_000, chunkSize: 100_000)
+        let (_, _, port, dir, server) = try makeFileAndServer(bytes: 100_000, chunkSize: 100_000)
+        defer {
+            server.process.terminate()
+            try? FileManager.default.removeItem(at: dir)
+        }
         let dest = FileManager.default.temporaryDirectory
             .appendingPathComponent("p3-fail-\(UUID().uuidString)")
             .appendingPathComponent("out.bin")

@@ -10,7 +10,7 @@ struct SettingsView: View {
     // Download section (P3)
     @State private var downloadRunner = DownloadRunner()
     @State private var downloadTask: Task<Void, Never>?
-    @State private var selectedTarget = 0
+    @State private var selectedTarget: String = Self.targets[0].file
 
     struct DownloadTarget {
         let name: String
@@ -18,7 +18,15 @@ struct SettingsView: View {
         let revision: String
         let file: String
         var url: URL {
-            URL(string: "https://huggingface.co/\(repo)/resolve/\(revision)/\(file)")!
+            // Percent-encode the file name; the repo/revision are path-safe.
+            var components = URLComponents()
+            components.scheme = "https"
+            components.host = "huggingface.co"
+            components.path = "/\(repo)/resolve/\(revision)/\(file)"
+            guard let url = components.url else {
+                fatalError("misconfigured download target: \(name)")
+            }
+            return url
         }
     }
     // The P1 model first; more targets arrive with P12. Source of the URL
@@ -40,8 +48,12 @@ struct SettingsView: View {
         return base.appendingPathComponent("SwiftStar/Downloads")
     }
 
+    private var selectedTargetEntry: DownloadTarget {
+        Self.targets.first { $0.file == selectedTarget } ?? Self.targets[0]
+    }
+
     private var selectedDestination: URL {
-        downloadsDir.appendingPathComponent(Self.targets[selectedTarget].file)
+        downloadsDir.appendingPathComponent(selectedTargetEntry.file)
     }
 
     var body: some View {
@@ -57,32 +69,44 @@ struct SettingsView: View {
             }
             Section("Download model") {
                 Picker("Model", selection: $selectedTarget) {
-                    ForEach(Self.targets.indices, id: \.self) { i in
-                        Text(Self.targets[i].name).tag(i)
+                    ForEach(Self.targets, id: \.file) { target in
+                        Text(target.name).tag(target.file)
                     }
                 }
-                if case .downloading(let fraction) = downloadRunner.state {
-                    ProgressView(value: fraction) {
-                        Text("Downloading… \(Int(fraction * 100))%")
-                    }
-                    Button("Cancel") { cancelDownload() }
-                } else if case .done(let url) = downloadRunner.state {
-                    Label("Downloaded to \(url.path)", systemImage: "checkmark.circle")
-                } else if case .failed(let message) = downloadRunner.state {
-                    Label(message, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                } else {
-                    Button("Download") { startDownload() }
-                }
+                downloadStatus
             }
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 360)
+        .onDisappear { downloadTask?.cancel() }
+    }
+
+    @ViewBuilder
+    private var downloadStatus: some View {
+        switch downloadRunner.state {
+        case .idle:
+            Button("Download") { startDownload() }
+        case .downloading(let fraction):
+            ProgressView(value: fraction) {
+                Text("Downloading… \(Int(fraction * 100))%")
+            }
+            Button("Cancel") { cancelDownload() }
+        case .done(let url):
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Downloaded to \(url.path)", systemImage: "checkmark.circle")
+                Button("Use this model") {
+                    modelPath = url.path
+                }
+            }
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.red)
+        }
     }
 
     private func startDownload() {
         let spec = DownloadSpec(
-            url: Self.targets[selectedTarget].url,
+            url: selectedTargetEntry.url,
             destination: selectedDestination,
             chunkSize: 16 * 1024 * 1024,
             maxConcurrency: 4
@@ -94,6 +118,7 @@ struct SettingsView: View {
     }
 
     private func cancelDownload() {
+        downloadRunner.cancel()
         downloadTask?.cancel()
         downloadTask = nil
     }

@@ -21,6 +21,7 @@ public enum Feasibility {
         availableBytes: Int64,
         modelName: String
     ) -> FeasibilityVerdict {
+        guard plannedBytes >= 0, availableBytes >= 0 else { return .feasible }
         guard plannedBytes > availableBytes else { return .feasible }
         let deficit = plannedBytes - availableBytes
         let message = """

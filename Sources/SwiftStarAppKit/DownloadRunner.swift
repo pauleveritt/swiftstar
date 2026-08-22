@@ -37,7 +37,8 @@ public final class DownloadRunner {
 
     public init() {
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForRequest = 180
+        config.timeoutIntervalForResource = 3600
         self.session = URLSession(configuration: config)
     }
 
@@ -55,15 +56,22 @@ public final class DownloadRunner {
             let plan = ChunkedPlan(chunkSize: spec.chunkSize)
             let chunkCount = plan.chunkCount(forTotalBytes: total)
 
+            // Resume integrity: if the remote total differs from the persisted
+            // meta, the server file changed — discard the bitmap and parts.
             var bitmap = Self.loadBitmap(dir: dir, chunkCount: chunkCount)
-            // Self-healing: a set chunk whose part file is absent or short
-            // resets the whole bitmap (v1 simplification; the file is the truth).
+            if let savedTotal = Self.loadMetaTotal(dir: dir), savedTotal != total {
+                try? FileManager.default.removeItem(at: dir)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                bitmap = DownloadBitmap(chunkCount: chunkCount)
+            }
+            // Self-healing per chunk: a set bit whose part file is absent or
+            // short is cleared (the file is the truth, not the bit).
             for i in 0..<chunkCount where bitmap.isSet(i) {
                 if Self.partSize(dir: dir, index: i) != plan.range(forChunk: i, totalBytes: total).count {
-                    bitmap = DownloadBitmap(chunkCount: chunkCount)
-                    break
+                    bitmap.clear(i)
                 }
             }
+            Self.persistMetaTotal(total, dir: dir)
 
             let missing = plan.missingChunkIndices(bitmap: bitmap)
             var doneBytes = plan.completedBytes(bitmap: bitmap, totalBytes: total)
@@ -90,12 +98,21 @@ public final class DownloadRunner {
             }
 
             try Self.merge(plan: plan, total: total, bitmap: bitmap, spec: spec, dir: dir)
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent("meta.txt"))
             try? FileManager.default.removeItem(at: dir)
             state = .done(spec.destination)
         } catch is CancellationError {
             state = .idle  // partial state remains on disk; resumable
         } catch {
             state = .failed("download failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Cooperative cancel: records immediate .idle (the enclosing Task's
+    /// cancellation still lands the runner's start() catch on the same state).
+    public func cancel() {
+        if case .downloading = state {
+            state = .idle
         }
     }
 
@@ -107,6 +124,7 @@ public final class DownloadRunner {
         head.httpMethod = "HEAD"
         let (_, response) = try await session.data(for: head)
         if let http = response as? HTTPURLResponse,
+           (http.statusCode == 200 || http.statusCode == 204),
            let len = http.value(forHTTPHeaderField: "Content-Length"),
            let n = Int64(len) {
             return n
@@ -127,14 +145,45 @@ public final class DownloadRunner {
     private nonisolated static func fetchChunk(range: Range<Int64>, chunk: Int, spec: DownloadSpec, session: URLSession, dir: URL) async throws {
         var request = URLRequest(url: spec.url)
         request.setValue("bytes=\(range.lowerBound)-\(range.upperBound - 1)", forHTTPHeaderField: "Range")
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse,
-              (http.statusCode == 200 || http.statusCode == 206),
-              data.count == range.count else {
-            throw NSError(domain: "DownloadRunner", code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: "chunk \(chunk): bad response"])
+        var lastError: Error?
+        for attempt in 1...3 {
+            do {
+                let (data, response) = try await session.data(for: request)
+                guard let http = response as? HTTPURLResponse else {
+                    throw NSError(domain: "DownloadRunner", code: 6,
+                                  userInfo: [NSLocalizedDescriptionKey: "chunk \(chunk): no HTTP response"])
+                }
+                if http.statusCode == 200 {
+                    // The server ignored the Range header: the whole strategy
+                    // is infeasible, not a transient failure.
+                    throw NSError(domain: "DownloadRunner", code: 7,
+                                  userInfo: [NSLocalizedDescriptionKey: "server does not support range requests"])
+                }
+                guard http.statusCode == 206, data.count == range.count else {
+                    throw NSError(domain: "DownloadRunner", code: 2,
+                                  userInfo: [NSLocalizedDescriptionKey: "chunk \(chunk): bad response (HTTP \(http.statusCode))"])
+                }
+                try data.write(to: dir.appendingPathComponent("\(chunk).part"), options: .atomic)
+                return
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                lastError = error
+                if attempt < 3 { try? await Task.sleep(for: .seconds(Double(attempt) * 0.5)) }
+            }
         }
-        try data.write(to: dir.appendingPathComponent("\(chunk).part"), options: .atomic)
+        throw lastError ?? NSError(domain: "DownloadRunner", code: 8,
+                                   userInfo: [NSLocalizedDescriptionKey: "chunk \(chunk): failed after retries"])
+    }
+
+    private nonisolated static func loadMetaTotal(dir: URL) -> Int64? {
+        let path = dir.appendingPathComponent("meta.txt").path
+        guard let s = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        return Int64(s.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private nonisolated static func persistMetaTotal(_ total: Int64, dir: URL) {
+        try? "\"\(total)\n\"".data(using: .utf8)?.write(to: dir.appendingPathComponent("meta.txt"), options: .atomic)
     }
 
     private nonisolated static func loadBitmap(dir: URL, chunkCount: Int) -> DownloadBitmap {
@@ -158,6 +207,11 @@ public final class DownloadRunner {
     }
 
     private nonisolated static func merge(plan: ChunkedPlan, total: Int64, bitmap: DownloadBitmap, spec: DownloadSpec, dir: URL) throws {
+        // Completeness guard: a missing chunk must never silently shift bytes.
+        guard plan.isComplete(bitmap: bitmap) else {
+            throw NSError(domain: "DownloadRunner", code: 5,
+                          userInfo: [NSLocalizedDescriptionKey: "merge refused: bitmap incomplete"])
+        }
         let fm = FileManager.default
         let tmp = URL(fileURLWithPath: spec.destination.path + ".tmp")
         fm.createFile(atPath: tmp.path, contents: nil)
@@ -167,6 +221,8 @@ public final class DownloadRunner {
             let part = dir.appendingPathComponent("\(i).part")
             try handle.write(contentsOf: Data(contentsOf: part))
         }
-        try fm.moveItem(at: tmp, to: spec.destination)
+        try handle.close()
+        // Destination may already exist (re-download); replace rather than move.
+        _ = try fm.replaceItemAt(spec.destination, withItemAt: tmp)
     }
 }

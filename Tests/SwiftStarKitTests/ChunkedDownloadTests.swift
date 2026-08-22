@@ -55,3 +55,29 @@ struct ChunkedDownloadTests {
         #expect(a == b)
     }
 }
+
+    @Test func deserializeRejectsTruncatedData() {
+        // 12 bytes for a 1-word bitmap: integer division would accept 8...15;
+        // the exact-length check must reject.
+        var b = DownloadBitmap(chunkCount: 10)
+        b.set(1)
+        var data = b.serialize()
+        data.append(contentsOf: [0xAA, 0xBB, 0xCC, 0xDD])
+        #expect(throws: DownloadBitmapError.self) {
+            _ = try DownloadBitmap.deserialize(data, chunkCount: 10)
+        }
+    }
+
+    @Test func deserializeMasksStrayHighBits() throws {
+        // A corrupted persisted last word with stray high bits must not
+        // overcount completed chunks.
+        var b = DownloadBitmap(chunkCount: 3)
+        b.set(0); b.set(1); b.set(2)
+        var data = b.serialize()
+        // Set every bit in the (only) word — a "corrupted" all-ones word.
+        data[0] = 0xFF; data[1] = 0xFF; data[2] = 0xFF; data[3] = 0xFF
+        data[4] = 0xFF; data[5] = 0xFF; data[6] = 0xFF; data[7] = 0xFF
+        let restored = try DownloadBitmap.deserialize(data, chunkCount: 3)
+        #expect(restored.completedCount == 3)
+        #expect(restored.isSet(0) && restored.isSet(1) && restored.isSet(2))
+    }
