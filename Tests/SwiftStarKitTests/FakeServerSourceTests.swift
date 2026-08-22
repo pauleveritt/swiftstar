@@ -88,6 +88,19 @@ struct FakeServerSourceTests {
         #expect(source.contains(FakeServerSource.swiftStringLiteral("data: [DONE]")))
     }
 
+    @Test func crlfCaptureIsNormalized() throws {
+        // CRLF line endings must split like LF (Swift's \r\n is one grapheme
+        // and would otherwise fail to split and misdiagnose as a count mismatch).
+        let capture = Data("data: {\"a\":1}\r\ndata: [DONE]\r\n".utf8)
+        let sidecar = Data("1000\r\n3000\r\n".utf8)
+        let source = try FakeServerSource.generate(
+            capture: capture, sidecar: sidecar,
+            engineArgv: ["/tmp/e/ds4-server"]
+        )
+        #expect(source.contains(FakeServerSource.swiftStringLiteral("data: {\"a\":1}")))
+        #expect(source.contains(FakeServerSource.swiftStringLiteral("data: [DONE]")))
+    }
+
     @Test func escaperHandlesQuotesAndBackslashes() {
         // Direct escaper test: the generated literal for a payload containing
         // quotes and backslashes must round-trip. End-to-end byte fidelity is

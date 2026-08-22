@@ -24,13 +24,23 @@ struct ChatView: View {
                 .frame(width: 10, height: 10)
             Text(statusText).font(.caption)
             Spacer()
-            if controller.state == .ready || controller.state == .generating {
-                Button("Stop Engine") { controller.stopEngine() }
-            } else {
-                Button("Start Engine") { controller.startEngine() }
-            }
+            engineButton
         }
         .padding(8)
+    }
+
+    @ViewBuilder
+    private var engineButton: some View {
+        switch controller.state {
+        case .ready, .generating, .starting:
+            // .starting shows Stop so a cold start can be cancelled.
+            Button("Stop Engine") { controller.stopEngine() }
+        case .stopped, .failed:
+            Button("Start Engine") { controller.startEngine() }
+        case .stopping:
+            Button("Start Engine") { controller.startEngine() }
+                .disabled(true)
+        }
     }
 
     private var statusText: String {
@@ -68,12 +78,21 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { _, row in
+                    ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { index, row in
                         rowView(row)
+                            .id(index)
                     }
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .onChange(of: controller.transcript.rows.count) { _, _ in
+                // Append-only transcript: keep the newest row in view as it streams.
+                let lastIndex = controller.transcript.rows.count - 1
+                guard lastIndex >= 0 else { return }
+                withAnimation {
+                    proxy.scrollTo(lastIndex, anchor: .bottom)
+                }
             }
         }
     }
@@ -104,7 +123,10 @@ struct ChatView: View {
     }
 
     private func send() {
-        let message = input
+        let message = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Both the button and onSubmit go through this guard; the input is
+        // preserved (not cleared) when the engine is not ready to take a turn.
+        guard controller.canSend, !message.isEmpty else { return }
         input = ""
         controller.send(message)
     }

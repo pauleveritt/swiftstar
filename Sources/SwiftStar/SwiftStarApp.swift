@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import SwiftStarKit
 
 @main
 struct SwiftStarApp: App {
@@ -17,9 +18,15 @@ struct SwiftStarApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Stop the engine on quit (Cmd-Q) so it is not orphaned to launchd.
+        EngineController.shared?.stopEngine()
     }
 }

@@ -10,7 +10,11 @@ let package = Package(
     ],
     targets: [
         .target(name: "SwiftStarKit"),
-        .executableTarget(name: "SwiftStar", dependencies: ["SwiftStarKit"]),
+        .executableTarget(
+            name: "SwiftStar",
+            dependencies: ["SwiftStarKit"],
+            resources: [.process("Resources")]
+        ),
         .testTarget(
             name: "SwiftStarKitTests",
             dependencies: ["SwiftStarKit"],

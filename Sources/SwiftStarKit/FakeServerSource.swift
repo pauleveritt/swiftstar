@@ -3,6 +3,7 @@ import Foundation
 public enum FakeServerError: Error, Equatable, Sendable {
     case lineCountMismatch(capture: Int, sidecar: Int)
     case malformedCaptureLine(line: Int, content: String)
+    case invalidUTF8
 }
 
 /// Generates the complete Swift source of a fake `ds4-server` from a committed
@@ -14,8 +15,14 @@ public enum FakeServerError: Error, Equatable, Sendable {
 public enum FakeServerSource {
 
     public static func generate(capture: Data, sidecar: Data, engineArgv: [String]) throws -> String {
-        let captureText = String(decoding: capture, as: UTF8.self)
-        let sidecarText = String(decoding: sidecar, as: UTF8.self)
+        // Strict UTF-8 (no silent U+FFFD replacement) and normalized line
+        // endings: CRLF must not become one grapheme that fails to split.
+        guard
+            let captureText = String(data: capture, encoding: .utf8)?.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n"),
+            let sidecarText = String(data: sidecar, encoding: .utf8)?.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        else {
+            throw FakeServerError.invalidUTF8
+        }
 
         var captureLines = captureText.split(separator: "\n", omittingEmptySubsequences: false)
         if captureLines.last == "" { captureLines.removeLast() }
@@ -79,6 +86,13 @@ guard let portIndex = CommandLine.arguments.firstIndex(of: "--port"),
 
 let speed = Double(ProcessInfo.processInfo.environment["FAKE_SPEED"] ?? "1.0") ?? 1.0
 
+// Per-line delay in seconds, derived from the sidecar. Double avoids the
+// UInt32 truncation of usleep; speed is clamped so a tiny FAKE_SPEED cannot
+// turn into an unbounded sleep.
+func lineDelay(_ micros: Int) -> TimeInterval {
+    Double(micros) / 1_000_000 / max(speed, 0.0001)
+}
+
 final class ServerSocket {
     private let fd: Int32
     init(port: Int) throws {
@@ -128,12 +142,12 @@ do {
     FileHandle.standardError.write(Data("fake ds4-server: listening on http://127.0.0.1:\(port)\n".utf8))
     while true {
         let client = try server.accept()
+        defer { client.close() }
         for (delay, line) in replay {
-            if speed > 0 { usleep(useconds_t(Double(delay) / speed)) }
+            if speed > 0 { Thread.sleep(forTimeInterval: lineDelay(delay)) }
             try client.write(line + "\n")
         }
         try client.write("\n")
-        client.close()
     }
 } catch {
     FileHandle.standardError.write(Data("fake ds4-server: \(error)\n".utf8))
@@ -149,7 +163,7 @@ do {
     /// Escapes a string for embedding as a Swift string literal in the
     /// generated source (backslash, quote, newline, carriage return, tab,
     /// and any other ASCII control character).
-    static func swiftStringLiteral(_ s: String) -> String {
+    public static func swiftStringLiteral(_ s: String) -> String {
         var out = "\""
         for scalar in s.unicodeScalars {
             switch scalar {
@@ -159,7 +173,7 @@ do {
             case "\r": out += "\\r"
             case "\t": out += "\\t"
             default:
-                if scalar.isASCII, CharacterSet.controlCharacters.contains(UnicodeScalar(scalar.value)!) {
+                if scalar.isASCII, CharacterSet.controlCharacters.contains(scalar) {
                     out += "\\u{\(String(scalar.value, radix: 16))}"
                 } else {
                     out.unicodeScalars.append(scalar)

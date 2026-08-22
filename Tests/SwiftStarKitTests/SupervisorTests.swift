@@ -53,8 +53,48 @@ struct SupervisorTests {
     }
 
     @Test func illegalTransitionKeepsState() {
-        // A ready event while stopped is a lie from the harness: keep the state.
+        // A generation event while stopped is a lie from the harness: keep the state.
         #expect(Supervisor.transition(from: .stopped, event: .generationFinished) == .stopped)
+    }
+
+    @Test func stopFromStoppedIsNoOp() {
+        // Stop is only legal from in-flight states; a stop request while stopped
+        // must not wedge the machine in .stopping with no process to terminate.
+        #expect(Supervisor.transition(from: .stopped, event: .stopRequested) == .stopped)
+    }
+
+    @Test func stopFromFailedPreservesFailure() {
+        let before = SupervisorState.failed(.timeout)
+        #expect(Supervisor.transition(from: before, event: .stopRequested) == before)
+    }
+
+    @Test func engineMissingFromFailedRefreshesReason() {
+        let url = URL(fileURLWithPath: "/nope/ds4-server")
+        let s = Supervisor.transition(from: .failed(.timeout), event: .engineMissing(url))
+        #expect(s == .failed(.engineMissing(url)))
+    }
+
+    @Test func stopFromStartingThenNonZeroExitIsStopped() {
+        // The user asked to cancel startup; a non-zero exit during stopping is
+        // the expected termination, not a failure.
+        var s = Supervisor.transition(from: .starting, event: .stopRequested)
+        #expect(s == .stopping)
+        s = Supervisor.transition(from: s, event: .exit(15))
+        #expect(s == .stopped)
+    }
+
+    @Test func lateStderrLineInFailedIsIgnored() {
+        // A stderr line arriving after failure must not resurrect state.
+        let before = SupervisorState.failed(.instanceLocked)
+        let s = Supervisor.transition(from: before, event: .stderrLine("ds4-server: listening on http://127.0.0.1:8000"))
+        #expect(s == before)
+    }
+
+    @Test func detectionIsCaseInsensitive() {
+        let locked = Supervisor.transition(from: .starting, event: .stderrLine("Ds4: ANOTHER ds4 PROCESS is already running (pid 1)"))
+        #expect(locked == .failed(.instanceLocked))
+        let ready = Supervisor.transition(from: .starting, event: .stderrLine("DS4-SERVER: LISTENING ON HTTP://127.0.0.1:8000"))
+        #expect(ready == .ready)
     }
 
     @Test func engineMissingMapsToFailure() {

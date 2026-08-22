@@ -8,7 +8,7 @@ struct MainView: View {
             PlaceholderView(title: "Agent", phase: "P7")
                 .tabItem { Label("Agent", systemImage: "person.crop.circle") }
             PlaceholderView(title: "Metrics", phase: "P4")
-                .tabItem { Label("Metrics", systemImage: "gauge.with.dots.needle.50percent") }
+                .tabItem { Label("Metrics", systemImage: "gauge") }
             PlaceholderView(title: "Diagnostics", phase: "P6")
                 .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
             PlaceholderView(title: "Help", phase: "P13")

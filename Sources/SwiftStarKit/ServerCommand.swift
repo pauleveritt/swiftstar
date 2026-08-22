@@ -4,21 +4,21 @@ import Foundation
 public struct EngineSettings: Equatable, Sendable {
     public var engineDir: URL
     public var modelPath: URL
-    public var contextSize: Int
     public var port: Int
+    public var contextSize: Int
     public var host: String
 
     public init(
         engineDir: URL,
         modelPath: URL,
-        contextSize: Int = 32768,
         port: Int,
+        contextSize: Int = 32768,
         host: String = "127.0.0.1"
     ) {
         self.engineDir = engineDir
         self.modelPath = modelPath
-        self.contextSize = contextSize
         self.port = port
+        self.contextSize = contextSize
         self.host = host
     }
 }
@@ -37,7 +37,7 @@ public enum ServerCommand {
     }
 
     /// The executable to spawn for these settings.
-    public static func binaryPath(settings: EngineSettings) -> String {
-        settings.engineDir.appendingPathComponent("ds4-server").path
+    public static func binaryPath(settings: EngineSettings) -> URL {
+        settings.engineDir.appendingPathComponent("ds4-server")
     }
 }
