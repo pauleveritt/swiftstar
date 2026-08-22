@@ -12,7 +12,12 @@ let package = Package(
         .target(name: "SwiftStarKit"),
         .target(
             name: "SwiftStarAppKit",
-            dependencies: ["SwiftStarKit"]
+            dependencies: ["SwiftStarKit"],
+            linkerSettings: [
+                // Private dyld-cache lib for power (Apple Silicon); cited from
+                // ds4-control's Package.swift (facts cross, code does not).
+                .linkedLibrary("IOReport")
+            ]
         ),
         .executableTarget(
             name: "SwiftStar",
