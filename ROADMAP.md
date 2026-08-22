@@ -58,7 +58,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | complete (2026-08-22) |
 | P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | complete (2026-08-22) |
 | P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | complete (2026-08-22) |
-| P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript, tool cards, workspace grant, shell toggle, interruptible turns | planned |
+| P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript and capture-grade turn/tool outcomes, tool cards, workspace grant, shell toggle, interruptible turns | planned |
 | P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | planned |
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | planned |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | planned |
@@ -78,6 +78,16 @@ That directory is empty today; each plan is written as its phase begins.
 - **P9 is the schedule risk.** It is a protocol design, and everything from P10
   on depends on it. A bidirectional wire also needs a fake *app* side; that cost
   belongs to P9 and must not be discovered inside it.
+- **Outcome telemetry precedes P10.** The Mellum agent evaluation showed that
+  visible prose is not evidence of action: a model can claim files were written
+  and tests passed while executing neither. P7's capture-grade turn outcome must
+  therefore identify the model/build/sampler and task, token and context use,
+  stop reason (EOS, limit, interrupt, timeout, or context-full), and each tool
+  lifecycle transition (emitted, parsed, rejected, or executed). P9 adds the
+  host-authoritative facts: actual mutations and their paths, command exit
+  status/output digest, and whether validation ran. A P10 handoff packet then
+  supplies the exact writable-file and validation contract; it must consume
+  these facts rather than infer success from the transcript.
 - **P11's pool is serialized on Laguna — by family, not by configuration.**
   An earlier version of this bullet framed the batch-path exclusion as an
   ssd_streaming (P11↔P12) interaction. Corrected 2026-08-22 after source
