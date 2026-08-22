@@ -127,7 +127,8 @@ In `agent_config` (near `json_events`):
     bool edit_upto;
     bool json_events;
     /* Consent flags (fork divergence #8, P7). shell_allowed defaults true in
-     * main (D2: the bare CLI keeps bash); the app always passes --shell. */
+     * parse_options (D2: the bare CLI keeps bash); the app always passes
+     * --shell. workspace_path arrives in Task 2. */
     bool shell_allowed;
 ```
 
@@ -146,10 +147,28 @@ In the arg-parsing chain (near `--json-events`):
             }
 ```
 
-At the config init site in `main` (the `agent_config c = {0};` line), immediately after:
+At the config init site — `static agent_config parse_options(int argc, char **argv)` (ds4_agent.c ~:660), where `agent_config c = { ... }` is a **designated initializer** (there is no `agent_config c = {0};` in `main`; `main` calls `parse_options` at ~:15021, and the unlisted bool fields zero-default). Add the default to the initializer list (D2: absent `--shell` keeps the bare CLI's bash):
 
 ```c
-    c.shell_allowed = true;  /* D2: absent --shell keeps the bare CLI's bash */
+    agent_config c = {
+        .engine = {
+            .model_path = "ds4flash.gguf",
+            .backend = default_backend(),
+            .mtp_draft_tokens = 1,
+            .dflash_draft_tokens = 0,
+            .mtp_margin = 3.0f,
+        },
+        .gen = {
+            .system = "You are a helpful coding assistant running inside ds4-agent.",
+            .n_predict = 50000,
+            .ctx_size = 100000,
+            .temperature = DS4_DEFAULT_TEMPERATURE,
+            .top_p = DS4_DEFAULT_TOP_P,
+            .min_p = DS4_DEFAULT_MIN_P,
+            .think_mode = DS4_THINK_HIGH,
+        },
+        .shell_allowed = true,  /* D2: absent --shell keeps the bare CLI's bash */
+    };
 ```
 
 - [ ] **Step 4: Implement `agent_schemas_for` and gate the tools prompt**
@@ -160,7 +179,8 @@ Add (near `agent_build_glm_tools_prompt`):
 /* The three bash tools are removed from the advertised schema when the shell
  * is off (D1/D11: only the bash family is gated; web tools keep the engine's
  * existing terminal approval). agent_glm_tool_schemas is a line-oriented JSON
- * blob; walk it line by line and drop the bash lines. */
+ * blob; walk it line by line and drop the bash lines. Writes at most outlen-1
+ * bytes (NUL-terminated) and returns the length written. */
 static size_t agent_schemas_for(char *out, size_t outlen, bool shell_allowed) {
     const char *src = agent_glm_tool_schemas;
     size_t o = 0;
@@ -186,9 +206,43 @@ static size_t agent_schemas_for(char *out, size_t outlen, bool shell_allowed) {
 }
 ```
 
-Thread `bool shell_allowed` through the prompt builders: change `agent_build_glm_tools_prompt(void)` → `agent_build_glm_tools_prompt(bool shell_allowed)` and `agent_build_laguna_tools_prompt(void)` → `agent_build_laguna_tools_prompt(bool shell_allowed)`; replace the `memcpy(out + a, agent_glm_tool_schemas, b)` with `b = agent_schemas_for(out + a, c + 1, shell_allowed);` (and keep the intro/after memcpy; recompute sizes). Change `agent_build_tools_prompt(ds4_engine *engine)` → `agent_build_tools_prompt(ds4_engine *engine, bool shell_allowed)` and pass it through to both branches. Update the single call site (the worker setup, which has `w->cfg`) to pass `w->cfg->shell_allowed`.
+Reword the two builders with the exact allocation math. `agent_schemas_for` writes into a fixed stack buffer first, so the size is known before `xmalloc` (a dry-run mode is unnecessary):
 
-Also gate the advisory bash-jobs sentence: in both `agent_glm_tools_prompt_after_schemas` and `agent_laguna_tools_prompt_after_schemas`, the trailing sentence starting "For long bash jobs, pass refresh_sec…" becomes its own small constant `agent_bash_jobs_rule[]`, appended by the two builders only when `shell_allowed` is true (it is advice about a tool the model can no longer call).
+```c
+static char *agent_build_glm_tools_prompt(bool shell_allowed) {
+    size_t a = strlen(agent_glm_tools_prompt_intro);
+    size_t c = strlen(agent_glm_tools_prompt_after_schemas);
+    char schemas[16384];  /* agent_glm_tool_schemas is ~2.3 KB; ample headroom */
+    size_t b = agent_schemas_for(schemas, sizeof(schemas), shell_allowed);
+    size_t d = shell_allowed ? strlen(agent_bash_jobs_rule) : 0;
+    char *out = xmalloc(a + b + c + d + 1);
+    memcpy(out, agent_glm_tools_prompt_intro, a);
+    memcpy(out + a, schemas, b);
+    memcpy(out + a + b, agent_glm_tools_prompt_after_schemas, c);
+    if (d) memcpy(out + a + b + c, agent_bash_jobs_rule, d);
+    out[a + b + c + d] = '\0';
+    return out;
+}
+```
+
+```c
+static char *agent_build_laguna_tools_prompt(bool shell_allowed) {
+    size_t a = strlen(agent_laguna_tools_prompt_intro);
+    size_t c = strlen(agent_laguna_tools_prompt_after_schemas);
+    char schemas[16384];
+    size_t b = agent_schemas_for(schemas, sizeof(schemas), shell_allowed);
+    size_t d = shell_allowed ? strlen(agent_bash_jobs_rule) : 0;
+    char *out = xmalloc(a + b + c + d + 1);
+    memcpy(out, agent_laguna_tools_prompt_intro, a);
+    memcpy(out + a, schemas, b);
+    memcpy(out + a + b, agent_laguna_tools_prompt_after_schemas, c);
+    if (d) memcpy(out + a + b + c, agent_bash_jobs_rule, d);
+    out[a + b + c + d] = '\0';
+    return out;
+}
+```
+
+The bash-jobs advisory sentence: in both `agent_glm_tools_prompt_after_schemas` and `agent_laguna_tools_prompt_after_schemas`, the final line beginning `- For long bash jobs, pass refresh_sec…` becomes its own constant `static const char agent_bash_jobs_rule[] = "\n- For long bash jobs, pass refresh_sec and then poll with bash_status or stop with bash_stop.\n";` (keep the original text exactly as it appears in each file; both files' sentence is the same). It is removed from the end of each after_schemas constant and appended by the builders only when `shell_allowed` is true — it is advice about a tool the model can no longer call. Then thread the bool through: `agent_build_tools_prompt(ds4_engine *engine, bool shell_allowed)` passing it to both branches, and update the single call site (the worker setup, which has `w->cfg`) to pass `w->cfg->shell_allowed`.
 
 - [ ] **Step 5: Implement the dispatch gate**
 
@@ -354,26 +408,124 @@ static char *agent_confine_path(agent_config *cfg, const char *path, bool allow_
 
 - [ ] **Step 5: Apply confinement in the file tools**
 
-In each of `agent_tool_read`, `agent_tool_write`, `agent_tool_list`, `agent_tool_edit`, `agent_tool_search`:
+Every confinement call is `agent_confine_path(w->cfg, path, allow_missing)`; a NULL result is the fail-closed refusal. `agent_tool_search` already takes `agent_worker *w` (and currently marks it `(void)w` — drop that). `agent_tool_list` does **not** take `w`, so its signature must change (see below) — without this the confinement cannot compile.
 
-1. Right after the tool reads its `path` argument, add:
+**`agent_tool_read`** (replace `agent_read_range(w, path, …)`; the tool currently returns it directly):
 
 ```c
-    char *confined = agent_confine_path(w->cfg, path, /*allow_missing=*/true_for_write_false_otherwise);
+static char *agent_tool_read(agent_worker *w, const agent_tool_call *call) {
+    const char *path = agent_tool_arg_value(call, "path");
+    char *confined = agent_confine_path(w->cfg, path, false);
     if (!confined) {
         return xstrdup("Tool error: path is outside the workspace grant (--workspace)\n");
     }
+    bool whole = agent_parse_bool_default(agent_tool_arg_value(call, "whole"), false);
+    int start = agent_parse_int_default(agent_tool_arg_value(call, "start_line"),
+                                        1, 1, INT_MAX);
+    int count = agent_parse_int_default(agent_tool_arg_value(call, "max_lines"),
+                                        agent_read_default_lines(w), 1, INT_MAX);
+    bool raw = agent_parse_bool_default(agent_tool_arg_value(call, "raw"), false);
+    char *result = agent_read_range(w, confined, start, count, whole, raw, true);
+    free(confined);
+    return result;
+}
 ```
 
-2. Replace the tool's use of `path` with `confined` (the `fopen`/`opendir`/read/`agent_write_file_bytes`/search-root calls and any result message that echoes the path), and `free(confined)` on every return path (or restructure the tool to take ownership and free once — prefer the smallest change that frees on all paths; `write` and `edit` already build a result buffer, so confine → use → free before each `return`).
+**`agent_tool_write`** (`allow_missing=true` — the file may not exist yet; free on every return path):
 
-   - `read`: `allow_missing=false` (existing file).
-   - `write`: `allow_missing=true` (file may not exist yet).
-   - `list`: `allow_missing=false`.
-   - `edit`: `allow_missing=false`; also confine the same path inside `agent_preflight_edit_old` (or pass the confined path into it from `agent_tool_edit`).
-   - `search`: `allow_missing=false` when the tool's path is required; when the search tool's path is optional (defaults to cwd), confine the *default* too by confining `"."`.
+```c
+static char *agent_tool_write(agent_worker *w, const agent_tool_call *call) {
+    const char *path = agent_tool_arg_value(call, "path");
+    const char *content = agent_tool_arg_value(call, "content");
+    if (!path || !path[0]) return xstrdup("Tool error: write requires path\n");
+    if (!content) return xstrdup("Tool error: write requires content\n");
+    char *confined = agent_confine_path(w->cfg, path, true);
+    if (!confined) {
+        return xstrdup("Tool error: path is outside the workspace grant (--workspace)\n");
+    }
+    FILE *fp = fopen(confined, "wb");
+    if (!fp) {
+        agent_buf b = {0};
+        agent_buf_puts(&b, "Tool error: open for write failed: ");
+        agent_buf_puts(&b, strerror(errno));
+        agent_buf_puts(&b, "\n");
+        free(confined);
+        return agent_buf_take(&b);
+    }
+    size_t len = strlen(content);
+    size_t wr = fwrite(content, 1, len, fp);
+    int close_rc = fclose(fp);
+    if (wr != len || close_rc != 0) {
+        agent_buf b = {0};
+        agent_buf_puts(&b, "Tool error: write failed: ");
+        agent_buf_puts(&b, strerror(errno));
+        agent_buf_puts(&b, "\n");
+        free(confined);
+        return agent_buf_take(&b);
+    }
+    char msg[PATH_MAX + 160];
+    snprintf(msg, sizeof(msg), "Wrote %zu bytes to %s\n", len, confined);
+    free(confined);
+    return xstrdup(msg);
+}
+```
 
-   `more` needs no change (its `w->more_path` was confined by the preceding read).
+**`agent_tool_list` — signature change is mandatory.** The function currently takes only `const agent_tool_call *call` (ds4_agent.c :7268), so it cannot reach `w->cfg`. Change it to take `agent_worker *w`, update the dispatch call site (:11300, `return agent_tool_list(call);` → `return agent_tool_list(w, call);`), and confine after the `.` defaulting (the default must be confined too):
+
+```c
+static char *agent_tool_list(agent_worker *w, const agent_tool_call *call) {
+    const char *path = agent_tool_arg_value(call, "path");
+    if (!path || !path[0]) path = ".";
+    char *confined = agent_confine_path(w->cfg, path, false);
+    if (!confined) {
+        return xstrdup("Tool error: path is outside the workspace grant (--workspace)\n");
+    }
+    DIR *dir = opendir(confined);
+    if (!dir) {
+        agent_buf b = {0};
+        agent_buf_puts(&b, "Tool error: opendir failed: ");
+        agent_buf_puts(&b, strerror(errno));
+        agent_buf_puts(&b, "\n");
+        free(confined);
+        return agent_buf_take(&b);
+    }
+    agent_buf out = {0};
+    char hdr[PATH_MAX + 64];
+    snprintf(hdr, sizeof(hdr), "%s:\n", confined);
+    agent_buf_puts(&out, hdr);
+    /* body unchanged: readdir loop builds `full` from `confined` instead of
+     * `path` (`snprintf(full, sizeof(full), "%s/%s", confined, de->d_name)`),
+     * lstat(full), etc. */
+    if (de) agent_buf_puts(&out, "... more entries omitted ...\n");
+    closedir(dir);
+    free(confined);
+    return agent_buf_take(&out);
+}
+```
+
+**`agent_tool_search`** (already has `w`; drop `(void)w;`; confine after the `.` defaulting — the default is confined too):
+
+```c
+static char *agent_tool_search(agent_worker *w, const agent_tool_call *call) {
+    const char *query = agent_tool_arg_value(call, "query");
+    if (!query || !query[0]) return xstrdup("Tool error: search requires query\n");
+    const char *path = agent_tool_arg_value(call, "path");
+    if (!path || !path[0]) path = ".";
+    char *confined = agent_confine_path(w->cfg, path, false);
+    if (!confined) {
+        return xstrdup("Tool error: path is outside the workspace grant (--workspace)\n");
+    }
+    /* ctx construction unchanged; every early return after this point must
+     * free(confined) first (the regex-compile error path included). */
+    agent_search_path(&ctx, confined, 0);
+    free(confined);
+    /* rest unchanged */
+}
+```
+
+**`agent_tool_edit`** (has `w`; drop `(void)w;`): confine once after the `path` non-empty check, then use `confined` for every file operation (`agent_read_file_bytes(confined, …)`, `agent_write_file_bytes(confined, …)`, and the apply), freeing before each of the tool's several returns. The streaming-time preflight runs on a different path from dispatch: add the same confine block at the top of `agent_preflight_edit_old` (ds4_agent.c :10285 — it already takes `agent_worker *w` and is called from the renderer at :4115), refusing with the same message; without it, the preflight would `fopen`/read the escaping path before dispatch ever refuses.
+
+`more` needs no change (its `w->more_path` was confined by the preceding read). `google_search`/`visit_page` are untouched (D11).
 
 - [ ] **Step 6: Run the engine tests to verify they pass**
 
@@ -1000,14 +1152,19 @@ struct AgentTranscriptTests {
         var t = AgentTranscript()
         t.apply(.tool(AgentToolEvent(phase: .start, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .tool, idx: 0, name: "read", paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
-        // New block: a stale post-finish output with idx 0 must NOT attach to
-        // the new block's same-idx card (the wire guarantees output lands
-        // before the next start, so this late output is a wire violation —
-        // the reducer must be safe anyway).
+        t.apply(.tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: 1)))
+        // A new block restarts idx at 0: the card map is cleared at `start`, so
+        // the new block's idx-0 card is a fresh row, never the old block's card.
+        // (A stale `output` arriving after the new `start` is a wire violation
+        // — json-events.md guarantees a block's outputs land before the next
+        // start — and the reducer does not defend against it: once the new
+        // block's `tool` phase re-keys idx 0, a late output attaches to that
+        // card. That case is undefined per D4; this test pins the defined one.)
         t.apply(.tool(AgentToolEvent(phase: .start, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .tool, idx: 0, name: "edit", paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
-        t.apply(.tool(AgentToolEvent(phase: .output, idx: 0, name: nil, paramKind: nil, paramName: nil, value: "stale", status: nil, calls: nil)))
-        #expect(t.rows.last == .tool(ToolCard(name: "edit", params: [], output: nil, status: nil)))
+        #expect(t.rows.count == 2)
+        #expect(t.rows[0] == .tool(ToolCard(name: "read", params: [], output: nil, status: nil)))
+        #expect(t.rows[1] == .tool(ToolCard(name: "edit", params: [], output: nil, status: nil)))
     }
 
     @Test func zeroCallFinishIsIgnored() {
@@ -1431,15 +1588,17 @@ public enum FakeAgentSource {
 
         // Every event carries a monotonic `ts` (fork divergence #7); derive
         // per-line delays from consecutive deltas — no sidecar file needed.
+        // The first line's delay is 0 (no wait before hello), mirroring
+        // FakeServerSource's `lastStamp = stamps.first ?? 0`.
         var replay: [(Int, String)] = []
-        var lastTS: Int = 0
+        var lastTS: Int?
         for (index, line) in captureLines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty { continue }
             guard let ts = extractTS(from: trimmed) else {
                 throw FakeAgentError.malformedCaptureLine(line: index + 1, content: trimmed)
             }
-            let delay = max(0, ts - lastTS)
+            let delay = lastTS.map { max(0, ts - $0) } ?? 0
             lastTS = ts
             replay.append((delay, String(line)))
         }
@@ -1574,7 +1733,7 @@ git commit -m "P7: FakeAgentSource — fake ds4-agent generated from the real to
 
 **Interfaces:**
 - Consumes: `FakeAgentSource.generate(capture:engineArgv:)`, `AgentCommand.argv`/`binaryPath`, `AgentWireParser`, `AgentTranscript` (Tasks 5–8); `FakeServerHarness.resolveSwiftc()` (reuse the compiler resolution).
-- Produces: `enum FakeAgentHarness` with `static func fixture(_ name: String) throws -> URL`, `static func compileFake(source: String, into dir: URL) throws -> URL`, `static func spawnAgent(_ binary: URL, arguments: [String], env: [String: String]) throws -> FakeProcess` (reusing the `FakeProcess` struct from `FakeServerHarness.swift`), and `static func readAgentEvents(_ fake: FakeProcess, until: @escaping ([AgentEvent]) -> Bool, timeout: TimeInterval) throws -> [AgentEvent]`.
+- Produces: `struct FakeAgentProcess { process: Process; stdout: Pipe; stderr: Pipe; stdin: Pipe }` (the server harness's `FakeProcess` has no stdin pipe, which the agent fake needs for prompts and the ETX byte); `enum FakeAgentHarness` with `static func fixture(_ name: String) throws -> URL`, `static func compileFake(source: String, into dir: URL) throws -> URL`, `static func spawnAgent(_ binary: URL, arguments: [String], env: [String: String]) throws -> FakeAgentProcess`, and `static func readAgentEvents(_ fake: FakeAgentProcess, parser: inout AgentWireParser, until: @escaping ([AgentEvent]) -> Bool, timeout: TimeInterval = 30) throws -> [AgentEvent]`. The parser is caller-owned: a test spanning multiple read calls (the interrupt test) continues one parse session instead of re-parsing a mid-stream first line as a handshake violation.
 
 - [ ] **Step 1: Write the failing harness + tests**
 
@@ -1630,8 +1789,9 @@ struct FakeAgentIntegrationTests {
             fake.process.waitUntilExit()
         }
         let expected = try expectedEvents("golden-tools")
+        var parser = AgentWireParser()
         FakeAgentHarness.writePrompt(fake, "run your tools")
-        let actual = try FakeAgentHarness.readAgentEvents(fake, until: { $0.count >= expected.count })
+        let actual = try FakeAgentHarness.readAgentEvents(fake, parser: &parser, until: { $0.count >= expected.count })
         #expect(actual == expected, "fake replay must produce the same events as the capture")
     }
 
@@ -1661,16 +1821,20 @@ struct FakeAgentIntegrationTests {
             fake.process.terminate()
             fake.process.waitUntilExit()
         }
+        // One parse session across both reads: the second call starts mid-stream
+        // (after the `start` event), so a fresh parser would refuse the first
+        // line it sees as a non-handshake.
+        var parser = AgentWireParser()
         FakeAgentHarness.writePrompt(fake, "run your tools")
         // Read until a tool block opens, then interrupt mid-replay.
-        let sawStart = try FakeAgentHarness.readAgentEvents(fake, until: { events in
+        let sawStart = try FakeAgentHarness.readAgentEvents(fake, parser: &parser, until: { events in
             events.contains {
                 if case .tool(let te) = $0, te.phase == .start { return true } else { return false }
             }
         })
         #expect(sawStart.contains { if case .tool(let te) = $0, te.phase == .start { return true } else { return false } })
         FakeAgentHarness.writeETX(fake)
-        let interrupted = try FakeAgentHarness.readAgentEvents(fake, until: { events in
+        let interrupted = try FakeAgentHarness.readAgentEvents(fake, parser: &parser, until: { events in
             events.contains {
                 if case .tool(let te) = $0, te.phase == .finish, te.status?.contains("interrupted") == true { return true } else { return false }
             }
@@ -1705,6 +1869,7 @@ enum FakeAgentHarnessError: LocalizedError {
     case compileFailed(status: Int32, output: String)
     case timeout(eventCount: Int)
     case unexpectedEOF
+    case readFailed(errno: Int32)
 
     var errorDescription: String? {
         switch self {
@@ -1714,6 +1879,8 @@ enum FakeAgentHarnessError: LocalizedError {
             return "timed out reading agent events; got \(count)"
         case .unexpectedEOF:
             return "unexpected EOF reading agent events"
+        case .readFailed(let code):
+            return "read failed: \(String(cString: strerror(code)))"
         }
     }
 }
@@ -1785,19 +1952,31 @@ enum FakeAgentHarness {
 
     /// Reads the fake's stdout, feeding `AgentWireParser`, until `until`
     /// returns true or the timeout elapses. The fake stays alive between
-    /// prompts, so completion is a predicate, not EOF.
+    /// prompts, so completion is a predicate, not EOF. Uses a blocking
+    /// `Darwin.read` loop (the same shape as `FakeServerHarness.readEvents`):
+    /// `FileHandle.availableData` blocks with no way to honour the deadline,
+    /// and conflates "quiet" with "EOF" — a slow fake would hang the test or
+    /// fail it spuriously. Reading raw bytes keeps the deadline real. The
+    /// parser is caller-owned and shared across calls (see the interrupt
+    /// test): a fresh parser on a second call would refuse the first
+    /// mid-stream line as a non-handshake.
     static func readAgentEvents(_ fake: FakeAgentProcess,
+                                parser: inout AgentWireParser,
                                 until: @escaping ([AgentEvent]) -> Bool,
                                 timeout: TimeInterval = 30) throws -> [AgentEvent] {
-        var parser = AgentWireParser()
         var events: [AgentEvent] = []
-        let handle = fake.stdout.fileHandleForReading
+        let fd = fake.stdout.fileHandleForReading.fileDescriptor
         let deadline = Date().addingTimeInterval(timeout)
         var buffer = Data()
+        var chunk = [UInt8](repeating: 0, count: 4096)
         while Date() < deadline {
-            let chunk = handle.availableData
-            if chunk.isEmpty { throw FakeAgentHarnessError.unexpectedEOF }
-            buffer.append(chunk)
+            let n = Darwin.read(fd, &chunk, chunk.count)
+            if n == 0 { throw FakeAgentHarnessError.unexpectedEOF }
+            if n < 0 {
+                if errno == EINTR { continue }
+                throw FakeAgentHarnessError.readFailed(errno: errno)
+            }
+            buffer.append(contentsOf: chunk[0..<n])
             while let nl = buffer.firstIndex(of: 0x0A) {
                 let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
                 buffer.removeSubrange(buffer.startIndex...nl)
@@ -1935,6 +2114,13 @@ final class AgentController {
         state = .starting
         generation += 1
         let gen = generation
+        // A restart is a fresh wire: the handshake state must reset or the new
+        // session's hello is misread as a second handshake (stuck in
+        // .starting forever). The transcript is deliberately kept (history,
+        // like EngineController); stderrTail is reset so a failure message
+        // never pairs a new session with a stale tail.
+        parser = AgentWireParser()
+        stderrTail = []
 
         let process = Process()
         process.executableURL = binary
@@ -2047,18 +2233,20 @@ final class AgentController {
 
     func send(_ prompt: String) {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard canSend, !trimmed.isEmpty, let process else { return }
+        guard canSend, !trimmed.isEmpty, let process,
+              let pipe = process.standardInput as? Pipe else { return }
         transcript.appendSystem("> \(trimmed)")
         state = .generating
-        (process.standardInput as? Pipe)?.fileHandleForWriting.write(Data((trimmed + "\n").utf8))
+        pipe.fileHandleForWriting.write(Data((trimmed + "\n").utf8))
     }
 
     /// D5: interrupt = write one ETX byte (0x03) to the child's stdin. The
     /// engine latches it, emits an interrupted `finish` when mid-block, and
     /// returns to idle; the controller reflects that via the wire.
     func interrupt() {
-        guard isGenerating, let process else { return }
-        (process.standardInput as? Pipe)?.fileHandleForWriting.write(Data([0x03]))
+        guard isGenerating, let process,
+              let pipe = process.standardInput as? Pipe else { return }
+        pipe.fileHandleForWriting.write(Data([0x03]))
     }
 
     func stopAgent() {
@@ -2067,6 +2255,10 @@ final class AgentController {
         stdoutTask?.cancel()
         stderrTask?.cancel()
         startupTimeoutTask?.cancel()
+        // EOF on stdin first (the same clean-exit shape as swiftstar-drive):
+        // the engine's non-interactive loop exits on EOF rather than relying
+        // on SIGTERM alone.
+        (process?.standardInput as? Pipe)?.fileHandleForWriting.close()
         process?.terminate()
         // The termination handler lands on .stopped (its guard passes: state
         // is .stopping, not .stopped) after recording the exit.
@@ -2330,3 +2522,40 @@ Self-review against the spec's "Testing" section: evidence floor (rule 6) met in
 **3. Type consistency.** `AgentToolPhase` cases match the wire spellings everywhere (paramBegin/paramValue/paramEnd via raw values); `AgentToolEvent` field names consistent across Tasks 5, 6, 9; `AgentTranscript`/`ToolCard`/`ToolParam` consistent across Tasks 6, 10; `AgentSettings`/`AgentCommand.argv` consistent across Tasks 7, 9, 10 (including `--workspace`/`--shell` ordering — the fake validates the exact array). `FakeServerSource.swiftStringLiteral` is reused (public, already exists) so the escaper stays single-sourced.
 
 **Cross-cutting note for the executor:** Task 5 adds `state: String` to the shared `StatusSnapshot` (the controller needs it for D6 turn-end inference). That is an additive change to one existing file (`WireEventParser.swift`) and mechanical updates to the P6 tests that construct `StatusSnapshot`; Metrics/Diagnostics logic ignores the new field. Shown-fail discipline applies to the affected tests too.
+
+---
+
+## GLM 5.2 review (2026-08-22)
+
+Reviewed by GLM 5.2 (OpenRouter `z-ai/glm-5.2`) with the plan, the design spec,
+`external/ds4/docs/json-events.md`, and the real sources it names. The review
+was delivered in two calls (the first was truncated at the token limit; the
+second completed with reasoning disabled). Findings were verified against the
+codebase before applying — the two that contradicted the code were dismissed:
+
+### Accepted and applied
+
+| Finding | Applied as |
+|---|---|
+| `AgentController` never resets the wire parser on restart; `sawHandshake` persists, so a second session's `hello` is read as a second handshake and the tab sticks in `.starting` | Task 10 Step 1: `startAgent` resets `parser = AgentWireParser()` and `stderrTail = []` |
+| `agent_tool_list` takes no `agent_worker *w`, so the plan's `w->cfg` confinement cannot compile | Task 2 Step 5: signature gains `agent_worker *w`; dispatch call site (`:11300`) updated; exact per-tool code for read/write/list/search/edit, incl. `agent_preflight_edit_old` |
+| `blockStartClearsPriorBlockCards` asserted a stale post-`start` output is not attached, but the reducer re-keys `cardRows[0]` when the new block's `tool` phase arrives, so it is; the scenario is a wire violation D4 does not defend against | Task 6 test rewritten to pin the defined behavior (two same-`idx` blocks → two distinct cards) and document the undefined case |
+| `FakeAgentSource.generate` initialized `lastTS = 0`, so the first line's delay was `ts` (nonzero), failing `delaysDeriveFromTsDeltas`'s `(0, ` assertion and sleeping before `hello`; `FakeServerSource` seeds from the first stamp | Task 8: `lastTS` is `Int?`, first delay 0 |
+| `FakeAgentHarness.readAgentEvents` used `FileHandle.availableData` in a deadline loop: it blocks (no deadline honouring) and conflates "quiet" with "EOF"; a second call with a fresh parser would refuse the first mid-stream line | Task 9: `Darwin.read` loop with a real deadline (same shape as `FakeServerHarness.readEvents`); `readFailed` error; parser is caller-owned and shared across the interrupt test's two reads |
+| Config default location: the plan said "the `agent_config c = {0};` line in `main`"; the config is a designated initializer in `parse_options` (`:660`) and `main` calls `parse_options` (`:15021`) | Task 1 Step 3: default added to the real initializer |
+| "recompute sizes" in the prompt-builder change was too vague for a zero-context executor | Task 1 Step 4: exact rewritten `agent_build_glm_tools_prompt` / `agent_build_laguna_tools_prompt` with `agent_schemas_for` into a stack buffer and conditional `agent_bash_jobs_rule` append |
+| `stopAgent` did not close stdin (swiftstar-drive closes it for a clean EOF exit) | Task 10: stdin closed before `terminate()` |
+| `send`/`interrupt` silently no-op'd if `standardInput` was not a `Pipe` | Task 10: explicit `guard let pipe = process.standardInput as? Pipe` |
+
+### Dismissed after verification
+
+- **`Task.detached` captures non-Sendable `Pipe` (flagged MAJOR).** The existing
+  `EngineController` (`Sources/SwiftStar/EngineController.swift:214,234`) uses
+  the identical pattern and ships; `Package.swift` is swift-tools 6.2 with
+  default (minimal) concurrency checking. The plan mirrors proven code.
+- **Hardcoded default model path (flagged MINOR).** Identical to the existing
+  `EngineController.defaultSettings()` default; consistent with the codebase.
+- **`availableData` "returns empty immediately" (part of the harness finding).**
+  The P5 verification record documents the opposite — a blocking read that hung
+  the capture driver. The real defects were the un-honoured deadline and the
+  fresh-parser-on-second-read, both fixed above.
