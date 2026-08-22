@@ -92,10 +92,35 @@ That directory is empty today; each plan is written as its phase begins.
 - **P9 is the schedule risk.** It is a protocol design, and everything from P10
   on depends on it. A bidirectional wire also needs a fake *app* side; that cost
   belongs to P9 and must not be discovered inside it.
-- **P11 and P12 constrain each other.** Sessions with `graph.ssd_streaming`
-  set are excluded from the engine's batch path regardless of family, so Laguna
-  XS support and subagent isolation cannot both be assumed. Whichever ships
-  second inherits the constraint.
+- **P11's pool is serialized on Laguna — by family, not by configuration.**
+  An earlier version of this bullet framed the batch-path exclusion as an
+  ssd_streaming (P11↔P12) interaction. Corrected 2026-08-22 after source
+  verification: `ds4_sessions_eval_batch_metal_supported()` excludes
+  `DS4_MODEL_FAMILY_LAGUNA` unconditionally, and the fallback is a sequential
+  eval loop, so the pool's workers run one at a time on any Laguna variant,
+  ssd_streaming or not. The isolation hypothesis survives intact — its
+  mechanism is the context tax, which works sequentially (up to ~4x from the
+  measured prefill curve in the perfectly-decomposable limit) — but P11's
+  measurement gate must not expect a parallel-throughput win, and its memory
+  math must budget ~6.1 GB of per-session GPU scratch that the engine's own
+  `planned_bytes` omits. Constraints, arithmetic, and recompute commands:
+  [`docs/superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md`](docs/superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md).
+- **P3's feasibility gate inherits an engine under-report.** The gate is
+  arithmetic on the engine's `planned_bytes` — the right design — but on
+  Laguna that number omits the ~6.1 GB session scratch `laguna_graph_alloc`
+  actually reserves (the estimator computes single-row scratch; the committed
+  `golden.ndjson` `ready` events carry the under-report verbatim:
+  `scratch_bytes: 784752`). A launch clearing the gate by less than ~6.1 GB
+  will be admitted and then exceed the plan. Fix direction is upstream (the
+  estimator's Laguna branch multiplies by `prefill_cap` rows) via
+  `docs/upstream-proposals.md`; until then the correction term is a documented
+  constant, not a re-derived mirror. Same research note as above.
+- **P5 should capture the agent's `--trace` channel; P6 needs it.**
+  Compaction's rebuild statistics (`old`, `new`, `tail_start`, `tail`) are
+  deliberately suppressed on the `--json-events` wire but already emitted via
+  `agent_trace()` — no new engine patch required. If P5 fixes the capture
+  format without a trace sidecar, P6 re-opens the format to answer "would
+  compaction help" (the diagnostics surface's first job) from recorded fact.
 - **P12 inherits an unbuilt artifact, not a finished engine.** Both model lines
   are validated against development quants that fit only the development
   machine: Mellum's evidence is all for a ~12 GiB Q8 build, and the mixed
@@ -154,8 +179,69 @@ Deferred, each with the condition that reopens it.
   then removed, because it refused contract-authorized renames the engine would
   admit. A guard with less information than the authoritative layer is not
   defense in depth.
-- **Specialized tool subagents** — reasoning-light, one-command agents (ruff, pyrefly, pytest, sphinx, roadmap admin) that each own a single tool's lifecycle: run it in a non-human JSON mode where one exists, digest the output into something the caller can act on without bloat, and apply the fix when the run says what it is (e.g., a broken test). Budgeted to fit an 8k context on AFM3; because Swift runs the evocation, repeated invocations make the limit a budget rather than a wall. The open question is dispatch — how the orchestrating model+agent decides which specialized agent to call. *Reopens when P11 lands and the pool design can hold a one-command worker; this is a candidate shape for P11's workers, not a phase of its own.* Source: P11 "Subagent pool".
+- **Specialized tool subagents** — reasoning-light, one-command agents (ruff, pyrefly, pytest, sphinx, roadmap admin) that each own a single tool's lifecycle: run it in a non-human JSON mode where one exists, digest the output into something the caller can act on without bloat, and apply the fix when the run says what it is (e.g., a broken test). Budgeted to fit an 8k context on AFM3; because Swift runs the evocation, repeated invocations make the limit a budget rather than a wall. The open question is dispatch — how the orchestrating model+agent decides which specialized agent to call. The economics are measured, not assumed: locally, prefill is the scarce resource, so deterministic work first is a *performance* rule — `ruff --fix` beats the model typing the same 40-line edit by ~500x, and clustering 40 pytest failures to 2 representatives turns a 178s prefill at depth into 9s (rates from `docs/harvest/telemetry-findings.md`; worked table in the ds4-control survey cited by `2026-08-22-p11-engine-constraints-and-corrections.md`). *Reopens when P11 lands and the pool design can hold a one-command worker; this is a candidate shape for P11's workers, not a phase of its own.* Source: P11 "Subagent pool".
 - **The dispatch decision** — what the handoff packet maker must know to route a task, on three axes. **(1) Parallelism:** dependency edges declared by the plan author are authoritative; the maker may additionally *prove* independence from disjoint writable-file sets plus disjoint validation commands, and must refuse when it cannot — file-disjointness is necessary, not sufficient (an API change and its consumer share no file). **(2) Thinking requirement:** a task is delegable to a reasoning-light worker only when acceptance is a machine-checkable predicate, the tool surface is bounded (`read`/`write`/`edit`, no `bash`), and the writable-file set is exact — and thinking is a stage, not a property: "fix the broken test" needs diagnosis (thinking) before the apply is mechanical. **(3) Executor:** whether the packet goes to a full-context worker or to a specialized Swift subagent running one command in its JSON mode (ruff, pyrefly, pytest, sphinx, roadmap admin), with AFM3's 8k as the budget for the latter and repeat evocations for anything longer. The lesson travels with it: the maker enforces declared intent and computes conservative proofs; it never re-derives semantics with less information than the plan author — the same lesson as the removed contract-blind pre-edit guard. *This is P10's routing design; axis 3 is what the "Specialized tool subagents" entry feeds. Reopens when P10 is planned.* Source: P10 "Isolation", the "Specialized tool subagents" backlog entry.
+- **Context-economy tooling** — two deterministic moves that exist because KV
+  reuse is exact-prefix-only and prefill is the scarce resource: (1)
+  *don't-re-read* — hash+mtime every file the agent has read and answer an
+  unchanged re-read with "unchanged since turn N" instead of contents, worth
+  up to ~130s per avoided deep re-read at measured rates; (2) *warm-prefix
+  routing* — when a pool exists, route a task to the session whose live
+  prefix already contains its files (`ds4_session_common_prefix` is free
+  engine-side; needs a wire query). *(1) reopens with P9 — the host must own
+  tool results to substitute them; (2) reopens with P11.* Source:
+  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
+  survey it cites.
+- **A `recall` tool** — the agent can page files (`read`/`search`/`more`) but
+  not its own history: the transcript is a flat token array whose head is
+  destroyed at compaction. The persist half is nearly free — the engine's
+  session `.kv` files already store the full rendered conversation as plain
+  UTF-8 behind a fixed 48-byte header, and pre-compaction prefixes survive on
+  disk until evicted — so the work is pinning the pre-compaction entry against
+  eviction plus a `recall(query)` tool backed by deterministic search over
+  that text. Compaction becomes lossy-in-context, lossless-on-disk, with zero
+  extra inference. *Reopens when P9 lands (host-owned tools make it app-side
+  rather than a C patch) or when a compaction is first observed discarding
+  something a later turn needed.* Source:
+  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
+  survey it cites.
+- **A session browser over `~/.ds4/kvcache`** — listing, metadata (tokens,
+  ctx, created, last-used), and full-text search across past agent sessions,
+  read directly from the `.kv` header + rendered-text region with no model
+  and no engine. Also the substrate `recall` searches. *Reopens with P7 (an
+  agent tab wants session listing/resume) or with `recall`.* Source: same
+  note; format verified by parsing a real file with `struct.unpack`.
+- **A deterministic compaction skeleton** — of the five things the engine's
+  compaction prompt asks the model to reconstruct, two (files
+  inspected/edited with paths and ranges; commands run) are losslessly
+  reconstructible today from `--json-events` tool params, and a tool-call
+  ledger cannot hallucinate which file it edited. The wire is *not* lossless
+  for results (only the bash family emits `output`), so this is a skeleton
+  plus a smaller model summary, not a replacement. Requires forking the
+  compaction path in `ds4_agent.c`; payoff is real but small (compaction
+  fires roughly once per full context). *Reopens when a compaction is
+  actually observed at the everyday context size and its measured cost or a
+  misremembered-summary incident justifies the fork.* Source: same note.
+- **An engine-side memory-plan / tokenize CLI** — an additive mode that
+  prints the memory plan for a given ctx and exits without loading weights
+  (the estimator needs only GGUF metadata; `inspect_only` exists), and a
+  tokenize mode (the tokenizer loads vocab without weights). The first
+  retires the P3 under-report *and* the temptation to mirror allocator math
+  in Swift; the second enables pre-flight token budgeting ("this read is 18k
+  tokens and will cross the compaction threshold") without linkage.
+  Upstream-bound; must include the estimator's Laguna scratch fix or it
+  ships the same under-report with a nicer interface. *Reopens with the
+  upstream proposal for the P3 correction, or when P9's budgeting needs
+  token counts.* Source: same note.
+- **Multi-project residency** — N long-lived project sessions sharing one
+  engine, switched without reload. Priced honestly: KV is
+  `49,152 × ctx + 72 MiB` per session *plus* ~6.1 GB scratch each, so five
+  64k-ctx sessions ≈ 89 GiB with the model — over the default wired ceiling
+  on a 96 GB machine. Viable shape: snapshot idle sessions to disk
+  (`ds4_session_save_payload`/`load_snapshot`, ~13 GB IO per 150k swap —
+  seconds, versus minutes of re-prefill) with a small resident working set.
+  *Reopens after P11's pool exists and a second concurrent project is
+  actually wanted.* Source: same note.
 - **An engine-side `--null-model` mode** — the real emitter, instance lock,
   signal handling, and stdout code running against fake weights, so the
   integration tier exercises the actual code instead of our beliefs about it.
@@ -168,8 +254,11 @@ Deferred, each with the condition that reopens it.
   embedding-only capability. *Reopens when a malformed tool call is observed
   costing a real turn.*
 - **Energy-aware pacing** — pace-to-read decoding and watts-aware scheduling via
-  a runtime control message. *Reopens when idle or sustained power shows a cost
-  worth paying for; the current measurement says idle draw is under 1W.*
+  a runtime control message. The control message must be *built*, not exposed:
+  `ds4_session_set_power` rejects Laguna at any value below 100 and is
+  engine-wide, not per-session, where it does apply (verified 2026-08-22).
+  *Reopens when idle or sustained power shows a cost worth paying for; the
+  current measurement says idle draw is under 1W.*
 - **An embedding spike.** *Reopens only if dynamic Swift-defined per-token logit
   masking becomes critical-path. Nothing else in `SWIFTSTAR.md` requires
   in-process access.*

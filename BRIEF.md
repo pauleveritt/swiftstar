@@ -106,7 +106,9 @@ Three consequences bind this project:
    session's baseline, and that compaction will not fix it because the prefix
    cache is already healthy.
 3. **Anything that keeps context small is a performance feature**, not a
-   nicety: cheap fresh sessions, condensing tool results *before* they enter
+   nicety: context-cheap fresh sessions (context-cheap, not memory-free — a
+   Laguna session also holds ~6.1 GB of lifetime GPU scratch; see
+   "Architecture, settled"), condensing tool results *before* they enter
    KV, and context-isolated subagents.
 
 **Three limits travel with the finding and must not be dropped when it is
@@ -135,15 +137,27 @@ This was reviewed against the opposing design — `SWIFTSTAR.md` in the ds4
 repository argues at length for embedding the engine in-process — and the
 spawned seam won on the evidence. The capabilities embedding was supposed to
 unlock are mostly reachable across the wire with an additive C patch: multiple
-cheap sessions (the subagent-pool plan is building exactly that behind the
-process boundary), KV snapshot/restore (snapshots are eager serializations to
-host RAM, so a wire command moves handles, not payloads), energy pacing (a
-runtime control message), and grammar-constrained tool calls (the grammar state
-machine is already in C). Embedding's irreducible advantages reduce to dynamic
-per-token Swift-defined logit masking and zero-copy logits access, neither on
-this app's critical path. Against that, embedding would put a Metal abort or a
-wired-limit kill inside the GUI's own process, and would destroy the clean
-per-pid memory attribution that made the telemetry investigation possible.
+sessions (the subagent-pool plan is building exactly that behind the process
+boundary), KV snapshot/restore (snapshots are eager serializations to host
+RAM, so a wire command moves handles, not payloads), energy pacing (a runtime
+control message), grammar-constrained tool calls (the grammar state machine is
+already in C), and exact tokenization (the tokenizer loads vocab without
+weights, so pre-flight token counting is a small CLI, not linkage).
+Embedding's irreducible advantages reduce to dynamic per-token Swift-defined
+logit masking and zero-copy logits access, neither on this app's critical
+path. Against that, embedding would put a Metal abort or a wired-limit kill
+inside the GUI's own process, and would destroy the clean per-pid memory
+attribution that made the telemetry investigation possible.
+
+**Two session facts, verified 2026-08-22, that bound what any pool can be**
+(neither is an embedding argument — both hold on either side of the seam):
+sessions on Laguna are *not* cheap — each costs its full-context KV up front
+plus ~6.1 GB of GPU scratch held for the session's lifetime, a figure the
+engine's own `planned_bytes` omits — and the Laguna family is excluded from
+the engine's cross-session batch path unconditionally, so pooled sessions
+execute one at a time. The pool's win is the context curve, sequentially, not
+concurrency. Arithmetic, citations, and recompute commands:
+[`docs/superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md`](docs/superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md).
 
 **The wire becomes bidirectional at P9, and that is scheduled, not hoped for.**
 As of P2–P8 the wire is observation-only: the C child executes tools and inserts

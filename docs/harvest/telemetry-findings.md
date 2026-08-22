@@ -124,11 +124,19 @@ available evidence that the split is right.
    baseline that is, and whether compaction would help. The model phrases the
    finding; it does not compute it.
 3. **Anything that keeps context small becomes a performance feature** —
-   cheap fresh sessions, condensing tool results before they enter KV (P9),
-   context-isolated subagents (P11).
+   context-cheap fresh sessions (not memory-free: a Laguna session also holds
+   ~6.1 GB of lifetime GPU scratch, verified 2026-08-22 — see
+   `../superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md`),
+   condensing tool results before they enter KV (P9), context-isolated
+   subagents (P11).
 4. **The isolation hypothesis gets a mechanism, not just a motivation.** A
    single long-lived orchestrator session pays a compounding tax as its context
-   grows; N subagents each working in a small isolated context do not. That is
-   why P11's own measurement gate asks whether any wall-clock win correlates
-   with subagent context staying small — confirming it would upgrade
-   "isolation seems to help" to "isolation helps for a known, measured reason."
+   grows; N subagents each working in a small isolated context do not. The
+   mechanism is sequential: the Laguna family is excluded from the engine's
+   cross-session batch path, so subagents run one at a time, and the win —
+   up to ~4x in the perfectly-decomposable limit, by integrating this
+   document's own curve — comes from prefilling several shallow contexts
+   instead of one deep one, not from concurrency. That is why P11's own
+   measurement gate asks whether any wall-clock win correlates with subagent
+   context staying small — confirming it would upgrade "isolation seems to
+   help" to "isolation helps for a known, measured reason."

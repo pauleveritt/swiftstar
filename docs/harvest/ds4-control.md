@@ -93,7 +93,11 @@ one research note. The ones with the most transferable content:
 - `2026-08-21-agent-telemetry.md` and its findings — see
   [telemetry-findings.md](telemetry-findings.md).
 - `2026-08-21-agent-subagent-pool.md` — SwiftStar's P11, already written and
-  independently reviewed.
+  independently reviewed. **Read it together with
+  `docs/superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md`**,
+  which post-dates it: the pool is serialized on Laguna (family-level batch
+  exclusion) and each session carries ~6.1 GB of scratch the engine's
+  `planned_bytes` omits.
 - `research/2026-08-21-skills-for-ds4-agent.md` — SwiftStar's P8. See below.
 
 ## The skills research, which becomes P8
