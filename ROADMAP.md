@@ -87,7 +87,11 @@ That directory is empty today; each plan is written as its phase begins.
   system-prompt contract a small model may not honor (measurable — count
   model-initiated linter calls in a capture); silent auto-fix breaks `edit`'s
   exact-match on files in the model's active window; and asynchronous findings
-  need tree-state provenance to stay actionable.
+  need tree-state provenance to stay actionable. The same window is also where
+  **condensation** — P9's own direction — can dispatch to AFM: the ANE is the
+  one compute unit that does not contend with Laguna's serialized GPU path, and
+  the model is blocked on the tool anyway. Two-stage, matching the diagnostics
+  rule already in `BRIEF.md`: CPU clusters deterministically, ANE only phrases.
   [`docs/superpowers/research/2026-08-22-p9-host-side-validation.md`](docs/superpowers/research/2026-08-22-p9-host-side-validation.md)
 - **Outcome telemetry precedes P10.** The Mellum agent evaluation showed that
   visible prose is not evidence of action: a model can claim files were written

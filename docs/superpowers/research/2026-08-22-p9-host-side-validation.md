@@ -121,9 +121,60 @@ Recorded rather than removed.
   files, so most of that gap is captured by ordinary tool use. The real
   difference is narrower: a host-side pass never emits a tool call at all, and
   it runs whether or not the model thought to.
-- **The GPU-idle framing was a red herring.** Validation is CPU work and never
-  needed the tool-execution window to be free. That window buys *latency
-  hiding* — the model is already blocked — not free capacity.
+- **The GPU-idle framing was a red herring** — *for CPU validation only, and
+  this retraction was itself too broad.* Lint and type checks are CPU work and
+  never needed the tool-execution window. But the window **is** load-bearing
+  for inference-bearing work dispatched into it; see the next section, added
+  after the retraction was challenged.
+
+## Where the window is load-bearing after all: dispatching to AFM
+
+The retraction above holds for `ruff` and `ast.parse`. It does not hold for
+**condensation**, which is P9's own stated direction ("condenses tool results
+before they enter KV") and which is inference, not arithmetic.
+
+If the host dispatches to Apple Foundation Models during the tool-execution
+window, that window earns its keep twice over:
+
+1. **Latency hiding on the critical path.** The model is blocked regardless.
+   An AFM call has real latency — unlike `ruff`'s ~20 ms — so hiding it inside
+   a wait that already exists is the difference between free and not.
+2. **The ANE does not contend with Laguna.** This is the load-bearing half.
+   Laguna is excluded from the engine's cross-session batch path, so *every*
+   GPU access serializes and GPU-adjacent background work is stolen foreground
+   capacity, not spare capacity (see
+   `2026-08-22-p11-engine-constraints-and-corrections.md`). AFM on separate
+   silicon is the one kind of inference that can run without taking a turn
+   away from the model.
+
+**The dispatch rule this implies:** only dispatch AFM behind a tool whose
+expected duration exceeds the AFM call. Behind a 20 ms lint it *extends* the
+window rather than hiding inside it. This is not a coincidence to rely on
+blindly, but it does align: the tools whose output needs condensing are the
+slow ones (a test suite, seconds to minutes, whose raw dump costs ~178 s of
+prefill at depth), while fast tools produce small output nobody needs to
+condense.
+
+**The shape is this repository's existing principle, not a new one.** AFM's
+context window is small — a raw 8,000-token pytest dump likely will not fit —
+so condensation is two-stage: **CPU clusters deterministically** (group by
+exception type and deepest common frame; 40 failures → 2 representatives),
+**ANE phrases** the clusters into something actionable. That is exactly
+`BRIEF.md`'s diagnostics rule — Swift computes the finding, the model only
+turns it into a sentence — generalized from P6's analyzer to P9's
+condensation.
+
+Two costs travel with it. **A bad condensation is invisible to the model**,
+which cannot see what was dropped; P5's capture format already retains the raw
+output, so a bad condensation is diagnosable offline, and the model should be
+able to request the full output. And **AFM availability is gated** on Apple
+Intelligence, so the deterministic clustering must stand alone as the fallback
+with AFM phrasing as enhancement — never the reverse.
+
+This is adjacent to, but not the same as, the Backlog's "Heterogeneous compute
+routing across ANE and GPU" entry, whose reopen condition is a role whose
+latency tolerance and energy cost are both measured. Condensation behind a slow
+tool is a candidate for exactly that role.
 
 ## What this does not settle
 
