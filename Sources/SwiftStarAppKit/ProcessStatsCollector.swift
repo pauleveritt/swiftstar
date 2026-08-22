@@ -3,14 +3,16 @@ import Darwin
 import IOKit
 import SwiftStarKit
 
-actor ProcessStatsCollector {
+public actor ProcessStatsCollector {
     private var previousCPUTicks: [UInt64]?
+
+    public init() {}
 
     /// Returns a sanitized snapshot. `pid` nil → residentBytes nil (per-process);
     /// watts/GPU/CPU are system-wide and always collected. Actor-isolated so the
     /// IOReport sampling never runs on the main actor and the `previousCPUTicks`
     /// delta state is serialized across polls.
-    func collect(pid: pid_t?) async -> MachineSnapshot {
+    public func collect(pid: pid_t?) async -> MachineSnapshot {
         let resident: Int64? = pid.flatMap { residentBytes(pid: $0) }
         let watts = await IOReportPower.totalWatts()
         return DialLogic.sanitize(MachineSnapshot(
