@@ -133,6 +133,7 @@ Deferred, each with the condition that reopens it.
   then removed, because it refused contract-authorized renames the engine would
   admit. A guard with less information than the authoritative layer is not
   defense in depth.
+- **Specialized tool subagents** — reasoning-light, one-command agents (ruff, pyrefly, pytest, sphinx, roadmap admin) that each own a single tool's lifecycle: run it in a non-human JSON mode where one exists, digest the output into something the caller can act on without bloat, and apply the fix when the run says what it is (e.g., a broken test). Budgeted to fit an 8k context on AFM3; because Swift runs the evocation, repeated invocations make the limit a budget rather than a wall. The open question is dispatch — how the orchestrating model+agent decides which specialized agent to call. *Reopens when P11 lands and the pool design can hold a one-command worker; this is a candidate shape for P11's workers, not a phase of its own.* Source: P11 "Subagent pool".
 - **An engine-side `--null-model` mode** — the real emitter, instance lock,
   signal handling, and stdout code running against fake weights, so the
   integration tier exercises the actual code instead of our beliefs about it.
