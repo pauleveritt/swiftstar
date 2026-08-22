@@ -15,9 +15,10 @@ struct ChunkedDownloadTests {
     }
 
     @Test func bitmapRejectsWidthMismatch() {
+        // 10 chunks = 1 word; 70 chunks = 2 words — a real width mismatch.
         let b = DownloadBitmap(chunkCount: 10)
         #expect(throws: DownloadBitmapError.self) {
-            _ = try DownloadBitmap.deserialize(b.serialize(), chunkCount: 20)
+            _ = try DownloadBitmap.deserialize(b.serialize(), chunkCount: 70)
         }
     }
 
