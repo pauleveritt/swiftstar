@@ -714,10 +714,15 @@ public enum FixtureReplay {
                     return
                 }
                 for line in text.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
+                    if Task.isCancelled { break }
                     let s = String(line)
                     guard !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                     continuation.yield(s)
-                    try? await Task.sleep(nanoseconds: 33_000_000)
+                    do {
+                        try await Task.sleep(nanoseconds: 33_000_000)
+                    } catch {
+                        break  // cancelled: stop yielding to a terminated stream
+                    }
                 }
                 continuation.finish()
             }
@@ -816,24 +821,32 @@ final class MetricsModel {
     private var enginePid: pid_t?
 
     func start(enginePid: pid_t?) {
+        // Idempotent: the collector reads the latest pid each tick, and each
+        // task is started at most once — calling start again (e.g. on pid
+        // change) must not duplicate the timer or restart the replay.
         self.enginePid = enginePid
-        collectTask = Task { [weak self] in
-            while !Task.isCancelled {
-                self?.tick()
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
-        }
-        replayTask = Task { [weak self] in
-            guard let self else { return }
-            self.isReplayingWire = true
-            var parser = WireEventParser()
-            var reducer = MetricsReducer()
-            for await line in FixtureReplay.lines() {
-                if let event = parser.feed(line) {
-                    reducer.reduce(&self.state, event)
+        if collectTask == nil {
+            collectTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self else { break }
+                    self.tick()
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
             }
-            self.isReplayingWire = false
+        }
+        if replayTask == nil {
+            replayTask = Task { [weak self] in
+                guard let self else { return }
+                self.isReplayingWire = true
+                var parser = WireEventParser()
+                var reducer = MetricsReducer()
+                for await line in FixtureReplay.lines() {
+                    if let event = parser.feed(line) {
+                        reducer.reduce(&self.state, event)
+                    }
+                }
+                self.isReplayingWire = false
+            }
         }
     }
 
@@ -902,10 +915,12 @@ struct MetricsView: View {
         return VStack(spacing: 8) {
             ZStack {
                 Circle().stroke(.quaternary, lineWidth: 12)
-                Circle()
-                    .trim(from: 0, to: 0.75)
-                    .stroke(color(for: severity), style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                    .rotationEffect(.degrees(135))
+                // Full ring colored by severity (a fixed-size ring is
+                // jitter-proof by construction; a partial arc would read as a
+                // fraction, which is the anchor we rejected).
+                Circle().stroke(color(for: severity), lineWidth: 12)
+                Text(ctx.map { DialLogic.fixedWidth(String($0), width: 8) } ?? "—")
+                    .font(.system(.body, design: .monospaced))
             }
             .frame(width: 96, height: 96)
             // Learning #4: widen the hit region to the frame so the tooltip is
