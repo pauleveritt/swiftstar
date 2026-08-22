@@ -13,11 +13,18 @@ let package = Package(
         .executableTarget(name: "SwiftStar", dependencies: ["SwiftStarKit"]),
         .testTarget(
             name: "SwiftStarKitTests",
-            dependencies: ["SwiftStarKit"]
+            dependencies: ["SwiftStarKit"],
+            plugins: ["FastTierGuard"]
         ),
         .testTarget(
             name: "SwiftStarIntegrationTests",
             dependencies: ["SwiftStarKit"]
+        ),
+        .executableTarget(name: "FastTierGuardTool"),
+        .plugin(
+            name: "FastTierGuard",
+            capability: .buildTool(),
+            dependencies: [.target(name: "FastTierGuardTool")]
         ),
     ]
 )
