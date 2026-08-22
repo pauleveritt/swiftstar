@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the Agent tab real: spawn a live `ds4-agent` on the NDJSON wire, render the stream as a transcript with tool cards, enforce the spawn-time consent model (`--workspace` grant + `--shell` toggle), and support interruptible turns via an ETX byte.
+**Goal:** Make the Agent tab real: spawn a live `ds4-agent` on the NDJSON wire, render the stream as a transcript with tool cards, enforce the spawn-time consent model (`--workspace` grant + `--shell` toggle), support interruptible turns via an ETX byte, and produce the roadmap's capture-grade turn/tool outcome records (D12).
 
-**Architecture:** A new `AgentWireParser` (NDJSON `hello`/`text`/`think`/`tool`/`status`/`ready`/`queued`) feeds a pure `AgentTranscript` reducer that reconstructs tool cards from the phase stream; `AgentCommand` owns the one argv contract (including the consent flags); a `FakeAgentSource` generates a fake `ds4-agent` from the committed tool capture for the integration tier. The engine fork gains `--workspace DIR` (cwd + fail-closed file-tool confinement) and `--shell on|off` (bash gating in schema + dispatch) as fork divergence #8. The app's `AgentController` spawns the child, drains stdout through the parser, writes one `0x03` byte to interrupt, and infers turn end from `status.state → idle`. Metrics and Diagnostics stay fixture-driven (D9).
+**Architecture:** A new `AgentWireParser` (NDJSON `hello`/`text`/`think`/`tool`/`status`/`ready`/`queued`, the `ready` carrying the D12 turn-outcome fields) feeds a pure `AgentTranscript` reducer that reconstructs tool cards from the phase stream, and a pure `TurnOutcomeBuilder` produces the per-turn outcome records; `AgentCommand` owns the one argv contract (including the consent flags); a `FakeAgentSource` generates a fake `ds4-agent` from the committed tool capture for the integration tier. The engine fork gains `--workspace DIR` (cwd + fail-closed file-tool confinement) and `--shell on|off` (bash gating in schema + dispatch) as fork divergence #8, plus turn-outcome fields on the turn-end `ready` event as divergence #9. The app's `AgentController` spawns the child, drains stdout through the parser, writes one `0x03` byte to interrupt, infers turn end from `status.state → idle`, and writes each turn's `TurnOutcome` to the `SWIFTSTAR_LOG` trail. Metrics and Diagnostics stay fixture-driven (D9).
 
 **Tech Stack:** Swift 6.3, SwiftPM, swift-testing (fast + integration tiers); C (`ds4_agent.c`) + the fork's `DS4_AGENT_TEST` harness + `make test` (engine tier); `swiftstar-drive` + the real engine and weights (live tier, never CI).
 
@@ -21,28 +21,30 @@
 - **Standing rule** — every submodule bump owes a golden-fixture recapture against the real binary; P7 recaptures `golden.ndjson` at the new SHA.
 - **No new SwiftPM targets** — all new files live in existing targets (`SwiftStarKit`, `SwiftStar`, `SwiftStarKitTests`, `SwiftStarIntegrationTests`), so `Package.swift` is untouched.
 - **D11** — only the bash family is gated; `google_search`/`visit_page` keep the engine's existing terminal-UI approval (a P9/wire concern, out of scope).
-- **D9** — Metrics and Diagnostics are not re-wired to the live agent in P7; they stay fixture-driven.
+- **D9** — Metrics and Diagnostics are not re-wired to the live agent in P7; they stay fixture-driven (the deviation from the roadmap's P4 bullet is recorded in the spec's D9 and amended in the roadmap at close).
+- **D12 / outcome telemetry (roadmap `0ee5f6c`)** — every turn yields a `TurnOutcome` identifying model/build/sampler and task, token and context use, stop reason (EOS, limit, interrupt, timeout, or context-full — timeout app-side by definition), and each tool lifecycle transition (emitted, parsed, rejected, executed). The stop reason comes from the turn-end `ready` event's new fields; the tool lifecycle and token/context figures come off the wire; the identification and task text are app-known.
 
 ## File Structure
 
 **Engine (submodule `external/ds4`, committed on `swiftstar-integration`):**
-- `ds4_agent.c` — `agent_config` gains `workspace_path`/`shell_allowed`; `--workspace`/`--shell` arg parsing; `agent_confine_path()` helper applied in `read`/`more`/`write`/`list`/`edit`/`search`; `agent_schemas_for()` gating bash in the tools prompt; bash refusal in `agent_execute_tool_call()`; `DS4_AGENT_TEST` unit tests registered in `ds4_agent_unit_tests_run()`.
-- `docs/fork-ledger.md` — divergence row #8.
-- `docs/json-events.md` — a short addendum: the two new flags and that they change no event kind.
+- `ds4_agent.c` — `agent_config` gains `workspace_path`/`shell_allowed`; `--workspace`/`--shell` arg parsing; `agent_confine_path()` helper applied in `read`/`more`/`write`/`list`/`edit`/`search`; `agent_schemas_for()` gating bash in the tools prompt (line-bounded matcher); bash refusal in `agent_execute_tool_call()`; the turn-stop classification + `agent_emit_ready_event` outcome fields (D12); `DS4_AGENT_TEST` unit tests registered in `ds4_agent_unit_tests_run()`.
+- `docs/fork-ledger.md` — divergence rows #8 (consent flags) and #9 (turn-outcome `ready` fields).
+- `docs/json-events.md` — a short addendum: the two new flags (no event kind or ordering change) and the `ready` event's optional turn-outcome fields.
 
 **SwiftStarKit (pure, fast-tier):**
-- `Sources/SwiftStarKit/AgentWireParser.swift` — `AgentToolPhase`, `AgentToolEvent`, `AgentEvent`, `AgentWireParser` (handshake-enforced).
+- `Sources/SwiftStarKit/AgentWireParser.swift` — `AgentToolPhase`, `AgentToolEvent`, `AgentEvent` (ready carries the outcome fields), `AgentWireParser` (handshake-enforced).
 - `Sources/SwiftStarKit/AgentTranscript.swift` — `ToolParam`, `ToolCard`, `AgentTranscriptRow`, `AgentTranscript` (tool-card reducer + leading-newline quirk).
+- `Sources/SwiftStarKit/TurnOutcome.swift` — `TurnStopReason`, `ToolLifecycle`, `ToolCallOutcome`, `TurnOutcome`, `TurnOutcomeBuilder` (D12).
 - `Sources/SwiftStarKit/AgentCommand.swift` — `AgentSettings`, `AgentCommand.argv`/`binaryPath`.
 - `Sources/SwiftStarKit/FakeAgentSource.swift` — fake `ds4-agent` generator from a committed NDJSON capture.
 
 **SwiftStar (app):**
-- `Sources/SwiftStar/AgentController.swift` — spawn, drain, parser→transcript, turn state, ETX interrupt, consent flags.
+- `Sources/SwiftStar/AgentController.swift` — spawn, drain, parser→transcript, turn state, ETX interrupt, consent flags, per-turn `TurnOutcome` records to the `SWIFTSTAR_LOG` trail.
 - `Sources/SwiftStar/AgentView.swift` — status bar, transcript with tool cards, composer, interrupt button, consent controls.
 - `Sources/SwiftStar/MainView.swift` — replace the Agent placeholder with `AgentView`.
 
 **Tests:**
-- `Tests/SwiftStarKitTests/AgentWireParserTests.swift`, `AgentTranscriptTests.swift`, `AgentCommandTests.swift`, `FakeAgentSourceTests.swift`.
+- `Tests/SwiftStarKitTests/AgentWireParserTests.swift`, `TurnOutcomeTests.swift`, `AgentTranscriptTests.swift`, `AgentCommandTests.swift`, `FakeAgentSourceTests.swift`.
 - `Tests/SwiftStarIntegrationTests/FakeAgentHarness.swift`, `FakeAgentIntegrationTests.swift`.
 
 **Fixtures (committed):**
@@ -74,6 +76,11 @@ static void test_agent_schemas_gate_bash_when_shell_off(void) {
     AGENT_TEST_ASSERT(strstr(buf, "\"name\":\"bash\"") == NULL);
     AGENT_TEST_ASSERT(strstr(buf, "\"name\":\"bash_status\"") == NULL);
     AGENT_TEST_ASSERT(strstr(buf, "\"name\":\"bash_stop\"") == NULL);
+    // D11: only the bash family is gated. google_search and visit_page come
+    // BEFORE the bash lines in agent_glm_tool_schemas — these two assertions
+    // are what catches an unbounded matcher (deep review 2026-08-22).
+    AGENT_TEST_ASSERT(strstr(buf, "\"name\":\"google_search\"") != NULL);
+    AGENT_TEST_ASSERT(strstr(buf, "\"name\":\"visit_page\"") != NULL);
     AGENT_TEST_ASSERT(strstr(buf, "\"name\":\"read\"") != NULL);
     AGENT_TEST_ASSERT(strstr(buf, "\"name\":\"write\"") != NULL);
     agent_schemas_for(buf, sizeof(buf), true);
@@ -83,7 +90,12 @@ static void test_agent_schemas_gate_bash_when_shell_off(void) {
 }
 
 static void test_agent_execute_tool_call_refuses_bash_when_shell_off(void) {
+    /* Mirror the harness setup of test_agent_execute_tool_call_unknown_tool
+     * (~:8882): the mutex and the wake fd must be initialized or the real
+     * dispatch path (shell-on branch) is UB. */
     agent_worker w = {0};
+    pthread_mutex_init(&w.mu, NULL);
+    w.wake_fd[1] = -1; /* agent_wake_locked() writes here; -1 is a safe no-op fd. */
     agent_config cfg = {0};
     cfg.shell_allowed = false;
     w.cfg = &cfg;
@@ -97,9 +109,9 @@ static void test_agent_execute_tool_call_refuses_bash_when_shell_off(void) {
     free(result);
 
     cfg.shell_allowed = true;
-    /* With the shell on, dispatch proceeds past the gate. The call itself
-     * will fail to start (no real shell in the unit-test binary) but the
-     * failure must NOT be the consent refusal. */
+    /* With the shell on, dispatch proceeds past the gate — this runs a real
+     * `echo hi` through the bash tool (the engine test tier already runs
+     * heavier things); the result must NOT be the consent refusal. */
     result = agent_execute_tool_call(&w, &call, 0);
     AGENT_TEST_ASSERT(result && strstr(result, "shell is disabled") == NULL);
     free(result);
@@ -173,9 +185,29 @@ At the config init site — `static agent_config parse_options(int argc, char **
 
 - [ ] **Step 4: Implement `agent_schemas_for` and gate the tools prompt**
 
-Add (near `agent_build_glm_tools_prompt`):
+Add (near `agent_build_glm_tools_prompt`). **The matcher must be line-bounded** (deep review 2026-08-22): a bare `strstr(p, …)` searches past the current line's newline into later lines, and `google_search`/`visit_page` come **before** the bash entries in `agent_glm_tool_schemas` — an unbounded search would drop the web tools too, violating D11:
 
 ```c
+/* Line-bounded check: does this one schema line (length len) declare one of
+ * the bash-family tools? NOT strstr(p, ...) — that searches past the line's
+ * newline and matches later lines' names (google_search and visit_page
+ * precede the bash entries in agent_glm_tool_schemas). */
+static bool agent_schema_line_is_bash(const char *p, size_t len) {
+    static const char *const names[] = {
+        "\"name\":\"bash\"",
+        "\"name\":\"bash_status\"",
+        "\"name\":\"bash_stop\"",
+    };
+    for (size_t n = 0; n < sizeof(names) / sizeof(names[0]); n++) {
+        size_t needle = strlen(names[n]);
+        if (len < needle) continue;
+        for (size_t i = 0; i + needle <= len; i++) {
+            if (memcmp(p + i, names[n], needle) == 0) return true;
+        }
+    }
+    return false;
+}
+
 /* The three bash tools are removed from the advertised schema when the shell
  * is off (D1/D11: only the bash family is gated; web tools keep the engine's
  * existing terminal approval). agent_glm_tool_schemas is a line-oriented JSON
@@ -188,10 +220,7 @@ static size_t agent_schemas_for(char *out, size_t outlen, bool shell_allowed) {
     while (*p && o + 1 < outlen) {
         const char *nl = strchr(p, '\n');
         size_t len = nl ? (size_t)(nl - p) : strlen(p);
-        bool bash_line = !shell_allowed &&
-            (strstr(p, "\"name\":\"bash\"") ||
-             strstr(p, "\"name\":\"bash_status\"") ||
-             strstr(p, "\"name\":\"bash_stop\""));
+        bool bash_line = !shell_allowed && agent_schema_line_is_bash(p, len);
         if (!bash_line) {
             if (o + len + 2 > outlen) break;
             memcpy(out + o, p, len);
@@ -206,21 +235,23 @@ static size_t agent_schemas_for(char *out, size_t outlen, bool shell_allowed) {
 }
 ```
 
-Reword the two builders with the exact allocation math. `agent_schemas_for` writes into a fixed stack buffer first, so the size is known before `xmalloc` (a dry-run mode is unnecessary):
+Rewrite the two builders with the exact allocation math. `agent_schemas_for` writes into a fixed stack buffer first, so the size is known before `xmalloc` (a dry-run mode is unnecessary):
 
 ```c
 static char *agent_build_glm_tools_prompt(bool shell_allowed) {
     size_t a = strlen(agent_glm_tools_prompt_intro);
-    size_t c = strlen(agent_glm_tools_prompt_after_schemas);
+    size_t h = strlen(agent_glm_after_schemas_head);
+    size_t t = strlen(agent_glm_after_schemas_tail);
     char schemas[16384];  /* agent_glm_tool_schemas is ~2.3 KB; ample headroom */
     size_t b = agent_schemas_for(schemas, sizeof(schemas), shell_allowed);
     size_t d = shell_allowed ? strlen(agent_bash_jobs_rule) : 0;
-    char *out = xmalloc(a + b + c + d + 1);
+    char *out = xmalloc(a + b + h + d + t + 1);
     memcpy(out, agent_glm_tools_prompt_intro, a);
     memcpy(out + a, schemas, b);
-    memcpy(out + a + b, agent_glm_tools_prompt_after_schemas, c);
-    if (d) memcpy(out + a + b + c, agent_bash_jobs_rule, d);
-    out[a + b + c + d] = '\0';
+    memcpy(out + a + b, agent_glm_after_schemas_head, h);
+    if (d) memcpy(out + a + b + h, agent_bash_jobs_rule, d);
+    memcpy(out + a + b + h + d, agent_glm_after_schemas_tail, t);
+    out[a + b + h + d + t] = '\0';
     return out;
 }
 ```
@@ -228,21 +259,29 @@ static char *agent_build_glm_tools_prompt(bool shell_allowed) {
 ```c
 static char *agent_build_laguna_tools_prompt(bool shell_allowed) {
     size_t a = strlen(agent_laguna_tools_prompt_intro);
-    size_t c = strlen(agent_laguna_tools_prompt_after_schemas);
+    size_t h = strlen(agent_laguna_after_schemas_head);
+    size_t t = strlen(agent_laguna_after_schemas_tail);
     char schemas[16384];
     size_t b = agent_schemas_for(schemas, sizeof(schemas), shell_allowed);
     size_t d = shell_allowed ? strlen(agent_bash_jobs_rule) : 0;
-    char *out = xmalloc(a + b + c + d + 1);
+    char *out = xmalloc(a + b + h + d + t + 1);
     memcpy(out, agent_laguna_tools_prompt_intro, a);
     memcpy(out + a, schemas, b);
-    memcpy(out + a + b, agent_laguna_tools_prompt_after_schemas, c);
-    if (d) memcpy(out + a + b + c, agent_bash_jobs_rule, d);
-    out[a + b + c + d] = '\0';
+    memcpy(out + a + b, agent_laguna_after_schemas_head, h);
+    if (d) memcpy(out + a + b + h, agent_bash_jobs_rule, d);
+    memcpy(out + a + b + h + d, agent_laguna_after_schemas_tail, t);
+    out[a + b + h + d + t] = '\0';
     return out;
 }
 ```
 
-The bash-jobs advisory sentence: in both `agent_glm_tools_prompt_after_schemas` and `agent_laguna_tools_prompt_after_schemas`, the final line beginning `- For long bash jobs, pass refresh_sec…` becomes its own constant `static const char agent_bash_jobs_rule[] = "\n- For long bash jobs, pass refresh_sec and then poll with bash_status or stop with bash_stop.\n";` (keep the original text exactly as it appears in each file; both files' sentence is the same). It is removed from the end of each after_schemas constant and appended by the builders only when `shell_allowed` is true — it is advice about a tool the model can no longer call. Then thread the bool through: `agent_build_tools_prompt(ds4_engine *engine, bool shell_allowed)` passing it to both branches, and update the single call site (the worker setup, which has `w->cfg`) to pass `w->cfg->shell_allowed`.
+The bash-jobs advisory line (deep review 2026-08-22: the line is **second-to-last** in both constants, not final — `- Preserve the current system configuration…` is the last line in both, at `ds4_agent.c` ~:1199–1200 for GLM and ~:1249–1250 for Laguna). Split each `agent_*_tools_prompt_after_schemas` constant at the bash line, keeping the original text byte-for-byte:
+
+- `static const char agent_glm_after_schemas_head[]` — everything up to (not including) the `- For long bash jobs…` line;
+- `static const char agent_bash_jobs_rule[] = "- For long bash jobs, pass refresh_sec and then poll with bash_status or stop with bash_stop.\n";` — shared (the line is identical in both constants);
+- `static const char agent_glm_after_schemas_tail[] = "- Preserve the current system configuration unless the user explicitly asks otherwise.\n";` (and the laguna equivalents).
+
+The builders insert `agent_bash_jobs_rule` between head and tail only when `shell_allowed` — advice about a tool the model can no longer call — so the **shell-on prompt stays byte-identical to today's** (`test_agent_glm_tools_prompt_is_native` pins that; the head+rule+tail concatenation guarantees it). Then thread the bool through: `agent_build_tools_prompt(ds4_engine *engine, bool shell_allowed)` passing it to both branches, and update the single call site (the worker setup, which has `w->cfg`) to pass `w->cfg->shell_allowed`.
 
 - [ ] **Step 5: Implement the dispatch gate**
 
@@ -541,25 +580,162 @@ git -C external/ds4 commit -m "agent: add --workspace consent flag (fail-closed 
 
 ---
 
-### Task 3: Fork ledger row + rebuild + submodule bump
+### Task 3: Engine — turn-end stop reason on the `ready` event
+
+**Files:**
+- Modify: `external/ds4/ds4_agent.c` (turn-stop classification, worker state, `agent_emit_ready_event`, unit tests)
+
+**Interfaces:**
+- Produces: `typedef enum { AGENT_TURN_STOP_NONE=0, AGENT_TURN_STOP_EOS, AGENT_TURN_STOP_LIMIT, AGENT_TURN_STOP_INTERRUPT, AGENT_TURN_STOP_CONTEXT_FULL } agent_turn_stop_reason;` + `static const char *agent_turn_stop_reason_name(agent_turn_stop_reason)` (returns NULL for NONE); worker fields `last_turn_stop_reason` / `last_turn_generated` / `last_turn_ctx_used` snapshotted where the turn actually ends; `agent_emit_ready_event` appends `,"stop_reason":"…","generated":N,"ctx_used":M` after the memory-plan fields when `last_turn_stop_reason != AGENT_TURN_STOP_NONE` (startup `ready` stays bare — the fields repeat on later readys like the memory-plan fields, so a consumer that drops a line recovers).
+
+Why `ready`: it fires exactly once per turn end in the persistent piped-stdin loop (the P5 driver counts it for exactly that), so the outcome lands at the turn-end moment without a new event kind (D12). The generation loop knows the reason at its exit (`ds4_agent.c` ~:12135–12260: the stop token → EOS, `generated >= max_tokens` → limit, the latched interrupt, `room <= 1` forcing `max_tokens = 0` → context-full); a turn is multiple generation rounds (tool rounds resume generation), so classify only where the round ends **without** a tool block — that exit is the turn's end.
+
+- [ ] **Step 1: Write the failing engine unit tests**
+
+In the `DS4_AGENT_TEST` block (mirror the setup of `test_agent_emit_ready_event_carries_memory_plan` at ~:9023 — `agent_worker w = {0}; pthread_mutex_init(&w.mu, NULL); w.wake_fd[1] = -1; agent_config cfg = { .json_events = true }; w.cfg = &cfg;` — and reset `w.out`/`w.out_len`/`w.out_cap` between emissions):
+
+```c
+static void test_agent_turn_stop_reason_names(void) {
+    AGENT_TEST_ASSERT(!strcmp(agent_turn_stop_reason_name(AGENT_TURN_STOP_EOS), "eos"));
+    AGENT_TEST_ASSERT(!strcmp(agent_turn_stop_reason_name(AGENT_TURN_STOP_LIMIT), "limit"));
+    AGENT_TEST_ASSERT(!strcmp(agent_turn_stop_reason_name(AGENT_TURN_STOP_INTERRUPT), "interrupt"));
+    AGENT_TEST_ASSERT(!strcmp(agent_turn_stop_reason_name(AGENT_TURN_STOP_CONTEXT_FULL), "context_full"));
+    AGENT_TEST_ASSERT(agent_turn_stop_reason_name(AGENT_TURN_STOP_NONE) == NULL);
+}
+
+static void test_agent_ready_event_carries_turn_outcome(void) {
+    agent_worker w = {0};
+    pthread_mutex_init(&w.mu, NULL);
+    w.wake_fd[1] = -1;
+    agent_config cfg = { .json_events = true };
+    w.cfg = &cfg;
+
+    /* Startup ready: no turn has ended, so no outcome fields. */
+    w.last_turn_stop_reason = AGENT_TURN_STOP_NONE;
+    agent_emit_ready_event(&w, NULL);
+    AGENT_TEST_ASSERT(w.out != NULL);
+    if (w.out) AGENT_TEST_ASSERT(strstr(w.out, "stop_reason") == NULL);
+    free(w.out); w.out = NULL; w.out_len = 0; w.out_cap = 0;
+
+    /* After a turn: the ready event carries the outcome snapshot. */
+    w.last_turn_stop_reason = AGENT_TURN_STOP_INTERRUPT;
+    w.last_turn_generated = 42;
+    w.last_turn_ctx_used = 1024;
+    agent_emit_ready_event(&w, NULL);
+    AGENT_TEST_ASSERT(w.out != NULL);
+    if (w.out) {
+        AGENT_TEST_ASSERT(strstr(w.out, "\"stop_reason\":\"interrupt\"") != NULL);
+        AGENT_TEST_ASSERT(strstr(w.out, "\"generated\":42") != NULL);
+        AGENT_TEST_ASSERT(strstr(w.out, "\"ctx_used\":1024") != NULL);
+    }
+    free(w.out); w.out = NULL; w.out_len = 0; w.out_cap = 0;
+}
+```
+
+Register both in `ds4_agent_unit_tests_run()`.
+
+- [ ] **Step 2: Run to verify the failure**
+
+Run: `make -C external/ds4 ds4_agent_test && ./external/ds4/ds4_agent_test`
+Expected: FAIL — the enum and worker fields do not exist (compile error).
+
+- [ ] **Step 3: Implement the classification, worker state, and emitter fields**
+
+1. Add the enum and name function (near `agent_worker_state`):
+
+```c
+/* Why a turn ended (D12, roadmap 0ee5f6c). NONE = no turn has ended yet. */
+typedef enum {
+    AGENT_TURN_STOP_NONE = 0,
+    AGENT_TURN_STOP_EOS,
+    AGENT_TURN_STOP_LIMIT,
+    AGENT_TURN_STOP_INTERRUPT,
+    AGENT_TURN_STOP_CONTEXT_FULL,
+} agent_turn_stop_reason;
+
+static const char *agent_turn_stop_reason_name(agent_turn_stop_reason r) {
+    switch (r) {
+    case AGENT_TURN_STOP_EOS:          return "eos";
+    case AGENT_TURN_STOP_LIMIT:        return "limit";
+    case AGENT_TURN_STOP_INTERRUPT:    return "interrupt";
+    case AGENT_TURN_STOP_CONTEXT_FULL: return "context_full";
+    case AGENT_TURN_STOP_NONE:         return NULL;
+    }
+    return NULL;
+}
+```
+
+2. Add the snapshot fields to `agent_worker` (near `status`):
+
+```c
+    /* Turn-outcome snapshot (D12): set where the turn actually ends (the
+     * final generation round's non-tool exit), read by the ready emitter.
+     * Dedicated fields, not status: status may be reset at idle. */
+    agent_turn_stop_reason last_turn_stop_reason;
+    int last_turn_generated;
+    int last_turn_ctx_used;
+```
+
+3. Classify at the turn-end exit. In the worker's turn function, the generation loop (~:12135–12260) exits for: the latched interrupt (`worker_should_interrupt`), the stop token (`ds4_token_is_stop_for_think_mode` / `stop_from_speculation`), the token limit (`generated >= max_tokens`), and tool-round terminations (`got_tool` → dispatch and generate again — **not** a turn end). After the loop, where the code handles the non-tool exits and returns the worker to idle, set the snapshot (the exact site is wherever the turn ends without `got_tool`; if the loop structure makes the limit/context-full distinction awkward there, compute it before the loop: `room <= 1` → `AGENT_TURN_STOP_CONTEXT_FULL`, else the limit applies):
+
+```c
+    w->last_turn_stop_reason = worker_should_interrupt(w) ? AGENT_TURN_STOP_INTERRUPT
+                            : <token-limit exit>          ? AGENT_TURN_STOP_LIMIT
+                            :                               AGENT_TURN_STOP_EOS;
+    w->last_turn_generated = <generated>;
+    w->last_turn_ctx_used = ds4_session_pos(w->session);
+```
+
+   Also set `AGENT_TURN_STOP_INTERRUPT` on the interrupt path that ends a prefill (`DS4_SESSION_SYNC_INTERRUPTED`, ~:12077, which already calls `agent_worker_append_assistant_turn_end`) — a turn can be cut short before generation starts. The `turn_fail`/error path may leave `last_turn_stop_reason` at its previous value; record what the source shows in the verification notes rather than guessing.
+
+4. Extend `agent_emit_ready_event` (after the memory-plan block, before the `ts`):
+
+```c
+    if (w->last_turn_stop_reason != AGENT_TURN_STOP_NONE) {
+        const char *reason = agent_turn_stop_reason_name(w->last_turn_stop_reason);
+        char outcome[96];
+        snprintf(outcome, sizeof(outcome),
+                 ",\"stop_reason\":\"%s\",\"generated\":%d,\"ctx_used\":%d",
+                 reason ? reason : "eos", w->last_turn_generated,
+                 w->last_turn_ctx_used);
+        agent_buf_puts(&b, outcome);
+    }
+```
+
+- [ ] **Step 4: Run the engine tests to verify they pass**
+
+Run: `make -C external/ds4 ds4_agent_test && ./external/ds4/ds4_agent_test`
+Expected: PASS — the new tests fail without the emitter fields and pass with them; `test_agent_emit_ready_event_carries_memory_plan` still passes (its worker is zero-initialized, so `last_turn_stop_reason == NONE` and the plan-only line is unchanged).
+
+- [ ] **Step 5: Commit (in the submodule)**
+
+```bash
+git -C external/ds4 add ds4_agent.c
+git -C external/ds4 commit -m "agent: carry turn-outcome fields (stop_reason/generated/ctx_used) on the ready event"
+```
+
+---
+
+### Task 4: Fork ledger rows + rebuild + submodule bump
 
 **Files:**
 - Modify: `external/ds4/docs/fork-ledger.md`; parent repo gitlink `external/ds4`
 
 - [ ] **Step 1: Add fork-ledger divergence #8**
 
-Append a row to the fork-ledger table and the SHA mapping (two commits from Tasks 1–2 — get their SHAs from `git -C external/ds4 log --oneline -2`):
+Append two rows to the fork-ledger table and the SHA mapping (three commits from Tasks 1–3 — get their SHAs from `git -C external/ds4 log --oneline -3`):
 
 | # | Divergence | Commits (orig → new) | Why it exists | What retires it |
 |---|---|---|---|---|
 | 8 | consent flags (`--workspace`, `--shell`) | (Task 1 sha)→(Task 2 sha) | the app's consent model is spawn-time and engine-enforced: `--workspace DIR` confines the file tools (fail closed) and sets the cwd; `--shell off` removes the bash family from schema and dispatch. Without it a "grant"/"toggle" in the app would be cosmetic — the file tools `fopen(path)` with no confinement | upstream lands a wire-level tool-authorization protocol; the flags then become one implementation of it (retires with the P9 wire round-trip) |
+| 9 | turn-outcome fields on `ready` | (Task 3 sha) | binding the roadmap's outcome-telemetry requirement (main `0ee5f6c`): the turn-end `ready` event carries `stop_reason`/`generated`/`ctx_used` — the wire previously had no stop reason at all (turn end was only inferable from `status.state → idle`), so a capture-grade turn outcome could not distinguish EOS from limit from context-full | upstream lands a structured events mode with turn-end semantics (flagship proposal #1); retires with #4 |
 
-Also add a short note to `docs/json-events.md` (the two new flags, and that they change no event kind or ordering guarantee).
+Also update the json-events.md addendum to document **both** changes: the two consent flags (and that they change no event kind or ordering guarantee), and the `ready` event's optional turn-outcome fields (`stop_reason`/`generated`/`ctx_used` — absent at startup, repeated on later readys like the memory-plan fields).
 
 - [ ] **Step 2: Rebuild the engine**
 
 Run: `just engine`
-Expected: `ds4-agent`/`ds4-server` build from the new submodule tip; no errors.
+Expected: `ds4-agent`/`ds4-server` build from the new submodule tip; no errors. The build now carries three P7 engine commits (consent flags ×2 + turn-outcome fields).
 
 - [ ] **Step 3: Run the full engine test suite**
 
@@ -570,9 +746,9 @@ Expected: PASS — includes `ds4_agent_test` with the new tests.
 
 ```bash
 git -C external/ds4 add docs/fork-ledger.md docs/json-events.md
-git -C external/ds4 commit -m "docs: fork-ledger divergence #8 (consent flags) + json-events addendum"
+git -C external/ds4 commit -m "docs: fork-ledger divergences #8/#9 (consent flags, turn-outcome ready fields) + json-events addendum"
 git add external/ds4
-git commit -m "P7: bump submodule — consent flags (--workspace/--shell), divergence #8"
+git commit -m "P7: bump submodule — consent flags + turn-outcome ready fields (divergences #8/#9)"
 ```
 
 - [ ] **Step 5: Verify the gitlink**
@@ -582,7 +758,7 @@ Expected: `+<newsha> external/ds4` (the `+` marks the staged/working-tree change
 
 ---
 
-### Task 4: Live recapture — `golden-tools.ndjson` + recaptured `golden.ndjson`
+### Task 5: Live recapture — `golden-tools.ndjson` + recaptured `golden.ndjson`
 
 **Files:**
 - Modify: `Sources/swiftstar-drive/main.swift`, `fixtures/agent/provenance.md`
@@ -654,6 +830,14 @@ grep -c '"phase":"finish"' captures/*/wire.ndjson # >= 1
 ```
 Expected: each >= 1. If the model declined a tool call for a prompt, rephrase that prompt (the capture must prove the wire carries read/write/edit/list *and* a bash `output` event) and re-run Step 3. Also confirm `seed.txt` was created inside the workspace (proves the write ran under confinement, not refused) and that `grep '"phase":"start"'` shows a block open before the tool events.
 
+Also verify the D12 wire addition against the real binary (the fixture proves it — Task 7's outcome tests depend on it):
+
+```bash
+grep -c '"stop_reason"' captures/*/wire.ndjson  # >= number of prompts: every turn's end
+```
+
+Expected: each turn's ending `ready` carries a stop reason (`eos` for these simple prompts). If the fields are absent, the engine patch did not land — fix before installing the fixture.
+
 - [ ] **Step 5: Install the fixture**
 
 Copy the newest capture dir (`captures/<ts>-<model>/`): `wire.ndjson` → `fixtures/agent/golden-tools.ndjson`, `wire.stderr` → `fixtures/agent/golden-tools.stderr`, `wire.trace` → `fixtures/agent/golden-tools.trace`. Write `fixtures/agent/golden-tools.provenance.md` in the P5 `provenance.md` style (submodule SHA, command line with `--workspace`/`--shell on`, model file, workspace setup, prompts file path, date, and the verification numbers from Step 4).
@@ -665,7 +849,7 @@ With the same two P5 prompts (default `swiftstar-drive` prompts) and **no** `CAP
 ```bash
 CAPTURE_GGUF="$HOME/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf" just capture
 ```
-Copy the result over `fixtures/agent/golden.ndjson` / `golden.stderr` / `golden.trace` and update `fixtures/agent/provenance.md` (new submodule SHA, new `ts` anchor, date).
+Copy the result over `fixtures/agent/golden.ndjson` / `golden.stderr` / `golden.trace` and update `fixtures/agent/provenance.md` (new submodule SHA, new `ts` anchor, date). Then verify the recaptured `golden.ndjson` is still **text-only** (Task 6's test asserts no tool events): `grep -c '"phase"' fixtures/agent/golden.ndjson` must be 0 — if the model emitted a tool call for one of the simple prompts, re-run the capture rather than adjusting the test.
 
 - [ ] **Step 7: Re-run the fast tier and fix any golden-value drift**
 
@@ -676,12 +860,12 @@ Expected: green. The P6 assertions on `golden` are count/band-based (`golden.tra
 
 ```bash
 git add Tools/p7-tool-capture-prompts.txt fixtures/agent/golden-tools.ndjson fixtures/agent/golden-tools.stderr fixtures/agent/golden-tools.trace fixtures/agent/golden-tools.provenance.md fixtures/agent/golden.ndjson fixtures/agent/golden.stderr fixtures/agent/golden.trace fixtures/agent/provenance.md Sources/swiftstar-drive/main.swift
-git commit -m "P7: recapture golden at new SHA + capture golden-tools fixture (tool events)"
+git commit -m "P7: recapture golden at new SHA + capture golden-tools fixture (tool events + stop reasons)"
 ```
 
 ---
 
-### Task 5: `AgentEvent` + `AgentWireParser` (SwiftStarKit)
+### Task 6: `AgentEvent` + `AgentWireParser` (SwiftStarKit)
 
 **Files:**
 - Create: `Sources/SwiftStarKit/AgentWireParser.swift`
@@ -692,7 +876,7 @@ git commit -m "P7: recapture golden at new SHA + capture golden-tools fixture (t
 - Produces:
   - `public enum AgentToolPhase: String, Equatable, Sendable` — `.start, .tool, .paramBegin = "param_begin", .paramValue = "param_value", .paramEnd = "param_end", .output, .finish`.
   - `public struct AgentToolEvent: Equatable, Sendable` — `phase: AgentToolPhase`, `idx: Int`, `name: String?`, `paramKind: String?`, `paramName: String?`, `value: String?`, `status: String?`, `calls: Int?`.
-  - `public enum AgentEvent: Equatable, Sendable` — `.hello(version: Int, capabilities: [String])`, `.status(StatusSnapshot)`, `.ready(plannedBytes: Int64?)`, `.queued`, `.text(String)`, `.think(String)`, `.tool(AgentToolEvent)`, `.ignored(String)`, `.refused(String)`.
+  - `public enum AgentEvent: Equatable, Sendable` — `.hello(version: Int, capabilities: [String])`, `.status(StatusSnapshot)`, `.ready(plannedBytes: Int64?, stopReason: String?, generated: Int?, ctxUsed: Int?)` (the D12 turn-outcome fields, all optional), `.queued`, `.text(String)`, `.think(String)`, `.tool(AgentToolEvent)`, `.ignored(String)`, `.refused(String)`.
   - `public struct AgentWireParser: Sendable { public init(); public mutating func feed(_ line: String) -> AgentEvent? }`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -796,8 +980,17 @@ struct AgentWireParserTests {
         var p = AgentWireParser()
         _ = p.feed(Self.helloLine)
         #expect(p.feed(#"{"t":"queued","ts":1}"#) == .queued)
-        #expect(p.feed(#"{"t":"ready","kv_bytes":1,"scratch_bytes":2,"model_bytes":3,"planned_bytes":4,"ts":2}"#) == .ready(plannedBytes: 4))
-        #expect(p.feed(#"{"t":"ready","ts":3}"#) == .ready(plannedBytes: nil))  // ctx_size <= 0 sessions omit the plan
+        #expect(p.feed(#"{"t":"ready","kv_bytes":1,"scratch_bytes":2,"model_bytes":3,"planned_bytes":4,"ts":2}"#) == .ready(plannedBytes: 4, stopReason: nil, generated: nil, ctxUsed: nil))
+        #expect(p.feed(#"{"t":"ready","ts":3}"#) == .ready(plannedBytes: nil, stopReason: nil, generated: nil, ctxUsed: nil))  // ctx_size <= 0 sessions omit the plan
+    }
+
+    @Test func readyCarriesTurnOutcomeFields() {
+        var p = AgentWireParser()
+        _ = p.feed(Self.helloLine)
+        // D12: the turn-end ready carries the stop reason and final figures.
+        #expect(p.feed(#"{"t":"ready","stop_reason":"context_full","generated":7,"ctx_used":32768,"ts":4}"#) == .ready(plannedBytes: nil, stopReason: "context_full", generated: 7, ctxUsed: 32768))
+        // And the fields coexist with the memory plan.
+        #expect(p.feed(#"{"t":"ready","kv_bytes":1,"planned_bytes":4,"stop_reason":"eos","generated":9,"ctx_used":100,"ts":5}"#) == .ready(plannedBytes: 4, stopReason: "eos", generated: 9, ctxUsed: 100))
     }
 
     @Test func unknownLinesIgnored() {
@@ -830,6 +1023,9 @@ struct AgentWireParserTests {
         #expect(toolEvents.contains { $0.phase == .start })
         #expect(toolEvents.contains { $0.phase == .output })
         #expect(toolEvents.contains { $0.phase == .finish })
+        // D12 (evidence floor): the capture's turn-end readys carry the stop reason.
+        let readyReasons = events.compactMap { if case .ready(_, let stop, _, _) = $0 { return stop } else { return nil } }
+        #expect(readyReasons.contains { $0 != nil })
     }
 }
 ```
@@ -917,7 +1113,7 @@ public struct AgentToolEvent: Equatable, Sendable {
 public enum AgentEvent: Equatable, Sendable {
     case hello(version: Int, capabilities: [String])
     case status(StatusSnapshot)
-    case ready(plannedBytes: Int64?)
+    case ready(plannedBytes: Int64?, stopReason: String?, generated: Int?, ctxUsed: Int?)
     case queued
     case text(String)
     case think(String)
@@ -977,7 +1173,12 @@ public struct AgentWireParser: Sendable {
                 state: (object["state"] as? String) ?? ""
             ))
         case "ready":
-            return .ready(plannedBytes: (object["planned_bytes"] as? NSNumber)?.int64Value)
+            return .ready(
+                plannedBytes: (object["planned_bytes"] as? NSNumber)?.int64Value,
+                stopReason: object["stop_reason"] as? String,
+                generated: (object["generated"] as? NSNumber)?.intValue,
+                ctxUsed: (object["ctx_used"] as? NSNumber)?.intValue
+            )
         case "queued":
             return .queued
         case "text":
@@ -1038,14 +1239,338 @@ git commit -m "P7: AgentWireParser — NDJSON agent wire, handshake-enforced"
 
 ---
 
-### Task 6: `AgentTranscript` (SwiftStarKit)
+### Task 7: `TurnOutcome` + `TurnOutcomeBuilder` (SwiftStarKit)
+
+**Files:**
+- Create: `Sources/SwiftStarKit/TurnOutcome.swift`
+- Test: `Tests/SwiftStarKitTests/TurnOutcomeTests.swift`
+
+**Interfaces:**
+- Consumes: `AgentEvent`, `AgentToolEvent`, `AgentToolPhase` (Task 6 — including the `ready` outcome fields).
+- Produces:
+  - `public enum ToolLifecycle: String, Equatable, Sendable, CaseIterable` — `.emitted, .parsed, .rejected, .executed`.
+  - `public struct ToolCallOutcome: Equatable, Sendable { public let name: String; public let transitions: [ToolLifecycle] }`.
+  - `public enum TurnStopReason: String, Equatable, Sendable, CaseIterable` — `.eos, .limit, .interrupt, .timeout, .contextFull = "context_full"`.
+  - `public struct TurnOutcome: Equatable, Sendable` — `model: String, build: String, sampler: String, task: String, generatedTokens: Int, ctxUsed: Int, stopReason: TurnStopReason, toolCalls: [ToolCallOutcome]`, `CustomStringConvertible` (one compact line for the log trail).
+  - `public struct TurnOutcomeBuilder` — `init(model: String, build: String, sampler: String, task: String)`, `mutating func apply(_ event: AgentEvent)`, `func finish(appStopReason: TurnStopReason? = nil) -> TurnOutcome`.
+
+Semantics (D12): a `tool` phase → `.emitted`; a clean block `finish` (no `status`) closes **every call in the block** with `.parsed` + `.executed` (dispatch is synchronous — a clean finish means the calls ran); a `finish` with a `status` closes every call with `.rejected` (invalid, interrupted, or failed — the four-word vocabulary has no finer case); an `output` adds `.executed` to that call (bash only; idempotent). `ready` carries the wire's stop reason and final token/context figures. `finish` resolves the stop reason as: the app's override (interrupt/timeout — the app knows what it did) ?? the wire's `stop_reason` ?? `.eos` (a wire predating D12 ends turns with no reason; a turn that simply ended is the least-wrong default).
+
+- [ ] **Step 1: Write the failing tests**
+
+`Tests/SwiftStarKitTests/TurnOutcomeTests.swift`:
+
+```swift
+import Testing
+import Foundation
+@testable import SwiftStarKit
+
+struct TurnOutcomeTests {
+    private static let hello = AgentEvent.hello(version: 1, capabilities: ["text", "tool", "status", "ts"])
+
+    private func tool(_ phase: AgentToolPhase, idx: Int = 0, name: String? = nil,
+                      status: String? = nil, calls: Int? = nil, value: String? = nil) -> AgentEvent {
+        .tool(AgentToolEvent(phase: phase, idx: idx, name: name, paramKind: nil,
+                             paramName: nil, value: value, status: status, calls: calls))
+    }
+
+    @Test func cleanReadCallIsEmittedParsedExecuted() {
+        var b = TurnOutcomeBuilder(model: "m.gguf", build: "abc123", sampler: "engine-defaults", task: "read it")
+        for e in [Self.hello, tool(.start), tool(.tool, name: "read"), tool(.paramBegin),
+                  tool(.paramValue, value: "seed.txt"), tool(.paramEnd), tool(.finish, calls: 1),
+                  .ready(plannedBytes: nil, stopReason: "eos", generated: 12, ctxUsed: 120)] {
+            b.apply(e)
+        }
+        let outcome = b.finish()
+        #expect(outcome.toolCalls == [ToolCallOutcome(name: "read", transitions: [.emitted, .parsed, .executed])])
+        #expect(outcome.stopReason == .eos)
+        #expect(outcome.generatedTokens == 12)
+        #expect(outcome.ctxUsed == 120)
+        #expect(outcome.model == "m.gguf")
+        #expect(outcome.build == "abc123")
+        #expect(outcome.sampler == "engine-defaults")
+        #expect(outcome.task == "read it")
+    }
+
+    @Test func bashOutputExecutesOnce() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        for e in [tool(.start), tool(.tool, name: "bash"), tool(.finish, calls: 1),
+                  tool(.output, value: "hello-world\n"),
+                  .ready(plannedBytes: nil, stopReason: "eos", generated: 3, ctxUsed: 9)] {
+            b.apply(e)
+        }
+        // .executed arrives twice (output + clean finish) but records once.
+        #expect(b.finish().toolCalls == [ToolCallOutcome(name: "bash", transitions: [.emitted, .parsed, .executed])])
+    }
+
+    @Test func interruptedFinishRejectsEveryCallInTheBlock() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        for e in [tool(.start), tool(.tool, idx: 0, name: "read"), tool(.tool, idx: 1, name: "bash"),
+                  tool(.finish, idx: 1, status: "[tool call interrupted]\n", calls: 2),
+                  .ready(plannedBytes: nil, stopReason: "interrupt", generated: 5, ctxUsed: 20)] {
+            b.apply(e)
+        }
+        let outcome = b.finish()
+        #expect(outcome.toolCalls == [
+            ToolCallOutcome(name: "read", transitions: [.emitted, .rejected]),
+            ToolCallOutcome(name: "bash", transitions: [.emitted, .rejected]),
+        ])
+        #expect(outcome.stopReason == .interrupt)
+    }
+
+    @Test func multipleBlocksAccumulateWithinATurn() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        for e in [tool(.start), tool(.tool, name: "read"), tool(.finish, calls: 1),
+                  tool(.start), tool(.tool, name: "edit"), tool(.finish, calls: 1),
+                  .ready(plannedBytes: nil, stopReason: "limit", generated: 99, ctxUsed: 32768)] {
+            b.apply(e)
+        }
+        #expect(b.finish().toolCalls.map(\.name) == ["read", "edit"])
+        #expect(b.finish().stopReason == .limit)
+    }
+
+    @Test func appOverrideBeatsWireReason() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 1, ctxUsed: 2))
+        // The app sent ETX; the wire may have already reported a stale reason.
+        #expect(b.finish(appStopReason: .interrupt).stopReason == .interrupt)
+        // Timeout is app-side only — the vocabulary case exists so the record
+        // is complete (no controller policy in P7).
+        #expect(b.finish(appStopReason: .timeout).stopReason == .timeout)
+    }
+
+    @Test func wireWithoutStopReasonDefaultsToEOS() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.ready(plannedBytes: 4, stopReason: nil, generated: nil, ctxUsed: nil))
+        #expect(b.finish().stopReason == .eos)
+    }
+
+    @Test func contextFullMapsFromWire() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.ready(plannedBytes: nil, stopReason: "context_full", generated: 0, ctxUsed: 32768))
+        #expect(b.finish().stopReason == .contextFull)
+    }
+
+    @Test func goldenToolsYieldsFullLifecycleOutcomes() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("fixtures/agent/golden-tools.ndjson")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        var parser = AgentWireParser()
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "whole capture")
+        for line in text.split(whereSeparator: \.isNewline) {
+            if let e = parser.feed(String(line)) { b.apply(e) }
+        }
+        let outcome = b.finish()
+        // Evidence floor (binding rule 6): the real tool capture yields calls
+        // with the full lifecycle — every call emitted, the bash call executed
+        // — and a wire stop reason off its turn-end readys.
+        #expect(!outcome.toolCalls.isEmpty)
+        #expect(outcome.toolCalls.allSatisfy { $0.transitions.first == .emitted })
+        #expect(outcome.toolCalls.contains { $0.name == "bash" && $0.transitions.contains(.executed) })
+        #expect(outcome.toolCalls.contains { $0.name == "read" && $0.transitions.contains(.parsed) })
+        #expect(outcome.stopReason == .eos || outcome.stopReason == .limit || outcome.stopReason == .interrupt || outcome.stopReason == .contextFull)
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify the failure**
+
+Run: `just test`
+Expected: FAIL — `TurnOutcomeTests.swift` does not compile (`TurnOutcome`/`TurnOutcomeBuilder`/`ToolCallOutcome`/`ToolLifecycle` undefined).
+
+- [ ] **Step 3: Implement `TurnOutcome` + `TurnOutcomeBuilder`**
+
+`Sources/SwiftStarKit/TurnOutcome.swift`:
+
+```swift
+import Foundation
+
+/// The outcome-telemetry vocabulary for one tool call (D12, roadmap 0ee5f6c):
+/// emitted (announced on the wire), parsed (its block closed cleanly),
+/// rejected (the block closed with a status — invalid, interrupted, or
+/// failed; the vocabulary has no finer case), executed (dispatch ran; bash
+/// additionally shows it via `output`).
+public enum ToolLifecycle: String, Equatable, Sendable, CaseIterable {
+    case emitted, parsed, rejected, executed
+}
+
+public struct ToolCallOutcome: Equatable, Sendable {
+    public let name: String
+    public let transitions: [ToolLifecycle]
+}
+
+/// Why a turn ended. `timeout` is app-side by definition — the app's own turn
+/// budget — and exists so the record's vocabulary is complete; P7's controller
+/// imposes no timeout policy (D12).
+public enum TurnStopReason: String, Equatable, Sendable, CaseIterable {
+    case eos
+    case limit
+    case interrupt
+    case timeout
+    case contextFull = "context_full"
+}
+
+/// One turn's capture-grade outcome record (D12): the spawn-time
+/// identification the wire cannot carry (model/build/sampler), the task text,
+/// final token/context figures, the stop reason, and every tool call's
+/// lifecycle. P10's handoff packets consume these facts rather than inferring
+/// success from the transcript.
+public struct TurnOutcome: Equatable, Sendable {
+    public let model: String
+    public let build: String
+    public let sampler: String
+    public let task: String
+    public let generatedTokens: Int
+    public let ctxUsed: Int
+    public let stopReason: TurnStopReason
+    public let toolCalls: [ToolCallOutcome]
+
+    public init(model: String, build: String, sampler: String, task: String,
+                generatedTokens: Int, ctxUsed: Int, stopReason: TurnStopReason,
+                toolCalls: [ToolCallOutcome]) {
+        self.model = model
+        self.build = build
+        self.sampler = sampler
+        self.task = task
+        self.generatedTokens = generatedTokens
+        self.ctxUsed = ctxUsed
+        self.stopReason = stopReason
+        self.toolCalls = toolCalls
+    }
+}
+
+extension TurnOutcome: CustomStringConvertible {
+    /// One compact line for the SWIFTSTAR_LOG trail.
+    public var description: String {
+        let tools = toolCalls.map { "\($0.name)[\($0.transitions.map(\.rawValue).joined(separator: "+"))]" }
+            .joined(separator: " ")
+        return "turn model=\(model) build=\(build) sampler=\(sampler) tokens=\(generatedTokens) ctx=\(ctxUsed) stop=\(stopReason.rawValue) tools=[\(tools)] task=\(task.prefix(80))"
+    }
+}
+
+/// Builds one `TurnOutcome` from a turn's wire events plus the app-known facts
+/// the wire cannot carry (D12). Pure; the controller opens one builder per
+/// turn and finishes it at the turn end. Tool state is keyed by `idx` within
+/// the current block (the same idx contract as `AgentTranscript`); a block's
+/// `finish` closes every call in it, and completed blocks accumulate within
+/// the turn.
+public struct TurnOutcomeBuilder {
+    private let model: String
+    private let build: String
+    private let sampler: String
+    private let task: String
+    private var calls: [Int: (name: String, transitions: [ToolLifecycle])] = [:]
+    private var order: [Int] = []
+    private var completed: [ToolCallOutcome] = []
+    private var wireStopReason: TurnStopReason?
+    private var generated = 0
+    private var ctxUsed = 0
+
+    public init(model: String, build: String, sampler: String, task: String) {
+        self.model = model
+        self.build = build
+        self.sampler = sampler
+        self.task = task
+    }
+
+    public mutating func apply(_ event: AgentEvent) {
+        switch event {
+        case .tool(let te):
+            applyTool(te)
+        case .ready(_, let stopReason, let generated, let ctxUsed):
+            if let stopReason { wireStopReason = TurnStopReason(rawValue: stopReason) }
+            if let generated { self.generated = generated }
+            if let ctxUsed { self.ctxUsed = ctxUsed }
+        case .hello, .status, .queued, .text, .think, .ignored, .refused:
+            break
+        }
+    }
+
+    /// The app override (interrupt/timeout — the app knows what it did) beats
+    /// the wire's reason; a wire predating the D12 fields ends turns with no
+    /// reason, so a turn that simply ended defaults to `.eos`.
+    public func finish(appStopReason: TurnStopReason? = nil) -> TurnOutcome {
+        var all = completed
+        for idx in order {
+            if let c = calls[idx] {
+                all.append(ToolCallOutcome(name: c.name, transitions: c.transitions))
+            }
+        }
+        return TurnOutcome(
+            model: model, build: build, sampler: sampler, task: task,
+            generatedTokens: generated, ctxUsed: ctxUsed,
+            stopReason: appStopReason ?? wireStopReason ?? .eos,
+            toolCalls: all
+        )
+    }
+
+    private mutating func applyTool(_ te: AgentToolEvent) {
+        switch te.phase {
+        case .start:
+            flushBlock()
+        case .tool:
+            calls[te.idx] = (name: te.name ?? "", transitions: [.emitted])
+            order.append(te.idx)
+        case .paramBegin, .paramValue, .paramEnd:
+            break  // the lifecycle vocabulary has no finer granularity
+        case .output:
+            if var c = calls[te.idx], !c.transitions.contains(.executed) {
+                c.transitions.append(.executed)
+                calls[te.idx] = c
+            }
+        case .finish:
+            // One finish per block: it closes every call in it. A clean
+            // finish (no status) means the calls parsed and — dispatch being
+            // synchronous — executed; a status means the block closed badly,
+            // which the vocabulary records as rejected.
+            for idx in order {
+                guard var c = calls[idx] else { continue }
+                if te.status == nil {
+                    if !c.transitions.contains(.parsed) { c.transitions.append(.parsed) }
+                    if !c.transitions.contains(.executed) { c.transitions.append(.executed) }
+                } else if !c.transitions.contains(.rejected) {
+                    c.transitions.append(.rejected)
+                }
+                calls[idx] = c
+            }
+        }
+    }
+
+    private mutating func flushBlock() {
+        for idx in order {
+            if let c = calls[idx] {
+                completed.append(ToolCallOutcome(name: c.name, transitions: c.transitions))
+            }
+        }
+        calls = [:]
+        order = []
+    }
+}
+```
+
+- [ ] **Step 4: Run to verify the tests pass**
+
+Run: `just test`
+Expected: PASS — all `TurnOutcomeTests` green, including the `golden-tools` evidence-floor test.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add Sources/SwiftStarKit/TurnOutcome.swift Tests/SwiftStarKitTests/TurnOutcomeTests.swift
+git commit -m "P7: TurnOutcome — capture-grade turn/tool outcome records (D12)"
+```
+
+---
+
+### Task 8: `AgentTranscript` (SwiftStarKit)
 
 **Files:**
 - Create: `Sources/SwiftStarKit/AgentTranscript.swift`
 - Test: `Tests/SwiftStarKitTests/AgentTranscriptTests.swift`
 
 **Interfaces:**
-- Consumes: `AgentEvent`, `AgentToolEvent`, `AgentToolPhase` (Task 5).
+- Consumes: `AgentEvent`, `AgentToolEvent`, `AgentToolPhase` (Task 6).
 - Produces:
   - `public struct ToolParam: Equatable, Sendable { public let name: String; public var value: String }`
   - `public struct ToolCard: Equatable, Sendable { public let name: String; public var params: [ToolParam]; public var output: String?; public var status: String? }`
@@ -1337,7 +1862,7 @@ git commit -m "P7: AgentTranscript — tool-card reducer + leading-newline quirk
 
 ---
 
-### Task 7: `AgentCommand` (SwiftStarKit)
+### Task 9: `AgentCommand` (SwiftStarKit)
 
 **Files:**
 - Create: `Sources/SwiftStarKit/AgentCommand.swift`
@@ -1473,7 +1998,7 @@ git commit -m "P7: AgentCommand — the agent argv contract (workspace grant + s
 
 ---
 
-### Task 8: `FakeAgentSource` (SwiftStarKit)
+### Task 10: `FakeAgentSource` (SwiftStarKit)
 
 **Files:**
 - Create: `Sources/SwiftStarKit/FakeAgentSource.swift`
@@ -1671,14 +2196,15 @@ func readPromptLine() -> String? {
 
 var blockOpen = false
 
-// The engine's documented ETX behavior (json-events.md / divergence #2):
-// interrupted finish when mid-block, then idle + ready.
+// The engine's documented ETX behavior (json-events.md / divergence #2) plus
+// the D12 turn-outcome fields: interrupted finish when mid-block, then
+// idle, then a turn-end ready carrying the interrupt stop reason.
 func emitInterrupt() {
     if blockOpen {
         emit("{\"t\":\"tool\",\"phase\":\"finish\",\"idx\":0,\"calls\":1,\"status\":\"[tool call interrupted]\\n\",\"ts\":0}")
     }
     emit("{\"t\":\"status\",\"state\":\"idle\",\"prefill_done\":0,\"prefill_total\":0,\"prefill_tps\":0.0,\"generated\":0,\"gen_tps\":0.0,\"ctx_used\":0,\"ctx_size\":0,\"power\":100,\"error\":\"\",\"ts\":0}")
-    emit("{\"t\":\"ready\",\"ts\":0}")
+    emit("{\"t\":\"ready\",\"stop_reason\":\"interrupt\",\"generated\":0,\"ctx_used\":0,\"ts\":0}")
 }
 
 func replayOnce() {
@@ -1715,7 +2241,7 @@ while readPromptLine() != nil {
 - [ ] **Step 4: Run to verify the tests pass**
 
 Run: `just test`
-Expected: PASS. (If `golden-tools.ndjson` contains a line whose `ts` extraction fails — e.g. a hypothetical capture violation — the `malformedCaptureLine` failure is the evidence; the fixture was verified in Task 4.)
+Expected: PASS. (If `golden-tools.ndjson` contains a line whose `ts` extraction fails — e.g. a hypothetical capture violation — the `malformedCaptureLine` failure is the evidence; the fixture was verified in Task 5.)
 
 - [ ] **Step 5: Commit**
 
@@ -1726,13 +2252,13 @@ git commit -m "P7: FakeAgentSource — fake ds4-agent generated from the real to
 
 ---
 
-### Task 9: Integration tier — fake `ds4-agent` harness
+### Task 11: Integration tier — fake `ds4-agent` harness
 
 **Files:**
 - Create: `Tests/SwiftStarIntegrationTests/FakeAgentHarness.swift`, `Tests/SwiftStarIntegrationTests/FakeAgentIntegrationTests.swift`
 
 **Interfaces:**
-- Consumes: `FakeAgentSource.generate(capture:engineArgv:)`, `AgentCommand.argv`/`binaryPath`, `AgentWireParser`, `AgentTranscript` (Tasks 5–8); `FakeServerHarness.resolveSwiftc()` (reuse the compiler resolution).
+- Consumes: `FakeAgentSource.generate(capture:engineArgv:)`, `AgentCommand.argv`/`binaryPath`, `AgentWireParser`, `AgentTranscript`, `TurnOutcome` (Tasks 6–10); `FakeServerHarness.resolveSwiftc()` (reuse the compiler resolution).
 - Produces: `struct FakeAgentProcess { process: Process; stdout: Pipe; stderr: Pipe; stdin: Pipe }` (the server harness's `FakeProcess` has no stdin pipe, which the agent fake needs for prompts and the ETX byte); `enum FakeAgentHarness` with `static func fixture(_ name: String) throws -> URL`, `static func compileFake(source: String, into dir: URL) throws -> URL`, `static func spawnAgent(_ binary: URL, arguments: [String], env: [String: String]) throws -> FakeAgentProcess`, and `static func readAgentEvents(_ fake: FakeAgentProcess, parser: inout AgentWireParser, until: @escaping ([AgentEvent]) -> Bool, timeout: TimeInterval = 30) throws -> [AgentEvent]`. The parser is caller-owned: a test spanning multiple read calls (the interrupt test) continues one parse session instead of re-parsing a mid-stream first line as a handshake violation.
 
 - [ ] **Step 1: Write the failing harness + tests**
@@ -1843,8 +2369,11 @@ struct FakeAgentIntegrationTests {
             if case .tool(let te) = $0, te.phase == .finish, te.status?.contains("interrupted") == true { return true } else { return false }
         })
         #expect(interrupted.contains { if case .status(let s) = $0, s.ctxUsed == 0 { return true } else { return false } })
-        // The fake returns to waiting on stdin (ready), and the turn is over.
-        #expect(interrupted.contains { if case .ready = $0 { return true } else { return false } })
+        // The fake returns to waiting on stdin (ready), the turn is over, and
+        // the D12 fields ride the turn-end ready: the interrupt is the stop reason.
+        #expect(interrupted.contains {
+            if case .ready(_, let stopReason, _, _) = $0, stopReason == "interrupt" { return true } else { return false }
+        })
     }
 }
 ```
@@ -2005,15 +2534,15 @@ git commit -m "P7: integration — fake ds4-agent replay, argv validation, ETX i
 
 ---
 
-### Task 10: App — `AgentController` + `AgentView` + `MainView`
+### Task 12: App — `AgentController` + `AgentView` + `MainView`
 
 **Files:**
 - Create: `Sources/SwiftStar/AgentController.swift`, `Sources/SwiftStar/AgentView.swift`
 - Modify: `Sources/SwiftStar/MainView.swift` (replace the Agent placeholder)
 
 **Interfaces:**
-- Consumes: `AgentCommand`, `AgentSettings`, `AgentWireParser`, `AgentEvent`, `AgentTranscript`, `AgentTranscriptRow`, `ToolCard`, `ToolParam` (Tasks 5–8).
-- Produces: `@MainActor @Observable final class AgentController` with `state: AgentState`, `transcript: AgentTranscript`, `stderrTail: [String]`, `settings: AgentSettings`, `func startIfNeeded()/startAgent()/send(_:)/interrupt()/stopAgent()`, `var canSend: Bool`, `var isGenerating: Bool`; `struct AgentView: View`.
+- Consumes: `AgentCommand`, `AgentSettings`, `AgentWireParser`, `AgentEvent`, `AgentTranscript`, `AgentTranscriptRow`, `ToolCard`, `ToolParam`, `TurnOutcome`, `TurnOutcomeBuilder`, `TurnStopReason` (Tasks 6–9).
+- Produces: `@MainActor @Observable final class AgentController` with `state: AgentState`, `transcript: AgentTranscript`, `stderrTail: [String]`, `lastTurnOutcome: TurnOutcome?` (D12 — the full trail goes to `SWIFTSTAR_LOG`), `settings: AgentSettings`, `func startIfNeeded()/startAgent()/send(_:)/interrupt()/stopAgent()`, `var canSend: Bool`, `var isGenerating: Bool`; `struct AgentView: View`.
 
 The controller is app glue (like `EngineController`): deliberately thin, every decision it consumes lives in Kit and is fast/integration-tested. D9: it does **not** re-wire Metrics/Diagnostics; D10: it passes no `--think` flag and offers no think control; D5: interrupt = one `0x03` byte on stdin; D6: turn end inferred from `status.state → idle`.
 
@@ -2044,6 +2573,9 @@ final class AgentController {
     private(set) var state: AgentState = .stopped
     private(set) var transcript = AgentTranscript()
     private(set) var stderrTail: [String] = []
+    /// The last completed turn's outcome record (D12); the full trail goes to
+    /// the SWIFTSTAR_LOG file. Persistence beyond that is P9/P10 work.
+    private(set) var lastTurnOutcome: TurnOutcome?
     var settings: AgentSettings
 
     nonisolated(unsafe) private var process: Process?
@@ -2052,9 +2584,28 @@ final class AgentController {
     private var stderrTask: Task<Void, Never>?
     private var startupTimeoutTask: Task<Void, Never>?
     private var generation = 0
+    // D12 turn-outcome state.
+    private var outcomeBuilder: TurnOutcomeBuilder?
+    private var sentInterrupt = false
+    private var buildSHA = "unknown"
+    nonisolated(unsafe) private let logHandle: FileHandle?
 
     init(settings: AgentSettings = AgentController.defaultSettings()) {
         self.settings = settings
+        if let logPath = ProcessInfo.processInfo.environment["SWIFTSTAR_LOG"] {
+            let url = URL(fileURLWithPath: logPath)
+            if !FileManager.default.fileExists(atPath: logPath) {
+                FileManager.default.createFile(atPath: logPath, contents: nil)
+            }
+            self.logHandle = try? FileHandle(forWritingTo: url)
+        } else {
+            self.logHandle = nil
+        }
+    }
+
+    deinit {
+        process?.terminate()
+        try? logHandle?.close()
     }
 
     var canSend: Bool { state == .ready }
@@ -2121,6 +2672,11 @@ final class AgentController {
         // never pairs a new session with a stale tail.
         parser = AgentWireParser()
         stderrTail = []
+        outcomeBuilder = nil
+        sentInterrupt = false
+        // D12: the build identification is resolved once per spawn (the
+        // submodule SHA — the same fact the capture provenance records).
+        buildSHA = AgentController.submoduleSHA(settings.engineDir)
 
         let process = Process()
         process.executableURL = binary
@@ -2204,6 +2760,9 @@ final class AgentController {
     private func consumeWire(_ line: String, generation: Int) {
         guard generation == self.generation else { return }
         guard let event = parser.feed(line) else { return }
+        // Every event feeds the outcome builder (it ignores what it does not
+        // need); the record spans the whole turn, not just tool events.
+        outcomeBuilder?.apply(event)
         switch event {
         case .hello:
             if state == .starting { state = .ready }
@@ -2213,8 +2772,16 @@ final class AgentController {
             if state == .generating && s.state == "idle" {
                 state = .ready
             }
-        case .ready:
+        case .ready(_, let stopReason, _, _):
             if state == .starting { state = .ready }
+            // D12: the turn-end ready carries the stop reason — finish the
+            // record. The app's own interrupt beats the wire's word for it.
+            if stopReason != nil, let builder = outcomeBuilder {
+                let outcome = builder.finish(appStopReason: sentInterrupt ? .interrupt : nil)
+                outcomeBuilder = nil
+                lastTurnOutcome = outcome
+                log("turn outcome: \(outcome)")
+            }
         case .text, .think, .tool:
             transcript.apply(event)
         case .queued, .ignored:
@@ -2223,6 +2790,28 @@ final class AgentController {
             state = .failed("wire handshake refused: \(line)")
             process?.terminate()
         }
+    }
+
+    private func log(_ s: String) {
+        guard let logHandle else { return }
+        var data = Data((s + "\n").utf8)
+        try? logHandle.seekToEnd()
+        try? logHandle.write(contentsOf: data)
+    }
+
+    /// The engine build identification (D12): the submodule SHA, resolved
+    /// once per spawn — the same fact the capture provenance records.
+    private static func submoduleSHA(_ engineDir: URL) -> String {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        p.arguments = ["-C", engineDir.path, "rev-parse", "HEAD"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = Pipe()
+        try? p.run()
+        p.waitUntilExit()
+        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
     }
 
     private func consumeStderr(_ line: String, generation: Int) {
@@ -2237,6 +2826,16 @@ final class AgentController {
               let pipe = process.standardInput as? Pipe else { return }
         transcript.appendSystem("> \(trimmed)")
         state = .generating
+        sentInterrupt = false
+        // D12: open the turn's outcome record with the app-known facts the
+        // wire cannot carry. sampler is "engine-defaults": the app passes no
+        // sampler flags (D10's think default is the engine's too).
+        outcomeBuilder = TurnOutcomeBuilder(
+            model: settings.modelPath.lastPathComponent,
+            build: buildSHA,
+            sampler: "engine-defaults",
+            task: trimmed
+        )
         pipe.fileHandleForWriting.write(Data((trimmed + "\n").utf8))
     }
 
@@ -2246,6 +2845,7 @@ final class AgentController {
     func interrupt() {
         guard isGenerating, let process,
               let pipe = process.standardInput as? Pipe else { return }
+        sentInterrupt = true
         pipe.fileHandleForWriting.write(Data([0x03]))
     }
 
@@ -2479,7 +3079,7 @@ git commit -m "P7: Agent tab — controller, tool-card transcript view, consent 
 
 ---
 
-### Task 11: Close — roadmap, concept budget, verification record
+### Task 13: Close — roadmap, concept budget, verification record
 
 **Files:**
 - Modify: `ROADMAP.md`, `docs/superpowers/research/2026-08-22-p7-verification-record.md` (create)
@@ -2489,14 +3089,15 @@ git commit -m "P7: Agent tab — controller, tool-card transcript view, consent 
 Run: `just test` then `just integration` then `make -C external/ds4 test`.
 Expected: all green.
 
-- [ ] **Step 2: Write the verification record** (`docs/superpowers/research/2026-08-22-p7-verification-record.md`) in the P5 record's style: test evidence per tier (fast counts, integration counts, live recapture results incl. the golden-tools verification numbers), shown-fail records (binding rule 2 table), real bugs found, scope compliance.
+- [ ] **Step 2: Write the verification record** (`docs/superpowers/research/2026-08-22-p7-verification-record.md`) in the P5 record's style: test evidence per tier (fast counts, integration counts, live recapture results incl. the golden-tools verification numbers and the stop-reason greps), the outcome-telemetry evidence (D12: golden-tools turn outcomes with full tool lifecycles and stop reasons), shown-fail records (binding rule 2 table), real bugs found, scope compliance.
 
 - [ ] **Step 3: Update the roadmap**
 
 - `## Now`: P7 complete → P8 next ("Next up; not started").
 - Phases table: P7 row → `complete (2026-08-22)`.
 - Add the P7 summary under Prior work (mirror the P6 entry; cite the spec path).
-- Concept budget: define the terms P7 earns — **workspace** (the confinement root + cwd the app grants at spawn; the file tools fail closed outside it) and **tool card** (the transcript's per-call reconstruction of one tool invocation from the wire's phase stream). Check the existing seed terms: **handoff packet** (unrelated, stays), **candidate ref** (unrelated).
+- Concept budget: define the terms P7 earns — **workspace** (the confinement root + cwd the app grants at spawn; the file tools fail closed outside it), **tool card** (the transcript's per-call reconstruction of one tool invocation from the wire's phase stream), and **turn outcome** (the capture-grade per-turn record — model/build/sampler and task, token and context use, stop reason, tool lifecycles — that P10's handoff packets consume instead of trusting the transcript). Check the existing seed terms: **handoff packet** (unrelated, stays), **candidate ref** (unrelated).
+- **Amend the P4 sequencing bullet with a dated correction** (the same way P6 corrected the P11 bullet): the live metrics wiring did **not** land with P7 — the phase row never included it, and P7's plate carried the consent patch, the outcome wire, two fixtures, and a new tab; Metrics/Diagnostics stay fixture-driven until a later phase (the spec's D9 records the deviation).
 
 - [ ] **Step 4: Commit**
 
@@ -2507,7 +3108,7 @@ git commit -m "P7: close — roadmap, concept budget, verification record"
 
 - [ ] **Step 5: Phase close review**
 
-Self-review against the spec's "Testing" section: evidence floor (rule 6) met in Task 5/8/9; binding rule 2 recorded in Task 11 Step 2; every component from the spec's Components section exists with a test in the tier the spec assigned. Then the branch is ready for the phase review and merge per `docs/sdd.md` step 5.
+Self-review against the spec's "Testing" section: evidence floor (rule 6) met in Tasks 6/7/10/11; binding rule 2 recorded in Task 13 Step 2; every component from the spec's Components section exists with a test in the tier the spec assigned. Then the branch is ready for the phase review and merge per `docs/sdd.md` step 5.
 
 ---
 
@@ -2515,17 +3116,21 @@ Self-review against the spec's "Testing" section: evidence floor (rule 6) met in
 
 (For the plan author, run before handoff.)
 
-**1. Spec coverage.** Every D decision and component maps to a task: D1/D2 → Tasks 1–2 (engine) + 7 + 10 (app defaults); D3 → Task 5; D4 → Task 6; D5 → Tasks 8–9 (fake honors ETX) + 10 (controller writes ETX); D6 → Task 5 (StatusSnapshot.state) + 10; D7 → Task 4; D8 → Tasks 8–9; D9 → Task 10 (explicit non-goal); D10 → Task 6 (think handled) + 10 (no think control); D11 → Task 1 (only bash gated). Fixtures → Task 4; engine → Tasks 1–3; Kit → 5–8; integration → 9; app → 10; close → 11.
+**1. Spec coverage.** Every D decision and component maps to a task: D1/D2 → Tasks 1–2 (engine) + 9 (argv) + 12 (app defaults); D3 → Task 6; D4 → Task 8; D5 → Tasks 10–11 (fake honors ETX) + 12 (controller writes ETX); D6 → Task 6 (StatusSnapshot.state) + 12; D7 → Task 5; D8 → Tasks 10–11; D9 → Task 12 (explicit non-goal + the recorded P4-bullet deviation); D10 → Task 8 (think handled) + 12 (no think control); D11 → Task 1 (only bash gated); D12 → Task 3 (engine stop reason) + 6 (ready fields) + 7 (TurnOutcome) + 12 (controller wiring) + 5 (fixture proves it). Fixtures → Task 5; engine → Tasks 1–4; Kit → 6–10; integration → 11; app → 12; close → 13.
 
-**2. Placeholder scan.** Every task has real code in the failing-test and implementation steps; no "add error handling", no "similar to Task N" (the harness/template code is repeated where needed), no undefined type references (AgentEvent/AgentToolEvent/AgentToolPhase defined in Task 5 before Tasks 6/9 use them; FakeAgentProcess defined in Task 9; StatusSnapshot.state added in Task 5).
+**2. Placeholder scan.** Every task has real code in the failing-test and implementation steps; no "add error handling", no "similar to Task N" (the harness/template code is repeated where needed), no undefined type references (AgentEvent/AgentToolEvent/AgentToolPhase/ready-fields defined in Task 6 before Tasks 7/8/11/12 use them; FakeAgentProcess defined in Task 11; StatusSnapshot.state added in Task 6; TurnOutcome/Builder defined in Task 7 before Task 12 uses them).
 
-**3. Type consistency.** `AgentToolPhase` cases match the wire spellings everywhere (paramBegin/paramValue/paramEnd via raw values); `AgentToolEvent` field names consistent across Tasks 5, 6, 9; `AgentTranscript`/`ToolCard`/`ToolParam` consistent across Tasks 6, 10; `AgentSettings`/`AgentCommand.argv` consistent across Tasks 7, 9, 10 (including `--workspace`/`--shell` ordering — the fake validates the exact array). `FakeServerSource.swiftStringLiteral` is reused (public, already exists) so the escaper stays single-sourced.
+**3. Type consistency.** `AgentToolPhase` cases match the wire spellings everywhere (paramBegin/paramValue/paramEnd via raw values); `AgentToolEvent` field names consistent across Tasks 6, 7, 8, 11; `AgentTranscript`/`ToolCard`/`ToolParam` consistent across Tasks 8, 12; `TurnOutcome`/`TurnStopReason`/`ToolCallOutcome`/`ToolLifecycle` and the `ready(plannedBytes:stopReason:generated:ctxUsed:)` shape consistent across Tasks 6, 7, 11, 12; `AgentSettings`/`AgentCommand.argv` consistent across Tasks 9, 11, 12 (including `--workspace`/`--shell` ordering — the fake validates the exact array). `FakeServerSource.swiftStringLiteral` is reused (public, already exists) so the escaper stays single-sourced.
 
-**Cross-cutting note for the executor:** Task 5 adds `state: String` to the shared `StatusSnapshot` (the controller needs it for D6 turn-end inference). That is an additive change to one existing file (`WireEventParser.swift`) and mechanical updates to the P6 tests that construct `StatusSnapshot`; Metrics/Diagnostics logic ignores the new field. Shown-fail discipline applies to the affected tests too.
+**Cross-cutting note for the executor:** Task 6 adds `state: String` to the shared `StatusSnapshot` (the controller needs it for D6 turn-end inference). That is an additive change to one existing file (`WireEventParser.swift`) and mechanical updates to the P6 tests that construct `StatusSnapshot`; Metrics/Diagnostics logic ignores the new field. Shown-fail discipline applies to the affected tests too.
 
 ---
 
 ## GLM 5.2 review (2026-08-22)
+
+*(Task numbers in this section refer to the pre-deep-review numbering — before the
+outcome-telemetry tasks (3 and 7) were inserted and the tasks renumbered. The trail
+is kept as it was written; the deep review below records what changed since.)*
 
 Reviewed by GLM 5.2 (OpenRouter `z-ai/glm-5.2`) with the plan, the design spec,
 `external/ds4/docs/json-events.md`, and the real sources it names. The review
@@ -2559,3 +3164,38 @@ codebase before applying — the two that contradicted the code were dismissed:
   The P5 verification record documents the opposite — a blocking read that hung
   the capture driver. The real defects were the un-honoured deadline and the
   fresh-parser-on-second-read, both fixed above.
+
+---
+
+## Deep review (2026-08-22)
+
+Adversarial review of the spec and plan together — the spec against the settled
+design (`BRIEF.md`, `ROADMAP.md` at main's tip, `json-events.md`), the plan against
+the real sources — with every finding verified against the codebase before a fix.
+Findings and dispositions:
+
+### Accepted and fixed
+
+| Finding | Verification | Fix |
+|---|---|---|
+| **BLOCKING (spec):** the branch forked before main's `0ee5f6c` ("require outcome telemetry before handoff packets"), so the spec was written against a roadmap that did not yet demand "capture-grade turn/tool outcomes" of P7 — model/build/sampler + task, token/context use, stop reason (EOS, limit, interrupt, timeout, context-full), and tool lifecycle transitions (emitted, parsed, rejected, executed). Neither spec nor plan delivered a turn-outcome record; the wire carries no stop reason at all. | `git log` on the branch vs main; the phase row and dependency bullet in the rebased ROADMAP. | Branch rebased onto main; spec gains **D12** (with options weighed: app-side-only rejected — 3 of 5 stop reasons unknowable; new event kind rejected; **stop reason on the turn-end `ready`** chosen); plan gains Task 3 (engine), the `ready` fields in Task 6, Task 7 (`TurnOutcome`/`TurnOutcomeBuilder`), the fixture checks in Task 5, the fake/integration assertions in Tasks 10–11, the controller wiring in Task 12, and the close-task concept-budget term (**turn outcome**). |
+| **MAJOR (spec):** D9 defers the live metrics wiring that the roadmap's P4 bullet says "lands with P7's `ds4-agent` migration" — silently contradicting the roadmap. | The P4 sequencing bullet (ROADMAP, "P4's telemetry data lives on the agent wire"). | The spec's D9 now records the deviation explicitly (dated); Task 13 amends the P4 bullet with a dated correction at close — the same way P6 corrected the P11 bullet. |
+| **BLOCKING (plan):** `agent_schemas_for` used bare `strstr(p, …)` per line — but `strstr` searches past the line's newline into later lines, and `google_search`/`visit_page` come *before* the bash entries in `agent_glm_tool_schemas`, so `--shell off` would silently drop the web tools too (violating D11) — and the unit test didn't check for it. | `agent_glm_tool_schemas` line order (google_search, visit_page, bash, bash_status, bash_stop, read, …). | Line-bounded matcher `agent_schema_line_is_bash` (memcmp within the line); the Task 1 test now asserts google_search/visit_page survive shell-off — the sibling that catches an unbounded matcher. |
+| **MAJOR (plan):** the bash-jobs prompt split claimed the bash line is the *final* line of both `after_schemas` constants; it is second-to-last (`- Preserve the current system configuration…` is last), and appending the rule after the constant would reorder the prompt — while `test_agent_glm_tools_prompt_is_native` pins the shell-on prompt. | `ds4_agent.c` ~:1196–1200 (GLM) and ~:1249–1251 (Laguna): both constants end "…bash jobs…\n- Preserve…\n"; both bash lines are byte-identical. | Each `after_schemas` splits into head + tail at the bash line; the builders insert the shared `agent_bash_jobs_rule` between head and tail only when the shell is on — byte-identical shell-on prompts. |
+| **MAJOR (plan):** Task 1's dispatch unit test constructed `agent_worker w = {0}` without the mutex/wake-fd setup the existing harness tests use — the shell-on branch runs the real bash dispatch path, so it would be UB. | `test_agent_execute_tool_call_unknown_tool_trims_torn_utf8_name` (~:8882) initializes `pthread_mutex_init(&w.mu, NULL)` and `w.wake_fd[1] = -1`. | The test now mirrors that setup verbatim. |
+| **MINOR (plan):** the golden recapture had no tool-free check, but Task 6's test asserts the fixture carries no tool events — a stray tool call would surface as a confusing fast-tier failure later. | Task 6's `goldenNdjsonParsesWithoutRefusing` asserts `.tool` events are absent. | Task 5 Step 6 greps the recaptured `golden.ndjson` for `"phase"` (must be 0) and re-runs the capture if the model emitted a tool call. |
+| **MINOR (plan):** the fake's `emitInterrupt` emitted a bare `ready` — the real engine now emits the turn-end `ready` with `stop_reason` (D12), so the fake modeled less than the engine does. | D12's wire addition. | The fake's interrupt `ready` carries `stop_reason: interrupt` (+ generated/ctx_used); the integration interrupt test asserts it. |
+
+### Dismissed after verification
+
+- **The `--shell off` schema would still advertise bash via the prompt intro.**
+  The intros list tools only in the `<available_tools>` schemas block; the rules
+  prose is advice, now gated with the bash-jobs rule split. Nothing else names bash.
+- **Two `~48 GiB` engine loads (Chat's server + Agent's agent) when both tabs run.**
+  Real, but the settled design sanctions it (`BRIEF.md`: Chat and Agent are different
+  wires and different products); the per-engine feasibility gate (P3) covers each
+  load. The P4-bullet amendment at close records the deferral conversation honestly
+  rather than smuggling a Chat-to-agent migration into P7.
+
+The GLM 5.2 review's findings (above) all remain applied; none were reverted by this
+pass.
