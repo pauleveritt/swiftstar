@@ -61,6 +61,15 @@ computed, actionable message (deficit, available, and the close-apps/smaller-qua
 levers). Unknown plans defer to the engine's own refusal. `MemorySnapshot.availableBytes`
 = free + inactive pages (Activity Monitor's notion).
 
+## GLM 5.2 review (four batches) and fixes
+
+Reviewed Kit (Feasibility, ChunkedDownload, BootLineParser + tests), the runner (DownloadRunner, MemorySnapshot), the integration tier, and the UI (SettingsView, EngineController gate, RangeFileServer). All accepted findings fixed (commit 4cdcff3):
+
+- **Kit**: deserialize rejects truncated byte lengths (the old `count/8` accepted 8–15 bytes for a one-word bitmap) and masks stray high bits on load so corruption cannot overcount; `ChunkedPlan` preconditions (positive chunkSize, non-negative total/index) remove the division trap; `isComplete` short-circuits; `clear(_:)` added; `BootLineParser` anchored on the "GiB planned" tail with a magnitude bound (no Int64 overflow trap) and is immune to earlier `=` tokens; Feasibility guards non-negative inputs.
+- **Runner**: persisted remote-total meta — if the remote file changed size between runs, the download resets instead of merging stale parts into a corrupt file; merge refuses an incomplete bitmap; `replaceItemAt` handles a pre-existing destination; per-chunk retry with backoff; longer timeouts (waitsForConnectivity removed after it made the connection-refused failure test hang); per-chunk self-heal via `clear`; "server does not support range requests" is a distinct error; HEAD status validated; mach port deallocated; immediate `cancel()`.
+- **Integration**: servers and temp dirs cleaned up via `defer` (no leaked processes); a real deadline-based wait for the listening line (availableData alone was racy).
+- **UI**: a completed download wires into the model path ("Use this model"); the download task is cancelled when Settings closes; the Picker is keyed by the stable file id; the URL is built via URLComponents; the persisted feasibility plan is **keyed by model** — a changed model invalidates the stale plan, so a refusal never pairs an old model's bytes with a new model's name.
+
 ## Concept budget
 
 **feasibility** is now defined (the engine's startup memory plan vs. available RAM,
