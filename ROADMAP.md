@@ -51,7 +51,10 @@ something the design actually needs, not by being convenient shorthand.*
 
 Seed terms, to be defined in this repository's own words when the phase that
 needs each one lands: **patch set**, **shipped integration**, **variant**,
-**feasibility**, **handoff packet**, **candidate ref**. Defined so far (P2):
+**handoff packet**, **candidate ref**. Defined so far:
+
+- **feasibility** (P3) — the engine's startup memory plan vs. available RAM,
+  computed, with an actionable refusal (deficit, levers, re-check number).
 
 - **seam** — the spawned-child-plus-wire boundary between the app and the engine.
 - **wire** — the byte stream on that seam (P2: SSE from `ds4-server`).
@@ -65,7 +68,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P0 | Scaffolding | Repository, docs toolchain, brief, roadmap, harvest briefs | **complete** |
 | P1 | The fork, consolidated | One command builds `ds4-server` and `ds4-agent` from a pinned SHA on the shipped integration branch, with a ledger and a golden capture | complete (2026-08-22) |
 | P2 | It launches and answers | A regular macOS app with a real icon, a window, and a `Settings` scene starts the server and streams one chat turn — with the fast tier, the tripwire, and fake engines generated from P1's captures | complete (2026-08-22) |
-| P3 | It can get its weights | Chunked parallel download with bitmap resume across restarts, and a launch that refuses infeasibly with an explanation a person can act on | planned |
+| P3 | It can get its weights | Chunked parallel download with bitmap resume across restarts, and a launch that refuses infeasibly with an explanation a person can act on | complete (2026-08-22) |
 | P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | planned |
 | P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | planned |
 | P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | planned |
