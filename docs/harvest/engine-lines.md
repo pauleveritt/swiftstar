@@ -57,6 +57,37 @@ that exploration works but termination does not. One commit in that history is
 worth the whole branch as a cultural artifact: *"Correct a false green: make
 test does not pass in this worktree."*
 
+Resident Q8 decode is green at ~144 tok/s; batched true prefill is correct but
+**not yet wired into `ds4_session_sync`**; the mixed Q4_K/Q8 artifact SwiftStar
+would actually ship **has never been built** and its primitive has no caller
+outside its own test. That last item is the line's largest unpriced work, and it
+is what P12 would inherit — not the Q8 harness, which fits only the development
+machine.
+
+Two findings from that branch are worth carrying whether or not P12 ever ships a
+Mellum `Variant`, because neither is about kernels. First, the branch's
+**envelopes measure something one to two orders of magnitude finer than the
+accuracy of the reference itself**: an independent FP32 forward from the pinned
+weights, run 2026-08-21 (`2026-08-21-mellum2-independent-fp32-oracle.md`,
+commit `d8f5190`), puts ds4 within 0.085% of llama.cpp on logits while
+llama.cpp's own Q8 sits 2.4% from the FP32 model, and 9.3% at layer 27. So
+numerical gates of this kind are regression tripwires, never fidelity
+acceptance criteria — a lesson that transfers to any engine SwiftStar pins.
+Second, the same run showed a **model config alone flipping the greedy token**:
+the older flattened `qwen3_moe` rope export, run against identical weights,
+diverges at 26 tokens. A `Variant` is not just a file path and a sampler; the
+runtime contract is part of it.
+
+The **RLM probe generalizes past Mellum and bears directly on P9 and P11**:
+across five configurations none produced a correct answer, code generation was
+solid in every no-think run, no-think never concluded, and thinking terminated
+without exploring — twice emitting a confident final answer on fabricated
+content. Bounded recursive uses are viable today; open-ended "explore this
+corpus and synthesize" is not, and *a false stop signal is worse than no stop
+signal* in a loop that propagates termination upward as though it were verified.
+The companion orchestrator eval found thinking helping on neither task shape,
+with the reasoning checkpoint hitting its cap at both 2,048 and 4,096 tokens.
+
 ## The constraint that binds P11 and P12
 
 **Sessions with SSD streaming enabled are excluded from the engine's batch path

@@ -196,7 +196,16 @@ surface testable offline against committed captures, with no model and no Mac.
   pins a SHA on this branch and only this branch.** Per-model branches
   (`laguna-xs2.1`, `mellum-2.1-overnight`) are development branches the app never pins; a
   model line enters the shipped integration when, and only when, SwiftStar
-  ships a `Variant` for it.
+  ships a `Variant` for it. Neither line is ready to cross that line today:
+  each is validated only against a development quant that fits the development
+  machine, and the artifact the app would ship has not been built for either.
+
+**A `Variant` is a runtime contract, not a file path.** Mellum's own history
+supplies the proof: the same weights, run under a flattened rope config instead
+of the canonical layer-selective one, flip the greedy token at 26 tokens with
+nothing raised and no error surfaced. Whatever a `Variant` ends up being, it
+carries the model's rope, attention pattern, and sampling contract, and those
+are gated — not inferred from a filename.
 
 Three policies, inherited from the `paul/laguna` divergence policy because they
 already work: rebase rather than merge, so the integration can be rebuilt onto

@@ -70,7 +70,7 @@ needs each one lands: **seam**, **wire**, **capture**, **fixture**, **variant**,
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | planned |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | planned |
 | P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | planned |
-| P12 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants | planned |
+| P12 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; see the dependency below | planned |
 | P13 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
 
 Full done-when criteria live in each phase's own plan under
@@ -89,6 +89,16 @@ That directory is empty today; each plan is written as its phase begins.
   set are excluded from the engine's batch path regardless of family, so Laguna
   XS support and subagent isolation cannot both be assumed. Whichever ships
   second inherits the constraint.
+- **P12 inherits an unbuilt artifact, not a finished engine.** Both model lines
+  are validated against development quants that fit only the development
+  machine: Mellum's evidence is all for a ~12 GiB Q8 build, and the mixed
+  Q4_K/Q8 artifact the app would actually ship has never been produced, has no
+  imatrix run, and needs a new oracle chain because none of the pinned fixtures
+  apply to it. Laguna XS is engineering-complete but still owes a real
+  constrained-hardware acceptance run. **P12's cost is dominated by producing
+  and gating a shipping quant, not by adding a `Variant`** — and a phase that
+  budgets for the latter will discover the former. See
+  `docs/harvest/engine-lines.md`.
 - **P8 degrades rather than blocks.** Superpowers skills carry fallback wording
   for a harness without subagent dispatch, so P8 does not wait on P11 — but it
   must never fabricate a dispatch call.
