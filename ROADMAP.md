@@ -10,24 +10,13 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P5 — Capture is a program, not a lost file.** In progress on branch
-`p5-capture-is-a-program`: design spec and plan committed; the engine patch
-(ledger divergence #7 — `ds4-agent --json-events` emits a version/capability
-handshake first and `ts` on every event) is bumped into the submodule;
-`swiftstar-drive` is committed and produces a capture directory with
-`wire.ndjson`/`wire.stderr`/`wire.trace`/`provenance.md`/`progress.log`, all
-byte-verbatim; fixtures are recaptured (`golden.ndjson` carries the handshake
-and `ts`, `golden.trace` and `golden.stderr` are committed, the old
-`.sidecar` file is gone). Remaining before done-when is met: this file
-marked complete and the concept budget reviewed for **handshake** and
-**trace**. Full done-when list:
-[`docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md`](docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md).
+**Phase P6 — Diagnostics that can't lie.** Next up; not started. A deterministic
+analyzer over captures, with the model only phrasing the findings. P5 landed the
+inputs it needs: the timestamped wire (`ts`) and the `--trace` channel
+(compaction rebuild stats) are both in the capture format, so "would compaction
+help" — the diagnostics surface's first job — is answerable from recorded fact.
 
-Note for whoever closes this phase: `wire.trace` already captures the
-engine's `--trace` channel, which independently satisfies the P5/P6
-dependency bullet below — no further action needed there.
-
-*P0–P4 are complete; their summaries live in [Prior work](#prior-work), not
+*P0–P5 are complete; their summaries live in [Prior work](#prior-work), not
 here, so this section stays a true "what's happening now."*
 
 ## Concept budget
@@ -45,7 +34,12 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 
 - **seam** — the spawned-child-plus-wire boundary between the app and the engine.
 - **wire** — the byte stream on that seam (P2: SSE from `ds4-server`).
-- **capture** — a byte-for-byte recording of a wire, stored with a timestamp sidecar.
+- **capture** — a byte-for-byte recording of the seam (wire + stderr + trace),
+  timestamped on the wire and anchored in wall-clock by its provenance.
+- **handshake** — the wire's first line: a version/capability `hello` object; a
+  consumer refuses a mismatch loudly (binding rule 7).
+- **trace** — the engine's `--trace` channel, a separate timestamped file carrying
+  what the wire suppresses (compaction rebuild stats); captured alongside the wire.
 - **fixture** — a committed capture used by tests.
 
 ## Phases
@@ -57,7 +51,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P2 | It launches and answers | A regular macOS app with a real icon, a window, and a `Settings` scene starts the server and streams one chat turn — with the fast tier, the tripwire, and fake engines generated from P1's captures | complete (2026-08-22) |
 | P3 | It can get its weights | Chunked parallel download with bitmap resume across restarts, and a launch that refuses infeasibly with an explanation a person can act on | complete (2026-08-22) |
 | P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | complete (2026-08-22) |
-| P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | in progress |
+| P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | complete (2026-08-22) |
 | P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | planned |
 | P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript, tool cards, workspace grant, shell toggle, interruptible turns | planned |
 | P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | planned |
@@ -344,6 +338,18 @@ Completed phases move here when the roadmap outgrows the front page.
   capture-replay banner. The lead dials (`ctx_used`, throughput) are
   fixture-replayed until P7's agent migration; memory/GPU/CPU/power are live.
   Spec: [`docs/superpowers/specs/2026-08-22-p4-it-shows-what-the-machine-is-doing-design.md`](docs/superpowers/specs/2026-08-22-p4-it-shows-what-the-machine-is-doing-design.md).
+
+- **P5 — Capture is a program, not a lost file (2026-08-22).** `swiftstar-drive`,
+  a committed executable target, drives the real `ds4-agent` and writes the fixed
+  capture format (`wire.ndjson` + `wire.stderr` + `wire.trace` + `provenance.md` +
+  `progress.log`), byte-verbatim. Fork divergence #7 gives the `--json-events` wire
+  a version/capability `hello` handshake (first line) and a monotonic `ts` on every
+  event, retiring the P1 receive-time sidecar. `WireEventParser` enforces the
+  handshake (refuses loudly on a mismatch) and reads `ts`; `CaptureWriter` (Kit)
+  pins the format; fixtures are recaptured with the handshake + `trace` + `stderr`.
+  The `--trace` channel (compaction rebuild stats) is now captured, which is what
+  P6's "would compaction help" needs.
+  Spec: [`docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md`](docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md).
 
 ## Workflow
 
