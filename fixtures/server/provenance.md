@@ -56,7 +56,7 @@ SHA. Nothing in it was hand-written or reformatted. This is the **first** SSE ca
 Each `data: {...}` chunk:
 
 ```
-{"id":"chatcmpl-1","object":"chat.completion.chunk","created":<epoch>,"model":"laguna-s-2.1",
+{"id":"chatcmpl-2","object":"chat.completion.chunk","created":<epoch>,"model":"laguna-s-2.1",
  "choices":[{"index":0,"delta":{...},"finish_reason":null}]}
 ```
 
@@ -66,7 +66,14 @@ Each `data: {...}` chunk:
 - Text tokens: `"delta":{"content":"<token>"}`.
 - Final chunk: `"finish_reason":"stop"` (then a blank line), followed by the terminal
   `data: [DONE]` line, which is the last non-blank line of the stream.
-- `id` is constant (`chatcmpl-1`) within each request; `created` is the request epoch.
+- `id` is constant within each request and **increments per request served by the process**:
+  `chatcmpl-1` in `golden.short.sse` (the first request of the server session), `chatcmpl-2` in
+  the canonical `golden.sse` (the second request). Do not assume a fixed id across requests.
+- `created` is **epoch seconds at emit time, advancing across the stream** (~once per second),
+  not a constant request epoch: the canonical capture has 57 distinct values spanning 56 s,
+  matching its sidecar's 56.28 s span exactly (first/last sidecar seconds equal first/last
+  `created` values). Unlike OpenAI's SSE shape (constant request-creation time), ds4-server
+  stamps each chunk with its emit second — do not assume it is fixed within a request.
 
 ## Gaps — what was not captured, and why
 
