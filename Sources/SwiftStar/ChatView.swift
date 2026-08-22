@@ -71,6 +71,7 @@ struct ChatView: View {
         case .instanceLocked: return "another ds4 process is already running"
         case .exited(let code, let tail): return "engine exited (\(code)): \(tail)"
         case .timeout: return "engine start timed out"
+        case .infeasible(let message): return message
         }
     }
 

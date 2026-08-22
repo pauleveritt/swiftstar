@@ -10,9 +10,13 @@ let package = Package(
     ],
     targets: [
         .target(name: "SwiftStarKit"),
+        .target(
+            name: "SwiftStarAppKit",
+            dependencies: ["SwiftStarKit"]
+        ),
         .executableTarget(
             name: "SwiftStar",
-            dependencies: ["SwiftStarKit"],
+            dependencies: ["SwiftStarKit", "SwiftStarAppKit"],
             resources: [.process("Resources")]
         ),
         .testTarget(
@@ -22,7 +26,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftStarIntegrationTests",
-            dependencies: ["SwiftStarKit"]
+            dependencies: ["SwiftStarKit", "SwiftStarAppKit"]
         ),
         .executableTarget(name: "FastTierGuardTool"),
         .plugin(

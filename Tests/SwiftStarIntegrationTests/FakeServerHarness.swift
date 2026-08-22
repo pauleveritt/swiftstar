@@ -93,10 +93,20 @@ enum FakeServerHarness {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let mainFile = dir.appendingPathComponent("main.swift")
         try source.write(to: mainFile, atomically: true, encoding: .utf8)
-        let binary = dir.appendingPathComponent("fake-ds4-server")
+        return try compile(sourceFile: mainFile, binary: dir.appendingPathComponent("fake-ds4-server"))
+    }
+
+    /// Compiles a committed Swift main file (e.g. the RangeFileServer) into a
+    /// binary in the given directory.
+    static func compileFile(at path: URL, into dir: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return try compile(sourceFile: path, binary: dir.appendingPathComponent(path.deletingPathExtension().lastPathComponent))
+    }
+
+    private static func compile(sourceFile: URL, binary: URL) throws -> URL {
         let process = Process()
         process.executableURL = try resolveSwiftc()
-        process.arguments = [mainFile.path, "-o", binary.path]
+        process.arguments = [sourceFile.path, "-o", binary.path]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
