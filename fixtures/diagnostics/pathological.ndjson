@@ -1,0 +1,5 @@
+{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":0}
+{"t":"status","state":"prefill","prefill_done":1024,"prefill_total":1024,"prefill_tps":330.0,"generated":0,"gen_tps":0.0,"ctx_used":3400,"ctx_size":150000,"power":100,"error":"","ts":1000000}
+{"t":"status","state":"prefill","prefill_done":20700,"prefill_total":20700,"prefill_tps":165.0,"generated":0,"gen_tps":0.0,"ctx_used":20700,"ctx_size":150000,"power":100,"error":"","ts":2000000}
+{"t":"status","state":"prefill","prefill_done":56900,"prefill_total":56900,"prefill_tps":66.0,"generated":0,"gen_tps":0.0,"ctx_used":56900,"ctx_size":150000,"power":100,"error":"","ts":3000000}
+{"t":"status","state":"prefill","prefill_done":92500,"prefill_total":92500,"prefill_tps":44.0,"generated":0,"gen_tps":0.0,"ctx_used":92500,"ctx_size":150000,"power":100,"error":"","ts":4000000}
