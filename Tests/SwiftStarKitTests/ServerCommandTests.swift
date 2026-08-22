@@ -12,12 +12,12 @@ struct ServerCommandTests {
         )
         let argv = ServerCommand.argv(settings: settings)
         #expect(argv == [
-            "/tmp/engine/ds4-server",
             "-m", "/tmp/model.gguf",
             "-c", "32768",
             "--host", "127.0.0.1",
             "--port", "43210",
         ])
+        #expect(ServerCommand.binaryPath(settings: settings) == "/tmp/engine/ds4-server")
     }
 
     @Test func honorsOverrides() {

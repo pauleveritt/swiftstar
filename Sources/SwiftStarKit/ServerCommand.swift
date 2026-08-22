@@ -23,15 +23,21 @@ public struct EngineSettings: Equatable, Sendable {
     }
 }
 
-/// The one argv contract: what the app spawns and what the fake engine validates.
+/// The one argv contract: what the app spawns (as `Process.arguments`, after
+/// `Process` prepends the executable path as argv[0]) and what the fake engine
+/// validates. The binary path itself is NOT part of the returned array.
 public enum ServerCommand {
     public static func argv(settings: EngineSettings) -> [String] {
         [
-            settings.engineDir.appendingPathComponent("ds4-server").path,
             "-m", settings.modelPath.path,
             "-c", String(settings.contextSize),
             "--host", settings.host,
             "--port", String(settings.port),
         ]
+    }
+
+    /// The executable to spawn for these settings.
+    public static func binaryPath(settings: EngineSettings) -> String {
+        settings.engineDir.appendingPathComponent("ds4-server").path
     }
 }
