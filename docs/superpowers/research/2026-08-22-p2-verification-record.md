@@ -58,6 +58,19 @@ no `swiftstar-drive` (P5), no NDJSON parser (P7), no wire handshake (P5). No
 source-text assertions; refusal tests have sibling success tests. No submodule
 bump; `external/ds4` untouched.
 
+## GLM 5.2 review (two rounds) and fixes
+
+Round 1 covered Supervisor, EngineController, ChatView/Settings/Main/App, ChatTranscript, ServerCommand, FakeServerSource; Round 2 covered SSEParser + its tests, the integration harness, and the integration tests. Findings were verified against the code before fixing; all accepted findings are fixed (commits a08a72f, 6784336):
+
+- **Supervisor**: stop only from in-flight states (no `.stopping` wedge from `.stopped`/`.failed`), `.engineMissing` refreshes from `.failed`, case-insensitive stderr detection, exit-code semantics pinned with tests, removed the unhandled `stdoutLine` event, wired startup/stop timeouts in the harness.
+- **EngineController**: idempotent `startEngine`, `canSend = .ready` only (no first-message race, single-turn chat, input preserved on refusal), stdout drained, exit driven from stderr EOF (complete tail on failure), generation-token drain isolation, host-aware URL, settings re-read at start, engine stopped on graceful quit, cached log handle, process cleared on run() failure.
+- **Parser**: delta checked before `finish_reason` (terminal chunk content not dropped); empty deltas not emitted; newline-agnostic fixture splitting; precedence/empty/terminal pins.
+- **Harness/integration**: typed errors, xcrun swiftc resolution, connect retry, buffered read, `defer` cleanup (no leaked fakes), deadline listening-wait that surfaces real stderr.
+- **Fake generator**: CRLF normalization, strict UTF-8, Double-based sleep + fd cleanup in the generated fake, public escaper.
+- **Transcript**: consecutive content deltas coalesce; non-stop finish pinned.
+
+Live re-smoke after the fixes: the app boots the real engine through all 11 stderr lines (ready), and a graceful quit (Apple event on the bundled app) stops the engine with 0 processes. The reliable stderr drain turned out to be a blocking `availableData` loop, not `AsyncBytes.bytes.lines` (which silently stopped after ~3 lines in the app); the re-smoke caught it. Raw-binary SIGTERM orphans the engine (no `applicationWillTerminate` on default-signal death) — documented edge; the bundled-app Cmd-Q path cleans up.
+
 ## Concept budget
 
 Definitions landed in the plan glossary: **seam**, **wire**, **capture**,
