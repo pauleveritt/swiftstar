@@ -6,6 +6,7 @@ public enum EngineFailure: Equatable, Sendable {
     case instanceLocked
     case exited(code: Int32, stderrTail: String)
     case timeout
+    case infeasible(String)   // P3: refused before spawn, computed message
 }
 
 public enum SupervisorState: Equatable, Sendable {

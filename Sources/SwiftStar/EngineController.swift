@@ -84,6 +84,18 @@ final class EngineController {
         )
     }
 
+    /// The engine's own startup memory plan from the last run (boot line), so
+    /// a future launch can refuse infeasibly before spawning. Persisted.
+    static var lastKnownPlannedBytes: Int64? {
+        get {
+            let v = UserDefaults.standard.object(forKey: "lastKnownPlannedBytes") as? Int64
+            return v
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "lastKnownPlannedBytes")
+        }
+    }
+
     static func probeFreePort() -> Int {
         let s = socket(AF_INET, SOCK_STREAM, 0)
         defer { close(s) }
@@ -123,6 +135,21 @@ final class EngineController {
         switch state {
         case .stopped, .failed: break
         default: return
+        }
+        // Feasibility: refuse before spawning with a computed, actionable
+        // message (P3). plannedBytes comes from the engine's own boot line,
+        // persisted from the last run; unknown plans defer to the engine.
+        if let planned = EngineController.lastKnownPlannedBytes {
+            let verdict = Feasibility.check(
+                plannedBytes: planned,
+                availableBytes: MemorySnapshot.availableBytes(),
+                modelName: settings.modelPath.lastPathComponent
+            )
+            if case .infeasible(let reason) = verdict {
+                state = .failed(.infeasible(reason.message))
+                log("feasibility refusal: \(reason.message)")
+                return
+            }
         }
         // Settings apply when the engine next starts (Settings pane caption).
         settings = EngineController.defaultSettings()
@@ -214,6 +241,11 @@ final class EngineController {
         stderrTail.append(line)
         if stderrTail.count > 20 { stderrTail.removeFirst(stderrTail.count - 20) }
         log(line)
+        // Persist the engine's own startup memory plan so future launches can
+        // refuse infeasibly before spawning (P3).
+        if let planned = BootLineParser.plannedBytes(from: line) {
+            EngineController.lastKnownPlannedBytes = planned
+        }
         state = Supervisor.transition(from: state, event: .stderrLine(line), port: settings.port, stderrTail: stderrTail)
     }
 
