@@ -8,9 +8,15 @@ watch-docs:
 docs:
     uv run --group docs sphinx-build -W -b html docs docs/_build/html
 
-# Fast tier: no model, no network, no subprocess. Arrives in P2.
+# Fast tier: SwiftStarKit against fixtures. No model, no network, no subprocess
+# (enforced by the FastTierGuard build-tool plugin on SwiftStarKitTests).
 test:
     swift test
+
+# Integration tier: real processes and files against fake engine binaries
+# generated from committed captures. Same suite, marked tests enabled.
+integration:
+    SWIFTSTAR_INTEGRATION=1 swift test
 
 # Build ds4-server and ds4-agent from the pinned submodule SHA (P1).
 #
@@ -27,3 +33,7 @@ engine:
 # Arrives in P5.
 capture:
     swift run swiftstar-drive
+
+# Assemble .build/SwiftStar.app (release build + Info.plist + icon)
+app:
+    Tools/make-app.sh
