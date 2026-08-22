@@ -84,7 +84,9 @@ independent conflict surface, on top of dropping the notatestuser base.
    GitHub cannot re-parent).
 2. `main` is a pristine mirror of `antirez/main`, never edited.
 3. One shipped integration branch `swiftstar-integration` carries
-   `antirez/laguna-s2.1` merged onto `main` plus the 22 rebased app patches.
+   `antirez/laguna-s2.1` plus the 22 rebased app patches (the "union of model
+   lines" — at P1, one line; `main` is the pristine mirror / rebase source,
+   not the integration base).
 4. The SwiftStar repo carries `external/ds4` as a submodule pinned to a SHA on
    `swiftstar-integration` (and only that branch).
 5. One command builds `ds4-server` and `ds4-agent` from the pinned SHA.
@@ -144,58 +146,41 @@ merged" property stays legible when P12 adds a second model line.
 
 ## The rebase
 
+**Amended 2026-08-21 (option A).** The original draft said "merge
+`upstream/laguna-s2.1` into `main`, then apply the patches." Attempting that
+produced **14 conflicted files, ~26 hunks** — a `laguna-s2.1` (17 commits
+ahead of a 155-behind merge base) into current `main` (155 commits ahead) is
+front-running antirez's own future merge, and half the conflicts were semantic
+kernel merges (`metal/moe.metal` 530 lines; `rocm/*` untestable on macOS).
+
+The brief's fork policy defines the shipped integration as "the union base
+carrying every model line the app ships a Variant for" — *not* "main + model
+lines." At P1 there is one model line: `laguna-s2.1`. So the integration is
+**`laguna-s2.1` + the 22 patches**, with no model-line merge. `main` stays the
+pristine mirror used as the rebase *source* when antirez eventually merges
+laguna into main (the standing recapture rule covers that re-rebase).
+
 **Source of truth** for the patch commits: the DS4 Control agent-mode worktree's
 submodule, branches `ds4-control-status-marker` (2 commits) and `ds4-control-laguna`
 (the rest).
 
-**Procedure** (implementation step 2):
+**Procedure** (implementation step 2, executed 2026-08-21):
 
-1. In the fork, create `patch-set` from `main`, then merge `upstream/laguna-s2.1`
-   into it. This is the new base.
+1. In the fork, create `patch-set` from `origin/laguna-s2.1` (the upstream
+   model line, already on the fork from the antirez fork).
 2. Cherry-pick the 22 commits in topological order, **dropping the 16 local
-   Laguna-line commits** — their feature set is already merged via
-   `upstream/laguna-s2.1`, but the local line and upstream line are not identical
-   commits (see "A finding"): only 4 of 16 patch-ids match, so rebasing the app
-   patches onto upstream `laguna-s2.1` is real conflict work.
+   Laguna-line commits** — their feature set is already present in
+   `laguna-s2.1` (the local line was a variant of upstream laguna; patch-ids
+   differ 4/16 because the local line was applied onto the notatestuser base).
 3. `swiftstar-integration` = the resulting `patch-set` tip; pin the submodule there.
 
-**Two orderings change, both deliberate:**
-
-- The Laguna line moves from *inside* the series to *underneath* it. In the source,
-  the status-marker commits sit directly on the notatestuser base *before* the
-  Laguna line; in the new base `laguna-s2.1` is merged first and all 22 patches sit
-  on top. The status marker will apply *after* Laguna, where it didn't before — a
-  real reordering and a real conflict surface.
-- The notatestuser base is dropped entirely. The 114 Metal/MXFP4 commits and the 3
-  agent commits are not carried. A load-bearing dependency will surface as a rebase
-  conflict or a recapture mismatch.
-
-**Conflict-handling policy — two traps, addressed explicitly:**
-
-1. **Textual conflicts** (git stops): resolve by hand, preserving the app-patch's
-   *semantics* over upstream's, and record the resolution in a `Conflicts:` footer
-   in the commit message. The instruction to a future rebaser: the patch set must
-   keep its wire contract (`docs/json-events.md`) intact.
-2. **Semantic collisions** (git applies cleanly, meaning is wrong — the brief's
-   central warning): "git rebase completed without conflict" is **not** a success
-   signal. The honest test is the golden recapture against the rebuilt binary. If a
-   rebase applies cleanly but the recapture diverges from the documented wire
-   contract, the fix is to re-derive the patch against new upstream — never to
-   hand-edit the capture to match.
-
-**Contingency — hard dependency on a notatestuser agent commit.** If the rebase or
-recapture reveals `b030961` / `355da75` / `0fa15c6` is load-bearing, do **not**
-carry the commit wholesale. Extract the minimal needed change, fold it into the
-patch set as its own small commit, and record it in the fork ledger as its own
-divergence row with its own retirement condition.
-
-**Traceability.** The ledger records both original and new SHAs for all 22 commits,
-so the rebase is auditable and re-doable. The SDD `progress.md` remains the
-development record; the ledger cites it.
-
-**Verification gate.** Build both binaries from the pinned SHA, then recapture.
-Nothing in this section is "done" until the recapture passes against the wire
-contract.
+**Result (verified):** all 22 cherry-picked cleanly onto `laguna-s2.1` with
+**exactly one conflict** — a trivial struct-field placement in `ds4_agent.c`
+(the `bool edit_upto; bool json_events;` addition to `agent_config`), resolved
+by keeping the patch's additions. This confirms the option-A reframe: the
+local-laguna-vs-upstream-laguna divergence is contained to `ds4_agent.c`, which
+is the one file the recapture (Task 6) verifies. The 13 other conflict files
+from the abandoned main+laguna merge do not arise.
 
 ## Patch set inventory + fork ledger
 

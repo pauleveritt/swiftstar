@@ -12,6 +12,18 @@
 
 ## Global Constraints
 
+- **Contingency — `d0b0caa` (recorded 2026-08-21, before fork deletion):** the pre-existing
+  `pauleveritt/ds4` carried one unique commit, `d0b0caa` ("Fix merge: restore
+  wrap_f32_decode_model_range, force_model_view param and callers", 38 lines in
+  `ds4_metal.m`), a merge-conflict fix restoring two laguna-line Metal symbols dropped when
+  `laguna-s2.1` was merged into `notatestuser/ds4` v2. Those symbols are native to upstream
+  `laguna-s2.1` (5/7 occurrences) and absent from both antirez main and notatestuser v2, so
+  P1's merge of upstream laguna into antirez main brings them in and the fix is expected to be
+  redundant. **Trigger to restore:** if Task 3's laguna-into-main merge drops
+  `wrap_f32_decode_model_range` or `force_model_view` (or the recapture/Task 6 build shows a
+  missing-symbol error), restore from the preserved bundle at
+  `.worktrees/ds4-fork-backup/ds4-control-patches-v3.bundle` (gitignored) and record it as a
+  ledger row. Do **not** port it preemptively.
 - **Decision B:** delete the existing `pauleveritt/ds4` (parented to `notatestuser`) and re-fork from `antirez/ds4` so the parent is antirez. GitHub cannot re-parent a fork.
 - **`main` is pristine**: mirrors `antirez/main`, never edited, fast-forward only.
 - **`patch-set` is small, rebased, never merged into main.**
@@ -186,31 +198,21 @@ git fetch source
 ```
 Expected: clone succeeds; `origin` = fork, `upstream` = antirez, `source` = the worktree submodule; fetch brings `upstream/main`, `upstream/laguna-s2.1`, `source/ds4-control-status-marker`, `source/ds4-control-laguna`.
 
-- [ ] **Step 3: Create `patch-set` from pristine main**
+- [ ] **Step 3: Create `patch-set` from `origin/laguna-s2.1` (option A)**
+
+Per the option-A reframe (see spec "The rebase"): the shipped integration is
+"the union of model lines," not "main + lines." At P1 the one model line is
+`laguna-s2.1`, so `patch-set` is based on `origin/laguna-s2.1` directly — no
+`laguna-s2.1`-into-`main` merge (that was 14 conflicted files of antirez's own
+future merge, half untestable on macOS).
 
 ```bash
 cd /tmp/ds4-rebase
-git checkout -b patch-set origin/main
+git checkout -b patch-set origin/laguna-s2.1
 ```
-Expected: `patch-set` at the fork's main (which mirrors antirez main at fork time).
+Expected: `patch-set` at `448d569` (upstream laguna-s2.1 tip on the fork).
 
-- [ ] **Step 4: Merge upstream laguna-s2.1 into patch-set**
-
-```bash
-cd /tmp/ds4-rebase
-git merge --no-ff upstream/laguna-s2.1 -m "Merge laguna-s2.1 into patch-set base"
-```
-Expected: merge completes, possibly with conflicts. Resolve conflicts by hand, preserving the **Laguna line's** content (it is the model line the app ships first). Record resolutions in the merge commit.
-
-- [ ] **Step 5: Verify the base is clean**
-
-```bash
-cd /tmp/ds4-rebase
-git log --oneline -1
-```
-Expected: the merge commit is HEAD; working tree clean (`git status` empty).
-
-- [ ] **Step 6: Cherry-pick the 22 app commits in order**
+- [ ] **Step 4: Cherry-pick the 22 app commits in order**
 
 ```bash
 cd /tmp/ds4-rebase
@@ -218,9 +220,15 @@ git cherry-pick 310d5a4 a9eda6d 1f18723 9bca6d4
 git cherry-pick 66c3de2^..1a14a6c
 git cherry-pick 83501bb 8267745
 ```
-Expected: cherry-picks complete. Conflicts are expected (the patches were written against the notatestuser base + local Laguna line; we now apply them to antirez main + upstream laguna-s2.1). For each conflict, resolve by hand **preserving the app patch's semantics** over upstream's, and add a `Conflicts:` footer to the commit message. The wire contract (`docs/json-events.md`, carried by the patch set) must stay intact.
+Expected: cherry-picks complete. Conflicts are confined to `ds4_agent.c`
+(the local-laguna-vs-upstream-laguna divergence in the tool-syntax context the
+json-events patches instrument). Resolve by hand **preserving the app patch's
+semantics**; the wire contract (`docs/json-events.md`, carried by the patch set)
+must stay intact. (Observed 2026-08-21: exactly one conflict — the
+`bool edit_upto; bool json_events;` addition to `agent_config`, resolved by
+keeping the patch's additions.)
 
-- [ ] **Step 6a: Contingency — hard dependency on a notatestuser agent commit**
+- [ ] **Step 4a: Contingency — hard dependency on a notatestuser agent commit**
 
 If a conflict (or the later recapture, Task 6) reveals that one of the
 dropped notatestuser agent commits (`b030961`, `355da75`, `0fa15c6`) is
@@ -230,16 +238,16 @@ it in the fork ledger (Task 4) as its own divergence row with its own
 retirement condition. Verify the extract is minimal (git diff shows only the
 needed lines) before committing.
 
-- [ ] **Step 7: Verify the patch set applied cleanly**
+- [ ] **Step 5: Verify the patch set applied cleanly**
 
 ```bash
 cd /tmp/ds4-rebase
-git log --oneline origin/main..patch-set | head -30
+git log --oneline origin/laguna-s2.1..patch-set | head -30
 git status
 ```
-Expected: 22 app commits (+ the Laguna merge commit) on top of main; working tree clean.
+Expected: 22 app commits above `laguna-s2.1`; working tree clean.
 
-- [ ] **Step 8: Build both binaries from the rebased tree** (dev check, not a SwiftStar gate)
+- [ ] **Step 6: Build both binaries from the rebased tree** (dev check, not a SwiftStar gate)
 
 ```bash
 cd /tmp/ds4-rebase
@@ -247,7 +255,7 @@ make ds4-server ds4-agent -j8 2>&1 | tail -5
 ```
 Expected: builds succeed (Metal on macOS). If a build error surfaces a semantic collision, fix the offending patch against new upstream (re-derive, do not hand-edit the wire).
 
-- [ ] **Step 9: Run the engine's own agent test as a dev check**
+- [ ] **Step 7: Run the engine's own agent test as a dev check**
 
 ```bash
 cd /tmp/ds4-rebase
@@ -255,7 +263,7 @@ make ds4_agent_test -j8 2>&1 | tail -3 && ./ds4_agent_test 2>&1 | tail -5
 ```
 Expected: test binary builds and passes. This is a development check, not a SwiftStar deliverable.
 
-- [ ] **Step 10: Create `swiftstar-integration` at the patch-set tip**
+- [ ] **Step 8: Create `swiftstar-integration` at the patch-set tip**
 
 ```bash
 cd /tmp/ds4-rebase
@@ -265,7 +273,7 @@ git push origin patch-set
 ```
 Expected: both branches pushed to the fork.
 
-- [ ] **Step 11: Verify the branches on the fork**
+- [ ] **Step 9: Verify the branches on the fork**
 
 Run:
 ```bash
@@ -273,16 +281,16 @@ git ls-remote --heads https://github.com/pauleveritt/ds4.git patch-set swiftstar
 ```
 Expected: both listed with SHAs.
 
-- [ ] **Step 12: Record new SHAs**
+- [ ] **Step 10: Record new SHAs**
 
 Run:
 ```bash
 cd /tmp/ds4-rebase
 git log --oneline --reverse patch-set | head -30
 ```
-Expected: the 22 commits with their **new** SHAs. Save this mapping (original → new) for the fork ledger (Task 5).
+Expected: the 22 commits with their **new** SHAs. Save this mapping (original → new) for the fork ledger (Task 4).
 
-- [ ] **Step 13: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 # Remote state; record in the session log.
