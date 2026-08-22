@@ -50,9 +50,13 @@ mind. Checked at the end of each phase; a term earns its place by naming
 something the design actually needs, not by being convenient shorthand.*
 
 Seed terms, to be defined in this repository's own words when the phase that
-needs each one lands: **seam**, **wire**, **capture**, **fixture**, **variant**,
-**feasibility**, **patch set**, **shipped integration**, **handoff packet**,
-**candidate ref**. Defined so far: none — P0 ships no vocabulary.
+needs each one lands: **patch set**, **shipped integration**, **variant**,
+**feasibility**, **handoff packet**, **candidate ref**. Defined so far (P2):
+
+- **seam** — the spawned-child-plus-wire boundary between the app and the engine.
+- **wire** — the byte stream on that seam (P2: SSE from `ds4-server`).
+- **capture** — a byte-for-byte recording of a wire, stored with a timestamp sidecar.
+- **fixture** — a committed capture used by tests.
 
 ## Phases
 
@@ -60,7 +64,7 @@ needs each one lands: **seam**, **wire**, **capture**, **fixture**, **variant**,
 |---|---|---|---|
 | P0 | Scaffolding | Repository, docs toolchain, brief, roadmap, harvest briefs | **complete** |
 | P1 | The fork, consolidated | One command builds `ds4-server` and `ds4-agent` from a pinned SHA on the shipped integration branch, with a ledger and a golden capture | complete (2026-08-22) |
-| P2 | It launches and answers | A regular macOS app with a real icon, a window, and a `Settings` scene starts the server and streams one chat turn — with the fast tier, the tripwire, and fake engines generated from P1's captures | planned |
+| P2 | It launches and answers | A regular macOS app with a real icon, a window, and a `Settings` scene starts the server and streams one chat turn — with the fast tier, the tripwire, and fake engines generated from P1's captures | complete (2026-08-22) |
 | P3 | It can get its weights | Chunked parallel download with bitmap resume across restarts, and a launch that refuses infeasibly with an explanation a person can act on | planned |
 | P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | planned |
 | P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | planned |
@@ -166,6 +170,17 @@ Completed phases move here when the roadmap outgrows the front page.
   The design session that produced them, including the rejected alternatives and
   the adversarial review that corrected two of them, is recorded in
   [`docs/superpowers/specs/2026-08-21-swiftstar-design.md`](docs/superpowers/specs/2026-08-21-swiftstar-design.md).
+
+- **P2 — It launches and answers (2026-08-22).** `SwiftStarKit` (pure: SSE
+  parser, server argv builder, supervisor state machine, chat transcript
+  reducer, fake-engine source generator) and `SwiftStar` (the SwiftUI app:
+  five-tab window, working Chat tab, Settings scene on ⌘,) plus the fast tier
+  (tripwire-guarded `swift test`) and the integration tier
+  (`SWIFTSTAR_INTEGRATION=1 swift test`) with a fake `ds4-server` compiled from
+  P1's `golden.sse`. The app auto-starts the real engine and streams SSE; two
+  live-tier bugs the fake tier could not catch (the argv contract — `Process`
+  prepends argv[0] — and the metal-source/CWD gotcha) were found and fixed.
+  Spec: [`docs/superpowers/specs/2026-08-22-p2-it-launches-and-answers-design.md`](docs/superpowers/specs/2026-08-22-p2-it-launches-and-answers-design.md).
 
 ## Workflow
 
