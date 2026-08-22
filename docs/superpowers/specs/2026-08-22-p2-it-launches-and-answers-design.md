@@ -111,10 +111,14 @@ real engine. `engineDir` defaults to `DS4_DIR` or the submodule path
 `.portInUse(Int)`, `.instanceLocked`, `.exited(code: Int32)`, `.stderr(EngineStderr)`,
 `.timeout`. `supervise(_ state: SupervisorState, _ event: SupervisorEvent) ->
 SupervisorState` is a pure function; `SupervisorEvent` covers `.launchRequested`,
-`.readyLine`, `.stdoutLine`, `.stderrLine(String)`, `.exit(Int32)`, `.stopRequested`,
-`.timeoutFired`. All decisions (which transitions are legal, what a stderr line means) are
-here, tested in milliseconds. The app holds the state and forwards events; it never makes
-policy.
+`.engineMissing(URL)`, `.stdoutLine`, `.stderrLine(String)`, `.generationStarted`,
+`.generationFinished`, `.exit(Int32)`, `.stopRequested`, `.timeoutFired`. (Plan
+amendment: `.readyLine` was dropped — ds4-server announces readiness on **stderr** as
+`listening on http://…`, so readiness is classified inside `.stderrLine` handling; the
+two generation events were added for chat turns; `.engineMissing(URL)` lets the app report
+a missing binary without making policy.) All decisions (which transitions are legal, what
+a stderr line means) are here, tested in milliseconds. The app holds the state and
+forwards events; it never makes policy.
 
 **Gardened fact (from P1, `fixtures/agent/provenance.md` gotcha #2 and the live run):**
 `ds4-server` enforces a single-instance lock (`/tmp/ds4.lock`, override
