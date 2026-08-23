@@ -10,10 +10,10 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P7 — Agent mode.** Next up; not started. Spawn `ds4-agent`, NDJSON
-transcript, tool cards, workspace grant, shell toggle, interruptible turns.
+**Phase P8 — Skills.** Next up; not started. The Superpowers bootstrap through
+`-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure.
 
-*P0–P6 are complete; their summaries live in [Prior work](#prior-work), not
+*P0–P7 are complete; their summaries live in [Prior work](#prior-work), not
 here, so this section stays a true "what's happening now."*
 
 ## Concept budget
@@ -46,6 +46,18 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
   compared; the session measures itself, no external calibration.
 - **diagnostic** (P6) — a finding the analyzer computes from a capture, never a
   model's judgment. The model only phrases.
+- **workspace** (P7) — the confinement root plus the cwd the app grants at
+  spawn (`--workspace`); the file tools (`read`/`more`/`write`/`list`/`edit`/
+  `search`) fail closed outside it — an unresolvable or escaping path is
+  refused, not silently `chdir`'d.
+- **tool card** (P7) — the transcript's per-call reconstruction of one tool
+  invocation from the wire's phase stream (`start`/`tool`/`param_*`/`output`/
+  `finish`); appended at the `tool` phase, mutated in place by `param_end`/
+  `output`/`finish`, keyed by `idx` scoped to the current block.
+- **turn outcome** (P7) — the capture-grade per-turn record (model/build/sampler
+  and task, token and context use, stop reason, and each tool-call lifecycle
+  transition) that P10's handoff packets consume instead of trusting the
+  transcript's prose.
 
 ## Phases
 
@@ -58,7 +70,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | complete (2026-08-22) |
 | P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | complete (2026-08-22) |
 | P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | complete (2026-08-22) |
-| P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript and capture-grade turn/tool outcomes, tool cards, workspace grant, shell toggle, interruptible turns | planned |
+| P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript and capture-grade turn/tool outcomes, tool cards, workspace grant, shell toggle, interruptible turns | complete (2026-08-22) |
 | P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | planned |
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | planned |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | planned |
@@ -169,10 +181,14 @@ That directory is empty today; each plan is written as its phase begins.
   the parser and widgets are built and tested against `golden.ndjson` in the
   fast tier — no engine, no model, no subprocess — while the live engine stays
   `ds4-server` for chat. The live wiring — the app's engine process emitting
-  real `status`/`ready` — lands with P7's `ds4-agent` migration, which is where
-  the agent's safety surface (workspace grant, shell toggle) is designed and
-  where two ~48 GiB model loads stop being a constraint. **P4 must not spawn
-  `ds4-agent` live** ahead of that migration. See
+  real `status`/`ready` — was to land with P7's `ds4-agent` migration, which is
+  where the agent's safety surface (workspace grant, shell toggle) is designed
+  and where two ~48 GiB model loads stop being a constraint. **Corrected
+  2026-08-22 (P7 close):** the live metrics wiring did *not* land with P7 — the
+  P7 phase row never included it, and P7's plate carried the consent patch, the
+  D12 outcome wire, two fixtures, and a new Agent tab; Metrics/Diagnostics stay
+  fixture-driven until a later phase (the spec's D9 records the deviation).
+  **P4 must not spawn `ds4-agent` live** ahead of that migration. See
   [`docs/superpowers/research/2026-08-22-p4-sequencing-findings.md`](docs/superpowers/research/2026-08-22-p4-sequencing-findings.md).
 
 ## Backlog
@@ -396,6 +412,30 @@ Completed phases move here when the roadmap outgrows the front page.
   capture and rejects a committed synthetic `pathological` fixture reproducing
   the measured 7x curve. No live engine, no model, no engine patch.
   Spec: [`docs/superpowers/specs/2026-08-22-p6-diagnostics-that-cant-lie-design.md`](docs/superpowers/specs/2026-08-22-p6-diagnostics-that-cant-lie-design.md).
+
+- **P7 — Agent mode (2026-08-22).** The Agent tab is real. `SwiftStarKit`
+  gains `AgentWireParser` (the NDJSON transcript parser — `hello`/`status`/
+  `ready`/`text`/`think`/`tool`/`queued`, handshake-enforced, with the `ready`
+  turn-outcome fields), `AgentTranscript` (the tool-card reducer — one card per
+  call, keyed by block-scoped `idx`; the `tool` phase appends, `param_end`/
+  `output`/`finish` mutate in place), `TurnOutcome`/`TurnOutcomeBuilder` (D12's
+  capture-grade per-turn record — model/build/sampler + task, token/context use,
+  stop reason, tool-call lifecycles), and `AgentCommand` (the one argv contract —
+  `--workspace` + `--shell`). `SwiftStar` gains `AgentController` (spawns
+  `ds4-agent`, drains the wire → transcript, writes ETX on interrupt, builds one
+  `TurnOutcome` per turn) and `AgentView` (the transcript with tool cards, the
+  composer, the interrupt button, the consent controls). The engine
+  (`ds4_agent.c`) gains `--workspace` (cwd + file-tool confinement — fail closed)
+  and `--shell` (gate `bash` in schema + dispatch), plus the turn-end `ready`
+  fields (`stop_reason`/`generated`/`ctx_used`, D12). Two fixtures: `golden.ndjson`
+  recaptured at the new SHA, `golden-tools.ndjson` new — five tool blocks
+  (`read`/`list`/`write`/`edit`/`bash`) whose five turn-end `ready` events each
+  carry `stop_reason`. The fake `ds4-agent` is generated from the real capture,
+  never hand-authored. Evidence floor met: the fixture yields turn outcomes with
+  the full tool lifecycle and a typed stop reason; the fake validates the exact
+  argv and honors ETX. Live Metrics/Diagnostics wiring deferred (D9 — see the P4
+  bullet's dated correction).
+  Spec: [`docs/superpowers/specs/2026-08-22-p7-agent-mode-design.md`](docs/superpowers/specs/2026-08-22-p7-agent-mode-design.md).
 
 ## Workflow
 

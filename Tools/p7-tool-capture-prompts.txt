@@ -1,0 +1,5 @@
+Write a file named seed.txt in the current directory with content exactly: hello from golden-tools
+Read the file seed.txt
+Edit seed.txt: replace the text "hello" with "hi"
+List the current directory
+Run the command: echo hello-world

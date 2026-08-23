@@ -10,6 +10,10 @@ public struct StatusSnapshot: Equatable, Sendable {
     public let prefillTPS: Double
     public let genTPS: Double
     public let ts: UInt64
+    /// The wire's `status.state` string (`idle`, `prefill`, `generating`, …).
+    /// Added in P7: the agent controller infers turn end from the `idle`
+    /// transition (D6). Metrics and Diagnostics read only the numeric fields.
+    public let state: String
 }
 
 /// One modelled event from the NDJSON telemetry wire. `.ignored` carries the
@@ -65,7 +69,8 @@ public struct WireEventParser: Sendable {
                 ctxSize: (object["ctx_size"] as? NSNumber)?.intValue ?? 0,
                 prefillTPS: (object["prefill_tps"] as? NSNumber)?.doubleValue ?? 0,
                 genTPS: (object["gen_tps"] as? NSNumber)?.doubleValue ?? 0,
-                ts: (object["ts"] as? NSNumber)?.uint64Value ?? 0
+                ts: (object["ts"] as? NSNumber)?.uint64Value ?? 0,
+                state: (object["state"] as? String) ?? ""
             ))
         case "ready":
             return .ready(plannedBytes: (object["planned_bytes"] as? NSNumber)?.int64Value)

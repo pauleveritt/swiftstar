@@ -1,32 +1,38 @@
-# `golden.ndjson` — capture notes (P5 recapture)
+# `golden.ndjson` — capture notes (P7 recapture at submodule `35bf505`)
 
 This fixture is a **verbatim, byte-for-byte copy of `ds4-agent`'s stdout** from one real
-`--json-events` session, captured by the committed `swiftstar-drive` program (P5). Nothing was
-hand-written or reformatted. It supersedes the P1 capture: the wire now carries the
-**version handshake** (first line) and a **monotonic `ts` on every event**, and the capture
-format now includes the engine's `--trace` output (`golden.trace`) and stderr (`golden.stderr`).
+`--json-events` session, captured by the committed `swiftstar-drive` program (P5 driver).
+Nothing was hand-written or reformatted. It supersedes the P5 capture (`24caf7b`): the wire
+still carries the **version handshake** (first line) and a **monotonic `ts` on every event**,
+and the capture format still includes the engine's `--trace` output (`golden.trace`) and
+stderr (`golden.stderr`). The P7 recapture re-verifies all of that against the rebuilt binary
+at submodule `35bf505` and, additionally, proves the **D12 turn-outcome fields**
+(`stop_reason`/`generated`/`ctx_used`) the bump added to every turn-end `ready`.
 
 ## Provenance
 
-- Submodule (`external/ds4`) SHA: `24caf7b836084042130b558ae39cd6954389bdbe`
-  (branch `swiftstar-integration`, the fork's tip at capture time; the SwiftStar gitlink pins
-  this exact SHA).
+- Submodule (`external/ds4`) SHA: `35bf505110184f2a4489b7bcc60b16150584f5c8`
+  (the P7 bump — consent flags `--workspace`/`--shell` (divergence #8) plus the turn-outcome
+  `ready` fields `stop_reason`/`generated`/`ctx_used` (divergence #9 / D12). The SwiftStar
+  gitlink pins this exact SHA; the P5 capture was at `24caf7b`.)
 - Built with: `just engine` (`make -C external/ds4 ds4-agent`). Binary run in place,
   `external/ds4/ds4-agent`, with `currentDirectoryURL = external/ds4` (so relative
-  `metal/*.metal` sources resolve — no `--chdir`, no `DS4_METAL_*_SOURCE` vars).
-- Captured by: `swiftstar-drive` (`CAPTURE_GGUF=<path> CAPTURE_CTX=32768 just capture`), which
+  `metal/*.metal` sources resolve — no `--chdir`, no `DS4_METAL_*_SOURCE` vars; this capture
+  uses no `CAPTURE_WORKSPACE`/`CAPTURE_SHELL`, so the P5 spawn shape is unchanged).
+- Captured by: `swiftstar-drive` (`CAPTURE_GGUF=<path> just capture`), which
   spawns the engine, feeds prompts over a kept-open stdin pipe one turn at a time, tees stdout
   and stderr byte-for-byte, and points `--trace` at `wire.trace`.
 - Model file: `laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf` (Laguna S 2.1, 48 GiB) at
   `~/projects/ds4/gguf/`.
-- `DS4_LOCK_FILE=/tmp/ds4-capture.lock`.
+- `DS4_LOCK_FILE=/tmp/ds4-capture-<pid>.lock`.
+- Wall-clock start: `2026-08-23T01:58:17Z`; handshake `ts` anchor: `315569503767`.
 
 ## What the handshake adds
 
 The first non-blank line is the version/capability handshake:
 
 ```json
-{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":…}
+{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":315569503767}
 ```
 
 Every event carries `"ts"` — monotonic microseconds since engine start
@@ -34,6 +40,22 @@ Every event carries `"ts"` — monotonic microseconds since engine start
 version it does not know, must refuse loudly (binding rule 7). The P1 receive-time sidecar is
 retired; the wall-clock start is recorded in `provenance.md` for correlation with the trace's
 wall-clock stamps.
+
+## D12 turn-outcome fields (P7 bump)
+
+The turn-end `ready` events now carry `stop_reason` / `generated` / `ctx_used` (divergence #9 /
+D12, added by the `35bf505` bump). Both turns here ended cleanly:
+
+```json
+{"t":"ready",...,"stop_reason":"eos","generated":<N>,"ctx_used":<N>,"ts":…}
+```
+
+`stop_reason` is `eos` for these simple text-only prompts (no tool calls, no context-full, no
+interrupt). The startup `ready` carries none of the three (they are turn-end fields, absent
+from the boot ready — same shape as the memory-plan fields). The fixture is still **text-only**:
+`grep -c '"phase"'` is `0` and `grep -c '"t":"tool"'` is `0` — no tool-call block opens, so
+Task 6's no-tool-events assertion on `golden.ndjson` still holds. The `golden-tools.ndjson`
+fixture is the one that exercises the tool-phase zoo.
 
 ## The memory-budget verification (and the scratch under-report)
 
@@ -74,20 +96,40 @@ queued.
 2. `List the first ten prime numbers.`
 
 These are deliberately simple — the recapture's job is to re-verify the wire contract
-(handshake, `ts`, status/ready shape) against the rebuilt binary, not to re-exercise the full
-tool-phase zoo that the P1 capture covered. The P1 capture's tool-event coverage
-(`read`/`write`/`edit`/`bash`, `idx`, param `name`, finish `calls`, the interrupted-finish
-shape) was verified against this same wire contract and is not repeated here.
+(handshake, `ts`, status/ready shape, D12 turn-outcome fields) against the rebuilt binary, not
+to re-exercise the full tool-phase zoo. That zoo (`read`/`write`/`edit`/`list`/`bash`, the
+block `start`/`tool`/`param_*`/`finish` sequence, a bash `output`, and the D12 `stop_reason`
+on every turn-end) is covered by the P7 `golden-tools.ndjson` fixture (see
+`golden-tools.provenance.md`), captured the same day against the same `35bf505` binary.
 
 ## Event counts
 
-- Kinds: `hello` (1), `status` (19), `ready` (3), plus `text`/`think` as the model produced.
-- `status.state` values observed: `idle`, `prefill`, `generating`.
+- Kinds: `hello` (1), `status` (20), `ready` (3), `text` (21). No `think`/`tool`/`queued`.
+- `status.state` values observed: `idle` (4), `prefill` (4), `generating` (12).
 - All 3 `ready` events carry all four memory fields, byte-identical across the session.
+- The 2 turn-end `ready` events carry `stop_reason:"eos"` plus `generated`/`ctx_used` (D12);
+  the startup `ready` carries none (turn-end fields, like the memory-plan fields).
+- `golden.trace` has 2 `prefill sync done` lines (one per turn) — the count the
+  `TraceParserTests.goldenTraceParsesWithoutRefusing` assertion pins.
+
+## Count/band drift vs the P5 capture (within tolerance)
+
+The P5 capture (`24caf7b`) had 43 wire lines / 19 `status` / 5460 bytes; this P7 recapture
+(`35bf505`) has 45 wire lines / 20 `status` / 5833 bytes. The drift is count/band only —
+generation cadence varies run-to-run, so `status`/`text` counts move. The test-critical
+values are unchanged: `planned_bytes` is still `49_943_965_040` (the
+`FixtureReplayTests.replayYieldsStatusAndReadyThroughReducer` hard-coded value), the trace
+still has 2 prefill syncs (`TraceParserTests`), the capture is still text-only
+(`DiagnosticsEvidenceFloorTests` no-critical-findings floor), and the memory-plan bytes are
+byte-identical. No exact-value assertion drifted; only the run-to-run cadence counts moved.
 
 ## Recapture rule
 
 This fixture is the sanctioned output of `swiftstar-drive`. **On every submodule bump, it must
-be recaptured** against the freshly rebuilt binary (`just engine`, then `just capture`), because
-a rebase can apply cleanly and still be semantically wrong — and the handshake version/caps are
-now part of what a recapture re-verifies.
+be recaptured** against the freshly rebuilt binary (`just engine`, then `just capture`),
+because a rebase can apply cleanly and still be semantically wrong — and the handshake
+version/caps, the D12 turn-outcome fields, and the `ts` monotonicity are all part of what a
+recapture re-verifies. The recapture must also be copied to the bundled
+`Sources/SwiftStarAppKit/Resources/golden.{ndjson,trace}` so the integration-tier
+`FixtureReplayTests.bundledFixtureMatchesRepoFixture` assertion (bundled == repo) stays green —
+the P5 precedent (`9e97bc3`) established that both copies move together.

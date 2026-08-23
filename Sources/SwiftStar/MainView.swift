@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainView: View {
     @State private var engineController = EngineController()
+    @State private var agentController = AgentController()
     @State private var metricsModel = MetricsModel()
     @State private var diagnosticsModel = DiagnosticsModel()
 
@@ -9,7 +10,7 @@ struct MainView: View {
         TabView {
             ChatView(controller: engineController)
                 .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
-            PlaceholderView(title: "Agent", phase: "P7")
+            AgentView(controller: agentController)
                 .tabItem { Label("Agent", systemImage: "person.crop.circle") }
             MetricsView(model: metricsModel)
                 .tabItem { Label("Metrics", systemImage: "gauge") }
