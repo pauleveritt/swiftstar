@@ -219,11 +219,16 @@ final class AgentController {
             if state == .generating && s.state == "idle" {
                 state = .ready
             }
-        case .ready(_, let stopReason, _, _):
+        case .ready:
             if state == .starting { state = .ready }
-            // D12: the turn-end ready carries the stop reason — finish the
-            // record. The app's own interrupt beats the wire's word for it.
-            if stopReason != nil, let builder = outcomeBuilder {
+            // D12: a turn-end ready finishes the record. The builder is nil
+            // at startup, so a startup ready is a no-op; a turn-end ready
+            // (after send() opened a builder) finishes unconditionally —
+            // TurnOutcomeBuilder.finish defaults a nil wire stop_reason to
+            // .eos, so a pre-D12 wire (or any ready omitting the field) still
+            // closes the record rather than orphaning it. The app's own
+            // interrupt beats the wire's word for the reason.
+            if let builder = outcomeBuilder {
                 let outcome = builder.finish(appStopReason: sentInterrupt ? .interrupt : nil)
                 outcomeBuilder = nil
                 lastTurnOutcome = outcome
