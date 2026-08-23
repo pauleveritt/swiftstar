@@ -99,9 +99,14 @@ static void test_agent_execute_tool_call_refuses_bash_when_shell_off(void) {
     agent_config cfg = {0};
     cfg.shell_allowed = false;
     w.cfg = &cfg;
+    /* agent_tool_call.args is a POINTER (ds4_agent.c ~:249) — the calls the
+     * parser produces own their array; a hand-built call must too, or
+     * call.args[0] is a NULL deref (found during implementation). */
+    agent_tool_arg args[1] = {0};
     agent_tool_call call = {0};
     call.name = "bash";
     call.argc = 1;
+    call.args = args;
     call.args[0].name = "command";
     call.args[0].value = "echo hi";
     char *result = agent_execute_tool_call(&w, &call, 0);
@@ -281,7 +286,7 @@ The bash-jobs advisory line (deep review 2026-08-22: the line is **second-to-las
 - `static const char agent_bash_jobs_rule[] = "- For long bash jobs, pass refresh_sec and then poll with bash_status or stop with bash_stop.\n";` — shared (the line is identical in both constants);
 - `static const char agent_glm_after_schemas_tail[] = "- Preserve the current system configuration unless the user explicitly asks otherwise.\n";` (and the laguna equivalents).
 
-The builders insert `agent_bash_jobs_rule` between head and tail only when `shell_allowed` — advice about a tool the model can no longer call — so the **shell-on prompt stays byte-identical to today's** (`test_agent_glm_tools_prompt_is_native` pins that; the head+rule+tail concatenation guarantees it). Then thread the bool through: `agent_build_tools_prompt(ds4_engine *engine, bool shell_allowed)` passing it to both branches, and update the single call site (the worker setup, which has `w->cfg`) to pass `w->cfg->shell_allowed`.
+The builders insert `agent_bash_jobs_rule` between head and tail only when `shell_allowed` — advice about a tool the model can no longer call — so the **shell-on prompt stays byte-identical to today's** (`test_agent_glm_tools_prompt_is_native` pins that; the head+rule+tail concatenation guarantees it). Then thread the bool through: `agent_build_tools_prompt(ds4_engine *engine, bool shell_allowed)` passing it to both branches, and update BOTH call sites (ds4_agent.c :1373 in `agent_build_system_prompt_reminder` and :1390 in `agent_append_system_prompt` — the plan's earlier "single call site" was wrong, found during implementation) to pass `w->cfg->shell_allowed`.
 
 - [ ] **Step 5: Implement the dispatch gate**
 
