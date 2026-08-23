@@ -2,7 +2,7 @@ import Testing
 @testable import SwiftStarKit
 
 private func status(_ ctx: Int, _ tps: Double, ts: UInt64 = 0) -> StatusSnapshot {
-    StatusSnapshot(ctxUsed: ctx, ctxSize: 150_000, prefillTPS: tps, genTPS: 0, ts: ts)
+    StatusSnapshot(ctxUsed: ctx, ctxSize: 150_000, prefillTPS: tps, genTPS: 0, ts: ts, state: "")
 }
 
 private func severity(_ f: Finding) -> Severity? {
