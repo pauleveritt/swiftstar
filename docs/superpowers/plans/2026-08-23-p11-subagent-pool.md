@@ -28,17 +28,18 @@
 
 ---
 
-### Task 1: WorkerId + the worker-id wire contract + DispatchReceipt
+### Task 1: WorkerId + the worker-id wire contract (outbound and inbound) + DispatchReceipt
 
 **Files:**
 - Create: `Sources/SwiftStarKit/WorkerId.swift`
 - Create: `Sources/SwiftStarKit/PoolWireParser.swift`
+- Create: `Sources/SwiftStarKit/PoolPrompt.swift`
 - Create: `Sources/SwiftStarKit/DispatchReceipt.swift`
-- Test: `Tests/SwiftStarKitTests/WorkerIdTests.swift`, `Tests/SwiftStarKitTests/PoolWireParserTests.swift`, `Tests/SwiftStarKitTests/DispatchReceiptTests.swift`
+- Test: `Tests/SwiftStarKitTests/WorkerIdTests.swift`, `Tests/SwiftStarKitTests/PoolWireParserTests.swift`, `Tests/SwiftStarKitTests/PoolPromptTests.swift`, `Tests/SwiftStarKitTests/DispatchReceiptTests.swift`
 
 **Interfaces:**
 - Consumes: `AgentWireParser`, `AgentEvent` (existing).
-- Produces: `WorkerId { rawValue: Int }` (`.orchestrator == 0`, `Comparable`); `PoolWireEvent { worker: WorkerId, event: AgentEvent }`; `PoolWireParser.feed(_ line: String) -> PoolWireEvent?`; `DispatchReceipt { worker, ref: String?, reason: String?, summary: String }` + `injectionPrompt() -> String`.
+- Produces: `WorkerId { rawValue: Int }` (`.orchestrator == 0`, `Comparable`); `PoolWireEvent { worker: WorkerId, event: AgentEvent }`; `PoolWireParser.feed(_ line: String) -> PoolWireEvent?`; `PoolPrompt { worker: WorkerId, text: String }` + `encode() -> String` (the inbound `{"t":"prompt","worker":N,"s":"..."}` line, D1); `DispatchExecutor { fullContext }` (the D10 reserved discriminator); `DispatchReceipt { worker, executor, ref: String?, reason: String?, summary: String }` + `injectionPrompt() -> String`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -113,6 +114,23 @@ struct DispatchReceiptTests {
 }
 ```
 
+`Tests/SwiftStarKitTests/PoolPromptTests.swift`:
+```swift
+import Testing
+@testable import SwiftStarKit
+
+struct PoolPromptTests {
+    @Test func encodesWorkerAddressedPrompt() {
+        #expect(PoolPrompt(worker: WorkerId(3), text: "do it").encode()
+                == #"{"s":"do it","t":"prompt","worker":3}"#)
+    }
+    @Test func barePromptIsWorkerZero() {
+        #expect(PoolPrompt(worker: .orchestrator, text: "go").encode()
+                == #"{"s":"go","t":"prompt","worker":0}"#)
+    }
+}
+```
+
 - [ ] **Step 2: Run the tests, confirm RED**
 
 Run: `swift test --filter WorkerIdTests` then `--filter PoolWireParserTests` then `--filter DispatchReceiptTests`
@@ -177,17 +195,27 @@ public struct PoolWireParser: Sendable {
 ```swift
 import Foundation
 
+/// The reserved routing discriminator (D10): which executor shape ran the
+/// worker. `.fullContext` is the only case in v1; the specialized one-command
+/// worker is the future case A-routing adds without churning the contract.
+public enum DispatchExecutor: String, Codable, Equatable, Sendable {
+    case fullContext
+}
+
 /// The bounded result that folds back from a worker into the orchestrator's
 /// next turn (D4). A candidate ref (a real commit) or a refusal reason — never
 /// the worker's transcript. `Codable` so the pool ledger can persist it.
 public struct DispatchReceipt: Codable, Equatable, Sendable {
     public let worker: WorkerId
+    public let executor: DispatchExecutor
     public let ref: String?
     public let reason: String?
     public let summary: String
 
-    public init(worker: WorkerId, ref: String?, reason: String?, summary: String) {
+    public init(worker: WorkerId, executor: DispatchExecutor = .fullContext,
+                ref: String?, reason: String?, summary: String) {
         self.worker = worker
+        self.executor = executor
         self.ref = ref
         self.reason = reason
         self.summary = summary
@@ -203,6 +231,30 @@ public struct DispatchReceipt: Codable, Equatable, Sendable {
 }
 ```
 
+`Sources/SwiftStarKit/PoolPrompt.swift`:
+```swift
+import Foundation
+
+/// The inbound prompt line (D1): how the app addresses a worker's turn on the
+/// pooled wire. A bare line (no `worker`) is the orchestrator (worker 0). The
+/// encoder is the single authority; the C patch and the fake both consume it.
+public struct PoolPrompt: Equatable, Sendable {
+    public let worker: WorkerId
+    public let text: String
+    public init(worker: WorkerId, text: String) { self.worker = worker; self.text = text }
+
+    /// `{"t":"prompt","worker":N,"s":"..."}` — keys sorted for determinism.
+    public func encode() -> String {
+        let obj: [String: Any] = ["t": "prompt", "worker": worker.rawValue, "s": text]
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return json
+    }
+}
+```
+
 - [ ] **Step 4: Run the tests, confirm GREEN**
 
 Run: `swift test --filter WorkerIdTests --filter PoolWireParserTests --filter DispatchReceiptTests`
@@ -211,8 +263,8 @@ Expected: all pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Sources/SwiftStarKit/WorkerId.swift Sources/SwiftStarKit/PoolWireParser.swift Sources/SwiftStarKit/DispatchReceipt.swift Tests/SwiftStarKitTests/WorkerIdTests.swift Tests/SwiftStarKitTests/PoolWireParserTests.swift Tests/SwiftStarKitTests/DispatchReceiptTests.swift
-git commit -m "P11: WorkerId + worker-id wire parser + DispatchReceipt"
+git add Sources/SwiftStarKit/WorkerId.swift Sources/SwiftStarKit/PoolWireParser.swift Sources/SwiftStarKit/PoolPrompt.swift Sources/SwiftStarKit/DispatchReceipt.swift Tests/SwiftStarKitTests/WorkerIdTests.swift Tests/SwiftStarKitTests/PoolWireParserTests.swift Tests/SwiftStarKitTests/PoolPromptTests.swift Tests/SwiftStarKitTests/DispatchReceiptTests.swift
+git commit -m "P11: WorkerId + worker-id wire (in+out) + PoolPrompt + DispatchReceipt"
 ```
 
 ---
@@ -225,7 +277,7 @@ git commit -m "P11: WorkerId + worker-id wire parser + DispatchReceipt"
 
 **Interfaces:**
 - Consumes: `WorkerId`, `HandoffPacket`, `DispatchReceipt`.
-- Produces: `PoolState { pending: [WorkerId: HandoffPacket], running: WorkerId?, completed: [WorkerId: DispatchReceipt], nextId: Int }`; `PoolCommand` (`.enqueue(packet:)`, `.workerStarted(WorkerId)`, `.workerFinished(WorkerId, DispatchReceipt)`, `.receiptInjected(WorkerId)`); `PoolScheduler.apply(_:_:) -> PoolState`, `PoolScheduler.nextWorker(_:) -> (WorkerId, HandoffPacket)?`, `PoolScheduler.canStart(_:) -> Bool`.
+- Produces: `PoolState { pending: [WorkerId: HandoffPacket], running: WorkerId?, completed: [WorkerId: DispatchReceipt], pendingDelivery: [WorkerId: DispatchReceipt], nextId: Int }`; `PoolCommand` (`.enqueue(packet:)`, `.workerStarted(WorkerId)`, `.workerFinished(WorkerId, DispatchReceipt)`, `.workerFailed(WorkerId, DispatchReceipt)`, `.receiptInjected(WorkerId)`); `PoolScheduler.apply(_:_:) -> PoolState`, `PoolScheduler.nextWorker(_:) -> (WorkerId, HandoffPacket)?`, `PoolScheduler.canStart(_:) -> Bool`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -271,6 +323,19 @@ struct PoolSchedulerTests {
         s = PoolScheduler.apply(s, .workerFinished(w.0, receipt))
         #expect(s.completed[w.0]?.reason == "noChanges")
     }
+    @Test func workerFailureFreesTheEngineAsAReceipt() {
+        var s = PoolState()
+        s = PoolScheduler.apply(s, .enqueue(packet: packet("one")))
+        s = PoolScheduler.apply(s, .enqueue(packet: packet("two")))
+        let w = PoolScheduler.nextWorker(s)!
+        s = PoolScheduler.apply(s, .workerStarted(w.0))
+        let failure = DispatchReceipt(worker: w.0, ref: nil, reason: "engine crash", summary: "crashed")
+        s = PoolScheduler.apply(s, .workerFailed(w.0, failure))
+        #expect(s.completed[w.0]?.reason == "engine crash")
+        #expect(s.running == nil)             // engine freed
+        #expect(PoolScheduler.canStart(s))    // next worker can run
+        #expect(PoolScheduler.nextWorker(s)?.1.taskText == "two")
+    }
     @Test func receiptInjectedClearsPendingDelivery() {
         var s = PoolState()
         s = PoolScheduler.apply(s, .enqueue(packet: packet("one")))
@@ -310,6 +375,10 @@ public enum PoolCommand: Equatable, Sendable {
     case enqueue(packet: HandoffPacket)
     case workerStarted(WorkerId)
     case workerFinished(WorkerId, DispatchReceipt)
+    /// An infrastructure failure (engine crash, timeout, thrown attempt) folded
+    /// into a receipt — the caller maps the failure to a `DispatchReceipt` with
+    /// a reason. Frees the engine exactly like `workerFinished`.
+    case workerFailed(WorkerId, DispatchReceipt)
     case receiptInjected(WorkerId)
 }
 
@@ -327,7 +396,7 @@ public enum PoolScheduler {
         case .workerStarted(let id):
             s.pending[id] = nil
             s.running = id
-        case .workerFinished(let id, let receipt):
+        case .workerFinished(let id, let receipt), .workerFailed(let id, let receipt):
             s.running = nil
             s.completed[id] = receipt
             s.pendingDelivery[id] = receipt
@@ -503,7 +572,7 @@ public enum RollingDigestReducer {
 
 **Interfaces:**
 - Consumes: `RollingDigest`, `HandoffPacket`.
-- Produces: `ContextAssembly.adaptationPrompt(objective:digest:loaded:implementer:) -> String` (the no-think model's prompt); `ContextAssembly.assemble(objective:digest:loaded:adaptation:) -> String` (the prepared `taskText`).
+- Produces: `ContextAssembly.deterministicAdaptation(objective:digest:loaded:implementer:) -> String` (the v1 sizing template, D7 — no model trip); `ContextAssembly.adaptationPrompt(objective:digest:loaded:implementer:) -> String` (the **deferred** no-think model prompt — not run in P11); `ContextAssembly.assemble(objective:digest:loaded:adaptation:) -> String` (the prepared `taskText`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -524,6 +593,13 @@ struct ContextAssemblyTests {
         #expect(task.contains("ref1"))            // digest folded in
         #expect(task.contains("ROADMAP.md"))       // staged read named
         #expect(task.contains("edit Tests/FooTests.swift"))
+    }
+    @Test func deterministicAdaptationSizesToImplementer() {
+        let small = ContextAssembly.deterministicAdaptation(objective: "o", digest: RollingDigest(), loaded: ["a.swift": "x"], implementer: "mellum")
+        let large = ContextAssembly.deterministicAdaptation(objective: "o", digest: RollingDigest(), loaded: ["a.swift": "x"], implementer: "laguna")
+        #expect(small.contains("one at a time"))       // small-capability: finer, chunked
+        #expect(!large.contains("one at a time"))      // large-capability: coarse
+        #expect(large.contains("as you see fit"))
     }
     @Test func adaptationPromptTargetsImplementerSize() {
         let prompt = ContextAssembly.adaptationPrompt(
@@ -553,10 +629,25 @@ import Foundation
 /// (D7) is impure and lives in the app; `adaptationPrompt` is the pure prompt
 /// that trip is fed.
 public enum ContextAssembly {
-    /// The no-think prompt for the objective-dependent adaptation (D7): filter
-    /// the digest to the objective and size the brief to the implementer. The
-    /// implementer's capability drives chunking: small models get finer,
-    /// more-detailed splits.
+    /// The deterministic v1 adaptation (D7): size the brief to the implementer
+    /// without a model trip. A small-capability implementer (mellum/afm) gets a
+    /// finer, single-file-steps brief; a large one (laguna) gets a coarse,
+    /// general brief. Pure — the deferred no-think model trip (`adaptationPrompt`)
+    /// would replace this once the gate justifies it.
+    public static func deterministicAdaptation(objective: String, digest: RollingDigest,
+                                               loaded: [String: String], implementer: String) -> String {
+        let isSmall = implementer.lowercased().contains("mellum")
+            || implementer.lowercased().contains("afm")
+        let reads = loaded.keys.sorted().joined(separator: ", ")
+        if isSmall {
+            return "Work in small, single-file steps, one at a time. Staged files: \(reads). Objective: \(objective)"
+        }
+        return "Objective: \(objective). Staged files: \(reads). Work as you see fit."
+    }
+
+    /// The deferred no-think prompt for the model-trip form of D7 (NOT run in
+    /// P11 — out of scope with the RLM tier). Kept so the contract is complete
+    /// when that trip lands.
     public static func adaptationPrompt(objective: String, digest: RollingDigest,
                                         loaded: [String: String], implementer: String) -> String {
         let reads = loaded.keys.sorted().joined(separator: ", ")
@@ -634,6 +725,13 @@ struct EnvelopeMathTests {
         // a realized win of 0 (the pool did no better than deep) → ratio 0, not NaN
         #expect(EnvelopeMath.overheadRatio(realizedWin: 0) == 0)
     }
+    @Test func perturbationsAreDeterministic() {
+        let t = "fix a.swift"
+        #expect(PacketPerturbation.canonical.apply(to: t) == t)
+        #expect(PacketPerturbation.taskTextBloat2x.apply(to: t).count > t.count)
+        #expect(PacketPerturbation.taskTextBloat2x.apply(to: t) == PacketPerturbation.taskTextBloat2x.apply(to: t))
+        #expect(PacketPerturbation.packetCountSweepCounts == [1, 2, 4, 8])
+    }
 }
 ```
 
@@ -694,6 +792,25 @@ public enum EnvelopeMath {
             snapshotRestoreCount: snapshotRestoreCount)
     }
 }
+
+/// The deterministic perturbation constructors (D11): each arm is built by a
+/// pure function over the canonical packet, never by ad-hoc shell logic.
+extension PacketPerturbation {
+    /// The counts the packet-count sweep runs (D11).
+    public static let packetCountSweepCounts = [1, 2, 4, 8]
+
+    /// Apply this perturbation to a canonical `taskText` (deterministic filler;
+    /// bloat simulates a wordier brief to sample the prefill curve's response to
+    /// input size). `.canonical`/`.failureInjection`/`.packetCountSweep` leave
+    /// the text unchanged.
+    public func apply(to taskText: String) -> String {
+        switch self {
+        case .taskTextBloat15x: return taskText + String(repeating: " detail", count: taskText.count / 2)
+        case .taskTextBloat2x:  return taskText + String(repeating: " detail", count: taskText.count)
+        case .canonical, .failureInjection, .packetCountSweep: return taskText
+        }
+    }
+}
 ```
 
 - [ ] **Step 4: Run, confirm GREEN** (`swift test --filter EnvelopeMathTests`).
@@ -749,7 +866,10 @@ struct PoolEngineTests {
         defer { fake.process.terminate() }
 
         var parser = PoolWireParser()
-        FakeAgentHarness.writePrompt(fake, "go")
+        // The inbound contract (D1): the prompt is PoolPrompt-encoded. The fake
+        // replays the whole capture per prompt line, so one prompt yields every
+        // worker-tagged event in the fixture.
+        FakeAgentHarness.writePrompt(fake, PoolPrompt(worker: .orchestrator, text: "go").encode())
         let events = try FakeAgentHarness.readPoolEvents(fake, parser: &parser) { es in
             es.contains { $0.worker.rawValue == 1 }
         }
@@ -811,7 +931,7 @@ static func readPoolEvents(_ fake: FakeAgentProcess,
 
 **Interfaces:**
 - Consumes: `AgentCommand`, `PoolWireParser`, `SubprocessRunner`.
-- Produces: `PoolEngine.spawn(settings:workers:) -> Process` (adds `--subagent-pool N`); `PoolEngine.drain(...)` route events by worker; `PoolEngine.readKVText(_:) throws -> String` (the `.kv` loader, 48-byte header); `PoolEngine.listFiles(_:)` (deterministic loader).
+- Produces: `PoolEngine.argv(settings:workers:) -> [String]` (adds `--subagent-pool N`); `PoolEngine.readKVText(_:) throws -> String` (the `.kv` loader, 48-byte header — the D6 crash-recovery backing, consumed by digest reconstruction); `PoolEngine.listFiles(_:)` (deterministic loader). The multiplex drain and the dispatch loop land in Task 9 (they need the scheduler + `WorktreeDispatcher`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -908,17 +1028,17 @@ public enum PoolEngineError: Error, Equatable {
 ```
 Mirror the `--json-events` gate: `--subagent-pool` with `N > 1` requires `--json-events` (the worker field is a json-events field); refuse loudly otherwise (the `--host-tools requires --json-events` precedent at ~963).
 
-- [ ] **Step 3: Emit the `worker` field.** Add `int worker_id;` to `agent_worker`. In the shared event emitter, append `"worker":<id>` to every event object **only when `cfg->num_workers > 1`** (so `N == 1` output is byte-identical to pre-P11 — the recapture in Step 6 proves it). Add a C test `test_agent_emit_hello_worker_omitted_when_single` and `test_agent_emit_event_carries_worker_id`.
+- [ ] **Step 3: Emit the `worker` field + advertise the pool cap.** Add `int worker_id;` to `agent_worker`. In the shared event emitter, append `"worker":<id>` to every event object **only when `cfg->num_workers > 1`** (so `N == 1` output is byte-identical to pre-P11 — the recapture in Step 6 proves it). Add `"pool"` to the `hello` `caps` array iff `num_workers > 1`, so the app can *detect* pool support instead of guessing (this is also how the use-it-or-lose-it flag-gate knows it can switch off). Add C tests `test_agent_emit_hello_worker_omitted_when_single`, `test_agent_emit_event_carries_worker_id`, `test_agent_hello_advertises_pool_cap_when_multi`.
 
-- [ ] **Step 4: Refactor the single worker into an array sharing one engine.** Replace the `agent_completion_worker` singleton with `agent_worker *workers` (size `num_workers`) plus the existing engine created once. Each `workers[i]` owns its own `ds4_session` (created via `ds4_session_new` from the shared `engine`) and its own `worker_id = i`. Keep the per-worker thread/mutex/cond structure; the serialization is already enforced by the single GPU — add a pool mutex so only one worker's turn runs at a time (the queue in `PoolScheduler` is the app-side mirror). This is the largest mechanical change; the worker struct fields (session, transcript, status, turn-outcome snapshot) all become per-array-element.
+- [ ] **Step 4: Refactor to ONE worker thread multiplexing N sessions.** Keep the single completion worker thread; replace the singleton `agent_worker` with `agent_worker *workers` (size `num_workers`), each holding its own `ds4_session` created at startup from the shared `engine`. **Do not add per-worker threads**: the serialized family means one generation at a time anyway, and N threads + a pool mutex is deadlock surface for zero win (and moves N==1 further from byte-identical). Each `workers[i]` gets `worker_id = i` and **its own small ctx_size at session creation** (D8: the orchestrator keeps `-c`; worker sessions are created at the packet's budget-mapped ctx, so scratch is ~1.5 GB at 4k, not 6.1 GB). Add a `generating_worker` pointer plus `assert(generating_worker == NULL)` at each turn entry/exit — the D1 serialization invariant — and a C test that runs two turns and checks the invariant via a debug counter.
 
-- [ ] **Step 5: Route the wire by worker.** Tag every emitter call with the emitting worker's `worker_id` (Step 3). Route stdin prompts by an optional leading worker selector — **or**, matching D4, keep the orchestrator as worker 0 and let the app address a worker turn with the existing prompt mechanism plus a `worker` field on the prompt line. Pick the minimal form that keeps `N == 1` byte-identical: when `N > 1`, a stdin line `{"t":"prompt","worker":<id>,"s":"..."}` addresses worker `<id>`; a bare line addresses worker 0. Add a C test `test_agent_pool_prompt_worker_route`.
+- [ ] **Step 5: Route stdin by worker (the pre-fixed contract, D1).** Inbound prompts are `PoolPrompt`-encoded: `{"t":"prompt","worker":<id>,"s":"..."}` addresses worker `<id>`; a bare line addresses worker 0 (so `N == 1` is byte-identical). `tool_result` lines carry **no worker tag**: because exactly one session generates at a time, at most one `tool_request` is outstanding, so the result routes unambiguously to the generating worker — enforce this with `assert(generating_worker != NULL)` before consuming a `tool_result`. Add C tests `test_agent_pool_prompt_worker_route` and `test_agent_pool_tool_result_routes_to_generating_worker`.
 
-- [ ] **Step 6: Rebuild + recapture (standing rule).** `just engine`, then run `swiftstar-drive` to recapture `golden.ndjson` at the new SHA with the **default** argv (no `--subagent-pool`, so `N == 1`), and capture a second, small **pool** capture (two workers) that becomes the regenerated `fixtures/agent/pool.ndjson` — retiring Task 6's hand-authored stand-in. Regenerate the fake from both. Confirm the single-session recapture is byte-identical modulo `ts` (this is the proof the patch is additive).
+- [ ] **Step 6: Rebuild + recapture (standing rule).** `just engine`, then run `swiftstar-drive` to recapture `golden.ndjson` at the new SHA with the **default** argv (no `--subagent-pool`, so `N == 1`), and capture a second, small **pool** capture (two workers) that becomes the regenerated `fixtures/agent/pool.ndjson` — retiring Task 6's hand-authored stand-in. Regenerate the fake from both. Confirm the single-session recapture is identical **modulo the volatile fields** — `ts`, `prefill_tps`, `gen_tps`, `power`, and the `status` prefill counters (extend the existing recapture normalizer first if it does not already strip these). A diff on any *other* field is a semantic collision, not a clean rebase.
 
 - [ ] **Step 7: Commit** `P11: --subagent-pool C patch (divergence #11) + recapture`.
 
-> **Risk note (Task 8 is the schedule risk):** the refactor touches the worker lifecycle, the emitters, and the main loop — the same regions the patch set already instruments (fork-ledger standing rule). If the array refactor proves larger than one task, split it: (a) flag + `worker` field emission for N==1 (additive, zero-behavior-change, recapture-green) in one commit, then (b) the N>1 session array in a second commit. Both are behind the flag; neither regresses N==1. **Stop and report if the recapture at (a) differs beyond `ts`** — that is a semantic collision, not a clean rebase.
+> **Risk note (Task 8 is the schedule risk):** the change touches the worker lifecycle, the emitters, and the main loop — the same regions the patch set already instruments (fork-ledger standing rule). Split it into two commits, both behind the flag, neither regressing N==1: (a) the flag + `worker` field emission + `pool` cap for N>1 (additive, zero-behavior-change at N==1, recapture-green), then (b) the N-session multiplex on the single worker thread. **Stop and report if the recapture at (a) differs beyond the volatile fields named in Step 6** — that is a semantic collision, not a clean rebase.
 
 ---
 
@@ -930,20 +1050,22 @@ Mirror the `--json-events` gate: `--subagent-pool` with `N > 1` requires `--json
 - Modify: `Sources/SwiftStarKit/ToolCallbackResponder.swift` (add `dispatch` to the host-executed tool set — it is a host-tool, D3).
 
 **Interfaces:**
-- Consumes: `PoolScheduler`, `PoolEngine`, `WorktreeDispatcher`, `ToolCallbackResponder`, `DispatchReceipt`, `RollingDigest`.
-- Produces: the orchestrator loop — on a `.toolRequest` named `dispatch`, enqueue the packet; run the worker (reusing `WorktreeDispatcher.dispatch` with the worker session); on completion, `record` the receipt into the digest and enqueue the injection prompt for the orchestrator's next turn.
+- Consumes: `PoolScheduler`, `PoolEngine`, `WorktreeDispatcher`, `ToolCallbackResponder`, `ContextAssembly`, `DispatchReceipt`, `RollingDigest`, `PoolPrompt`.
+- Produces: the orchestrator loop — on a `.toolRequest` named `dispatch`, assemble the packet's prepared context (D5: `ContextAssembly.assemble(objective:digest:loaded:deterministicAdaptation(...))`), enqueue it (the scheduler assigns the worker id); run the worker's turn in the pooled engine inside a disposable worktree (D1+D4: `WorktreeDispatcher` with a turn-runner that drives worker N, not a fresh spawn); on completion, fold the outcome into a `DispatchReceipt`, `RollingDigestReducer.record` it, and enqueue `receipt.injectionPrompt()` for the orchestrator's next turn.
 
-- [ ] **Step 1: Add `dispatch` to the responder's host-tool set.** In `ToolCallbackResponder`, the `dispatch` tool returns `ok:true` immediately (the host enqueues the worker and answers "dispatched as worker N"; the real execution is the worker turn, which the controller runs after the orchestrator turn ends — D4). The `consent` check refuses `dispatch` unless the params carry a non-empty `taskText` and a `writableFiles` list (a sibling success test: a well-formed dispatch proceeds; a missing-taskText dispatch refuses).
+- [ ] **Step 1: Add `dispatch` to the responder's host-tool set.** In `ToolCallbackResponder`, the `dispatch` tool is a host-tool (D3): `consent` refuses it unless the params carry a non-empty `taskText` and a `writableFiles` list; `respond` returns `ok:true` immediately. The worker id comes from the scheduler, not the responder — the controller enqueues first, then formats the answer "dispatched as worker N" itself (the responder's `s` is a placeholder the controller overwrites).
 
-- [ ] **Step 2: Write the failing test** in `ToolCallbackResponderTests` — `dispatchProceedsWhenWellFormed` / `dispatchRefusedWithoutTaskText` (binding rule 4: refusal has a sibling success).
+- [ ] **Step 2: Write the failing tests** in `ToolCallbackResponderTests` — `dispatchProceedsWhenWellFormed` / `dispatchRefusedWithoutTaskText` (binding rule 4: refusal has a sibling success).
 
-- [ ] **Step 3: Implement** the `dispatch` branch in `respond` (pure) + the controller's enqueue in `AgentController` (the `toolRequest` case routes `dispatch` to the scheduler instead of `executeHostTool`).
+- [ ] **Step 3: Implement** the `dispatch` branch in `respond` (pure) + the controller's enqueue: on the `toolRequest` named `dispatch`, the controller builds the packet via `ContextAssembly.assemble(objective: params.taskText, digest: rollingDigest, loaded: loadedRoadmap, adaptation: ContextAssembly.deterministicAdaptation(objective:digest:loaded:implementer:))`, enqueues it (`PoolScheduler.apply(.enqueue)`), reads back the assigned `WorkerId`, and answers `ok:true` "dispatched as worker N".
 
-- [ ] **Step 4: The worker turn + receipt injection.** On the orchestrator's turn-end `ready`, drain any queued workers (`PoolScheduler.nextWorker`), run each via the existing `runDispatchedTurn` (P10), fold the result into a `DispatchReceipt` (`candidate` ref or `receipt` reason), `RollingDigestReducer.record` it, and enqueue `receipt.injectionPrompt()` as the orchestrator's next prompt.
+- [ ] **Step 4: The worker turn + receipt injection.** On the orchestrator's turn-end `ready`, drain queued workers (`PoolScheduler.nextWorker`); run each via `WorktreeDispatcher.dispatch` whose `attempt` closure drives **worker N of the pooled engine** (`PoolPrompt(worker: N, text: preparedTaskText).encode()` on stdin, draining worker-N-tagged events) instead of spawning a fresh process (D1). Fold the `DispatchOutcome` into a `DispatchReceipt` (`candidate` ref or `receipt` reason), `RollingDigestReducer.record` it, `PoolScheduler.apply(.workerFinished/.workerFailed)`, and enqueue the combined `injectionPrompt()` for the orchestrator's next turn (D4).
 
-- [ ] **Step 5: Run `swift build`, `just test`, `just integration`; confirm GREEN.**
+- [ ] **Step 5: The enqueue → run → receipt-inject integration test.** Against the fake pool engine (Task 6's fixture + argv): enqueue a packet, run the worker turn, and assert the receipt is recorded in the digest and queued for injection — the spec's integration tier, explicitly.
 
-- [ ] **Step 6: Commit** `P11: orchestrator dispatch loop + receipt injection`.
+- [ ] **Step 6: Run `swift build`, `just test`, `just integration`; confirm GREEN.**
+
+- [ ] **Step 7: Commit** `P11: orchestrator dispatch loop + context assembly + receipt injection`.
 
 ---
 
@@ -956,13 +1078,15 @@ Mirror the `--json-events` gate: `--subagent-pool` with `N > 1` requires `--json
 - Consumes: `EnvelopeMath`, the real `ds4-agent` with `--subagent-pool`.
 - Produces: the three gate reports — overhead ratio, sensitivity envelope, instrumentation — written to a committed `docs/superpowers/research/2026-08-23-p11-verification-record.md`.
 
-- [ ] **Step 1: Write the driver** that, for each `PacketPerturbation`, builds the packet set (canonical + the deterministic perturbations), runs one deep-context baseline (131k) and the pooled shallow-context runs (8 × 16k, sequential), and records seconds, tokens-evaluated, tokens-nominal, and peak resident.
+- [ ] **Step 1: Commit the canonical packet corpus** under `fixtures/gate/` (the packet set the headline ratio is computed on — named, so the number is reproducible).
 
-- [ ] **Step 2: Run it** (`just capture`-style, minutes, never CI). Record the numbers and the exact commands in the verification record (binding rule 1: carry the command, not the number).
+- [ ] **Step 2: Write the driver** that, for each `PacketPerturbation` (using `apply(to:)` and `packetCountSweepCounts` from Task 5), builds the packet set, runs the deep-context baseline (one 131k) and the pooled shallow-context runs (8 × 16k, sequential — **including the orchestrator's own prefill+decode, not just 8 isolated workers**), applies the fixed retry policy (one retry on a budget/validation receipt, then surface), and records seconds, tokens-evaluated, tokens-nominal, and peak resident.
 
-- [ ] **Step 3: Commit** `P11: measurement gate — envelope report + verification record`.
+- [ ] **Step 3: Run it** (live tier, never CI). **Size it honestly**: one 131k prefill is ~35 min alone, so the full envelope is ~hours — schedule it, don't call it "minutes." Record the numbers and the exact commands in the verification record (binding rule 1: carry the command, not the number).
 
-> **Gate note:** the gate is live-tier (real weights, minutes). If the real engine cannot be run in this environment, the gate's *arithmetic* is already pinned by Task 5; record the live run as pending with the exact command, and state so in the verification record rather than asserting a number that was not measured.
+- [ ] **Step 4: Commit** `P11: measurement gate — envelope report + verification record`.
+
+> **Gate note:** the gate is the phase's **hard exit criterion** — the phase does not close until the envelope is measured. There is no "record as pending" path; if the hardware is unavailable, the phase stays open and the plan says so, rather than asserting a number that was not measured.
 
 ---
 
@@ -975,7 +1099,7 @@ Mirror the `--json-events` gate: `--subagent-pool` with `N > 1` requires `--json
 
 - [ ] **Step 1: `just test` + `just integration` + the engine suite (`make -C external/ds4 ds4_agent_test && external/ds4/ds4_agent_test`) all green.**
 
-- [ ] **Step 2: Update ROADMAP/README; record the evidence floor (the pool capture parses and routes; a worker-tagged capture parses; a refusal receipt has a sibling success).**
+- [ ] **Step 2: Update ROADMAP/README; record the evidence floor (the pool capture parses and routes; a worker-tagged capture parses; a refusal receipt has a sibling success) and the use-it-or-lose-it commitment (divergence #11 is flag-gated off or reverted if A-routing has not landed within one phase).**
 
 - [ ] **Step 3: Commit** `P11: close — roadmap, concept budget, verification record`.
 
@@ -983,7 +1107,7 @@ Mirror the `--json-events` gate: `--subagent-pool` with `N > 1` requires `--json
 
 ## Self-review
 
-**Spec coverage:** D1→Tasks 1,2,7,8; D2→Tasks 6,8; D3→Task 9; D4→Tasks 1,9; D5→Task 4; D6→Tasks 3,7; D7→Task 4; D8→(P10 unchanged; Task 9 reuses it); D9→Tasks 3,9; D10→Tasks 1,9; D11→Tasks 5,10. The rolling digest's `.kv` backing (D6) → Task 7; the compaction ledger reconstruction (D9) is the digest's `summary()` (Task 3), consumed host-side.
+**Spec coverage:** D1→Tasks 1,2,7,8 (inbound `PoolPrompt` in Task 1; N bound + per-worker ctx in Task 8); D2→Tasks 6,8; D3→Task 9; D4→Tasks 1,9; D5→Tasks 4,9 (assembled in the dispatch loop); D6→Tasks 3,7 (`.kv` backing is the digest-reconstruction consumer); D7→Task 4 (deterministic v1; model trip deferred); D8→Task 8 (per-worker ctx at session creation); D9→Tasks 3,9 (digest `summary()` is the ledger); D10→Tasks 1,9 (executor discriminator reserved on `DispatchReceipt`); D11→Tasks 5,10 (perturbation constructors in Kit; hard exit).
 
 **Placeholder scan:** no TBD/TODO; the C patch (Task 8) names exact anchor regions and splits on a recapture gate rather than hand-waving.
 
