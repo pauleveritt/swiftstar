@@ -351,11 +351,15 @@ final class AgentController {
     /// the responder injects. It runs the six tool families under the
     /// consent-cleared grant: `read`/`more`/`write`/`list`/`edit`/`search` read
     /// or mutate files at `request.resolvedPath` (already confined by the
-    /// consent check); `bash`/`bash_status`/`bash_stop` run the command in the
-    /// workspace cwd. The `ok` verdict is the executor's own (true = ran, false
-    /// = could not run); a consent refusal never calls this. For `bash` the
-    /// host facts ride along: the exit status, a SHA-256 digest of stdout, and
-    /// `validationRan` (the host ran the command and can report its exit).
+    /// consent check); `bash` runs the command in the workspace cwd. The `ok`
+    /// verdict is the executor's own (true = ran, false = could not run); a
+    /// consent refusal never calls this. For `bash` the host facts ride along:
+    /// the exit status, a SHA-256 digest of stdout, and `validationRan` (the
+    /// host ran the command and can report its exit). `bash_status`/`bash_stop`
+    /// are not yet implemented in host mode (a fresh `Process` would re-run /
+    /// re-stop instead of polling / stopping a job) — the executor refuses them
+    /// with `ok:false` rather than mis-executing; the real job protocol is
+    /// P10+ hardening.
     /// `nonisolated` — touches only `FileManager`/`Process` (not `self`); the
     /// synchronous run blocks the main actor during a `bash` call, which P9's
     /// scope accepts (the engine blocks on the result line anyway).
@@ -437,7 +441,7 @@ final class AgentController {
                 return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
             }
 
-        case "bash", "bash_status", "bash_stop":
+        case "bash":
             let command = request.params.first(where: { $0.name == "command" })?.value ?? ""
             guard !command.isEmpty else {
                 return ToolExecutionResult(ok: false, text: "error: bash requires command")
@@ -467,6 +471,17 @@ final class AgentController {
             } catch {
                 return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
             }
+
+        case "bash_status", "bash_stop":
+            // Not yet implemented in host mode: a fresh `Process` would re-run
+            // the command (bash_status) or re-run instead of stopping
+            // (bash_stop) — mis-execution, not a real poll/stop. Refuse loudly
+            // (ok:false) so the agent sees the limitation and can fall back to a
+            // plain `bash` with a short timeout. The real job protocol
+            // (long-lived bash jobs + status/stop) is P10+ hardening.
+            return ToolExecutionResult(
+                ok: false,
+                text: "bash_status/bash_stop are not yet implemented in host mode; use a plain bash with a short timeout")
 
         default:
             return ToolExecutionResult(ok: false, text: "error: unknown tool \(request.name)")
