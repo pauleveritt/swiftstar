@@ -15,6 +15,9 @@ guard let ggufPath = env["CAPTURE_GGUF"], !ggufPath.isEmpty else {
 let ctx = Int(env["CAPTURE_CTX"] ?? "32768") ?? 32768
 let loadTimeout = Double(env["CAPTURE_MODEL_LOAD_TIMEOUT"] ?? "900") ?? 900
 let turnTimeout = Double(env["CAPTURE_TURN_TIMEOUT"] ?? "900") ?? 900
+// P7 consent knobs (nil = P5 shape: no --workspace/--shell appended).
+let workspace = env["CAPTURE_WORKSPACE"]  // nil = no --workspace
+let shell = env["CAPTURE_SHELL"]          // nil = no --shell
 
 let repoRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let engineDir = repoRoot.appendingPathComponent("external/ds4", isDirectory: true)
@@ -122,7 +125,7 @@ let state = DriveState()
 
 let process = Process()
 process.executableURL = engineBinary
-process.arguments = [
+var args: [String] = [
     "-m", ggufPath,
     "-c", "\(ctx)",
     "--metal",
@@ -130,9 +133,39 @@ process.arguments = [
     "--json-events",
     "--trace", tracePath.path,
 ]
+// P7 consent flags appended after `--trace` (nil = P5 shape, absent).
+// NOTE: `Process.arguments` is a Foundation `copy` property — appending via
+// `process.arguments?.append(...)` mutates a throwaway copy and does not persist
+// (the brief's sketch hit this trap: `--workspace`/`--shell` were silently dropped,
+// so the engine ran in bare-CLI mode and `seed.txt` landed in `external/ds4`).
+// Build the array on a local `var` and assign once.
+if let workspace {
+    args += ["--workspace", workspace]
+}
+if let shell {
+    args += ["--shell", shell]
+}
+process.arguments = args
 process.currentDirectoryURL = engineDir
 var engineEnv = ProcessInfo.processInfo.environment
 engineEnv["DS4_LOCK_FILE"] = "/tmp/ds4-capture-\(ProcessInfo.processInfo.processIdentifier).lock"
+// P7: `--workspace` chdir's the engine into the workspace, but Metal sources load
+// cwd-relative (`metal/*.metal`) and would not resolve there (the engine aborts with
+// "metal backend unavailable"). The engine sanctions per-source `DS4_METAL_*_SOURCE`
+// overrides for exactly this ("a diagnostic run can swap one source file"); point each
+// at its absolute path so Metal resolves regardless of cwd. The P5 shape (no
+// `CAPTURE_WORKSPACE`) is untouched — cwd stays `external/ds4` and Metal loads from
+// there as before, so no env vars are added and the recaptured `golden` is unchanged.
+if workspace != nil {
+    let metalDir = engineDir.appendingPathComponent("metal", isDirectory: true)
+    if let names = try? FileManager.default.contentsOfDirectory(atPath: metalDir.path) {
+        for name in names where name.hasSuffix(".metal") {
+            let stem = String(name.dropLast(".metal".count))
+            engineEnv["DS4_METAL_\(stem.uppercased())_SOURCE"] =
+                metalDir.appendingPathComponent(name).path
+        }
+    }
+}
 process.environment = engineEnv
 
 let stdinPipe = Pipe()

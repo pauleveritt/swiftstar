@@ -1,43 +1,45 @@
-{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":289347868703}
-{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":32768,"power":100,"error":"","ts":289347868951}
-{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"ts":289347887820}
-{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":32768,"power":100,"error":"","ts":289348182501}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":32768,"power":100,"error":"","ts":289348182543}
-{"t":"status","state":"prefill","prefill_done":8,"prefill_total":68,"prefill_tps":39.9,"generated":0,"gen_tps":0.0,"ctx_used":1026,"ctx_size":32768,"power":100,"error":"","ts":289348383894}
-{"t":"status","state":"prefill","prefill_done":39,"prefill_total":68,"prefill_tps":96.4,"generated":0,"gen_tps":0.0,"ctx_used":1026,"ctx_size":32768,"power":100,"error":"","ts":289348587599}
-{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1026,"ctx_size":32768,"power":100,"error":"","ts":289348759059}
-{"t":"text","s":"\nThe sky appears blue because ","ts":289348861761}
-{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":13,"gen_tps":64.3,"ctx_used":1039,"ctx_size":32768,"power":100,"error":"","ts":289348961288}
-{"t":"text","s":"sunlight is scattered in all directions by ","ts":289348977503}
-{"t":"text","s":"the atmosphere's air molecules and tiny ","ts":289349090693}
-{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":26,"gen_tps":63.0,"ctx_used":1052,"ctx_size":32768,"power":100,"error":"","ts":289349171662}
-{"t":"text","s":"particles more strongly at shorter (blue)","ts":289349205407}
-{"t":"text","s":" wavelengths—a phenomenon called Rayleigh scattering.","ts":289349319197}
-{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":39,"gen_tps":62.4,"ctx_used":1065,"ctx_size":32768,"power":100,"error":"","ts":289349383622}
-{"t":"text","s":" Our eyes are also more sensitive ","ts":289349431358}
-{"t":"text","s":"to blue light, and during the ","ts":289349542702}
-{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":52,"gen_tps":62.5,"ctx_used":1078,"ctx_size":32768,"power":100,"error":"","ts":289349590686}
-{"t":"text","s":"day when the sun is high, ","ts":289349654784}
-{"t":"text","s":"this scattered blue light dominates what we ","ts":289349766501}
-{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":65,"gen_tps":62.6,"ctx_used":1091,"ctx_size":32768,"power":100,"error":"","ts":289349798008}
-{"t":"text","s":"see overhead. At sunrise and sunset,","ts":289349877350}
-{"t":"text","s":" the light travels through more atmosphere,","ts":289349988992}
-{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":78,"gen_tps":62.6,"ctx_used":1104,"ctx_size":32768,"power":100,"error":"","ts":289350004701}
-{"t":"text","s":" scattering away most of the blue ","ts":289350099487}
-{"t":"text","s":"and letting the longer red and orange ","ts":289350209770}
-{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":91,"gen_tps":62.7,"ctx_used":1117,"ctx_size":32768,"power":100,"error":"","ts":289350209785}
-{"t":"text","s":"wavelengths become visible.\n\n","ts":289350272843}
-{"t":"status","state":"idle","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":94,"gen_tps":62.7,"ctx_used":1122,"ctx_size":32768,"power":100,"error":"","ts":289350272857}
-{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"ts":289350272859}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1122,"ctx_size":32768,"power":100,"error":"","ts":289350627822}
-{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1138,"ctx_size":32768,"power":100,"error":"","ts":289350790747}
-{"t":"text","s":"\n2, 3, 5","ts":289350901899}
-{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":14,"gen_tps":67.8,"ctx_used":1152,"ctx_size":32768,"power":100,"error":"","ts":289350997249}
-{"t":"text","s":", 7, 11","ts":289351013179}
-{"t":"text","s":", 13, 1","ts":289351124688}
-{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":27,"gen_tps":65.3,"ctx_used":1165,"ctx_size":32768,"power":100,"error":"","ts":289351204145}
-{"t":"text","s":"7, 19, ","ts":289351236108}
-{"t":"text","s":"23, 29\n","ts":289351347703}
-{"t":"text","s":"\n","ts":289351347707}
-{"t":"status","state":"idle","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":35,"gen_tps":64.7,"ctx_used":1175,"ctx_size":32768,"power":100,"error":"","ts":289351347731}
-{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"ts":289351347733}
+{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":315569503767}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":32768,"power":100,"error":"","ts":315569503997}
+{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"ts":315569516154}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":32768,"power":100,"error":"","ts":315569828053}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":32768,"power":100,"error":"","ts":315569828095}
+{"t":"status","state":"prefill","prefill_done":14,"prefill_total":68,"prefill_tps":70.0,"generated":0,"gen_tps":0.0,"ctx_used":1026,"ctx_size":32768,"power":100,"error":"","ts":315570028663}
+{"t":"status","state":"prefill","prefill_done":46,"prefill_total":68,"prefill_tps":114.6,"generated":0,"gen_tps":0.0,"ctx_used":1026,"ctx_size":32768,"power":100,"error":"","ts":315570229957}
+{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1026,"ctx_size":32768,"power":100,"error":"","ts":315570347301}
+{"t":"text","s":"\nThe sky appears blue because sunlight ","ts":315570458202}
+{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":14,"gen_tps":68.3,"ctx_used":1040,"ctx_size":32768,"power":100,"error":"","ts":315570552410}
+{"t":"text","s":"gets scattered in all directions when it ","ts":315570568093}
+{"t":"text","s":"enters our atmosphere, and blue light ","ts":315570681410}
+{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":27,"gen_tps":65.2,"ctx_used":1053,"ctx_size":32768,"power":100,"error":"","ts":315570761545}
+{"t":"text","s":"is scattered more than other colors because ","ts":315570793898}
+{"t":"text","s":"it travels as shorter, smaller waves.","ts":315570906968}
+{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":40,"gen_tps":63.9,"ctx_used":1066,"ctx_size":32768,"power":100,"error":"","ts":315570973021}
+{"t":"text","s":" This phenomenon, called Rayleigh scattering,","ts":315571023211}
+{"t":"text","s":" means that during the day when ","ts":315571138103}
+{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":53,"gen_tps":63.2,"ctx_used":1079,"ctx_size":32768,"power":100,"error":"","ts":315571186078}
+{"t":"text","s":"the sun is overhead, the blue ","ts":315571250316}
+{"t":"text","s":"wavelengths dominate what we see in the ","ts":315571364619}
+{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":66,"gen_tps":62.9,"ctx_used":1092,"ctx_size":32768,"power":100,"error":"","ts":315571397204}
+{"t":"text","s":"sky. At sunrise and sunset, ","ts":315571478844}
+{"t":"text","s":"the light travels through more atmosphere, ","ts":315571594781}
+{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":79,"gen_tps":62.5,"ctx_used":1105,"ctx_size":32768,"power":100,"error":"","ts":315571611153}
+{"t":"text","s":"scattering away most of the blue and ","ts":315571708472}
+{"t":"text","s":"allowing the longer red and orange wavelengths ","ts":315571823052}
+{"t":"status","state":"generating","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":92,"gen_tps":62.3,"ctx_used":1118,"ctx_size":32768,"power":100,"error":"","ts":315571823085}
+{"t":"text","s":"to become visible.\n\n","ts":315571890338}
+{"t":"status","state":"idle","prefill_done":68,"prefill_total":68,"prefill_tps":0.0,"generated":95,"gen_tps":62.2,"ctx_used":1123,"ctx_size":32768,"power":100,"error":"","ts":315571890365}
+{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":95,"ctx_used":1121,"ts":315571890367}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1123,"ctx_size":32768,"power":100,"error":"","ts":315572271964}
+{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1139,"ctx_size":32768,"power":100,"error":"","ts":315572434563}
+{"t":"text","s":"\nThe first ten prime numbers are:","ts":315572549477}
+{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":14,"gen_tps":66.4,"ctx_used":1153,"ctx_size":32768,"power":100,"error":"","ts":315572645558}
+{"t":"text","s":" 2, 3, ","ts":315572661355}
+{"t":"text","s":"5, 7, 1","ts":315572771111}
+{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":27,"gen_tps":65.1,"ctx_used":1166,"ctx_size":32768,"power":100,"error":"","ts":315572849479}
+{"t":"text","s":"1, 13, ","ts":315572880716}
+{"t":"text","s":"17, 19,","ts":315572990913}
+{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":40,"gen_tps":64.6,"ctx_used":1179,"ctx_size":32768,"power":100,"error":"","ts":315573053801}
+{"t":"text","s":" 23, and 2","ts":315573101512}
+{"t":"text","s":"9.\n\n","ts":315573148591}
+{"t":"status","state":"idle","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":45,"gen_tps":64.4,"ctx_used":1186,"ctx_size":32768,"power":100,"error":"","ts":315573148610}
+{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":45,"ctx_used":1184,"ts":315573148612}
