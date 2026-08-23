@@ -10,15 +10,18 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P11 — Subagent pool.** Next up; not started. Context-isolated subagents
-sharing one locked engine, ending at the plan's own measurement gate. P10 —
-Isolation — is complete: a dispatched attempt runs in a disposable git worktree
-under a typed handoff packet (exact writable files, a validation command, a
-per-file baseline read from the worktree), with every mutation revision-checked;
-it returns a reviewable candidate ref (a commit) or a typed receipt naming the
-refusal — nothing merges, the caller's tree is never touched.
+**Phase P12 — More models.** Next up; not started. Laguna XS 2.1 and/or
+Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**
+(see the dependency below). P11 — Subagent pool — is complete: context-isolated
+subagents share one locked engine (`--subagent-pool`, one model load, N sessions,
+a `worker` id on every event), driven through a queue over the serialized GPU;
+the packet-maker assembles a prepared context from a deterministic rolling
+digest; a `dispatch` host-tool enqueues workers and receipts fold back into the
+orchestrator. The measurement gate's canonical arm is measured: **3.70x realized
+win vs the 4.2x ceiling** (overhead ratio 0.88) — the sensitivity envelope is the
+remaining follow-up pass.
 
-*P0–P10 are complete; their summaries live in [Prior work](#prior-work), not
+*P0–P11 are complete; their summaries live in [Prior work](#prior-work), not
 here, so this section stays a true "what's happening now."*
 
 ## Concept budget
@@ -120,6 +123,19 @@ appear below.) Defined so far:
   mutation that *is* in `allowedMutations` but outside `writableFiles` — a
   symlink escape, or the integration test's scripted mutation).
 
+- **rolling digest** (P11) — the objective-independent "always-want" reduced
+  form of the conversation, maintained incrementally and inference-free by the
+  host: strip tool noise, keep the host-authoritative ledger (files touched,
+  refs, receipts, exit statuses). Backed by the session `.kv` rendered text for
+  crash recovery. The packet-maker's extraction reads this, never the raw
+  conversation — Layer 1 of context distillation, pre-chewed before the
+  objective is known.
+
+- **context assembly** (P11) — the packet-maker's `deterministic-load → rolling
+  digest → adaptation → packet` pipeline: the `dispatch` tool's objective plus
+  the digest plus staged read names plus the deterministic adaptation (D7) become
+  a *prepared* packet `taskText`, not P10's bare sentence.
+
 ## Phases
 
 | # | Phase | Direction (one sentence) | Status |
@@ -135,7 +151,7 @@ appear below.) Defined so far:
 | P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | complete (2026-08-22) |
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | complete (2026-08-22) |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | complete (2026-08-22) |
-| P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | planned |
+| P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | complete (2026-08-23) |
 | P12 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; see the dependency below | planned |
 | P13 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
 
@@ -420,6 +436,34 @@ Deferred, each with the condition that reopens it.
 - **An embedding spike.** *Reopens only if dynamic Swift-defined per-token logit
   masking becomes critical-path. Nothing else in `SWIFTSTAR.md` requires
   in-process access.*
+- **The ANE watcher tier — a librarian and an inspector over Monty.** A third
+  tier beside the GPU main agent and the GPU pool: AFM on the ANE (macOS 26
+  CoreML, 27 CoreAI — verify) as the model, and
+  [Monty](https://github.com/pydantic/monty) — pydantic's sandboxed Rust
+  interpreter for a Python subset — as the executor. Two roles share it. The
+  **librarian** is a watcher (a Pi-style guard): it declares the state it cares
+  about, the host projects the rolling digest (D6) into a small slice, and the
+  librarian's moment-specific reaction runs in Monty — sandboxed,
+  resource-limited, type-checked against host-function stubs. Monty never sees
+  kv; it sees the projected digest, with a narrow `kv_query(selector)` host
+  function as the only door ("`read_customer(id)` is a tool; `read_file(path)`
+  is a filesystem"). The **inspector** is the same substrate in the tool loop,
+  running P9's validation cadence on the ANE while the model is blocked on the
+  tool, findings riding back on the triggering result. The trick that makes
+  model-authored Monty trustworthy: Swift owns a fixed, typed envelope (template
+  + host-function stubs), the model fills a bounded hole, `ty` is the referee
+  before execution, and a retry is a cheap bounded re-prefill. A host function
+  (`ask_model`) runs a chat prompt and returns, so a Monty loop orchestrates
+  bounded model calls deterministically — the RLM/slicing pattern with the
+  strategy as a short program rather than a token-stream plan. Reactions can be
+  declared as App Intents, making a user's librarian discoverable by the system
+  AI — the extension-system shape. *Reopens when P11's pool exists and either a
+  kv/digest watcher is wanted or P9's validation cadence is being built with the
+  AFM-on-ANE shape — and only after the two falsifiers are measured, not
+  assumed: the macOS 26 AFM invocation API is confirmed callable for text
+  generation, and the fill-success rate (a primed hole type-checks and runs
+  first time) is measured.* Source:
+  `docs/superpowers/research/2026-08-23-monty-and-the-ane-watcher-tier.md`.
 - **"Swift body, Python brain"** — agent policy in a hot-reloadable uv-managed
   peer process. *Reopens if agent policy starts changing faster than the app
   can ship.* Source: `SWIFTSTAR.md`.
@@ -616,6 +660,31 @@ Completed phases move here when the roadmap outgrows the front page.
   routes through are tier-tested; a real-model dispatch is out of scope for the
   tiered oracles). No new wire — the dispatch reuses P9's `--host-tools` spawn.
   Spec: [`docs/superpowers/specs/2026-08-22-p10-isolation-design.md`](docs/superpowers/specs/2026-08-22-p10-isolation-design.md).
+
+- **P11 — Subagent pool (2026-08-23).** Context-isolated subagents share one
+  locked engine. The engine patch (`--subagent-pool`, fork divergence #11) hosts
+  N sessions in one process on one model load, multiplexes a `worker` id on every
+  `--json-events` event (absent when N==1, so the single-session wire is
+  byte-identical — the recapture proved it), advertises a `pool` cap, and routes
+  inbound `{"t":"prompt","worker":N,"s":"..."}` prompts by worker; generation is
+  serialized by a pool mutex around `worker_run_turn` (and around worker init,
+  whose concurrent system-prompt prefill segfaulted the first live run — a Metal
+  command-buffer race caught only by the live smoke gate). `SwiftStarKit` gains
+  the wire-contract layer — `WorkerId`/`PoolWireParser`/`PoolPrompt`/
+  `DispatchReceipt` (+ the reserved `DispatchExecutor`), the pure `PoolScheduler`
+  (enqueue/start/finish/fail/inject), the `RollingDigest` reducer, `ContextAssembly`
+  (deterministic adaptation in v1; the no-think model trip is deferred with the
+  RLM tier), `EnvelopeMath` + deterministic perturbation constructors, and
+  `DispatchPacketBuilder`. `SwiftStarAppKit` gains `PoolEngine` (spawn argv,
+  `.kv` reader, `listFiles`). The app gains the `dispatch` host-tool, the
+  dispatch→queue→worker-turn→receipt-injection loop, and the smoke-gate driver.
+  The measurement gate's canonical arm is measured: **3.70x realized win vs the
+  4.2x ceiling** (deep 131k 1550 s vs 8×16k pool 419 s; overhead ratio 0.88) —
+  the sensitivity envelope (bloat/failure/count-sweep) is the follow-up pass.
+  Live evidence:
+  [`smoke gate`](docs/superpowers/research/2026-08-23-p11-smoke-gate.md),
+  [`measurement gate`](docs/superpowers/research/2026-08-23-p11-measurement-gate.md).
+  Spec: [`docs/superpowers/specs/2026-08-23-p11-subagent-pool-design.md`](docs/superpowers/specs/2026-08-23-p11-subagent-pool-design.md).
 
 ## Workflow
 

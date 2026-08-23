@@ -14,12 +14,15 @@ It does no inference itself. Inference is delegated to `ds4-server` and
 
 ## Status
 
-**Phases P0–P10 complete.** SwiftStar launches a regular macOS app (Chat via
+**Phases P0–P11 complete.** SwiftStar launches a regular macOS app (Chat via
 `ds4-server` SSE; Agent via `ds4-agent` NDJSON with tool cards, consent controls,
 and interruptible turns), downloads and gates model feasibility, replays Metrics
 and Diagnostics from committed captures, bootstraps the Superpowers skills,
-answers tool calls over a bidirectional wire, and dispatches worktree-isolated
-attempts. See [`ROADMAP.md`](ROADMAP.md) for what is next (P11).
+answers tool calls over a bidirectional wire, dispatches worktree-isolated
+attempts, and runs a subagent pool — context-isolated subagents sharing one
+locked engine, driven through a queue over the serialized GPU, with the
+context-curve win measured (3.70x realized vs the 4.2x ceiling). See
+[`ROADMAP.md`](ROADMAP.md) for what is next (P12).
 
 - [`BRIEF.md`](BRIEF.md) — the design. Read this first.
 - [`ROADMAP.md`](ROADMAP.md) — phases, concept budget, backlog.
