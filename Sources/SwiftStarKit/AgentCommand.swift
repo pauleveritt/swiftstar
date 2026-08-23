@@ -11,19 +11,24 @@ public struct AgentSettings: Equatable, Sendable {
     /// The shell toggle (D1/D2): false = `--shell off` (bash removed from
     /// schema and refused in dispatch). The app's default posture is deny.
     public var shellAllowed: Bool
+    /// The system prompt (D1): passed inline as `-sys <text>` after `--shell`.
+    /// nil omits the flag. The app passes the Superpowers bootstrap (P8).
+    public var systemPrompt: String?
 
     public init(
         engineDir: URL,
         modelPath: URL,
         contextSize: Int = 32768,
         workspace: URL,
-        shellAllowed: Bool = false
+        shellAllowed: Bool = false,
+        systemPrompt: String? = nil
     ) {
         self.engineDir = engineDir
         self.modelPath = modelPath
         self.contextSize = contextSize
         self.workspace = workspace
         self.shellAllowed = shellAllowed
+        self.systemPrompt = systemPrompt
     }
 }
 
@@ -32,7 +37,7 @@ public struct AgentSettings: Equatable, Sendable {
 /// validates. The binary path itself is NOT part of the returned array.
 public enum AgentCommand {
     public static func argv(settings: AgentSettings) -> [String] {
-        [
+        var argv: [String] = [
             "-m", settings.modelPath.path,
             "-c", String(settings.contextSize),
             "--metal",
@@ -41,6 +46,10 @@ public enum AgentCommand {
             "--workspace", settings.workspace.path,
             "--shell", settings.shellAllowed ? "on" : "off",
         ]
+        if let systemPrompt = settings.systemPrompt {
+            argv.append(contentsOf: ["-sys", systemPrompt])
+        }
+        return argv
     }
 
     /// The executable to spawn for these settings.

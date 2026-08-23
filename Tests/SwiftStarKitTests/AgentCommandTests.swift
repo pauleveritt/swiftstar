@@ -3,13 +3,14 @@ import Foundation
 @testable import SwiftStarKit
 
 struct AgentCommandTests {
-    private func makeSettings(workspace: URL, shellAllowed: Bool = false) -> AgentSettings {
+    private func makeSettings(workspace: URL, shellAllowed: Bool = false, systemPrompt: String? = nil) -> AgentSettings {
         AgentSettings(
             engineDir: URL(fileURLWithPath: "/tmp/fake-engine"),
             modelPath: URL(fileURLWithPath: "/tmp/model.gguf"),
             contextSize: 16384,
             workspace: workspace,
-            shellAllowed: shellAllowed
+            shellAllowed: shellAllowed,
+            systemPrompt: systemPrompt
         )
     }
 
@@ -33,6 +34,28 @@ struct AgentCommandTests {
         let argv = AgentCommand.argv(settings: makeSettings(workspace: ws, shellAllowed: true))
         #expect(argv.contains("--shell"))
         #expect(argv[argv.firstIndex(of: "--shell")! + 1] == "on")
+    }
+
+    @Test func argvAppendsSystemPromptAfterShell() {
+        let ws = URL(fileURLWithPath: "/Users/me/Work")
+        let argv = AgentCommand.argv(settings: makeSettings(workspace: ws, systemPrompt: "You have Superpowers."))
+        // -sys + text arrive after --shell (D1); the default-order test pins the nil case.
+        #expect(argv == [
+            "-m", "/tmp/model.gguf",
+            "-c", "16384",
+            "--metal",
+            "--non-interactive",
+            "--json-events",
+            "--workspace", "/Users/me/Work",
+            "--shell", "off",
+            "-sys", "You have Superpowers.",
+        ])
+    }
+
+    @Test func argvOmitsSystemPromptWhenNil() {
+        let ws = URL(fileURLWithPath: "/Users/me/Work")
+        let argv = AgentCommand.argv(settings: makeSettings(workspace: ws))
+        #expect(!argv.contains("-sys"))
     }
 
     @Test func binaryPathIsDs4Agent() {
