@@ -31,16 +31,24 @@ public enum WorktreeDispatcher {
     }
 
     /// Create a disposable worktree on a throwaway branch and read each
-    /// writableFile's baseline from it (D1/D2). The caller runs the attempt in
+    /// writableFile's baseline from it (D1/D2). When `baseRef` is set, the
+    /// worktree is branched from that commit instead of `HEAD` (P11 addendum D3:
+    /// a transaction chains phases). The caller runs the attempt in
     /// `worktree.url`, then calls `finalize` and `discard`.
-    public static func prepare(packet: HandoffPacket, in repo: URL) throws -> Worktree {
+    public static func prepare(packet: HandoffPacket, in repo: URL,
+                               baseRef: String? = nil) throws -> Worktree {
         let branch = "swiftstar-dispatch-\(UUID().uuidString)"
         let candidateRefName = "refs/swiftstar/candidates/\(UUID().uuidString)"
         let worktree = FileManager.default.temporaryDirectory
             .appendingPathComponent("swiftstar-wt-\(UUID().uuidString)")
 
-        // `git worktree add -b` branches from HEAD and checks the worktree out.
-        _ = try git(repo, ["worktree", "add", "-b", branch, worktree.path])
+        // `git worktree add -b <branch> <path> [<commit-ish>]` branches from
+        // <commit-ish> (default HEAD) and checks the worktree out on it.
+        if let baseRef {
+            _ = try git(repo, ["worktree", "add", "-b", branch, worktree.path, baseRef])
+        } else {
+            _ = try git(repo, ["worktree", "add", "-b", branch, worktree.path])
+        }
 
         var baselines: [String: FileBaseline] = [:]
         for path in packet.writableFiles {
@@ -50,6 +58,11 @@ public enum WorktreeDispatcher {
         }
         return Worktree(url: worktree, branch: branch,
                         candidateRefName: candidateRefName, baselines: baselines)
+    }
+
+    /// Resolve a namespaced ref to its commit SHA (`git rev-parse <ref>`).
+    public static func resolve(ref: String, in repo: URL) throws -> String {
+        try git(repo, ["rev-parse", ref]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Commit the worktree's diff and return the candidate ref, or a receipt.
