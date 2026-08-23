@@ -44,3 +44,23 @@ made of them was selection, not analysis.
   validation command is the only shell the worker may run — the feedback loop).
 - The harness sets `validationCommand` to a light import check so the worker can
   self-check its code mid-turn.
+
+## Second look (2026-08-23, after the fixes)
+
+**The bounding fixes worked.** Re-running the easy spec with the read cache +
+vetted bash + bounding prompt + 16k ctx + 30-tool budget: **elapsed 708s → 107s**,
+Phase 1 tool calls 38 → ~10, re-reads ~10 → 1, ctx bounded at ~9.7k (no
+compaction), acceptance still green. The analyzer now prints per-phase rounds,
+distribution, repeated-identical calls, and re-reads mechanically.
+
+**A real bug found by the capture.** The captured wire carries BOTH `tool`
+transcript events (175) and `tool_request` execution events (20) for the same
+calls, and `TurnOutcomeBuilder.finish()` concatenated both — double-counting
+(harness said 40 tool calls, the wire has 20). Fixed: host-tools mode prefers the
+`tool_request` view. This also fixes the app's `lastTurnOutcome` telemetry.
+
+**Model variance, observed.** The implementer's tool-call count varies widely
+across runs (Phase 1: ~5, ~19, and >30 tool calls). A thrashing run now hits the
+30-tool budget and returns `budgetExceeded` — the correct budget-or-receipt
+behavior (D8), and the reason n=4 will matter once we're happy with the
+instrument.
