@@ -38,14 +38,17 @@ public enum Receipt: Equatable, Sendable {
 }
 
 /// One dispatch's outcome (D3/D4): either a candidate ref carrying the P9
-/// `TurnOutcome` as the candidate's evidence, or a typed `Receipt` naming why
-/// not. The pure `WorktreeDispatch.verdict` leaves the candidate `ref` empty
-/// (it cannot commit); the app-layer `WorktreeDispatcher` fills it after
+/// `TurnOutcome` as the candidate's evidence **and the per-file baselines read
+/// from the worktree at dispatch time** (D1 — the parent diffs the candidate
+/// against these to detect drift on a file it was allowed to touch), or a typed
+/// `Receipt` naming why not. The pure `WorktreeDispatch.verdict` leaves the
+/// candidate `ref` empty **and the baselines empty** (it cannot read the
+/// worktree — no I/O); the app-layer `WorktreeDispatcher` fills both after
 /// committing the worktree's diff to the throwaway branch. The `TurnOutcome`
 /// carries the host-authoritative facts (mutations, exit status, output digest,
 /// `validationRan`) per D4 — a handoff packet's success is never inferred from
 /// prose.
 public enum DispatchOutcome: Equatable, Sendable {
-    case candidate(ref: String, turnOutcome: TurnOutcome)
+    case candidate(ref: String, turnOutcome: TurnOutcome, baselines: [String: FileBaseline])
     case receipt(Receipt)
 }

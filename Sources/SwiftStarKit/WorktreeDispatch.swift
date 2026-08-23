@@ -18,21 +18,43 @@ import Foundation
 ///    → `.validationFailed(exit:digest:)`. A passing result (exit == 0) or an
 ///    absent one (no `validationCommand` was set) falls through.
 /// 4. **No changes.** No observed mutations → `.noChanges` (nothing to commit).
-/// 5. **Candidate.** Otherwise → `.candidate(ref: "", turnOutcome:)`. The empty
-///    `ref` is a sentinel; the app-layer dispatcher fills it after committing.
+/// 5. **Candidate.** Otherwise → `.candidate(ref: "", turnOutcome:, baselines: [:])`. The
+///    empty `ref` and empty `baselines` are sentinels; the app-layer dispatcher
+///    fills the ref after committing and the baselines from the worktree.
 public enum WorktreeDispatch {
     /// Relativize a finished `TurnOutcome`'s mutations to `worktree` (P10/D4):
     /// the P9 host executor records absolute paths (the confined
-    /// `resolvedPath` under the worktree), but `packet.writableFiles` is
-    /// worktree-relative, so the revision check compares apples-to-apples only
-    /// after this strip. A path without the worktree prefix (already relative,
-    /// or an escape the grant already refused) is kept unchanged. Pure — no
-    /// I/O; the app layer calls it before handing the outcome to `verdict`.
+    /// `resolvedPath` under the worktree, resolved through symlinks by
+    /// `confinedRealPath`), but `packet.writableFiles` is worktree-relative,
+    /// so the revision check compares apples-to-apples only after this strip.
+    /// A path without the worktree prefix (already relative, or an escape the
+    /// grant already refused) is kept unchanged.
+    ///
+    /// FINDING 1: the host executor's `confinedRealPath` resolves symlinks
+    /// (`URL.resolvingSymlinksInPath()`), so a mutation recorded under a
+    /// symlinked worktree root (macOS `/tmp` -> `/private/tmp`, a user symlink,
+    /// or any path whose real form differs from its standardized form) is the
+    /// symlink-resolved absolute path. `standardizedFileURL` does NOT resolve
+    /// symlinks, so stripping against it alone mis-relativizes the mutation
+    /// (the prefix does not match) and the verdict refuses an allowed write.
+    /// The fix: strip against the symlink-resolved worktree path (and fall back
+    /// to the standardized path, so a mutation already in the standardized form
+    /// still strips). `resolvingSymlinksInPath()` does touch the filesystem
+    /// (it stat's the path components); this is the one I/O `relativize` needs
+    /// to match the executor's already-resolved mutations — the verdict itself
+    /// stays pure.
     public static func relativize(outcome: TurnOutcome, worktree: URL) -> TurnOutcome {
-        let wtPath = worktree.standardizedFileURL.path
+        let wtStd = worktree.standardizedFileURL.path
+        let wtReal = worktree.resolvingSymlinksInPath().path
         var o = outcome
         o.mutations = outcome.mutations.map { mut in
-            if mut.hasPrefix(wtPath + "/") { return String(mut.dropFirst(wtPath.count + 1)) }
+            // Prefer the symlink-resolved prefix (the executor records resolved
+            // paths); fall back to the standardized prefix (a mutation already
+            // in the non-resolved form, e.g. a scripted test mutation).
+            if wtReal != wtStd, mut.hasPrefix(wtReal + "/") {
+                return String(mut.dropFirst(wtReal.count + 1))
+            }
+            if mut.hasPrefix(wtStd + "/") { return String(mut.dropFirst(wtStd.count + 1)) }
             return mut
         }
         return o
@@ -60,8 +82,9 @@ public enum WorktreeDispatch {
         if allowedMutations.isEmpty {
             return .receipt(.noChanges)
         }
-        // 5. Otherwise: a candidate. The pure verdict leaves the ref empty; the
-        //    app-layer dispatcher fills it after committing the worktree.
-        return .candidate(ref: "", turnOutcome: turnOutcome)
+        // 5. Otherwise: a candidate. The pure verdict leaves the ref empty and
+        //    the baselines empty (it cannot read the worktree — no I/O); the
+        //    app-layer dispatcher fills both after committing the worktree.
+        return .candidate(ref: "", turnOutcome: turnOutcome, baselines: [:])
     }
 }

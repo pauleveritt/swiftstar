@@ -12,8 +12,8 @@ struct DispatchOutcomeTests {
     @Test func candidateCarriesRefAndTurnOutcome() {
         let outcome = TurnOutcome(model: "m", build: "b", sampler: "s", task: "t",
                                    generatedTokens: 3, ctxUsed: 9, stopReason: .eos, toolCalls: [])
-        let dispatch = DispatchOutcome.candidate(ref: "abc123", turnOutcome: outcome)
-        guard case .candidate(let ref, let carried) = dispatch else {
+        let dispatch = DispatchOutcome.candidate(ref: "abc123", turnOutcome: outcome, baselines: [:])
+        guard case .candidate(let ref, let carried, _) = dispatch else {
             Issue.record("expected candidate"); return
         }
         #expect(ref == "abc123")
@@ -56,7 +56,7 @@ struct DispatchOutcomeTests {
     @Test func candidateAndReceiptAreDistinct() {
         let outcome = TurnOutcome(model: "m", build: "b", sampler: "s", task: "t",
                                    generatedTokens: 0, ctxUsed: 0, stopReason: .eos, toolCalls: [])
-        let candidate = DispatchOutcome.candidate(ref: "", turnOutcome: outcome)
+        let candidate = DispatchOutcome.candidate(ref: "", turnOutcome: outcome, baselines: [:])
         let receipt = DispatchOutcome.receipt(.noChanges)
         #expect(candidate != receipt)
     }

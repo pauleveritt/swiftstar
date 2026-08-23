@@ -102,7 +102,7 @@ struct DispatchView: View {
     @ViewBuilder
     private func outcomeRow(_ outcome: DispatchOutcome) -> some View {
         switch outcome {
-        case .candidate(let ref, let carried):
+        case .candidate(let ref, let carried, let baselines):
             VStack(alignment: .leading, spacing: 4) {
                 Label("Candidate ref", systemImage: "checkmark.seal")
                     .font(.headline).foregroundStyle(.green)
@@ -115,6 +115,7 @@ struct DispatchView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 Text("\(carried.mutations.count) mutation(s) · "
                      + "\(carried.toolCalls.count) tool call(s) · "
+                     + "\(baselines.count) baseline(s) · "
                      + "stop=\(carried.stopReason.rawValue)")
                     .font(.caption).foregroundStyle(.secondary)
                     .textSelection(.enabled)

@@ -28,7 +28,7 @@ struct WorktreeDispatchTests {
         let oc = outcome(toolCalls: 1, generated: 5)
         let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt", "b.txt"],
                                                turnOutcome: oc, validation: nil)
-        guard case .candidate(let ref, let carried) = result else {
+        guard case .candidate(let ref, let carried, _) = result else {
             Issue.record("expected candidate"); return
         }
         // The pure verdict leaves the ref empty; the app-layer dispatcher
@@ -42,12 +42,29 @@ struct WorktreeDispatchTests {
         let p = packet(writable: ["a.txt"])
         let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
                                                turnOutcome: oc, validation: nil)
-        guard case .candidate(_, let carried) = result else {
+        guard case .candidate(_, let carried, _) = result else {
             Issue.record("expected candidate"); return
         }
         #expect(carried == oc)
         #expect(carried.toolCalls.count == 2)
         #expect(carried.generatedTokens == 42)
+    }
+
+    @Test func pureVerdictLeavesBaselinesEmptyForTheAppLayerToFill() {
+        // The pure verdict cannot read the worktree (no I/O), so it leaves the
+        // candidate's baselines empty — a sentinel the app-layer dispatcher
+        // fills from the worktree reads (mirroring the empty `ref` sentinel).
+        // Carrying real baselines is the app layer's job (see the integration
+        // test `candidateCarriesBaselinesForWritableFiles`).
+        let oc = outcome(toolCalls: 1, generated: 5)
+        let p = packet(writable: ["a.txt"],
+                       baselines: ["a.txt": FileBaseline(sha256: "ignored", lineEnding: .lf, mode: 0o644)])
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: oc, validation: nil)
+        guard case .candidate(_, _, let baselines) = result else {
+            Issue.record("expected candidate"); return
+        }
+        #expect(baselines.isEmpty, "the pure verdict must leave baselines empty")
     }
 
     // MARK: - revision check: a mutation outside writableFiles is refused

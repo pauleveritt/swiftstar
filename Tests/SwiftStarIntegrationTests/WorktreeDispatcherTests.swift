@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import CryptoKit
 @testable import SwiftStarKit
 @testable import SwiftStarAppKit
 
@@ -51,6 +52,12 @@ struct WorktreeDispatcherTests {
         return oc
     }
 
+    /// The lowercase hex SHA-256 of `data` (CryptoKit), the reference digest
+    /// `FileBaseline.sha256` must equal — independent of `git hash-object`.
+    private func sha256Hex(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     /// Run `git -C <dir> <args>`, returning stdout. Throws on non-zero exit.
     private func git(_ dir: URL, _ args: [String]) throws -> String {
         let p = Process()
@@ -88,7 +95,7 @@ struct WorktreeDispatcherTests {
             return self.outcome(mutations: ["a.txt"])
         }
 
-        guard case .candidate(let ref, let carried) = outcome else {
+        guard case .candidate(let ref, let carried, _) = outcome else {
             Issue.record("expected candidate for an in-bounds mutation"); return
         }
         #expect(!ref.isEmpty, "candidate ref must be a non-empty SHA")
@@ -118,7 +125,7 @@ struct WorktreeDispatcherTests {
                                  atomically: true, encoding: .utf8)
             return self.outcome(mutations: ["a.txt"])
         }
-        guard case .candidate(let ref, _) = outcome else {
+        guard case .candidate(let ref, _, _) = outcome else {
             Issue.record("expected candidate"); return
         }
         // The worktree dir is gone.
@@ -126,6 +133,125 @@ struct WorktreeDispatcherTests {
         let resolved = try git(repo, ["rev-parse", ref])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         #expect(resolved == ref)
+    }
+
+    @Test func candidateCommitDoesNotIncludeUntrackedBuildDir() throws {
+        // FINDING 4 regression: `commitDiff` must stage only the writable files
+        // (`git add -- <writableFiles>`), not `git add -A`. An untracked `.build/`
+        // dir left in the worktree by the attempt (or by a build the agent ran)
+        // must NOT end up in the candidate commit — only the mutated writable
+        // file should be there.
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let packet = HandoffPacket(
+            taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
+            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { wt in
+            // Mutate the writable file...
+            try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
+                                   atomically: true, encoding: .utf8)
+            // ...and leave an untracked .build/ dir (the pollution `git add -A`
+            // would sweep into the candidate). The fixture repo has no
+            // .gitignore, so this is genuinely untracked, not ignored.
+            let build = wt.appendingPathComponent(".build")
+            try FileManager.default.createDirectory(at: build, withIntermediateDirectories: true)
+            try "junk\n".write(to: build.appendingPathComponent("junk.txt"),
+                               atomically: true, encoding: .utf8)
+            return self.outcome(mutations: ["a.txt"])
+        }
+        guard case .candidate(let ref, _, _) = outcome else {
+            Issue.record("expected candidate"); return
+        }
+        let show = try git(repo, ["show", "--stat", "--name-only", ref])
+        #expect(show.contains("a.txt"), "the mutated writable file must be in the candidate")
+        #expect(!show.contains(".build"),
+                "an untracked .build/ dir must NOT be swept into the candidate")
+    }
+
+    @Test func relativizeAcceptsSymlinkResolvedMutationFromHostWrite() throws {
+        // FINDING 1 regression: the host executor's `confinedRealPath` resolves
+        // symlinks (macOS /tmp -> /private/tmp, or any symlinked worktree root),
+        // so the mutation it records is the symlink-resolved absolute path.
+        // `relativize` must strip against the symlink-resolved worktree root,
+        // else an in-contract write under a symlinked temp dir is mis-relativized
+        // to an absolute path and the verdict refuses it (an allowed mutation
+        // refused).
+        //
+        // This mirrors the real data flow: `consent` resolves the path with
+        // `standardizedFileURL` (no symlink I/O), but `executeHostTool`'s
+        // `confinedRealPath` re-confines with `resolvingSymlinksInPath()` and
+        // records the resolved path as the mutation. The `execute` closure
+        // below replicates that exactly.
+
+        // A real temp dir + a symlink to it (the symlinked worktree root).
+        // Seed `a.txt` in the real dir first: `resolvingSymlinksInPath()` only
+        // follows the symlink when the leaf exists, so this mirrors an `edit`
+        // of an existing writable file (the canonical FINDING 1 scenario — the
+        // host executor records the symlink-resolved mutation only when the
+        // file is present to resolve).
+        let real = FileManager.default.temporaryDirectory
+            .appendingPathComponent("swiftstar-real-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try "seed\n".write(to: real.appendingPathComponent("a.txt"),
+                          atomically: true, encoding: .utf8)
+        let link = FileManager.default.temporaryDirectory
+            .appendingPathComponent("swiftstar-link-\(UUID().uuidString)")
+        try FileManager.default.createSymbolicLink(atPath: link.path,
+                                                   withDestinationPath: real.path)
+        defer {
+            try? FileManager.default.removeItem(at: link)
+            try? FileManager.default.removeItem(at: real)
+        }
+
+        // The host executor's write (mirrors AgentController.executeHostTool +
+        // confinedRealPath): resolve symlinks on both the workspace and the
+        // file, re-confine, write, and record the symlink-resolved path as the
+        // mutation.
+        let resp = ToolCallbackResponder.respond(
+            idx: 0, name: "write",
+            params: [ToolParam(name: "path", value: "a.txt"),
+                     ToolParam(name: "content", value: "candidate")],
+            workspace: link, shellAllowed: false,
+            writableFiles: ["a.txt"],
+            execute: { req in
+                guard let path = req.resolvedPath else {
+                    return ToolExecutionResult(ok: false, text: "no resolved path")
+                }
+                let wsReal = req.workspace.resolvingSymlinksInPath()
+                let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+                guard resolved.path == wsReal.path
+                    || resolved.path.hasPrefix(wsReal.path + "/") else {
+                    return ToolExecutionResult(ok: false, text: "escape")
+                }
+                try? "candidate".write(toFile: resolved.path, atomically: true, encoding: .utf8)
+                return ToolExecutionResult(ok: true, text: "wrote", mutations: [resolved.path])
+            })
+        #expect(resp.ok == true, "the in-contract write must be executed")
+        #expect(resp.mutations.count == 1)
+
+        // The TurnOutcome carries the symlink-resolved mutation (as the host
+        // records it — absolute, through /private/...).
+        var oc = TurnOutcome(model: "m", build: "b", sampler: "s", task: "write a.txt",
+                             generatedTokens: 5, ctxUsed: 10, stopReason: .eos,
+                             toolCalls: [ToolCallOutcome(name: "write",
+                                                         transitions: [.emitted, .executed])])
+        oc.mutations = resp.mutations
+
+        // relativize + verdict: the symlink-resolved mutation must relativize
+        // back to "a.txt" (matching writableFiles) and yield a candidate — not
+        // a refusedTool for the absolute resolved path.
+        let rel = WorktreeDispatch.relativize(outcome: oc, worktree: link)
+        #expect(rel.mutations == ["a.txt"],
+                "the symlink-resolved mutation must relativize to the worktree-relative form")
+        let packet = HandoffPacket(taskText: "write a.txt", writableFiles: ["a.txt"],
+                                   validationCommand: nil, baselines: [:],
+                                   turnBudget: 10_000, toolCallBudget: 16)
+        let result = WorktreeDispatch.verdict(packet: packet, allowedMutations: rel.mutations,
+                                               turnOutcome: rel, validation: nil)
+        guard case .candidate = result else {
+            Issue.record("expected candidate; the symlink-resolved mutation was mis-relativized and refused"); return
+        }
     }
 
     // MARK: - revision check: a mutation outside writableFiles is a receipt
@@ -181,7 +307,7 @@ struct WorktreeDispatcherTests {
                                    atomically: true, encoding: .utf8)
             return self.outcome(mutations: ["a.txt"])
         }
-        guard case .candidate(let ref, _) = outcome else {
+        guard case .candidate(let ref, _, _) = outcome else {
             Issue.record("expected candidate when validation passed"); return
         }
         #expect(!ref.isEmpty)
@@ -207,10 +333,10 @@ struct WorktreeDispatcherTests {
     // MARK: - evidence floor: baselines are read from the worktree
 
     @Test func baselineReadFromWorktreeDiffersAfterChange() throws {
-        // A baseline read from the worktree (sha256 via `git hash-object`, mode
-        // via `git ls-files -s`, line ending by scanning bytes) differs from the
-        // post-mutation hash — the parent can detect drift a candidate
-        // introduces on a file it was allowed to touch.
+        // A baseline read from the worktree (sha256 via CryptoKit SHA-256 of
+        // the file's bytes, mode via `git ls-files -s`, line ending by scanning
+        // bytes) differs from the post-mutation hash — the parent can detect
+        // drift a candidate introduces on a file it was allowed to touch.
         let repo = try makeFixtureRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
 
@@ -227,6 +353,29 @@ struct WorktreeDispatcherTests {
         #expect(after.mode == baseline.mode, "mode is unchanged by a content edit")
     }
 
+    @Test func baselineSha256IsTheActualSha256OfTheBytes() throws {
+        // FINDING 3 regression: `FileBaseline.sha256` must hold the SHA-256 of
+        // the file's bytes (CryptoKit SHA256), not `git hash-object`'s SHA-1.
+        // The fixture seeds `a.txt` with `"seed\n"`; the baseline's sha256 must
+        // equal the CryptoKit SHA-256 of those exact bytes (a 64-char hex), and
+        // must NOT equal the git hash-object SHA-1 of the same bytes.
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let baseline = try WorktreeDispatcher.readBaseline(for: "a.txt", in: repo)
+        let expected = sha256Hex(Data("seed\n".utf8))
+        #expect(baseline.sha256 == expected,
+                "sha256 must be the CryptoKit SHA-256 of the bytes, not git hash-object's SHA-1")
+        #expect(baseline.sha256.count == 64, "SHA-256 is 64 hex chars (not SHA-1's 40)")
+
+        // Cross-check: it must differ from the git hash-object SHA-1 of the
+        // same bytes (the value the old code stored).
+        let gitSha1 = try git(repo, ["hash-object", "a.txt"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(baseline.sha256 != gitSha1,
+                "sha256 must not be the git hash-object SHA-1")
+    }
+
     @Test func baselineClassifiesCrlfLineEnding() throws {
         // The line-ending classification scans the file's bytes: a CRLF file
         // reads as `.crlf`; a mixed file (CRLF + lone LF) reads as `.mixed`.
@@ -239,5 +388,40 @@ struct WorktreeDispatcherTests {
         _ = try git(repo, ["commit", "-m", "crlf seed"])
         let baseline = try WorktreeDispatcher.readBaseline(for: "crlf.txt", in: repo)
         #expect(baseline.lineEnding == .crlf)
+    }
+
+    @Test func candidateCarriesBaselinesForWritableFiles() throws {
+        // FINDING 2 regression: `dispatch` reads each writableFile's baseline
+        // from the worktree and must carry it into the `DispatchOutcome.candidate`
+        // (D1 — the typed contract is complete), so the parent can diff the
+        // candidate against the pre-attempt state of each writable file. The
+        // old code read the baselines then discarded them (`_ = try? ...`),
+        // leaving the candidate's baselines empty.
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        // The expected baseline is the seed state of `a.txt` (what a fresh
+        // worktree checkout of HEAD holds) — read from the repo, which shares
+        // the seed commit's `a.txt` bytes/mode/line-ending with the worktree.
+        let expected = try WorktreeDispatcher.readBaseline(for: "a.txt", in: repo)
+
+        let packet = HandoffPacket(
+            taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
+            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { wt in
+            try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
+                                   atomically: true, encoding: .utf8)
+            return self.outcome(mutations: ["a.txt"])
+        }
+        guard case .candidate(_, _, let baselines) = outcome else {
+            Issue.record("expected candidate"); return
+        }
+        let baseline = try #require(baselines["a.txt"],
+                                    "candidate must carry the baseline for the writable file a.txt")
+        #expect(baseline == expected,
+                "the carried baseline must match a fresh readBaseline of the seed file")
+        #expect(baseline.sha256 == expected.sha256)
+        #expect(baseline.mode == 0o644)
+        #expect(baseline.lineEnding == .lf)
     }
 }

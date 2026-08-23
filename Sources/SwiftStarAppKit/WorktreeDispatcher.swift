@@ -51,15 +51,20 @@ public enum WorktreeDispatcher {
             try? FileManager.default.removeItem(at: worktree)
         }
 
-        // Read each writableFile's baseline from the worktree (D1): sha256 via
-        // `git hash-object`, mode via `git ls-files -s`, line ending by scanning
-        // the file's bytes — each read from the worktree, never guessed. A
+        // Read each writableFile's baseline from the worktree (D1): the
+        // SHA-256 of its bytes (CryptoKit, not `git hash-object`'s SHA-1), the
+        // mode via `git ls-files -s`, and the line ending by scanning the
+        // file's bytes — each read from the worktree, never guessed. A
         // not-yet-existing writableFile (the agent will create it) has no
-        // pre-baseline; reading is best-effort per file.
+        // pre-baseline; reading is best-effort per file. The dict is carried
+        // into the candidate (D1) so the parent can detect drift on a file
+        // the candidate was allowed to touch.
+        var baselines: [String: FileBaseline] = [:]
         for path in packet.writableFiles {
-            _ = try? readBaseline(for: path, in: worktree)
+            if let baseline = try? readBaseline(for: path, in: worktree) {
+                baselines[path] = baseline
+            }
         }
-
         // Run the dispatched turn: the closure mutates files in the worktree
         // and returns the P9 `TurnOutcome` carrying the observed mutations.
         let turnOutcome = try attempt(worktree)
@@ -77,33 +82,42 @@ public enum WorktreeDispatcher {
             turnOutcome: turnOutcome,
             validation: validation)
         switch verdict {
-        case .candidate(_, let carried):
+        case .candidate(_, let carried, _):
             // Commit the worktree's diff to the throwaway branch (D3) and return
-            // the commit SHA as the candidate ref.
-            let ref = try commitDiff(in: worktree)
-            return .candidate(ref: ref, turnOutcome: carried)
+            // the commit SHA as the candidate ref. The baselines read above (D1)
+            // ride on the candidate so the parent can diff the candidate against
+            // the pre-attempt state of each writable file.
+            let ref = try commitDiff(in: worktree, writableFiles: packet.writableFiles)
+            return .candidate(ref: ref, turnOutcome: carried, baselines: baselines)
         case .receipt(let receipt):
             return .receipt(receipt)
         }
     }
 
-    /// Read one file's baseline from `worktree` (D1): `sha256` via
-    /// `git hash-object` (the working-tree blob), `mode` via `git ls-files -s`
-    /// (the index's permission bits), and `lineEnding` by scanning the file's
-    /// bytes for CRLF vs lone LF. Throws when the file is not in the worktree.
+    /// Read one file's baseline from `worktree` (D1): `sha256` as the
+    /// lowercase-hex SHA-256 of the file's bytes (CryptoKit `SHA256`, not
+    /// `git hash-object`'s SHA-1 — the field name is honest), `mode` via
+    /// `git ls-files -s` (the index's permission bits), and `lineEnding` by
+    /// scanning the file's bytes for CRLF vs lone LF. Throws when the file is
+    /// not in the worktree (a not-yet-existing writableFile has no baseline;
+    /// the caller's `try?` skips it).
     public static func readBaseline(for path: String, in worktree: URL) throws -> FileBaseline {
-        // `git hash-object <path>` writes the working-tree blob to the object
-        // store and prints its SHA-1 object name. We want the content hash; the
-        // worktree's working tree is the authority for the file's current bytes.
-        let sha = try git(worktree, ["hash-object", path])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = file(path, in: worktree)
+        guard let data = FileManager.default.contents(atPath: url.path) else {
+            throw WorktreeDispatcherError.gitFailed(
+                status: -1, output: "", error: "readBaseline: file not found: \(url.path)")
+        }
+        // The SHA-256 of the file's bytes (CryptoKit), not `git hash-object`'s
+        // SHA-1 — `FileBaseline.sha256` must be honest about which hash it holds.
+        let sha = SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }.joined()
         // `git ls-files -s <path>` -> "<mode> <sha> 0\t<path>"; the first field
         // is the octal git mode (e.g. "100644"). Mask to the permission +
         // setuid/setgid/sticky bits (the file-type prefix is not a mode bit).
         let entry = try git(worktree, ["ls-files", "-s", path])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let mode = parseMode(entry)
-        let lineEnding = scanLineEnding(file(path, in: worktree))
+        let lineEnding = scanLineEnding(url)
         return FileBaseline(sha256: sha, lineEnding: lineEnding, mode: mode)
     }
 
@@ -131,12 +145,24 @@ public enum WorktreeDispatcher {
         return ValidationResult(exit: p.terminationStatus, digest: digest)
     }
 
-    /// Commit the worktree's diff to the throwaway branch (`git add -A` +
-    /// `git commit`) and return the commit SHA (`git rev-parse HEAD`). Throws on
-    /// a git failure (infrastructure); the pure verdict gates reaching here, so
-    /// a candidate always has a diff to commit.
-    private static func commitDiff(in worktree: URL) throws -> String {
-        _ = try git(worktree, ["add", "-A"])
+    /// Commit the worktree's diff to the throwaway branch, staging only the
+    /// packet's `writableFiles` (`git add -- <writableFiles>`, not `git add -A`)
+    /// so an untracked build dir (`.build/` etc.) the attempt left in the
+    /// worktree is NOT swept into the candidate. Returns the commit SHA
+    /// (`git rev-parse HEAD`). Throws on a git failure (infrastructure); the
+    /// pure verdict gates reaching here, so a candidate always has a diff to
+    /// commit.
+    private static func commitDiff(in worktree: URL, writableFiles: [String]) throws -> String {
+        // Stage only the writable files that exist (a not-yet-created contract
+        // file has nothing to stage; the verdict guarantees at least one
+        // mutation, so at least one writable file exists). `--` separates
+        // options from pathspecs so paths with odd characters are safe.
+        let paths = writableFiles.filter {
+            FileManager.default.fileExists(atPath: file($0, in: worktree).path)
+        }
+        if !paths.isEmpty {
+            _ = try git(worktree, ["add", "--"] + paths)
+        }
         _ = try git(worktree, ["commit", "-m", "SwiftStar dispatch candidate"])
         return try git(worktree, ["rev-parse", "HEAD"])
             .trimmingCharacters(in: .whitespacesAndNewlines)
