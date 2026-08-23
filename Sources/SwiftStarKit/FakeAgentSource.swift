@@ -14,9 +14,18 @@ public enum FakeAgentError: Error, Equatable, Sendable {
 /// is open, then `status idle`, then `ready`, and stops the turn. `FAKE_SPEED`
 /// (0 = no delay) keeps the equivalence test fast; `FAKE_MIN_LINE_DELAY`
 /// (seconds floor) gives the interrupt test a deterministic window.
+///
+/// P9 host-tools mode (`hostTools: true`): the replay replaces each tool block
+/// with `tool_request` events (one per call, carrying the call's name + params)
+/// and blocks on stdin for the matching `tool_result` line before continuing —
+/// mirroring the engine's `--host-tools` protocol. Non-tool lines (hello/
+/// status/text/ready) are emitted as-is; the `tool` phase stream and `output`
+/// are collected into requests (the host provides the result). The
+/// observation-only replay (`hostTools: false`, the default) is byte-for-byte
+/// unchanged — the bidirectional wire is opt-in.
 public enum FakeAgentSource {
 
-    public static func generate(capture: Data, engineArgv: [String]) throws -> String {
+    public static func generate(capture: Data, engineArgv: [String], hostTools: Bool = false) throws -> String {
         guard
             let captureText = String(data: capture, encoding: .utf8)?
                 .replacingOccurrences(of: "\r\n", with: "\n")
@@ -25,9 +34,12 @@ public enum FakeAgentSource {
             throw FakeAgentError.invalidUTF8
         }
 
-        var captureLines = captureText.split(separator: "\n", omittingEmptySubsequences: false)
+        var captureLines = captureText.split(separator: "\n", omittingEmptySubsequences: false).map { String($0) }
         if captureLines.last == "" { captureLines.removeLast() }
 
+        if hostTools {
+            return try buildHostTools(captureLines: captureLines, engineArgv: engineArgv)
+        }
         // Every event carries a monotonic `ts` (fork divergence #7); derive
         // per-line delays from consecutive deltas — no sidecar file needed.
         // The first line's delay is 0 (no wait before hello), mirroring
@@ -42,7 +54,7 @@ public enum FakeAgentSource {
             }
             let delay = lastTS.map { max(0, ts - $0) } ?? 0
             lastTS = ts
-            replay.append((delay, String(line)))
+            replay.append((delay, line))
         }
         guard !replay.isEmpty else {
             throw FakeAgentError.malformedCaptureLine(line: 0, content: "<empty capture>")
@@ -151,5 +163,184 @@ while readPromptLine() != nil {
         guard let range = line.range(of: #""ts":(\d+)"#, options: .regularExpression) else { return nil }
         let digits = line[range].dropFirst(5)  // drop `"ts":`
         return Int(digits)
+    }
+
+    /// Parses a capture line as a JSON object (robust extraction of the tool
+    /// phase fields — `param_value`'s `s` may carry escaped quotes that a naive
+    /// regex would split on). Returns nil for non-JSON lines.
+    private static func parseJSONObject(_ line: String) -> [String: Any]? {
+        guard let data = line.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    /// Builds one `tool_request` wire line (D2) from a collected call:
+    /// `{"t":"tool_request","idx":N,"name":"<tool>","params":[{"name":"<p>","value":"<v>"},…],"ts":<µs>}`.
+    /// `JSONSerialization` + `.sortedKeys` yields deterministic key order and
+    /// correct string escaping; the params array order is preserved.
+    private static func buildToolRequestLine(idx: Int, name: String,
+                                             params: [(String, String)], ts: Int) -> String {
+        var paramsArr: [[String: Any]] = []
+        for p in params {
+            paramsArr.append(["name": p.0, "value": p.1])
+        }
+        let obj: [String: Any] = [
+            "t": "tool_request",
+            "idx": idx,
+            "name": name,
+            "params": paramsArr,
+            "ts": ts,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]) else {
+            return ""
+        }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    /// P9 host-tools generator: builds a fake that replaces each tool block in
+    /// the capture with `tool_request` events (one per call) and blocks on
+    /// stdin for the matching `tool_result` before continuing. Non-tool lines
+    /// (hello/status/text/ready) are emitted as-is; the `tool` phase stream
+    /// (start/tool/param_*/finish) is collected into the requests, and
+    /// `output` is skipped (the host supplies the result). The first request
+    /// in a block carries the `finish` line's delay; subsequent requests (a
+    /// multi-call block) carry delay 0.
+    private static func buildHostTools(captureLines: [String], engineArgv: [String]) throws -> String {
+        // replay entry: (delay µs, kind, line); kind 0 = emit, kind 1 = request
+        // (emit the tool_request line, then block on stdin for the tool_result).
+        var replay: [(Int, Int, String)] = []
+        var calls: [Int: (name: String, params: [(String, String)])] = [:]
+        var order: [Int] = []
+        var lastTS: Int?
+        for (index, line) in captureLines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { continue }
+            guard let ts = extractTS(from: trimmed) else {
+                throw FakeAgentError.malformedCaptureLine(line: index + 1, content: trimmed)
+            }
+            let delay = lastTS.map { max(0, ts - $0) } ?? 0
+            lastTS = ts
+
+            if let obj = parseJSONObject(trimmed), (obj["t"] as? String) == "tool" {
+                let phase = (obj["phase"] as? String) ?? ""
+                let idx = (obj["idx"] as? NSNumber)?.intValue ?? 0
+                switch phase {
+                case "start":
+                    calls = [:]; order = []
+                case "tool":
+                    calls[idx] = (name: (obj["name"] as? String) ?? "", params: [])
+                    order.append(idx)
+                case "param_begin":
+                    if var c = calls[idx] {
+                        c.params.append(((obj["name"] as? String) ?? "", ""))
+                        calls[idx] = c
+                    }
+                case "param_value":
+                    if var c = calls[idx], !c.params.isEmpty {
+                        c.params[c.params.count - 1].1 += (obj["s"] as? String) ?? ""
+                        calls[idx] = c
+                    }
+                case "param_end":
+                    break
+                case "finish":
+                    for (i, callIdx) in order.enumerated() {
+                        guard let call = calls[callIdx] else { continue }
+                        let requestLine = buildToolRequestLine(idx: callIdx, name: call.name,
+                                                                params: call.params, ts: ts)
+                        replay.append((i == 0 ? delay : 0, 1, requestLine))
+                    }
+                    calls = [:]; order = []
+                case "output":
+                    break  // host mode: the result arrives via tool_result, not the capture's output
+                default:
+                    break
+                }
+            } else {
+                replay.append((delay, 0, line))
+            }
+        }
+        guard !replay.isEmpty else {
+            throw FakeAgentError.malformedCaptureLine(line: 0, content: "<empty capture>")
+        }
+
+        let argvLiteral = engineArgv.map(FakeServerSource.swiftStringLiteral).joined(separator: ", ")
+        let replayLiteral = replay
+            .map { "    (\($0.0), \($0.1), \(FakeServerSource.swiftStringLiteral($0.2)))" }
+            .joined(separator: ",\n")
+
+        // Raw string template: the host-tools replay. kind 0 emits a capture
+        // line (status/text/ready/hello); kind 1 emits a tool_request and
+        // blocks on stdin for the matching tool_result before continuing.
+        let template = #"""
+import Foundation
+import Darwin
+
+// GENERATED by SwiftStarKit.FakeAgentSource (host-tools mode) — do not hand-edit.
+// Regenerate from the committed capture; a drift test pins this.
+
+let expectedArgv: [String] = [__ARGV__]
+let replay: [(Int, Int, String)] = [
+__REPLAY__
+]
+
+func validateArgv() -> Bool {
+    let actual = Array(CommandLine.arguments.dropFirst())
+    return actual == expectedArgv
+}
+
+if !validateArgv() {
+    FileHandle.standardError.write(Data("fake ds4-agent: argv mismatch; expected \(expectedArgv) got \(Array(CommandLine.arguments.dropFirst()))\n".utf8))
+    exit(1)
+}
+
+let speed = Double(ProcessInfo.processInfo.environment["FAKE_SPEED"] ?? "1.0") ?? 1.0
+let minDelay = Double(ProcessInfo.processInfo.environment["FAKE_MIN_LINE_DELAY"] ?? "0") ?? 0
+
+func lineDelay(_ micros: Int) -> TimeInterval {
+    max(minDelay, Double(micros) / 1_000_000 / max(speed, 0.0001))
+}
+
+func emit(_ line: String) {
+    FileHandle.standardOutput.write(Data((line + "\n").utf8))
+}
+
+// Blocking read of one stdin line: the prompt at turn start, or a tool_result
+// line during a host-tools tool block (raw bytes; stdio buffering would hide
+// a result written right after the request's newline).
+func readStdinLine() -> String? {
+    var line = [UInt8]()
+    while true {
+        var p = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
+        guard poll(&p, 1, -1) > 0 else { return nil }
+        var b: UInt8 = 0
+        guard read(STDIN_FILENO, &b, 1) == 1 else { return nil }
+        if b == 0x0A { break }
+        line.append(b)
+    }
+    return String(decoding: line, as: UTF8.self)
+}
+
+// kind 0 = emit a capture line as-is (status/text/ready/hello); kind 1 = emit
+// a tool_request and block on stdin for the matching tool_result before
+// continuing (mirrors the engine's host-tools protocol from D1/D2).
+func replayOnce() {
+    for (micros, kind, line) in replay {
+        if speed > 0 { Thread.sleep(forTimeInterval: lineDelay(micros)) }
+        if kind == 0 {
+            emit(line)
+        } else {
+            emit(line)
+            _ = readStdinLine()
+        }
+    }
+}
+
+while readStdinLine() != nil {
+    replayOnce()
+}
+"""#
+
+        return template
+            .replacingOccurrences(of: "__ARGV__", with: argvLiteral)
+            .replacingOccurrences(of: "__REPLAY__", with: replayLiteral)
     }
 }
