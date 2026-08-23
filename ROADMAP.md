@@ -10,12 +10,15 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P10 — Isolation.** Next up; not started. Worktree-isolated dispatch: a
-handoff packet in, a candidate ref or a receipt out. P9 — the tool-callback wire
-— is complete: the host owns tool execution, answering tool calls over the same
-pipe and condensing tool results before they enter KV.
+**Phase P11 — Subagent pool.** Next up; not started. Context-isolated subagents
+sharing one locked engine, ending at the plan's own measurement gate. P10 —
+Isolation — is complete: a dispatched attempt runs in a disposable git worktree
+under a typed handoff packet (exact writable files, a validation command, a
+per-file baseline read from the worktree), with every mutation revision-checked;
+it returns a reviewable candidate ref (a commit) or a typed receipt naming the
+refusal — nothing merges, the caller's tree is never touched.
 
-*P0–P9 are complete; their summaries live in [Prior work](#prior-work), not
+*P0–P10 are complete; their summaries live in [Prior work](#prior-work), not
 here, so this section stays a true "what's happening now."*
 
 ## Concept budget
@@ -25,8 +28,9 @@ mind. Checked at the end of each phase; a term earns its place by naming
 something the design actually needs, not by being convenient shorthand.*
 
 Seed terms, to be defined in this repository's own words when the phase that
-needs each one lands: **patch set**, **shipped integration**, **variant**,
-**handoff packet**, **candidate ref**. Defined so far:
+needs each one lands: **patch set**, **shipped integration**, **variant**. (The
+seed terms **handoff packet** and **candidate ref** were defined by P10 and now
+appear below.) Defined so far:
 
 - **feasibility** (P3) — the engine's startup memory plan vs. available RAM,
   computed, with an actionable refusal (deficit, levers, re-check number).
@@ -87,6 +91,34 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
   writes the `tool_result` back, and records the host facts into the per-turn
   `TurnOutcome`. Without the flag the engine executes internally and the wire is
   observation-only.
+- **handoff packet** (P10) — the typed contract a dispatched attempt runs under:
+  `taskText`, the exact `writableFiles` (worktree-relative), the
+  `validationCommand` the parent will actually run, a per-file `FileBaseline`
+  (`sha256` + `lineEnding` + Unix `mode`) read from the worktree at dispatch time
+  rather than guessed, and turn/tool-call budgets. The worker gets
+  `read`/`write`/`edit` (+`list`/`search` as read aids) and no `bash`; every
+  mutation is revision-checked against `writableFiles`. It consumes the P9
+  host-authoritative facts — success is never inferred from prose.
+- **candidate ref** (P10) — the reviewable commit a dispatched attempt returns
+  when the turn ends without a revision-check violation and (when the packet's
+  `validationCommand` is set) the validation passes: the dispatcher commits the
+  worktree's diff to a throwaway branch and returns the SHA. The ref resolves via
+  `git rev-parse` after the worktree is removed (the commit object survives); the
+  parent reviews it. Nothing merges.
+- **receipt** (P10) — the typed refusal a dispatched attempt returns otherwise,
+  naming the reason: a mutation outside `writableFiles` (`.refusedTool`, first
+  offending path), a turn/tool-call budget exceeded (`.budgetExceeded`), the
+  validation command failing (`.validationFailed` with exit status + stdout
+  digest), or no mutations (`.noChanges`). The reason is machine-computed from the
+  P9 `TurnOutcome`, not inferred from the transcript.
+- **revision check** (P10) — the membership test a dispatched attempt runs on
+  every mutation: a `write`/`edit` whose workspace-relative path is not in the
+  packet's `writableFiles` is refused host-side (`ToolCallbackResponder.consent`
+  refuses the tool, does not execute, does not record it), so an out-of-set write
+  never lands in the worktree. Two checks by design: the host-side refusal is the
+  production confinement; the pure verdict's `.refusedTool` is the backstop (a
+  mutation that *is* in `allowedMutations` but outside `writableFiles` — a
+  symlink escape, or the integration test's scripted mutation).
 
 ## Phases
 
@@ -102,7 +134,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript and capture-grade turn/tool outcomes, tool cards, workspace grant, shell toggle, interruptible turns | complete (2026-08-22) |
 | P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | complete (2026-08-22) |
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | complete (2026-08-22) |
-| P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | planned |
+| P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | complete (2026-08-22) |
 | P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | planned |
 | P12 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; see the dependency below | planned |
 | P13 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
@@ -510,6 +542,35 @@ Completed phases move here when the roadmap outgrows the front page.
   invalid JSON the wire consumer refused; the `c21b831` amend closes it and adds
   `test_agent_emit_hello_caps_array_closes` (red-then-green). Spec:
   [`docs/superpowers/specs/2026-08-22-p9-tool-callback-wire-design.md`](docs/superpowers/specs/2026-08-22-p9-tool-callback-wire-design.md).
+
+- **P10 — Isolation (2026-08-22).** A dispatched attempt is isolated.
+  `SwiftStarKit` gains `HandoffPacket` (`taskText`, `writableFiles` exact and
+  worktree-relative, `validationCommand`, per-file `FileBaseline` baselines —
+  `sha256` + `lineEnding` + Unix `mode` read from the worktree, never guessed —
+  and turn/tool-call budgets), `DispatchOutcome` (`.candidate(ref:turnOutcome:)`
+  | `.receipt(Receipt)`; `Receipt` = `.refusedTool`/`.budgetExceeded`/
+  `.validationFailed(exit:digest:)`/`.noChanges`), and the pure
+  `WorktreeDispatch.verdict` — the `request → verdict` mapping (revision check →
+  budget → validation → `noChanges` → candidate) plus `relativize` (strip the
+  worktree prefix so the verdict compares worktree-relative forms against
+  `writableFiles`). `SwiftStarAppKit` gains `WorktreeDispatcher.dispatch` (creates
+  a disposable worktree on a throwaway branch, reads baselines, runs the
+  validation command parent-side, commits the diff, returns the ref; the worktree
+  + branch are removed in `defer`, the commit object survives so the ref
+  resolves). `SwiftStar` gains the dispatched-attempt entry in `AgentController` —
+  a fresh, ephemeral `ds4-agent` at `--workspace <worktree>` with shell off and
+  host-tools on, the P9 responder revision-checking each mutation against
+  `packet.writableFiles` (an out-of-set `write`/`edit` is refused host-side, not
+  executed, not recorded), the finished `TurnOutcome` relativized to the worktree
+  before the pure verdict — and a minimal Dispatch tab. The caller's tree is
+  never touched; nothing merges. Evidence floor met: the candidate ref is a real
+  commit that resolves via `git rev-parse` after the worktree is removed; a
+  changed file differs from its baseline; a refused tool / exceeded budget /
+  failed validation / no changes each yields a typed receipt. No live end-to-end
+  dispatch (the app target has no test target; the pure pieces the dispatch
+  routes through are tier-tested; a real-model dispatch is out of scope for the
+  tiered oracles). No new wire — the dispatch reuses P9's `--host-tools` spawn.
+  Spec: [`docs/superpowers/specs/2026-08-22-p10-isolation-design.md`](docs/superpowers/specs/2026-08-22-p10-isolation-design.md).
 
 ## Workflow
 
