@@ -36,6 +36,12 @@ final class AgentController {
     private(set) var isDispatching = false
     @ObservationIgnored private var dispatchTask: Task<Void, Never>?
     var settings: AgentSettings
+    /// P11 (D1): the pool scheduler state — enqueued workers, the running
+    /// worker, and receipts awaiting delivery back into the orchestrator.
+    private(set) var poolState = PoolState()
+    /// P11 (D6): the rolling digest — the objective-independent reduced form
+    /// of the session, maintained incrementally as host facts arrive.
+    private(set) var rollingDigest = RollingDigest()
 
     nonisolated(unsafe) private var process: Process?
     private var parser = AgentWireParser()
@@ -270,25 +276,45 @@ final class AgentController {
         case .text, .think, .tool:
             transcript.apply(event)
         case .toolRequest(let idx, let name, let params):
-            // P9: the host owns execution. Route the request through the
-            // responder (consent-enforced, condenses via ToolResultCondenser,
-            // records the host facts), write the `tool_result` line to the
-            // agent's stdin, and feed the host facts into the open
-            // TurnOutcomeBuilder. The engine blocks on the result line, so
-            // this is synchronous (the stdout drain awaits consumeWire per
-            // line; the engine emits one request then blocks).
-            let response = ToolCallbackResponder.respond(
-                idx: idx, name: name, params: params,
-                workspace: settings.workspace, shellAllowed: settings.shellAllowed,
-                execute: Self.executeHostTool)
-            if let pipe = process?.standardInput as? Pipe {
-                pipe.fileHandleForWriting.write(
-                    Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
+            if name == "dispatch" {
+                // P11 (D3/D5): dispatch is a host-control tool. Build the
+                // packet's prepared context from the model's objective + the
+                // rolling digest, enqueue it, and answer "dispatched as worker
+                // N" (the worker turn runs after this turn ends, D4).
+                if let packet = DispatchPacketBuilder.build(
+                    params: params, digest: rollingDigest, loaded: [:],
+                    implementer: settings.modelPath.lastPathComponent) {
+                    let workerId = WorkerId(poolState.nextId)
+                    poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
+                    writeToolResult(ToolCallbackResponse(
+                        idx: idx, ok: true, s: "dispatched as worker \(workerId.rawValue)"))
+                    outcomeBuilder?.recordHostVerdict(
+                        idx: idx, ok: true, mutations: [], exitStatus: nil,
+                        outputDigest: nil, validationRan: false)
+                    log("dispatch: enqueued worker \(workerId.rawValue)")
+                } else {
+                    writeToolResult(ToolCallbackResponse(
+                        idx: idx, ok: false,
+                        s: ToolResultCondenser.condense("refused: malformed dispatch")))
+                }
+            } else {
+                // P9: the host owns execution. Route the request through the
+                // responder (consent-enforced, condenses via ToolResultCondenser,
+                // records the host facts), write the `tool_result` line to the
+                // agent's stdin, and feed the host facts into the open
+                // TurnOutcomeBuilder. The engine blocks on the result line, so
+                // this is synchronous (the stdout drain awaits consumeWire per
+                // line; the engine emits one request then blocks).
+                let response = ToolCallbackResponder.respond(
+                    idx: idx, name: name, params: params,
+                    workspace: settings.workspace, shellAllowed: settings.shellAllowed,
+                    execute: Self.executeHostTool)
+                writeToolResult(response)
+                outcomeBuilder?.recordHostVerdict(
+                    idx: idx, ok: response.ok,
+                    mutations: response.mutations, exitStatus: response.exitStatus,
+                    outputDigest: response.outputDigest, validationRan: response.validationRan)
             }
-            outcomeBuilder?.recordHostVerdict(
-                idx: idx, ok: response.ok,
-                mutations: response.mutations, exitStatus: response.exitStatus,
-                outputDigest: response.outputDigest, validationRan: response.validationRan)
         case .queued, .ignored:
             break
         case .toolRequestRefused(let idx, let reason):
@@ -317,6 +343,15 @@ final class AgentController {
         let data = Data((s + "\n").utf8)
         try? logHandle.seekToEnd()
         try? logHandle.write(contentsOf: data)
+    }
+
+    /// Write one `tool_result` line to the engine's stdin (the single sink for
+    /// both the P9 responder path and the P11 dispatch path).
+    private func writeToolResult(_ response: ToolCallbackResponse) {
+        if let pipe = process?.standardInput as? Pipe {
+            pipe.fileHandleForWriting.write(
+                Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
+        }
     }
 
     /// P8: resolve the Superpowers skills dir — env `SUPERPOWERS_SKILLS_DIR`
