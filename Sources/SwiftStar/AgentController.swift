@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftStarKit
+import SwiftStarAppKit
 
 /// The agent child's lifecycle + turn state. Unlike the server's `Supervisor`
 /// state machine, the agent wire carries no explicit turn-end event: the
@@ -125,6 +126,19 @@ final class AgentController {
         // D12: the build identification is resolved once per spawn (the
         // submodule SHA — the same fact the capture provenance records).
         buildSHA = AgentController.submoduleSHA(settings.engineDir)
+
+        // P8: stage the Superpowers skills into the workspace (progressive
+        // disclosure, D2/D3) and pass the deterministic bootstrap index via
+        // -sys (D1/D4). A staging failure is non-fatal — the bootstrap still
+        // loads and names skills the agent cannot `read` (the confined `read`
+        // refuses a missing file, so no fabrication).
+        let skillsDir = AgentController.resolveSkillsDir()
+        do {
+            _ = try SkillStager.stage(skillsDir: skillsDir, into: settings.workspace)
+        } catch {
+            log("skill staging failed (non-fatal): \(error)")
+        }
+        settings.systemPrompt = SuperpowersBootstrap.build(skillsDir: skillsDir).indexPrompt
 
         let process = Process()
         process.executableURL = binary
@@ -258,6 +272,20 @@ final class AgentController {
         let data = Data((s + "\n").utf8)
         try? logHandle.seekToEnd()
         try? logHandle.write(contentsOf: data)
+    }
+
+    /// P8: resolve the Superpowers skills dir — env `SUPERPOWERS_SKILLS_DIR`
+    /// if set and non-empty, else the default
+    /// `~/.pi/agent/git/github.com/obra/superpowers/skills`. A missing dir is a
+    /// non-fatal degrade (staging throws; the bootstrap degrades to "No skills
+    /// available in this workspace."; D3).
+    private static func resolveSkillsDir() -> URL {
+        if let env = ProcessInfo.processInfo.environment["SUPERPOWERS_SKILLS_DIR"],
+           !env.isEmpty {
+            return URL(fileURLWithPath: env)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".pi/agent/git/github.com/obra/superpowers/skills")
     }
 
     /// The engine build identification (D12): the submodule SHA, resolved

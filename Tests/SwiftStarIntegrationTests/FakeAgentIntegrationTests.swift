@@ -5,13 +5,47 @@ import SwiftStarKit
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct FakeAgentIntegrationTests {
 
-    private func makeSettings(workspace: URL, shellAllowed: Bool = false) -> AgentSettings {
-        AgentSettings(
+    /// A deterministic skills dir (built per call) whose SKILL.md content is
+    /// fixed, so `SuperpowersBootstrap.build` renders the same index text
+    /// regardless of the temp path. Mirrors the app's bootstrap path (P8 D1):
+    /// only the input dir is a small fixture, the renderer is the real one.
+    private func fixtureSkillsDir() throws -> URL {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("swiftstar-fake-skills-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let skills: [(String, String)] = [
+            ("zebra", "Use when sorting animals"),
+            ("apple", "Use when craving fruit"),
+        ]
+        for (dir, desc) in skills {
+            let d = tmp.appendingPathComponent(dir)
+            try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+            let md = """
+            ---
+            name: \(dir)
+            description: \(desc)
+            ---
+
+            # \(dir)
+            """
+            try md.write(to: d.appendingPathComponent("SKILL.md"),
+                         atomically: true, encoding: .utf8)
+        }
+        return tmp
+    }
+
+    private func makeSettings(workspace: URL, shellAllowed: Bool = false) throws -> AgentSettings {
+        // P8 D1/D4: the app always passes the Superpowers bootstrap via -sys,
+        // built deterministically from the resolved skills dir. The fake's
+        // expected argv therefore carries -sys + that same index text.
+        let bootstrap = SuperpowersBootstrap.build(skillsDir: try fixtureSkillsDir())
+        return AgentSettings(
             engineDir: URL(fileURLWithPath: "/tmp/fake-engine"),
             modelPath: URL(fileURLWithPath: "/tmp/model.gguf"),
             contextSize: 32768,
             workspace: workspace,
-            shellAllowed: shellAllowed
+            shellAllowed: shellAllowed,
+            systemPrompt: bootstrap.indexPrompt
         )
     }
 
@@ -36,9 +70,25 @@ struct FakeAgentIntegrationTests {
         return out
     }
 
+    @Test func fakeArgvCarriesSysAndBootstrap() throws {
+        // P8 D1/D4: the app always passes the Superpowers bootstrap via -sys,
+        // so the fake's expected argv must carry it. The -sys value is the
+        // deterministic index built by `SuperpowersBootstrap` from the
+        // resolved skills dir — the same text the app would pass.
+        let ws = URL(fileURLWithPath: "/tmp/swiftstar-p7-ws")
+        let settings = try makeSettings(workspace: ws, shellAllowed: true)
+        let argv = AgentCommand.argv(settings: settings)
+        let sysIndex = argv.firstIndex(of: "-sys")
+        #expect(sysIndex != nil, "argv must carry -sys (the app always passes the bootstrap)")
+        guard let i = sysIndex else { return }
+        let bootstrap = SuperpowersBootstrap.build(skillsDir: try fixtureSkillsDir())
+        #expect(argv[i + 1] == bootstrap.indexPrompt,
+                "the -sys value is the deterministic SuperpowersBootstrap index")
+    }
+
     @Test func fakeReplaysCaptureEventsEquivalently() throws {
         let ws = URL(fileURLWithPath: "/tmp/swiftstar-p7-ws")
-        let settings = makeSettings(workspace: ws, shellAllowed: true)
+        let settings = try makeSettings(workspace: ws, shellAllowed: true)
         let (binary, argv) = try buildFake(fixture: "golden-tools", settings: settings)
 
         let fake = try FakeAgentHarness.spawnAgent(binary, arguments: argv, env: ["FAKE_SPEED": "0"])
@@ -55,7 +105,7 @@ struct FakeAgentIntegrationTests {
 
     @Test func fakeRefusesWrongArgv() throws {
         let ws = URL(fileURLWithPath: "/tmp/swiftstar-p7-ws")
-        let settings = makeSettings(workspace: ws, shellAllowed: false)
+        let settings = try makeSettings(workspace: ws, shellAllowed: false)
         let (binary, _) = try buildFake(fixture: "golden-tools", settings: settings)
 
         // Wrong argv: workspace differs from what the fake was generated with.
@@ -70,7 +120,7 @@ struct FakeAgentIntegrationTests {
 
     @Test func fakeHonorsETXAsInterrupt() throws {
         let ws = URL(fileURLWithPath: "/tmp/swiftstar-p7-ws")
-        let settings = makeSettings(workspace: ws, shellAllowed: true)
+        let settings = try makeSettings(workspace: ws, shellAllowed: true)
         let (binary, argv) = try buildFake(fixture: "golden-tools", settings: settings)
 
         let fake = try FakeAgentHarness.spawnAgent(binary, arguments: argv,
