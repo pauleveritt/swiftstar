@@ -73,3 +73,15 @@ as a sanity check. `deepseek/deepseek-chat` returned:
 The grader parses into `GraderVerdict.parse(...) == .good`. Wiring this same
 prompt over the harness's *own* output (via the code-dump the harness will write
 before `discardFinal`) is the remaining grader step.
+
+## Next (overnight kick-off)
+
+1. **Wire the DeepSeek grader end-to-end** — dump the final worktree's code +
+   rubric (spec + `mission.md` + `tech-stack.md`) before `discardFinal`, call
+   `deepseek/deepseek-chat`, parse `GraderVerdict` (parser + reference demo
+   already exist; only the code-dump + live call are missing).
+2. **Re-run easy + hard specs** (n=1) with the vetted pytest self-test +
+   repeat-refusal hint + 32k ctx (commit `9481b86`), and refresh this record
+   with the corrected bounded telemetry.
+3. **Investigate the ~393 generatedTokens cap, then n=4** (batching) for the
+   statistical claim once the grader is green.
