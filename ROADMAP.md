@@ -387,6 +387,19 @@ Deferred, each with the condition that reopens it.
   seconds, versus minutes of re-prefill) with a small resident working set.
   *Reopens after P11's pool exists and a second concurrent project is
   actually wanted.* Source: same note.
+- **Laguna XS 2.1 at 16 GB — feasible, unconfirmed** — the SSD-streaming
+  footprint work is done and the numbers clear 16 GB comfortably: 6.53 GiB
+  planned / 6.46 GiB task footprint ("fits easily under 10 GB including
+  context"), from the uniform RoutedQ3_K artifact plus `--prefill-chunk`. What
+  remains is confirmation, not new engineering: the 16 GB hardware acceptance
+  never ran (the numbers come from a 128 GB dev machine, whose OS page cache
+  hides SSD-miss throughput), so the committed target stays 32 GB until the
+  `mini-notes.md` §7 checklist passes on real 16 GB hardware. *Reopens with P12
+  (Laguna XS is a P12 variant) or when a real 16 GB machine is available.*
+  Source: `~/projects/ds4/.claude/worktrees/laguna-xs2.1` — `LAGUNA-XS.md`,
+  `docs/superpowers/LAGUNA-XS21.md` §6, `docs/superpowers/plans/mini-notes.md`
+  §7, and
+  `docs/superpowers/research/laguna-xs21-p26-p27-hotlist-acceptance.md`.
 - **An engine-side `--null-model` mode** — the real emitter, instance lock,
   signal handling, and stdout code running against fake weights, so the
   integration tier exercises the actual code instead of our beliefs about it.

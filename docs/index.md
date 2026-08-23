@@ -19,5 +19,6 @@ For now, the durable documents are in the repository root:
 :hidden:
 
 sdd
+laptop-ai
 harvest/index
 ```
