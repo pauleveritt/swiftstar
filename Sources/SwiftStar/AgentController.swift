@@ -44,13 +44,18 @@ final class AgentController {
     private(set) var rollingDigest = RollingDigest()
 
     nonisolated(unsafe) private var process: Process?
-    private var parser = AgentWireParser()
+    private var parser = PoolWireParser()
     private var stdoutTask: Task<Void, Never>?
     private var stderrTask: Task<Void, Never>?
     private var startupTimeoutTask: Task<Void, Never>?
     private var generation = 0
     // D12 turn-outcome state.
     private var outcomeBuilder: TurnOutcomeBuilder?
+    // P11 (D4) worker-turn state: the in-flight worker's packet (its
+    // writableFiles confine the worker's mutations), outcome builder, and id.
+    private var activeWorkerPacket: HandoffPacket?
+    private var workerOutcomeBuilder: TurnOutcomeBuilder?
+    private var activeWorkerId: WorkerId?
     private var sentInterrupt = false
     private var buildSHA = "unknown"
     nonisolated(unsafe) private let logHandle: FileHandle?
@@ -135,7 +140,7 @@ final class AgentController {
         // .starting forever). The transcript is deliberately kept (history,
         // like EngineController); stderrTail is reset so a failure message
         // never pairs a new session with a stale tail.
-        parser = AgentWireParser()
+        parser = PoolWireParser()
         stderrTail = []
         outcomeBuilder = nil
         sentInterrupt = false
@@ -237,7 +242,16 @@ final class AgentController {
 
     private func consumeWire(_ line: String, generation: Int) {
         guard generation == self.generation else { return }
-        guard let event = parser.feed(line) else { return }
+        guard let poolEvent = parser.feed(line) else { return }
+        let event = poolEvent.event
+
+        // P11 (D1/D4): worker-tagged events belong to the in-flight worker
+        // turn, not the orchestrator's transcript/outcome.
+        if poolEvent.worker != .orchestrator {
+            handleWorkerEvent(worker: poolEvent.worker, event: event)
+            return
+        }
+
         // Every event feeds the outcome builder (it ignores what it does not
         // need); the record spans the whole turn, not just tool events.
         outcomeBuilder?.apply(event)
@@ -273,6 +287,9 @@ final class AgentController {
                 lastTurnOutcome = outcome
                 log("turn outcome: \(outcome)")
             }
+            // P11 (D4): the orchestrator's turn ended — run any workers it
+            // dispatched.
+            drainQueuedWorkers()
         case .text, .think, .tool:
             transcript.apply(event)
         case .toolRequest(let idx, let name, let params):
@@ -351,6 +368,114 @@ final class AgentController {
         if let pipe = process?.standardInput as? Pipe {
             pipe.fileHandleForWriting.write(
                 Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
+        }
+    }
+
+    // MARK: - P11 worker-turn loop (D4)
+
+    /// Start the next queued worker's turn in the pooled engine (D4): send the
+    /// `PoolPrompt` for worker N, open its outcome builder, and mark it running.
+    private func drainQueuedWorkers() {
+        guard let (worker, packet) = PoolScheduler.nextWorker(poolState) else {
+            injectPendingReceipts()
+            return
+        }
+        poolState = PoolScheduler.apply(poolState, .workerStarted(worker))
+        activeWorkerId = worker
+        activeWorkerPacket = packet
+        workerOutcomeBuilder = TurnOutcomeBuilder(
+            model: settings.modelPath.lastPathComponent,
+            build: buildSHA,
+            sampler: "engine-defaults",
+            task: packet.taskText)
+        if let pipe = process?.standardInput as? Pipe {
+            pipe.fileHandleForWriting.write(
+                Data((PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n").utf8))
+        }
+        log("worker \(worker.rawValue): turn started")
+    }
+
+    /// Route one worker-tagged event through the worker's turn (D4): answer its
+    /// tool requests (revision-checked against its packet's writableFiles), and
+    /// finish the turn on its `ready`.
+    private func handleWorkerEvent(worker: WorkerId, event: AgentEvent) {
+        workerOutcomeBuilder?.apply(event)
+        switch event {
+        case .toolRequest(let idx, let name, let params):
+            let response = ToolCallbackResponder.respond(
+                idx: idx, name: name, params: params,
+                workspace: settings.workspace, shellAllowed: false,
+                writableFiles: activeWorkerPacket?.writableFiles,
+                execute: Self.executeHostTool)
+            writeToolResult(response)
+            workerOutcomeBuilder?.recordHostVerdict(
+                idx: idx, ok: response.ok, mutations: response.mutations,
+                exitStatus: response.exitStatus, outputDigest: response.outputDigest,
+                validationRan: response.validationRan)
+        case .toolRequestRefused(let idx, let reason):
+            writeToolResult(ToolCallbackResponse(idx: idx, ok: false,
+                s: ToolResultCondenser.condense(reason)))
+        case .ready:
+            if let builder = workerOutcomeBuilder {
+                let outcome = builder.finish()
+                workerOutcomeBuilder = nil
+                finishWorkerTurn(worker: worker, outcome: outcome)
+            }
+        default:
+            break
+        }
+    }
+
+    /// Fold a finished worker turn into a `DispatchReceipt`, record it in the
+    /// rolling digest (D9) and the scheduler, and run the next worker (or inject
+    /// the receipts back into the orchestrator when the queue empties, D4). The
+    /// candidate-vs-receipt verdict is the pure `WorktreeDispatch.verdict`; the
+    /// candidate *ref* (the worktree commit SHA) is produced by the P10
+    /// `WorktreeDispatcher`, which the pooled path will reuse for the commit.
+    private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome) {
+        let packet = activeWorkerPacket ?? HandoffPacket(
+            taskText: "", writableFiles: [], validationCommand: nil,
+            baselines: [:], turnBudget: 0, toolCallBudget: 0)
+        let receipt: DispatchReceipt
+        switch WorktreeDispatch.verdict(
+            packet: packet, allowedMutations: outcome.mutations,
+            turnOutcome: outcome, validation: nil) {
+        case .candidate:
+            receipt = DispatchReceipt(worker: worker, ref: nil, reason: nil,
+                summary: "candidate: \(outcome.mutations.count) mutation(s), \(outcome.generatedTokens) tokens")
+        case .receipt(let reason):
+            receipt = DispatchReceipt(worker: worker, ref: nil,
+                reason: Self.receiptReason(reason), summary: Self.receiptReason(reason))
+        }
+        poolState = PoolScheduler.apply(poolState, .workerFinished(worker, receipt))
+        rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
+        activeWorkerId = nil
+        activeWorkerPacket = nil
+        log("worker \(worker.rawValue): \(receipt.summary)")
+        drainQueuedWorkers()
+    }
+
+    /// Inject any undelivered receipts back into the orchestrator as its next
+    /// turn's prompt (D4): the orchestrator sees only the bounded receipts, not
+    /// the worker transcripts.
+    private func injectPendingReceipts() {
+        let receipts = poolState.pendingDelivery.values.sorted { $0.worker < $1.worker }
+        guard !receipts.isEmpty else { return }
+        let workers = Array(poolState.pendingDelivery.keys)
+        for worker in workers {
+            poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+        }
+        send(receipts.map { $0.injectionPrompt() }.joined(separator: "\n"))
+    }
+
+    /// A stable string for a `Receipt` (D10: the reason folds back into the
+    /// orchestrator's context as prose, not a debug dump).
+    private static func receiptReason(_ receipt: Receipt) -> String {
+        switch receipt {
+        case .refusedTool(let path): return "refusedTool: \(path)"
+        case .budgetExceeded: return "budgetExceeded"
+        case .validationFailed(let exit, _): return "validationFailed (exit \(exit))"
+        case .noChanges: return "noChanges"
         }
     }
 
