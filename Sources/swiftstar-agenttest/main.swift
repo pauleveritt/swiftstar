@@ -80,7 +80,7 @@ git(repoURL, ["commit", "-q", "-m", "seed"])
 
 let settings = AgentSettings(
     engineDir: engineDir, modelPath: URL(fileURLWithPath: gguf),
-    contextSize: 16384, workspace: repoURL, shellAllowed: false)
+    contextSize: 32768, workspace: repoURL, shellAllowed: false)
 let orch = try PoolOrchestrator(settings: settings)
 defer { orch.stop() }
 let txn = WorktreeTransaction(repo: repoURL)
@@ -102,17 +102,24 @@ let runStart = Date()
 for (i, phaseText) in phases.enumerated() {
     // The prepared context (D4): the phase spec + the shared rubric + the writable
     // scope + a bounding directive, so the worker writes directly instead of
-    // exploring/thrashing (the slm-struggles lessons).
+    // exploring/thrashing (the slm-struggles lessons). The two vetted commands
+    // are the worker's only feedback loop.
+    let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
+    let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
     let writableNote = "You may write or edit only these files:\n"
         + writableFiles.map { "- \($0)" }.joined(separator: "\n")
-        + "\n\nWork in one concise pass: write each file exactly once, do not explore\n"
-        + "the workspace or re-read files you just wrote, and run the validation\n"
-        + "command at most once. The acceptance suite checks user-visible behavior,\n"
+        + "\n\nYou may run exactly these two commands (and no other shell command):\n"
+        + "- \(vettedImport)   (does app.py import cleanly?)\n"
+        + "- \(vettedPytest)   (do your own tests pass?)\n"
+        + "\nWork in one concise pass: write each file exactly once, do not explore\n"
+        + "the workspace or re-read files you just wrote, and run those commands at\n"
+        + "most once each. The acceptance suite checks user-visible behavior,\n"
         + "not file layout — write the files named above directly."
     let packet = HandoffPacket(
         taskText: phaseText + "\n\n" + writableNote + "\n\n" + sharedContext,
         writableFiles: writableFiles,
-        validationCommand: "uv run --project \(pyProject) python -c 'import app'",
+        validationCommand: vettedImport,
+        selfTestCommand: vettedPytest,
         baselines: [:], turnBudget: 100_000, toolCallBudget: 30)
     print("[agenttest] phase \(i + 1)/\(phases.count) …")
     let wt = try txn.preparePhase(packet: packet)

@@ -15,8 +15,9 @@ public final class PoolOrchestrator {
     /// Per-phase read cache (path -> SHA-256): an unchanged re-read answers
     /// "unchanged" instead of re-paying the context cost (the don't-re-read lever).
     private var readCache: [String: String] = [:]
-    /// The packet's validation command — the only `bash` the worker may run.
-    private var vettedBash: String?
+    /// The packet's vetted commands — the only `bash` the worker may run (the
+    /// parent's validation command and, in the agent test, the worker's self-test).
+    private var vettedCommands: [String] = []
 
     public init(settings: AgentSettings) throws {
         self.model = settings.modelPath.lastPathComponent
@@ -59,8 +60,11 @@ public final class PoolOrchestrator {
         var builder = TurnOutcomeBuilder(
             model: model, build: "pooled", sampler: "engine-defaults", task: packet.taskText)
         var toolCallCount = 0
+        var lastRefusedSignature: String?
+        var refusedStreak = 0
         readCache.removeAll()
-        vettedBash = packet.validationCommand
+        vettedCommands = [packet.validationCommand, packet.selfTestCommand]
+            .compactMap { $0 }.filter { !$0.isEmpty }
         let prompt = PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n"
         stdin.write(Data(prompt.utf8))
 
@@ -106,11 +110,34 @@ public final class PoolOrchestrator {
                         stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
                         continue
                     }
-                    let response = ToolCallbackResponder.respond(
+                    var response = ToolCallbackResponder.respond(
                         idx: idx, name: name, params: params,
                         workspace: worktree, shellAllowed: true,  // bash is vetted in the executor
                         writableFiles: packet.writableFiles,
                         execute: executeHostTool)
+                    // Repeat-refusal guard: a worker that retries an identical
+                    // refused call gets a hint after the third repeat so it
+                    // breaks the loop instead of burning the tool budget.
+                    if !response.ok {
+                        let signature = name + "|"
+                            + params.map { "\($0.name)=\($0.value)" }.joined(separator: "\u{1e}")
+                        if signature == lastRefusedSignature {
+                            refusedStreak += 1
+                            if refusedStreak >= 3 {
+                                let hint = "(hint: you have repeated this identical request \(refusedStreak) times and it was refused each time; it will not be allowed. Run one of the vetted commands exactly as given, or edit the code instead.)"
+                                response = ToolCallbackResponse(
+                                    idx: response.idx, ok: false, s: response.s + " " + hint,
+                                    mutations: response.mutations, exitStatus: response.exitStatus,
+                                    outputDigest: response.outputDigest, validationRan: response.validationRan)
+                            }
+                        } else {
+                            lastRefusedSignature = signature
+                            refusedStreak = 1
+                        }
+                    } else {
+                        lastRefusedSignature = nil
+                        refusedStreak = 0
+                    }
                     stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
                     builder.recordHostVerdict(
                         idx: idx, ok: response.ok, mutations: response.mutations,
@@ -206,10 +233,10 @@ public final class PoolOrchestrator {
             }
         case "bash":
             let command = request.params.first(where: { $0.name == "command" })?.value ?? ""
-            guard let vetted = vettedBash, !vetted.isEmpty,
-                  command == vetted || command.hasPrefix(vetted) else {
+            let allowed = vettedCommands.contains { command == $0 || command.hasPrefix($0) }
+            guard allowed else {
                 return ToolExecutionResult(ok: false,
-                    text: "error: bash is limited to the validation command")
+                    text: "error: bash is limited to the vetted validation/self-test commands")
             }
             let r: SubprocessRunner.Result
             do { r = try SubprocessRunner.run(command, in: request.workspace) }

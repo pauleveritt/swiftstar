@@ -56,6 +56,25 @@ struct HandoffPacketTests {
         let decoded = try JSONDecoder().decode(HandoffPacket.self, from: data)
         #expect(decoded == packet)
         #expect(decoded.validationCommand == nil)
+        #expect(decoded.selfTestCommand == nil)
+    }
+
+    @Test func handoffPacketCarriesSelfTestCommand() throws {
+        // P11 agenttest: the worker's feedback loop gets a second vetted command
+        // (a pytest run against its own tests) alongside the parent's validation.
+        let packet = HandoffPacket(
+            taskText: "t",
+            writableFiles: ["app.py"],
+            validationCommand: "uv run python -c 'import app'",
+            selfTestCommand: "uv run python -m pytest tests/test_app.py -q",
+            baselines: [:],
+            turnBudget: 1000,
+            toolCallBudget: 30
+        )
+        let data = try JSONEncoder().encode(packet)
+        let decoded = try JSONDecoder().decode(HandoffPacket.self, from: data)
+        #expect(decoded == packet)
+        #expect(decoded.selfTestCommand == "uv run python -m pytest tests/test_app.py -q")
     }
 
     @Test func modeRoundTripsThroughOctalLiteral() throws {

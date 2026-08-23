@@ -29,23 +29,28 @@ public struct FileBaseline: Codable, Equatable, Sendable {
 
 /// The typed handoff contract (D1): the task text, the exact writable files
 /// (relative to the worktree root), the validation command the parent will
-/// actually run, a per-file baseline read from the worktree, and the turn and
-/// tool-call budgets. The worker gets `read`/`write`/`edit` (no `bash`) under
-/// these budgets; every mutation is revision-checked against `writableFiles`.
+/// actually run, an optional self-test command the worker may also run (P11
+/// agenttest: the worker's feedback loop — a pytest run against its own tests),
+/// a per-file baseline read from the worktree, and the turn and tool-call
+/// budgets. The worker gets `read`/`write`/`edit` (no `bash`) under these
+/// budgets; every mutation is revision-checked against `writableFiles`.
 /// `Codable` so the parent can persist and replay a dispatch.
 public struct HandoffPacket: Codable, Equatable, Sendable {
     public let taskText: String
     public let writableFiles: [String]
     public let validationCommand: String?
+    public let selfTestCommand: String?
     public var baselines: [String: FileBaseline]
     public let turnBudget: Int
     public let toolCallBudget: Int
 
     public init(taskText: String, writableFiles: [String], validationCommand: String?,
+                selfTestCommand: String? = nil,
                 baselines: [String: FileBaseline], turnBudget: Int, toolCallBudget: Int) {
         self.taskText = taskText
         self.writableFiles = writableFiles
         self.validationCommand = validationCommand
+        self.selfTestCommand = selfTestCommand
         self.baselines = baselines
         self.turnBudget = turnBudget
         self.toolCallBudget = toolCallBudget
