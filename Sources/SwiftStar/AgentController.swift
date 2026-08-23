@@ -3,8 +3,9 @@ import Observation
 import SwiftStarKit
 
 /// The agent child's lifecycle + turn state. Unlike the server's `Supervisor`
-/// state machine, the agent wire carries no explicit turn-end event: turn end
-/// is inferred from `status.state → idle` (D6).
+/// state machine, the agent wire carries no explicit turn-end event: the
+/// turn-end `ready` is the single gate (D6) — `status.state → idle` is a
+/// precursor, not the gate (see consumeWire).
 @MainActor
 @Observable
 final class AgentController {
@@ -213,14 +214,22 @@ final class AgentController {
         switch event {
         case .hello:
             if state == .starting { state = .ready }
-        case .status(let s):
-            // D6: turn end is inferred from the idle state transition (state
-            // changes bypass the 200ms status throttle, so this is reliable).
-            if state == .generating && s.state == "idle" {
-                state = .ready
-            }
+        case .status(_):
+            // D6: the status line carries the worker's state, but it is NOT
+            // the turn-end gate — the turn-end `ready` is (see `.ready`
+            // below). Flipping state → .ready here on `state == "idle"`
+            // raced that ready: the stdout drain awaits consumeWire per
+            // line (separate main-actor hops), so between the idle status
+            // and the turn-end ready a send() could overwrite the prior
+            // turn's outcomeBuilder before the ready finished it — the
+            // record was lost and the delayed ready misattributed. The wire
+            // guarantees ready follows idle (json-events.md), and the
+            // interrupt path emits ready too, so gating on ready alone is
+            // safe. The status event still feeds the outcome builder above.
+            break
         case .ready:
             if state == .starting { state = .ready }
+            else if state == .generating { state = .ready }
             // D12: a turn-end ready finishes the record. The builder is nil
             // at startup, so a startup ready is a no-op; a turn-end ready
             // (after send() opened a builder) finishes unconditionally —

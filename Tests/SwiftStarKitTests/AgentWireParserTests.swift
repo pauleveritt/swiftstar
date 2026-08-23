@@ -121,7 +121,7 @@ struct AgentWireParserTests {
         let events = feedAll(&p, text)
         #expect(events.first == .hello(version: 1, capabilities: ["status", "ready", "text", "think", "tool", "queued", "ts"]))
         #expect(events.allSatisfy { if case .refused = $0 { return false } else { return true } })
-        // 43-line text-only capture: 1 hello, 3 ready, 19 status, no tool events.
+        // 45-line text-only capture: 1 hello, 3 ready, 20 status, no tool events.
         #expect(events.filter { if case .tool = $0 { return true } else { return false } }.isEmpty)
     }
 
