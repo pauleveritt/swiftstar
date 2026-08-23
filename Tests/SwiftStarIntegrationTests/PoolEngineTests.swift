@@ -2,6 +2,8 @@ import Foundation
 import Testing
 import SwiftStarKit
 
+@testable import SwiftStarAppKit
+
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct PoolEngineTests {
 
@@ -42,5 +44,18 @@ struct PoolEngineTests {
         #expect(hasDispatch)
         let workerEvents = events.filter { $0.worker == WorkerId(1) }
         #expect(!workerEvents.isEmpty)
+    }
+
+    @Test func kvReaderSkipsThe48ByteHeader() throws {
+        // A synthetic .kv: 48 header bytes, then rendered UTF-8 text.
+        var bytes = Data(repeating: 0x41, count: 48)   // header (garbage, ignored)
+        let body = Data("hello conversation".utf8)
+        bytes.append(body)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kv-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("session.kv")
+        try bytes.write(to: url)
+        let text = try PoolEngine.readKVText(url)
+        #expect(text == "hello conversation")
     }
 }
