@@ -26,7 +26,7 @@ struct ContextAssemblyTests {
         let prompt = ContextAssembly.adaptationPrompt(
             objective: "o", digest: RollingDigest(), loaded: ["f": "x"], implementer: "mellum")
         #expect(prompt.contains("mellum"))
-        #expect(prompt.contains("split into smaller chunks"))
+        #expect(prompt.contains("split the task into smaller"))
     }
     @Test func assembleWithoutAdaptationStillCarriesObjective() {
         let task = ContextAssembly.assemble(objective: "o", digest: RollingDigest(), loaded: [:], adaptation: "")
