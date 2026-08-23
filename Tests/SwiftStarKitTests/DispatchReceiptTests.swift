@@ -12,4 +12,11 @@ struct DispatchReceiptTests {
         #expect(r.injectionPrompt().contains("refused"))
         #expect(r.injectionPrompt().contains("budgetExceeded"))
     }
+    @Test func candidateWithoutRefIsNotRefused() {
+        // A candidate whose worktree commit is pending (ref nil) must NOT be
+        // reported as a refusal.
+        let r = DispatchReceipt(worker: WorkerId(2), ref: nil, reason: nil, summary: "3 mutations")
+        #expect(!r.injectionPrompt().contains("refused"))
+        #expect(r.injectionPrompt().contains("candidate"))
+    }
 }

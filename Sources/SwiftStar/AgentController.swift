@@ -252,6 +252,10 @@ final class AgentController {
             return
         }
 
+        // P11 (D6): feed the rolling digest with every wire event (tool-call
+        // names) so the packet-maker's Layer 1 input is not empty.
+        rollingDigest = RollingDigestReducer.apply(rollingDigest, event: poolEvent)
+
         // Every event feeds the outcome builder (it ignores what it does not
         // need); the record spans the whole turn, not just tool events.
         outcomeBuilder?.apply(event)
@@ -301,14 +305,19 @@ final class AgentController {
                 if let packet = DispatchPacketBuilder.build(
                     params: params, digest: rollingDigest, loaded: [:],
                     implementer: settings.modelPath.lastPathComponent) {
-                    let workerId = WorkerId(poolState.nextId)
-                    poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
-                    writeToolResult(ToolCallbackResponse(
-                        idx: idx, ok: true, s: "dispatched as worker \(workerId.rawValue)"))
-                    outcomeBuilder?.recordHostVerdict(
-                        idx: idx, ok: true, mutations: [], exitStatus: nil,
-                        outputDigest: nil, validationRan: false)
-                    log("dispatch: enqueued worker \(workerId.rawValue)")
+                    if let workerId = PoolScheduler.availableWorker(poolState) {
+                        poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
+                        writeToolResult(ToolCallbackResponse(
+                            idx: idx, ok: true, s: "dispatched as worker \(workerId.rawValue)"))
+                        outcomeBuilder?.recordHostVerdict(
+                            idx: idx, ok: true, mutations: [], exitStatus: nil,
+                            outputDigest: nil, validationRan: false)
+                        log("dispatch: enqueued worker \(workerId.rawValue)")
+                    } else {
+                        writeToolResult(ToolCallbackResponse(
+                            idx: idx, ok: false,
+                            s: ToolResultCondenser.condense("refused: subagent pool is full")))
+                    }
                 } else {
                     writeToolResult(ToolCallbackResponse(
                         idx: idx, ok: false,
@@ -331,6 +340,9 @@ final class AgentController {
                     idx: idx, ok: response.ok,
                     mutations: response.mutations, exitStatus: response.exitStatus,
                     outputDigest: response.outputDigest, validationRan: response.validationRan)
+                rollingDigest = RollingDigestReducer.recordHostVerdict(
+                    rollingDigest, mutations: response.mutations,
+                    exitStatus: response.exitStatus, validationRan: response.validationRan)
             }
         case .queued, .ignored:
             break
@@ -412,6 +424,9 @@ final class AgentController {
                 idx: idx, ok: response.ok, mutations: response.mutations,
                 exitStatus: response.exitStatus, outputDigest: response.outputDigest,
                 validationRan: response.validationRan)
+            rollingDigest = RollingDigestReducer.recordHostVerdict(
+                rollingDigest, mutations: response.mutations,
+                exitStatus: response.exitStatus, validationRan: response.validationRan)
         case .toolRequestRefused(let idx, let reason):
             writeToolResult(ToolCallbackResponse(idx: idx, ok: false,
                 s: ToolResultCondenser.condense(reason)))
@@ -461,11 +476,14 @@ final class AgentController {
     private func injectPendingReceipts() {
         let receipts = poolState.pendingDelivery.values.sorted { $0.worker < $1.worker }
         guard !receipts.isEmpty else { return }
-        let workers = Array(poolState.pendingDelivery.keys)
-        for worker in workers {
-            poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+        let text = receipts.map { $0.injectionPrompt() }.joined(separator: "\n")
+        // Send first, clear only on success — at-least-once delivery (a dropped
+        // send must not silently lose the receipts).
+        if send(text) {
+            for worker in Array(poolState.pendingDelivery.keys) {
+                poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+            }
         }
-        send(receipts.map { $0.injectionPrompt() }.joined(separator: "\n"))
     }
 
     /// A stable string for a `Receipt` (D10: the reason folds back into the
@@ -697,10 +715,11 @@ final class AgentController {
         return results
     }
 
-    func send(_ prompt: String) {
+    @discardableResult
+    func send(_ prompt: String) -> Bool {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canSend, !trimmed.isEmpty, let process,
-              let pipe = process.standardInput as? Pipe else { return }
+              let pipe = process.standardInput as? Pipe else { return false }
         transcript.appendSystem("> \(trimmed)")
         state = .generating
         sentInterrupt = false
@@ -714,6 +733,7 @@ final class AgentController {
             task: trimmed
         )
         pipe.fileHandleForWriting.write(Data((trimmed + "\n").utf8))
+        return true
     }
 
     /// D5: interrupt = write one ETX byte (0x03) to the child's stdin. The

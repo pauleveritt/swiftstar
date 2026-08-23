@@ -61,4 +61,19 @@ struct PoolSchedulerTests {
         s = PoolScheduler.apply(s, .receiptInjected(w.0))
         #expect(s.pendingDelivery.isEmpty)
     }
+    @Test func workerIdsAreBoundedAndReused() {
+        var s = PoolState(workerCapacity: 3)
+        #expect(PoolScheduler.availableWorker(s) == WorkerId(1))
+        s = PoolScheduler.apply(s, .enqueue(packet: packet("a")))
+        #expect(PoolScheduler.availableWorker(s) == WorkerId(2))
+        s = PoolScheduler.apply(s, .enqueue(packet: packet("b")))
+        s = PoolScheduler.apply(s, .enqueue(packet: packet("c")))
+        #expect(PoolScheduler.availableWorker(s) == nil)   // pool full
+        // Finish worker 1; its id returns to the free list.
+        let w1 = PoolScheduler.nextWorker(s)!
+        #expect(w1.0 == WorkerId(1))
+        s = PoolScheduler.apply(s, .workerStarted(w1.0))
+        s = PoolScheduler.apply(s, .workerFinished(w1.0, DispatchReceipt(worker: w1.0, ref: "r", reason: nil, summary: "d")))
+        #expect(PoolScheduler.availableWorker(s) == WorkerId(1))  // reused, never grows past 3
+    }
 }

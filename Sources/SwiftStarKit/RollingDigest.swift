@@ -55,15 +55,15 @@ public enum RollingDigestReducer {
         return d
     }
 
-    /// Fold a worker's receipt into the ledger (D9): the ref or the refusal
-    /// reason. This is the pool state that survives the orchestrator's
-    /// compaction.
+    /// Fold a worker's receipt into the ledger (D9): the refusal reason, or the
+    /// candidate ref (which may still be pending the worktree commit). This is
+    /// the pool state that survives the orchestrator's compaction.
     public static func record(_ digest: RollingDigest, receipt: DispatchReceipt) -> RollingDigest {
         var d = digest
-        if let ref = receipt.ref {
-            d.refs[receipt.worker] = ref
-        } else if let reason = receipt.reason {
+        if let reason = receipt.reason {
             d.receipts[receipt.worker] = reason
+        } else {
+            d.refs[receipt.worker] = receipt.ref ?? "(ref pending)"
         }
         return d
     }

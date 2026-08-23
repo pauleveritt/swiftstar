@@ -18,6 +18,12 @@ struct RollingDigestTests {
         #expect(d.refs[WorkerId(1)] == "ref1")
         #expect(d.summary().contains("ref1"))
     }
+    @Test func recordCandidateWithoutRefIsNotDropped() {
+        var d = RollingDigest()
+        d = RollingDigestReducer.record(d, receipt: DispatchReceipt(worker: WorkerId(1), ref: nil, reason: nil, summary: "3 mutations"))
+        #expect(d.refs[WorkerId(1)] != nil)   // a candidate is recorded, not dropped
+        #expect(d.receipts.isEmpty)
+    }
     @Test func recordHostVerdictAccumulatesMutationsAndExit() {
         var d = RollingDigest()
         d = RollingDigestReducer.recordHostVerdict(d, mutations: ["a.swift"], exitStatus: 0, validationRan: true)

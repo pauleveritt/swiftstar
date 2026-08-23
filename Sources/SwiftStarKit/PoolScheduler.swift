@@ -8,8 +8,14 @@ public struct PoolState: Equatable, Sendable {
     public var running: WorkerId?
     public var completed: [WorkerId: DispatchReceipt] = [:]
     public var pendingDelivery: [WorkerId: DispatchReceipt] = [:]
-    public var nextId: Int = 1
-    public init() {}
+    /// The free worker-session ids (`1...workerCapacity`), in ascending order.
+    /// The engine hosts a FIXED number of worker sessions (N-1); ids must be
+    /// reused, never grown past that bound — an unbounded id would overflow the
+    /// engine's pool and be silently clamped to the orchestrator.
+    public var freeIds: [WorkerId] = []
+    public init(workerCapacity: Int = 64) {
+        self.freeIds = (1...max(workerCapacity, 1)).map { WorkerId($0) }
+    }
 }
 
 /// A command that transitions `PoolState` (D1). Pure; `PoolScheduler.apply` is
@@ -29,13 +35,22 @@ public enum PoolCommand: Equatable, Sendable {
 /// generates at a time; `nextWorker` returns the next pending worker only when
 /// the engine is free.
 public enum PoolScheduler {
+    /// The next free worker id (or nil when the pool is full). The caller
+    /// peeks here before `.enqueue`, so it can answer "pool full" instead of
+    /// overflowing the engine's fixed worker set.
+    public static func availableWorker(_ state: PoolState) -> WorkerId? {
+        state.freeIds.first
+    }
+
     public static func apply(_ state: PoolState, _ command: PoolCommand) -> PoolState {
         var s = state
         switch command {
         case .enqueue(let packet):
-            let id = WorkerId(s.nextId)
-            s.nextId += 1
-            s.pending[id] = packet
+            if let id = s.freeIds.first {
+                s.freeIds.removeFirst()
+                s.pending[id] = packet
+            }
+            // else: pool full — the caller must have checked availableWorker
         case .workerStarted(let id):
             s.pending[id] = nil
             s.running = id
@@ -43,6 +58,10 @@ public enum PoolScheduler {
             s.running = nil
             s.completed[id] = receipt
             s.pendingDelivery[id] = receipt
+            if !s.freeIds.contains(id) {
+                s.freeIds.append(id)
+                s.freeIds.sort()
+            }
         case .receiptInjected(let id):
             s.pendingDelivery[id] = nil
         }

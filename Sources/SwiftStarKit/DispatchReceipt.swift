@@ -26,11 +26,16 @@ public struct DispatchReceipt: Codable, Equatable, Sendable {
         self.summary = summary
     }
 
-    /// The prompt text injected into the orchestrator's next turn (D4).
+    /// The prompt text injected into the orchestrator's next turn (D4). A
+    /// refusal is named by its `reason`; a candidate by its `ref` (or, while
+    /// the worktree commit is still pending, as a candidate without a ref).
     public func injectionPrompt() -> String {
+        if let reason {
+            return "Worker \(worker.rawValue) refused: \(reason)"
+        }
         if let ref {
             return "Worker \(worker.rawValue) returned candidate ref \(ref): \(summary)"
         }
-        return "Worker \(worker.rawValue) refused: \(reason ?? summary)"
+        return "Worker \(worker.rawValue) returned a candidate (ref pending): \(summary)"
     }
 }
