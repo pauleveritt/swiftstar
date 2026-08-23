@@ -22,10 +22,21 @@ public final class PoolOrchestrator {
         process.environment = ProcessInfo.processInfo.environment
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
         process.standardInput = stdinPipe
         process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+        process.standardError = FileHandle.standardError  // inherit: engine stderr goes to the harness log
+        // The engine chdir's to `--workspace`; Metal shaders load cwd-relative
+        // and would not resolve there. Point each at its absolute path (the same
+        // override `swiftstar-drive` uses), so Metal resolves regardless of cwd.
+        var engineEnv = ProcessInfo.processInfo.environment
+        let metalDir = settings.engineDir.appendingPathComponent("metal", isDirectory: true)
+        if let names = try? FileManager.default.contentsOfDirectory(atPath: metalDir.path) {
+            for name in names where name.hasSuffix(".metal") {
+                let stem = String(name.dropLast(".metal".count))
+                engineEnv["DS4_METAL_\(stem.uppercased())_SOURCE"] = metalDir.appendingPathComponent(name).path
+            }
+        }
+        process.environment = engineEnv
         try process.run()
         self.process = process
         self.stdin = stdinPipe.fileHandleForWriting
@@ -47,7 +58,8 @@ public final class PoolOrchestrator {
         var result: TurnOutcome?
         var buffer = Data()
         var chunk = [UInt8](repeating: 0, count: 4096)
-        let deadline = Date().addingTimeInterval(600)
+        let turnTimeout = Double(ProcessInfo.processInfo.environment["AGENTTEST_TURN_TIMEOUT"] ?? "1800") ?? 1800
+        let deadline = Date().addingTimeInterval(turnTimeout)
 
         loop: while Date() < deadline {
             var pfd = pollfd(fd: stdoutFD, events: Int16(POLLIN), revents: 0)
@@ -62,6 +74,14 @@ public final class PoolOrchestrator {
                 buffer.removeSubrange(buffer.startIndex...nl)
                 guard let poolEvent = parser.feed(line), poolEvent.worker == worker else { continue }
                 let event = poolEvent.event
+                if ProcessInfo.processInfo.environment["AGENTTEST_DEBUG"] != nil {
+                    switch event {
+                    case .ready(_, let stop, let gen, let ctx): FileHandle.standardError.write(Data("[orch] ready stop=\(stop ?? "nil") gen=\(gen.map(String.init) ?? "nil") ctx=\(ctx.map(String.init) ?? "nil")\n".utf8))
+                    case .toolRequest(_, let name, _): FileHandle.standardError.write(Data("[orch] tool_request \(name)\n".utf8))
+                    case .text(let s): FileHandle.standardError.write(Data("[orch] text \(s.prefix(60))\n".utf8))
+                    default: break
+                    }
+                }
                 builder.apply(event)
                 switch event {
                 case .toolRequest(let idx, let name, let params):
@@ -128,6 +148,11 @@ public final class PoolOrchestrator {
             guard let path = request.resolvedPath else { return ToolExecutionResult(ok: false, text: "error: no path") }
             let content = request.params.first(where: { $0.name == "content" })?.value ?? ""
             do {
+                // Create parent directories so `templates/base.html` works even
+                // when `templates/` does not exist yet (a fresh worktree).
+                let url = URL(fileURLWithPath: path)
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try content.write(toFile: path, atomically: true, encoding: .utf8)
                 return ToolExecutionResult(ok: true, text: "wrote \(path)", mutations: [path])
             } catch {

@@ -89,8 +89,12 @@ defer { txn.abort() }
 print("[agenttest] spec=\(specName) phases=\(phases.count)")
 
 for (i, phaseText) in phases.enumerated() {
+    // The prepared context (D4): the phase spec + the shared rubric + the writable
+    // scope, so the worker knows exactly which files it may create/edit.
+    let writableNote = "You may write or edit only these files:\n"
+        + writableFiles.map { "- \($0)" }.joined(separator: "\n")
     let packet = HandoffPacket(
-        taskText: phaseText + "\n\n" + sharedContext,
+        taskText: phaseText + "\n\n" + writableNote + "\n\n" + sharedContext,
         writableFiles: writableFiles, validationCommand: nil,
         baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
     print("[agenttest] phase \(i + 1)/\(phases.count) …")
