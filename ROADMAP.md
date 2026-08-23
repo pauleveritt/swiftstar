@@ -10,10 +10,11 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P8 — Skills.** Next up; not started. The Superpowers bootstrap through
-`-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure.
+**Phase P9 — The tool-callback wire.** Next up; not started. SwiftStar answers
+tool calls over the same pipe — including a fake app side — and condenses tool
+results before they enter KV.
 
-*P0–P7 are complete; their summaries live in [Prior work](#prior-work), not
+*P0–P8 are complete; their summaries live in [Prior work](#prior-work), not
 here, so this section stays a true "what's happening now."*
 
 ## Concept budget
@@ -58,6 +59,17 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
   and task, token and context use, stop reason, and each tool-call lifecycle
   transition) that P10's handoff packets consume instead of trusting the
   transcript's prose.
+- **bootstrap** (P8) — the deterministic skills index `SuperpowersBootstrap`
+  renders from a skills dir (`name`/`description` front-matter, sorted by name,
+  one line per skill), passed to the agent via `ds4-agent -sys`; the engine's
+  existing `sysprompt.kv` rebuild-on-mismatch makes it "prefilled once." A
+  missing skills dir degrades to "No skills available in this workspace."
+  rather than fabricating skills the agent cannot `read`.
+- **progressive disclosure** (P8) — the index lives in the system prompt; the
+  full skill bodies are staged into the workspace (`.swiftstar/skills/<name>/`)
+  at spawn and `read` on demand inside the workspace grant. The bootstrap never
+  inlines skill bodies, so the agent pays the prefill cost only for the skills
+  it loads.
 
 ## Phases
 
@@ -71,7 +83,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | complete (2026-08-22) |
 | P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | complete (2026-08-22) |
 | P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript and capture-grade turn/tool outcomes, tool cards, workspace grant, shell toggle, interruptible turns | complete (2026-08-22) |
-| P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | planned |
+| P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | complete (2026-08-22) |
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | planned |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | planned |
 | P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | planned |
@@ -436,6 +448,26 @@ Completed phases move here when the roadmap outgrows the front page.
   argv and honors ETX. Live Metrics/Diagnostics wiring deferred (D9 — see the P4
   bullet's dated correction).
   Spec: [`docs/superpowers/specs/2026-08-22-p7-agent-mode-design.md`](docs/superpowers/specs/2026-08-22-p7-agent-mode-design.md).
+
+- **P8 — Skills (2026-08-22).** The Superpowers bootstrap is real. `SwiftStarKit`
+  gains `SuperpowersBootstrap` — a deterministic index rendered from a skills
+  dir (`name`/`description` front-matter, sorted by name, with a generic
+  disclosure path), passed to the agent via `AgentCommand`'s new
+  `systemPrompt: String?` → `-sys <text>` (appended after `--shell`).
+  `SwiftStarAppKit` gains `SkillStager` — a recursive `FileManager` copy of the
+  skills tree into `<workspace>/.swiftstar/skills/` at spawn, idempotent
+  (removes a pre-existing destination), throwing on a missing skills dir
+  (non-fatal degrade). `AgentController` resolves the skills dir
+  (`SUPERPOWERS_SKILLS_DIR` else the default), stages (a throw logged and
+  non-fatal), builds the bootstrap, and sets `settings.systemPrompt` before the
+  spawn argv is built — so the fake's strict-argv validation carries the same
+  deterministic bootstrap. Progressive disclosure: the index names skills; the
+  agent `read`s each body on demand inside the workspace grant (D5 — never
+  fabricate a dispatch call). No engine patch (D4 — `sysprompt.kv` already
+  rebuilds on mismatch). Evidence floor met: the bootstrap names every skill;
+  the staged workspace contains them; the fake's expected argv carries the
+  bootstrap it validates.
+  Spec: [`docs/superpowers/specs/2026-08-22-p8-skills-design.md`](docs/superpowers/specs/2026-08-22-p8-skills-design.md).
 
 ## Workflow
 
