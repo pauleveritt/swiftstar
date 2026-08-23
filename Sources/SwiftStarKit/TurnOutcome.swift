@@ -68,7 +68,13 @@ extension TurnOutcome: CustomStringConvertible {
     public var description: String {
         let tools = toolCalls.map { "\($0.name)[\($0.transitions.map(\.rawValue).joined(separator: "+"))]" }
             .joined(separator: " ")
-        return "turn model=\(model) build=\(build) sampler=\(sampler) tokens=\(generatedTokens) ctx=\(ctxUsed) stop=\(stopReason.rawValue) tools=[\(tools)] task=\(task.prefix(80))"
+        var s = "turn model=\(model) build=\(build) sampler=\(sampler) tokens=\(generatedTokens) ctx=\(ctxUsed) stop=\(stopReason.rawValue) tools=[\(tools)]"
+        if !mutations.isEmpty { s += " mutations=\(mutations.joined(separator: ","))" }
+        if let exitStatus { s += " exit=\(exitStatus)" }
+        if let outputDigest { s += " digest=\(outputDigest)" }
+        if validationRan { s += " validated=true" }
+        s += " task=\(task.prefix(80))"
+        return s
     }
 }
 
@@ -86,6 +92,17 @@ public struct TurnOutcomeBuilder {
     private var calls: [Int: (name: String, transitions: [ToolLifecycle])] = [:]
     private var order: [Int] = []
     private var completed: [ToolCallOutcome] = []
+    /// P9 host mode (D5): the wire carries `.toolRequest` (not `.tool` phases);
+    /// the builder records each request as `emitted` and the host's verdict as
+    /// `executed` (ok) or `rejected` (refused), in arrival order. `idx` is
+    /// scoped to the current block and repeats across blocks, so host calls are
+    /// keyed by arrival order (this array), not by idx.
+    private var hostCalls: [(name: String, transitions: [ToolLifecycle])] = []
+    /// P9 host-authoritative facts (D5), accumulated from `recordHostVerdict`.
+    private var mutations: [String] = []
+    private var exitStatus: Int?
+    private var outputDigest: String?
+    private var validationRan = false
     private var wireStopReason: TurnStopReason?
     private var generated = 0
     private var ctxUsed = 0
@@ -105,11 +122,40 @@ public struct TurnOutcomeBuilder {
             if let stopReason { wireStopReason = TurnStopReason(rawValue: stopReason) }
             if let generated { self.generated = generated }
             if let ctxUsed { self.ctxUsed = ctxUsed }
-        case .toolRequest:
-            break  // P9: host-tools requests are not tool-lifecycle events here; the host's verdict is app-side
+        case .toolRequest(let idx, let name, _):
+            // P9 host mode (D5): the request is the emission. `idx` is scoped to
+            // the current block and repeats across blocks, so the builder keys
+            // host calls by arrival order (the `hostCalls` array), not by idx.
+            _ = idx  // traced on the wire; not the key here
+            hostCalls.append((name: name, transitions: [.emitted]))
         case .hello, .status, .queued, .text, .think, .ignored, .refused:
             break
         }
+    }
+
+    /// P9 host mode (D5): record the host's verdict on the most recent
+    /// `.toolRequest`. The protocol is strictly request→result (the engine
+    /// blocks per request), so the last un-verdicted host call is the current
+    /// one. `ok` → `executed` (the host ran it); `!ok` → `rejected` (the host
+    /// refused or the executor failed). The host-authoritative facts
+    /// (mutations/exitStatus/outputDigest/validationRan) accumulate onto the
+    /// finished record. `idx` is the request's wire idx (kept for symmetry);
+    /// it is NOT the key — it repeats across blocks.
+    public mutating func recordHostVerdict(idx: Int, ok: Bool,
+                                           mutations: [String], exitStatus: Int?,
+                                           outputDigest: String?, validationRan: Bool) {
+        _ = idx
+        if let last = hostCalls.indices.last,
+           !hostCalls[last].transitions.contains(.executed),
+           !hostCalls[last].transitions.contains(.rejected) {
+            var c = hostCalls[last]
+            c.transitions.append(ok ? .executed : .rejected)
+            hostCalls[last] = c
+        }
+        self.mutations.append(contentsOf: mutations)
+        if let exitStatus { self.exitStatus = exitStatus }
+        if let outputDigest { self.outputDigest = outputDigest }
+        if validationRan { self.validationRan = validationRan }
     }
 
     /// The app override (interrupt/timeout — the app knows what it did) beats
@@ -122,12 +168,20 @@ public struct TurnOutcomeBuilder {
                 all.append(ToolCallOutcome(name: c.name, transitions: c.transitions))
             }
         }
-        return TurnOutcome(
+        all.append(contentsOf: hostCalls.map {
+            ToolCallOutcome(name: $0.name, transitions: $0.transitions)
+        })
+        var outcome = TurnOutcome(
             model: model, build: build, sampler: sampler, task: task,
             generatedTokens: generated, ctxUsed: ctxUsed,
             stopReason: appStopReason ?? wireStopReason ?? .eos,
             toolCalls: all
         )
+        outcome.mutations = self.mutations
+        outcome.exitStatus = self.exitStatus
+        outcome.outputDigest = self.outputDigest
+        outcome.validationRan = self.validationRan
+        return outcome
     }
 
     private mutating func applyTool(_ te: AgentToolEvent) {

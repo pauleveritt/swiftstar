@@ -52,8 +52,10 @@ struct FakeHostToolsIntegrationTests {
 
     private func buildAgent(fixture: String, settings: AgentSettings) throws -> (URL, [String]) {
         let capture = try Data(contentsOf: FakeAgentHarness.fixture("\(fixture).ndjson"))
-        var argv = AgentCommand.argv(settings: settings)
-        argv.append("--host-tools")  // host mode: the app owns the tools
+        // `AgentCommand.argv` always carries `--host-tools` (P9: the app owns
+        // execution), so the fake's expected argv carries it; the host-tools
+        // replay mode is baked in at `generate(hostTools: true)` time.
+        let argv = AgentCommand.argv(settings: settings)
         let source = try FakeAgentSource.generate(capture: capture, engineArgv: argv, hostTools: true)
         let work = FileManager.default.temporaryDirectory
             .appendingPathComponent("p9-fake-agent-\(UUID().uuidString)", isDirectory: true)

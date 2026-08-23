@@ -45,6 +45,9 @@ public enum AgentCommand {
             "--json-events",
             "--workspace", settings.workspace.path,
             "--shell", settings.shellAllowed ? "on" : "off",
+            // P9: the app owns tool execution — always pass `--host-tools` so the
+            // agent emits `tool_request` and blocks on `tool_result` (D1).
+            "--host-tools",
         ]
         if let systemPrompt = settings.systemPrompt {
             argv.append(contentsOf: ["-sys", systemPrompt])

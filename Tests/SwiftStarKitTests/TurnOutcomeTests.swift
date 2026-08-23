@@ -140,4 +140,97 @@ struct TurnOutcomeTests {
         #expect(outcome.generatedTokens == 7)
         #expect(outcome.ctxUsed == 9)
     }
+
+    // MARK: - host-mode tool requests (D5: the host owns the verdict)
+    //
+    // In host mode the wire carries `.toolRequest` (not `.tool` phases); the
+    // builder records each request as `emitted` and the host's verdict as
+    // `executed` (ok) or `rejected` (refused), and accumulates the
+    // host-authoritative facts (mutations/exitStatus/outputDigest/
+    // validationRan) onto the finished record. The request `idx` is scoped to
+    // the current block (the existing idx contract) and may repeat across
+    // blocks, so the builder keys host calls by arrival order, not by idx.
+
+    @Test func hostModeToolRequestRecordsEmitted() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.toolRequest(idx: 0, name: "read",
+                             params: [ToolParam(name: "path", value: "seed.txt")]))
+        let outcome = b.finish()
+        #expect(outcome.toolCalls == [ToolCallOutcome(name: "read", transitions: [.emitted])])
+        #expect(outcome.mutations == [])
+        #expect(outcome.exitStatus == nil)
+        #expect(outcome.validationRan == false)
+    }
+
+    @Test func recordHostVerdictOkExecutesAndCarriesFacts() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.toolRequest(idx: 0, name: "bash", params: []))
+        b.recordHostVerdict(idx: 0, ok: true,
+                            mutations: ["/tmp/a"], exitStatus: 0,
+                            outputDigest: "sha256:abc", validationRan: true)
+        let outcome = b.finish()
+        #expect(outcome.toolCalls == [ToolCallOutcome(name: "bash", transitions: [.emitted, .executed])])
+        #expect(outcome.mutations == ["/tmp/a"])
+        #expect(outcome.exitStatus == 0)
+        #expect(outcome.outputDigest == "sha256:abc")
+        #expect(outcome.validationRan == true)
+    }
+
+    @Test func recordHostVerdictRefusedRejects() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.toolRequest(idx: 2, name: "bash", params: []))
+        b.recordHostVerdict(idx: 2, ok: false,
+                            mutations: [], exitStatus: nil,
+                            outputDigest: nil, validationRan: false)
+        let outcome = b.finish()
+        #expect(outcome.toolCalls == [ToolCallOutcome(name: "bash", transitions: [.emitted, .rejected])])
+        #expect(outcome.mutations == [])
+        #expect(outcome.exitStatus == nil)
+        #expect(outcome.validationRan == false)
+    }
+
+    @Test func hostModeMultipleRequestsAccumulateAcrossBlocks() {
+        // Each block resets idx; the builder keys by arrival order, so two
+        // requests both carrying idx 0 (one per block) become two distinct
+        // tool calls in the outcome.
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.toolRequest(idx: 0, name: "read", params: []))
+        b.recordHostVerdict(idx: 0, ok: true,
+                            mutations: [], exitStatus: nil,
+                            outputDigest: nil, validationRan: false)
+        b.apply(.toolRequest(idx: 0, name: "bash", params: []))
+        b.recordHostVerdict(idx: 0, ok: true,
+                            mutations: ["/tmp/x"], exitStatus: 0,
+                            outputDigest: "sha256:1", validationRan: true)
+        let outcome = b.finish()
+        #expect(outcome.toolCalls.count == 2)
+        #expect(outcome.toolCalls[0].name == "read")
+        #expect(outcome.toolCalls[1].name == "bash")
+        #expect(outcome.mutations == ["/tmp/x"])
+        #expect(outcome.exitStatus == 0)
+        #expect(outcome.outputDigest == "sha256:1")
+        #expect(outcome.validationRan == true)
+    }
+
+    @Test func hostModeFactsAccumulateAcrossMultipleBashCalls() {
+        // Mutations accumulate across the turn; exitStatus/outputDigest keep
+        // the last set (a turn with several bash calls records the last one's
+        // command facts).
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.toolRequest(idx: 0, name: "bash", params: []))
+        b.recordHostVerdict(idx: 0, ok: true,
+                            mutations: ["/tmp/a"], exitStatus: 1,
+                            outputDigest: "sha256:first", validationRan: true)
+        b.apply(.toolRequest(idx: 0, name: "bash", params: []))
+        b.recordHostVerdict(idx: 0, ok: true,
+                            mutations: ["/tmp/b"], exitStatus: 0,
+                            outputDigest: "sha256:second", validationRan: true)
+        let outcome = b.finish()
+        #expect(outcome.mutations == ["/tmp/a", "/tmp/b"])
+        #expect(outcome.exitStatus == 0)  // last bash call's exit
+        #expect(outcome.outputDigest == "sha256:second")
+        #expect(outcome.validationRan == true)
+        #expect(outcome.toolCalls.count == 2)
+        #expect(outcome.toolCalls.allSatisfy { $0.transitions.contains(.executed) })
+    }
 }

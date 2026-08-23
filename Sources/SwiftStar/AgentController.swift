@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import SwiftStarKit
 import SwiftStarAppKit
+import CryptoKit
 
 /// The agent child's lifecycle + turn state. Unlike the server's `Supervisor`
 /// state machine, the agent wire carries no explicit turn-end event: the
@@ -259,12 +260,26 @@ final class AgentController {
             }
         case .text, .think, .tool:
             transcript.apply(event)
-        case .toolRequest:
-            // P9: the host-tools request is not routed here yet — the app's
-            // ToolCallbackResponder (execution + condensation + host-fact
-            // recording) answers it and writes the `tool_result` line back.
-            // The builder still consumed the event above (a no-op for now).
-            break
+        case .toolRequest(let idx, let name, let params):
+            // P9: the host owns execution. Route the request through the
+            // responder (consent-enforced, condenses via ToolResultCondenser,
+            // records the host facts), write the `tool_result` line to the
+            // agent's stdin, and feed the host facts into the open
+            // TurnOutcomeBuilder. The engine blocks on the result line, so
+            // this is synchronous (the stdout drain awaits consumeWire per
+            // line; the engine emits one request then blocks).
+            let response = ToolCallbackResponder.respond(
+                idx: idx, name: name, params: params,
+                workspace: settings.workspace, shellAllowed: settings.shellAllowed,
+                execute: Self.executeHostTool)
+            if let pipe = process?.standardInput as? Pipe {
+                pipe.fileHandleForWriting.write(
+                    Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
+            }
+            outcomeBuilder?.recordHostVerdict(
+                idx: idx, ok: response.ok,
+                mutations: response.mutations, exitStatus: response.exitStatus,
+                outputDigest: response.outputDigest, validationRan: response.validationRan)
         case .queued, .ignored:
             break
         case .refused(let line):
@@ -313,6 +328,183 @@ final class AgentController {
         guard generation == self.generation else { return }
         stderrTail.append(line)
         if stderrTail.count > 20 { stderrTail.removeFirst(stderrTail.count - 20) }
+    }
+
+    /// P9: the host's side-effecting tool executor (D3/D6). The pure
+    /// `ToolCallbackResponder` handles consent + condensation + the
+    /// `tool_result` line; this closure is the app's file/process capability
+    /// the responder injects. It runs the six tool families under the
+    /// consent-cleared grant: `read`/`more`/`write`/`list`/`edit`/`search` read
+    /// or mutate files at `request.resolvedPath` (already confined by the
+    /// consent check); `bash`/`bash_status`/`bash_stop` run the command in the
+    /// workspace cwd. The `ok` verdict is the executor's own (true = ran, false
+    /// = could not run); a consent refusal never calls this. For `bash` the
+    /// host facts ride along: the exit status, a SHA-256 digest of stdout, and
+    /// `validationRan` (the host ran the command and can report its exit).
+    /// `nonisolated` — touches only `FileManager`/`Process` (not `self`); the
+    /// synchronous run blocks the main actor during a `bash` call, which P9's
+    /// scope accepts (the engine blocks on the result line anyway).
+    nonisolated private static func executeHostTool(
+        _ request: ToolExecutionRequest
+    ) -> ToolExecutionResult {
+        switch request.name {
+        case "read", "more":
+            guard let path = AgentController.confinedRealPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
+            guard let data = FileManager.default.contents(atPath: path),
+                  let text = String(data: data, encoding: .utf8) else {
+                return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
+            }
+            return ToolExecutionResult(ok: true, text: text)
+
+        case "list":
+            guard let path = AgentController.confinedRealPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
+            do {
+                let entries = try FileManager.default.contentsOfDirectory(atPath: path)
+                return ToolExecutionResult(ok: true, text: entries.sorted().joined(separator: "\n"))
+            } catch {
+                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
+            }
+
+        case "search":
+            guard let path = AgentController.confinedRealPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
+            let query = request.params.first(where: { $0.name == "query" })?.value ?? ""
+            var caseSensitive = true
+            if let v = request.params.first(where: { $0.name == "case_sensitive" })?.value {
+                caseSensitive = v != "false" && v != "0"
+            }
+            let matches = AgentController.searchRecursive(
+                root: path, query: query, caseSensitive: caseSensitive, maxResults: 50)
+            if matches.isEmpty {
+                return ToolExecutionResult(ok: true, text: "No matches\n")
+            }
+            let header = "\(matches.count) match\(matches.count == 1 ? "" : "es") shown\n\n"
+            return ToolExecutionResult(ok: true, text: header + matches.joined(separator: "\n"))
+
+        case "write":
+            guard let path = AgentController.confinedRealPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
+            let content = request.params.first(where: { $0.name == "content" })?.value ?? ""
+            do {
+                try content.write(toFile: path, atomically: true, encoding: .utf8)
+                return ToolExecutionResult(ok: true, text: "wrote \(path)", mutations: [path])
+            } catch {
+                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
+            }
+
+        case "edit":
+            guard let path = AgentController.confinedRealPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
+            let old = request.params.first(where: { $0.name == "old" })?.value ?? ""
+            let new = request.params.first(where: { $0.name == "new" })?.value ?? ""
+            guard !old.isEmpty else {
+                return ToolExecutionResult(ok: false, text: "error: edit requires non-empty old text")
+            }
+            guard let data = FileManager.default.contents(atPath: path),
+                  var text = String(data: data, encoding: .utf8) else {
+                return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
+            }
+            guard let range = text.range(of: old) else {
+                return ToolExecutionResult(ok: false, text: "error: old text not found in \(path)")
+            }
+            text.replaceSubrange(range, with: new)
+            do {
+                try text.write(toFile: path, atomically: true, encoding: .utf8)
+                return ToolExecutionResult(ok: true, text: "edited \(path)", mutations: [path])
+            } catch {
+                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
+            }
+
+        case "bash", "bash_status", "bash_stop":
+            let command = request.params.first(where: { $0.name == "command" })?.value ?? ""
+            guard !command.isEmpty else {
+                return ToolExecutionResult(ok: false, text: "error: bash requires command")
+            }
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/bash")
+            p.arguments = ["-c", command]
+            p.currentDirectoryURL = request.workspace
+            let outPipe = Pipe()
+            let errPipe = Pipe()
+            p.standardOutput = outPipe
+            p.standardError = errPipe
+            do {
+                try p.run()
+                p.waitUntilExit()
+                let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(),
+                                 encoding: .utf8) ?? ""
+                let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(),
+                                 encoding: .utf8) ?? ""
+                let combined = out + (err.isEmpty ? "" : err)
+                let digest = "sha256:" + SHA256.hash(data: Data(out.utf8))
+                    .map { String(format: "%02x", $0) }.joined()
+                return ToolExecutionResult(
+                    ok: true, text: combined,
+                    exitStatus: Int(p.terminationStatus),
+                    outputDigest: digest, validationRan: true)
+            } catch {
+                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
+            }
+
+        default:
+            return ToolExecutionResult(ok: false, text: "error: unknown tool \(request.name)")
+        }
+    }
+
+    /// Belt-and-suspenders re-confinement for the executor: the pure `consent`
+    /// check resolves `..` but not symlinks (no I/O); the engine's confinement
+    /// uses `realpath`, which does. A symlink under the workspace that points
+    /// outside would pass the pure check but escape the grant on execution — this
+    /// resolves symlinks on both the workspace and the file and refuses when the
+    /// real path is outside the real workspace root. The same rules P7 put in
+    /// the engine (D1), enforced host-side. Returns the symlink-resolved
+    /// absolute path, or nil on refusal.
+    nonisolated private static func confinedRealPath(_ request: ToolExecutionRequest) -> String? {
+        guard let path = request.resolvedPath else { return nil }
+        let wsReal = request.workspace.resolvingSymlinksInPath()
+        let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+        guard resolved.path == wsReal.path || resolved.path.hasPrefix(wsReal.path + "/") else {
+            return nil
+        }
+        return resolved.path
+    }
+
+    /// Recursive grep for the `search` executor: walks `root` depth-first, reads
+    /// each regular file as UTF-8, and collects `path:lineNo:line` for lines
+    /// containing `query` (substring; case-sensitive unless `caseSensitive` is
+    /// false), capped at `maxResults` matches. Skips unreadable/binary files.
+    nonisolated private static func searchRecursive(
+        root: String, query: String, caseSensitive: Bool, maxResults: Int
+    ) -> [String] {
+        guard !query.isEmpty else { return [] }
+        let fm = FileManager.default
+        var results: [String] = []
+        let enumerator = fm.enumerator(atPath: root)
+        while let entry = enumerator?.nextObject() as? String {
+            if results.count >= maxResults { break }
+            let full = (root as NSString).appendingPathComponent(entry)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: full, isDirectory: &isDir),
+                  !isDir.boolValue else { continue }
+            guard let data = fm.contents(atPath: full),
+                  let text = String(data: data, encoding: .utf8) else { continue }
+            let needle = caseSensitive ? query : query.lowercased()
+            for (i, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                if results.count >= maxResults { break }
+                let hay = caseSensitive ? String(line) : String(line).lowercased()
+                if hay.contains(needle) {
+                    results.append("\(entry):\(i + 1):\(line)")
+                }
+            }
+        }
+        return results
     }
 
     func send(_ prompt: String) {
