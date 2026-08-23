@@ -108,4 +108,36 @@ struct TurnOutcomeTests {
         #expect(outcome.toolCalls.contains { $0.name == "read" && $0.transitions.contains(.parsed) })
         #expect(outcome.stopReason == .eos || outcome.stopReason == .limit || outcome.stopReason == .interrupt || outcome.stopReason == .contextFull)
     }
+
+    // P9 host-authoritative facts (D5): the record gains `mutations`,
+    // `exitStatus`, `outputDigest`, and `validationRan`. The wire cannot carry
+    // them (the host learns them by executing), so the builder leaves them at
+    // their defaults and the app sets them on the finished record.
+    @Test func hostFactFieldsDefaultInBuilderFinish() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 1, ctxUsed: 2))
+        let outcome = b.finish()
+        #expect(outcome.mutations == [])
+        #expect(outcome.exitStatus == nil)
+        #expect(outcome.outputDigest == nil)
+        #expect(outcome.validationRan == false)
+    }
+
+    @Test func hostFactFieldsAreSettable() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 7, ctxUsed: 9))
+        var outcome = b.finish()
+        outcome.mutations = ["/tmp/a", "/tmp/b"]
+        outcome.exitStatus = 0
+        outcome.outputDigest = "sha256:deadbeef"
+        outcome.validationRan = true
+        #expect(outcome.mutations == ["/tmp/a", "/tmp/b"])
+        #expect(outcome.exitStatus == 0)
+        #expect(outcome.outputDigest == "sha256:deadbeef")
+        #expect(outcome.validationRan == true)
+        // The wire-derived fields are unaffected by setting the host facts.
+        #expect(outcome.stopReason == .eos)
+        #expect(outcome.generatedTokens == 7)
+        #expect(outcome.ctxUsed == 9)
+    }
 }

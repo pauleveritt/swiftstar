@@ -40,6 +40,10 @@ public enum AgentEvent: Equatable, Sendable {
     case text(String)
     case think(String)
     case tool(AgentToolEvent)
+    /// P9: a host-tools `tool_request` — the bidirectional wire's emission. The
+    /// agent asks the host to run `name` with `params` (reusing the transcript's
+    /// `ToolParam`); the host answers with a `tool_result` line on stdin.
+    case toolRequest(idx: Int, name: String, params: [ToolParam])
     case ignored(String)
     case refused(String)
 }
@@ -110,6 +114,11 @@ public struct AgentWireParser: Sendable {
         case "tool":
             if let toolEvent = parseTool(object) { return .tool(toolEvent) }
             return .ignored(trimmed)
+        case "tool_request":
+            if let req = parseToolRequest(object) {
+                return .toolRequest(idx: req.idx, name: req.name, params: req.params)
+            }
+            return .ignored(trimmed)
         default:
             return .ignored(trimmed)
         }
@@ -143,5 +152,23 @@ public struct AgentWireParser: Sendable {
             return AgentToolEvent(phase: phase, idx: idx, name: nil,
                                   paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)
         }
+    }
+
+    /// P9: parse a `tool_request` payload (the host-tools bidirectional wire).
+    /// `idx` defaults to 0; `name` is required (nil → the line is unmodelled, not
+    /// a fatal refusal — the wire can grow and the parser tolerates malformed
+    /// cases); `params` is optional and each entry must carry `name`+`value`
+    /// strings, preserved in order.
+    private func parseToolRequest(_ object: [String: Any]) -> (idx: Int, name: String, params: [ToolParam])? {
+        guard let name = object["name"] as? String else { return nil }
+        let idx = (object["idx"] as? NSNumber)?.intValue ?? 0
+        var params: [ToolParam] = []
+        if let arr = object["params"] as? [[String: Any]] {
+            for p in arr {
+                guard let pn = p["name"] as? String, let pv = p["value"] as? String else { return nil }
+                params.append(ToolParam(name: pn, value: pv))
+            }
+        }
+        return (idx, name, params)
     }
 }

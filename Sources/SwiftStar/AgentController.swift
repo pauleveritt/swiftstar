@@ -259,6 +259,12 @@ final class AgentController {
             }
         case .text, .think, .tool:
             transcript.apply(event)
+        case .toolRequest:
+            // P9: the host-tools request is not routed here yet — the app's
+            // ToolCallbackResponder (execution + condensation + host-fact
+            // recording) answers it and writes the `tool_result` line back.
+            // The builder still consumed the event above (a no-op for now).
+            break
         case .queued, .ignored:
             break
         case .refused(let line):

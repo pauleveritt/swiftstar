@@ -114,6 +114,58 @@ struct AgentWireParserTests {
         #expect(p.feed(line) == .ignored(line))
     }
 
+    // P9: the bidirectional wire. `tool_request` is the host-tools event the
+    // agent emits instead of executing; the parser must accept it after the
+    // handshake and surface it as `.toolRequest` (reusing the transcript's
+    // `ToolParam`). The hello caps may advertise "tool_request" but the parser
+    // must not require it (backward compatible; requiredCaps unchanged).
+    @Test func toolRequestParses() {
+        var p = AgentWireParser()
+        _ = p.feed(Self.helloLine)
+        let line = #"{"t":"tool_request","idx":2,"name":"read","params":[{"name":"path","value":"seed.txt"}],"ts":99}"#
+        #expect(p.feed(line) == .toolRequest(idx: 2, name: "read", params: [ToolParam(name: "path", value: "seed.txt")]))
+    }
+
+    @Test func toolRequestMultipleParamsPreserveOrder() {
+        var p = AgentWireParser()
+        _ = p.feed(Self.helloLine)
+        let line = #"{"t":"tool_request","idx":1,"name":"bash","params":[{"name":"cmd","value":"ls"},{"name":"cwd","value":"/tmp"}],"ts":5}"#
+        #expect(p.feed(line) == .toolRequest(idx: 1, name: "bash", params: [
+            ToolParam(name: "cmd", value: "ls"),
+            ToolParam(name: "cwd", value: "/tmp"),
+        ]))
+    }
+
+    @Test func toolRequestEmptyParamsParses() {
+        var p = AgentWireParser()
+        _ = p.feed(Self.helloLine)
+        #expect(p.feed(#"{"t":"tool_request","idx":0,"name":"list","params":[],"ts":1}"#) == .toolRequest(idx: 0, name: "list", params: []))
+    }
+
+    @Test func toolRequestOmittedParamsParses() {
+        var p = AgentWireParser()
+        _ = p.feed(Self.helloLine)
+        // `params` is optional on the wire — a tool with no params may omit it.
+        #expect(p.feed(#"{"t":"tool_request","idx":0,"name":"ping","ts":1}"#) == .toolRequest(idx: 0, name: "ping", params: []))
+    }
+
+    @Test func toolRequestMissingNameIgnored() {
+        var p = AgentWireParser()
+        _ = p.feed(Self.helloLine)
+        // `name` is required; without it the line is unmodelled, not a fatal
+        // refusal (the wire can grow and the parser tolerates malformed cases).
+        let line = #"{"t":"tool_request","idx":0,"params":[],"ts":1}"#
+        #expect(p.feed(line) == .ignored(line))
+    }
+
+    @Test func handshakeMayAdvertiseToolRequestCap() {
+        var p = AgentWireParser()
+        // The host may advertise "tool_request" in caps; the parser must not
+        // require it (backward compatible; requiredCaps unchanged).
+        let line = #"{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts","tool_request"],"ts":1}"#
+        #expect(p.feed(line) == .hello(version: 1, capabilities: ["status", "ready", "text", "think", "tool", "queued", "ts", "tool_request"]))
+    }
+
     @Test func goldenNdjsonParsesWithoutRefusing() throws {
         let url = Self.fixturesRoot.appendingPathComponent("golden.ndjson")
         let text = try String(contentsOf: url, encoding: .utf8)

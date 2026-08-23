@@ -39,6 +39,15 @@ public struct TurnOutcome: Equatable, Sendable {
     public let ctxUsed: Int
     public let stopReason: TurnStopReason
     public let toolCalls: [ToolCallOutcome]
+    /// P9 host-authoritative facts (D5): the actual mutation paths, the command
+    /// exit status, an output digest, and whether validation ran. The wire
+    /// cannot carry these (the host learns them by executing), so they default
+    /// empty/nil/nil/false and the app sets them on the finished record. They
+    /// are `var` for that reason; the wire-derived fields above stay `let`.
+    public var mutations: [String] = []
+    public var exitStatus: Int? = nil
+    public var outputDigest: String? = nil
+    public var validationRan: Bool = false
 
     public init(model: String, build: String, sampler: String, task: String,
                 generatedTokens: Int, ctxUsed: Int, stopReason: TurnStopReason,
@@ -96,6 +105,8 @@ public struct TurnOutcomeBuilder {
             if let stopReason { wireStopReason = TurnStopReason(rawValue: stopReason) }
             if let generated { self.generated = generated }
             if let ctxUsed { self.ctxUsed = ctxUsed }
+        case .toolRequest:
+            break  // P9: host-tools requests are not tool-lifecycle events here; the host's verdict is app-side
         case .hello, .status, .queued, .text, .think, .ignored, .refused:
             break
         }
