@@ -176,6 +176,19 @@ public enum ToolCallbackResponder {
                 name: name, params: params, workspace: wsStd, resolvedPath: nil))
         }
 
+        // P11 (D3): `dispatch` is a host-control tool — the host enqueues a
+        // worker. A well-formed dispatch carries a non-empty taskText; the
+        // actual enqueue is the controller's job (no filesystem confinement
+        // applies — it is not a file tool).
+        if name == "dispatch" {
+            let taskText = params.first(where: { $0.name == "taskText" })?.value ?? ""
+            guard !taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .refuse("refused: dispatch requires a non-empty taskText")
+            }
+            return .proceed(ToolExecutionRequest(
+                name: name, params: params, workspace: wsStd, resolvedPath: nil))
+        }
+
         return .refuse("refused: unknown or unsupported tool: \(name)")
     }
 
@@ -194,6 +207,21 @@ public enum ToolCallbackResponder {
         writableFiles: [String]? = nil,
         execute: (ToolExecutionRequest) -> ToolExecutionResult
     ) -> ToolCallbackResponse {
+        // P11 (D3): `dispatch` is a host-control tool — the host enqueues the
+        // worker. The responder admits a well-formed call and returns ok:true
+        // (the controller overwrites `s` with "dispatched as worker N" after
+        // enqueueing). No `execute` runs.
+        if name == "dispatch" {
+            switch consent(idx: idx, name: name, params: params,
+                           workspace: workspace, shellAllowed: shellAllowed,
+                           writableFiles: writableFiles) {
+            case .refuse(let reason):
+                return ToolCallbackResponse(idx: idx, ok: false,
+                    s: ToolResultCondenser.condense(reason))
+            case .proceed:
+                return ToolCallbackResponse(idx: idx, ok: true, s: "dispatched")
+            }
+        }
         switch consent(idx: idx, name: name, params: params,
                        workspace: workspace, shellAllowed: shellAllowed,
                        writableFiles: writableFiles) {

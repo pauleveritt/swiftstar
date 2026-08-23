@@ -378,4 +378,29 @@ struct ToolCallbackResponderTests {
         let sorted = positions.sorted { $0.1.lowerBound < $1.1.lowerBound }
         #expect(sorted.map(\.0) == ["\"idx\":", "\"ok\":", "\"s\":", "\"t\":"])
     }
+
+    // P11 (D3): dispatch is a host-control tool — well-formed admits, missing
+    // taskText refuses, and no execute runs.
+    @Test func dispatchProceedsWhenWellFormed() {
+        let params = [ToolParam(name: "taskText", value: "fix a.swift"),
+                      ToolParam(name: "writableFiles", value: "a.swift")]
+        let r = ToolCallbackResponder.respond(
+            idx: 0, name: "dispatch", params: params,
+            workspace: URL(fileURLWithPath: "/tmp/w"), shellAllowed: false,
+            execute: { _ in
+                Issue.record("execute must not run for dispatch")
+                return ToolExecutionResult(ok: true, text: "nope")
+            })
+        #expect(r.ok)
+        #expect(r.s == "dispatched")
+    }
+
+    @Test func dispatchRefusedWithoutTaskText() {
+        let r = ToolCallbackResponder.respond(
+            idx: 0, name: "dispatch", params: [],
+            workspace: URL(fileURLWithPath: "/tmp/w"), shellAllowed: false,
+            execute: { _ in ToolExecutionResult(ok: true, text: "nope") })
+        #expect(!r.ok)
+        #expect(r.s.contains("taskText"))
+    }
 }
