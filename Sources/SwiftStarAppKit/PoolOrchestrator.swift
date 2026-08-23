@@ -1,6 +1,7 @@
 import Foundation
 import SwiftStarKit
 import Darwin
+import CryptoKit
 
 /// The headless orchestrator (P11 addendum D7): the loop that was inside
 /// `AgentController`, extracted so the harness can drive a pooled engine without
@@ -11,6 +12,11 @@ public final class PoolOrchestrator {
     private let stdin: FileHandle
     private let stdoutFD: Int32
     private let model: String
+    /// Per-phase read cache (path -> SHA-256): an unchanged re-read answers
+    /// "unchanged" instead of re-paying the context cost (the don't-re-read lever).
+    private var readCache: [String: String] = [:]
+    /// The packet's validation command — the only `bash` the worker may run.
+    private var vettedBash: String?
 
     public init(settings: AgentSettings) throws {
         self.model = settings.modelPath.lastPathComponent
@@ -51,6 +57,8 @@ public final class PoolOrchestrator {
     public func runPhase(worker: WorkerId, packet: HandoffPacket, worktree: URL) throws -> TurnOutcome {
         var builder = TurnOutcomeBuilder(
             model: model, build: "pooled", sampler: "engine-defaults", task: packet.taskText)
+        readCache.removeAll()
+        vettedBash = packet.validationCommand
         let prompt = PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n"
         stdin.write(Data(prompt.utf8))
 
@@ -87,9 +95,9 @@ public final class PoolOrchestrator {
                 case .toolRequest(let idx, let name, let params):
                     let response = ToolCallbackResponder.respond(
                         idx: idx, name: name, params: params,
-                        workspace: worktree, shellAllowed: false,
+                        workspace: worktree, shellAllowed: true,  // bash is vetted in the executor
                         writableFiles: packet.writableFiles,
-                        execute: Self.executeHostTool)
+                        execute: executeHostTool)
                     stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
                     builder.recordHostVerdict(
                         idx: idx, ok: response.ok, mutations: response.mutations,
@@ -119,10 +127,11 @@ public final class PoolOrchestrator {
         process.terminate()
     }
 
-    /// The host's file-tool executor, confined to the consent-cleared
-    /// `resolvedPath` (already inside `worktree`). No shell — the worker codes
-    /// blind; the harness runs validation.
-    private static func executeHostTool(_ request: ToolExecutionRequest) -> ToolExecutionResult {
+    /// The host's file-tool executor. `bash` is limited to the packet's vetted
+    /// validation command (the worker gets a feedback loop without a full shell);
+    /// an unchanged re-read answers "unchanged" (don't-re-read). File mutations
+    /// are confined to the consent-cleared `resolvedPath`.
+    private func executeHostTool(_ request: ToolExecutionRequest) -> ToolExecutionResult {
         switch request.name {
         case "read", "more":
             guard let path = request.resolvedPath,
@@ -130,6 +139,11 @@ public final class PoolOrchestrator {
                   let text = String(data: data, encoding: .utf8) else {
                 return ToolExecutionResult(ok: false, text: "error: could not read")
             }
+            let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            if readCache[path] == hash {
+                return ToolExecutionResult(ok: true, text: "(unchanged since last read)")
+            }
+            readCache[path] = hash
             return ToolExecutionResult(ok: true, text: text)
         case "list":
             guard let path = request.resolvedPath else { return ToolExecutionResult(ok: false, text: "error: no path") }
@@ -177,6 +191,21 @@ public final class PoolOrchestrator {
             } catch {
                 return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
             }
+        case "bash":
+            let command = request.params.first(where: { $0.name == "command" })?.value ?? ""
+            guard let vetted = vettedBash, !vetted.isEmpty,
+                  command == vetted || command.hasPrefix(vetted) else {
+                return ToolExecutionResult(ok: false,
+                    text: "error: bash is limited to the validation command")
+            }
+            let r: SubprocessRunner.Result
+            do { r = try SubprocessRunner.run(command, in: request.workspace) }
+            catch { return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)") }
+            let combined = r.stdout + (r.stderr.isEmpty ? "" : r.stderr)
+            let digest = "sha256:" + SHA256.hash(data: Data(r.stdout.utf8)).map { String(format: "%02x", $0) }.joined()
+            return ToolExecutionResult(
+                ok: r.exit == 0 && !r.timedOut, text: combined,
+                exitStatus: Int(r.exit), outputDigest: digest, validationRan: true)
         default:
             return ToolExecutionResult(ok: false, text: "error: unknown tool \(request.name)")
         }

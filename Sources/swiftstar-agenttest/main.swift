@@ -87,6 +87,7 @@ let txn = WorktreeTransaction(repo: repoURL)
 defer { txn.abort() }
 
 print("[agenttest] spec=\(specName) phases=\(phases.count)")
+let runStart = Date()
 
 for (i, phaseText) in phases.enumerated() {
     // The prepared context (D4): the phase spec + the shared rubric + the writable
@@ -95,7 +96,8 @@ for (i, phaseText) in phases.enumerated() {
         + writableFiles.map { "- \($0)" }.joined(separator: "\n")
     let packet = HandoffPacket(
         taskText: phaseText + "\n\n" + writableNote + "\n\n" + sharedContext,
-        writableFiles: writableFiles, validationCommand: nil,
+        writableFiles: writableFiles,
+        validationCommand: "uv run --project \(pyProject) python -c 'import app'",
         baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
     print("[agenttest] phase \(i + 1)/\(phases.count) …")
     let wt = try txn.preparePhase(packet: packet)
@@ -103,7 +105,12 @@ for (i, phaseText) in phases.enumerated() {
     let result = try txn.finalizePhase(wt, packet: packet, turnOutcome: outcome, validation: nil)
     switch result {
     case .candidate(let ref, let carried, _):
-        print("[agenttest]   phase \(i + 1): candidate \(ref) — \(carried.mutations.count) mutation(s), \(carried.generatedTokens) tokens")
+        let tools = carried.toolCalls.map { $0.name }.joined(separator: ",")
+        // One "turn" = one worker prompt/response; the granular measure is the
+        // tool-call count. ctx_used is the session position (which compacts at
+        // a soft limit), NOT a per-phase total.
+        print("[agenttest]   phase \(i + 1): candidate \(ref) — \(carried.toolCalls.count) tool calls, \(carried.mutations.count) mutations, \(carried.generatedTokens) generated tokens, ctx_pos=\(carried.ctxUsed) stop=\(carried.stopReason.rawValue)")
+        print("[agenttest]   tools=[\(tools)]")
     case .receipt(let r):
         print("[agenttest]   phase \(i + 1): receipt \(r)")
         print("[agenttest] STOPPING (phase receipt)")
@@ -140,4 +147,5 @@ if let gradeWT = txn.finalWorktree {
 }
 
 txn.discardFinal()
+print("[agenttest] elapsed: \(Int(Date().timeIntervalSince(runStart)))s")
 print("[agenttest] done")
