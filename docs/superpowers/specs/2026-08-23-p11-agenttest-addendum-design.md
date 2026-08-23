@@ -56,7 +56,11 @@ out-of-band context the rolling digest already is) plug into.
   harness decomposes the task into phases deterministically and drives each phase
   as a subagent; the model runs *only* as each phase's implementer (worker N).
   There is no model-driven "implement the whole thing" in v1 — that is the growth
-  path, exercised later.
+  path, exercised later. **v1 spawns `--subagent-pool 2`** — one orchestrator
+  session (idle) plus one worker slot, reused across phases: the pool exists for
+  the growth path, not for concurrency in v1. **The worker codes blind**
+  (`shellAllowed: false`); the packet's `validationCommand` is `nil` in v1 — the
+  only validation is the final acceptance suite, run parent-side by the harness.
 
 - **D2 — Two task specs, one acceptance contract.** The test runs the **easy**
   spec (`roadmap.md`, imperative) and the **hard** spec (`roadmap-user-story.md`,
@@ -67,8 +71,11 @@ out-of-band context the rolling digest already is) plug into.
   "transaction" is a multi-phase effort ending in one candidate ref. `prepare`
   gains a **base ref**: phase N's worktree is branched from phase N-1's commit,
   not `HEAD`. The transaction retains the chain of intermediate worktrees until
-  the final phase commits; the last commit is the candidate ref; then all
-  intermediates are discarded.
+  the final phase commits; the last commit is the candidate ref; intermediates
+  are discarded. **The final worktree is retained for grading** (it is where the
+  acceptance suite runs) — `commitBack` discards *intermediates only*. On a phase
+  **receipt** the transaction stops: there is no partial chain, the candidate ref
+  is nil, and the report records the failure.
 
 - **D4 — Fold-forward: two channels.** The *code* travels forward through the
   checkout (phase N's worktree already contains phases 1..N-1's committed code);
@@ -84,9 +91,14 @@ out-of-band context the rolling digest already is) plug into.
   without rerunning.
 
 - **D6 — Grading: two legs.** (a) **Deterministic** — the acceptance suite runs
-  in the final checkout (`uv run pytest`), pass/fail. (b) **Agent-judged** — a
-  DeepSeek pass reads the generated code against the spec and returns a "looks
-  good / does not look good" verdict with reasons. The DeepSeek verdict is the
+  in the final worktree (`uv run pytest`), pass/fail. (b) **Agent-judged** — a
+  DeepSeek pass reads the generated code against a **fixed rubric** (the spec +
+  `mission.md` + `tech-stack.md`, so the framework choice is in-rubric and a Flask
+  implementation is correctly flagged even though the user-story spec does not
+  name a framework) and returns a structured verdict. The grader is a component:
+  a pinned prompt, a JSON output schema `{"verdict":"good"|"bad","reasons":[…]}`, a
+  model id, a timeout and retry count, and an on-failure behavior that records
+  `verdict:"error"` — it never fabricates a pass. The DeepSeek verdict is the
   primary quality read; the acceptance suite is the floor.
 
 - **D7 — Headless harness, extracted loop.** The harness is a new headless
