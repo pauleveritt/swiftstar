@@ -10,11 +10,12 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P9 — The tool-callback wire.** Next up; not started. SwiftStar answers
-tool calls over the same pipe — including a fake app side — and condenses tool
-results before they enter KV.
+**Phase P10 — Isolation.** Next up; not started. Worktree-isolated dispatch: a
+handoff packet in, a candidate ref or a receipt out. P9 — the tool-callback wire
+— is complete: the host owns tool execution, answering tool calls over the same
+pipe and condensing tool results before they enter KV.
 
-*P0–P8 are complete; their summaries live in [Prior work](#prior-work), not
+*P0–P9 are complete; their summaries live in [Prior work](#prior-work), not
 here, so this section stays a true "what's happening now."*
 
 ## Concept budget
@@ -70,6 +71,22 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
   at spawn and `read` on demand inside the workspace grant. The bootstrap never
   inlines skill bodies, so the agent pays the prefill cost only for the skills
   it loads.
+- **tool request** (P9) — the `--host-tools` wire event the engine emits on stdout
+  when the host owns execution: `{"t":"tool_request","idx":N,"name":"<tool>",
+  "params":[…],"ts":<µs>}`, one per tool call in a block. The engine blocks on a
+  matching `tool_result` from stdin; a mismatched `idx` or any non-`tool_result`
+  line is a loud refusal. `hello` advertises `"tool_request"` in `caps` iff the
+  flag is set.
+- **tool result** (P9) — the host's answer on stdin:
+  `{"t":"tool_result","idx":N,"ok":true|false,"s":"<condensed result text>"}`.
+  `ok:false` is a result, not an absence — the engine consumes it and continues.
+  The `s` is condensed (`ToolResultCondenser`, cap 8000) before it enters KV.
+- **host tool execution** (P9) — the app owns tool execution: with `--host-tools`,
+  the engine emits `tool_request` and blocks; the app's `ToolCallbackResponder`
+  enforces the workspace/shell consent, executes the call, condenses the result,
+  writes the `tool_result` back, and records the host facts into the per-turn
+  `TurnOutcome`. Without the flag the engine executes internally and the wire is
+  observation-only.
 
 ## Phases
 
@@ -84,7 +101,7 @@ needs each one lands: **patch set**, **shipped integration**, **variant**,
 | P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | complete (2026-08-22) |
 | P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript and capture-grade turn/tool outcomes, tool cards, workspace grant, shell toggle, interruptible turns | complete (2026-08-22) |
 | P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | complete (2026-08-22) |
-| P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | planned |
+| P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | complete (2026-08-22) |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | planned |
 | P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | planned |
 | P12 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; see the dependency below | planned |
@@ -468,6 +485,31 @@ Completed phases move here when the roadmap outgrows the front page.
   the staged workspace contains them; the fake's expected argv carries the
   bootstrap it validates.
   Spec: [`docs/superpowers/specs/2026-08-22-p8-skills-design.md`](docs/superpowers/specs/2026-08-22-p8-skills-design.md).
+
+- **P9 — The tool-callback wire (2026-08-22).** The host owns tool execution.
+  The engine's `--host-tools` flag (fork divergence #10) makes
+  `agent_execute_tool_calls` emit one `tool_request` per call on stdout and block
+  on a matching `tool_result` from stdin (the worker thread owns the blocking
+  read, gated by `host_tool_reading` so the UI thread's prompt poll does not
+  steal the result line); a mismatched `idx` or any non-`tool_result` line is a
+  loud refusal. `hello` advertises `"tool_request"` in `caps` iff the flag is
+  set. `SwiftStarKit` gains `.toolRequest` on `AgentWireParser`, a pure
+  `ToolResultCondenser` (cap 8000, deterministic digest), and
+  `ToolCallbackResponder` (the consent matrix — file tools proceed inside the
+  workspace, escapes refuse, `bash` is shell-gated, web tools always refuse —
+  plus execution and the condensed `tool_result` line); `FakeAppSource` is the
+  fake app side (keyed canned answers + the fixed refusal). `AgentController`
+  routes `tool_request` → responder → `tool_result` over stdin and records the
+  host facts into the per-turn `TurnOutcome`. The round trip is
+  `FakeHostToolsIntegrationTests` (a fake agent compiled from `golden-tools.ndjson`
+  with `hostTools:true` ↔ a fake app; the agent emits one request per block,
+  blocks, the app answers, the agent continues to `eos`; `ok:false` still
+  continues). The live recapture at `c21b831` re-verified the bare wire is
+  unchanged (D1: `tool_request`-free, observation-only) and caught a real defect —
+  the `741f722` edit dropped the `"]"` closing the `hello` `caps` array, emitting
+  invalid JSON the wire consumer refused; the `c21b831` amend closes it and adds
+  `test_agent_emit_hello_caps_array_closes` (red-then-green). Spec:
+  [`docs/superpowers/specs/2026-08-22-p9-tool-callback-wire-design.md`](docs/superpowers/specs/2026-08-22-p9-tool-callback-wire-design.md).
 
 ## Workflow
 

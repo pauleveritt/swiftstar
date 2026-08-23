@@ -1,122 +1,118 @@
-{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":315502588394}
-{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":32768,"power":100,"error":"","ts":315502588782}
-{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"ts":315502605418}
-{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":32768,"power":100,"error":"","ts":315502950083}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":32768,"power":100,"error":"","ts":315502950120}
-{"t":"status","state":"prefill","prefill_done":13,"prefill_total":74,"prefill_tps":64.5,"generated":0,"gen_tps":0.0,"ctx_used":1032,"ctx_size":32768,"power":100,"error":"","ts":315503152568}
-{"t":"status","state":"prefill","prefill_done":47,"prefill_total":74,"prefill_tps":115.3,"generated":0,"gen_tps":0.0,"ctx_used":1032,"ctx_size":32768,"power":100,"error":"","ts":315503358617}
-{"t":"status","state":"generating","prefill_done":74,"prefill_total":74,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1032,"ctx_size":32768,"power":100,"error":"","ts":315503501273}
-{"t":"text","s":"\n","ts":315503519058}
-{"t":"tool","phase":"start","idx":0,"ts":315503519081}
-{"t":"tool","phase":"tool","idx":0,"name":"write","ts":315503598093}
-{"t":"status","state":"generating","prefill_done":74,"prefill_total":74,"prefill_tps":0.0,"generated":14,"gen_tps":67.6,"ctx_used":1046,"ctx_size":32768,"power":100,"error":"","ts":315503708264}
-{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":315503723971}
-{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":315503818347}
-{"t":"tool","phase":"param_end","idx":0,"ts":315503818349}
-{"t":"status","state":"generating","prefill_done":74,"prefill_total":74,"prefill_tps":0.0,"generated":27,"gen_tps":65.6,"ctx_used":1059,"ctx_size":32768,"power":100,"error":"","ts":315503912788}
-{"t":"tool","phase":"param_begin","idx":0,"kind":"content","name":"content","ts":315503991447}
-{"t":"tool","phase":"param_value","idx":0,"s":"hello from golden-tools","ts":315504117604}
-{"t":"tool","phase":"param_end","idx":0,"ts":315504117606}
-{"t":"status","state":"generating","prefill_done":74,"prefill_total":74,"prefill_tps":0.0,"generated":40,"gen_tps":64.9,"ctx_used":1072,"ctx_size":32768,"power":100,"error":"","ts":315504117618}
-{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":315504148960}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":40,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1113,"ctx_size":32768,"power":100,"error":"","ts":315504149357}
-{"t":"status","state":"prefill","prefill_done":30,"prefill_total":40,"prefill_tps":148.4,"generated":0,"gen_tps":0.0,"ctx_used":1113,"ctx_size":32768,"power":100,"error":"","ts":315504351573}
-{"t":"status","state":"generating","prefill_done":40,"prefill_total":40,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1113,"ctx_size":32768,"power":100,"error":"","ts":315504413365}
-{"t":"text","s":"\nCreated `seed.txt` in ","ts":315504524728}
-{"t":"status","state":"generating","prefill_done":40,"prefill_total":40,"prefill_tps":0.0,"generated":14,"gen_tps":67.7,"ctx_used":1127,"ctx_size":32768,"power":100,"error":"","ts":315504620061}
-{"t":"text","s":"the current directory with the exact content:","ts":315504635884}
-{"t":"text","s":" `hello from golden-tools`.\n","ts":315504747300}
-{"t":"text","s":"\n","ts":315504747303}
-{"t":"status","state":"idle","prefill_done":40,"prefill_total":40,"prefill_tps":0.0,"generated":21,"gen_tps":66.0,"ctx_used":1136,"ctx_size":32768,"power":100,"error":"","ts":315504747321}
-{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":21,"ctx_used":1134,"ts":315504747323}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1136,"ctx_size":32768,"power":100,"error":"","ts":315505027703}
-{"t":"status","state":"generating","prefill_done":17,"prefill_total":17,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1151,"ctx_size":32768,"power":100,"error":"","ts":315505195768}
-{"t":"text","s":"\n","ts":315505213741}
-{"t":"tool","phase":"start","idx":0,"ts":315505213745}
-{"t":"tool","phase":"tool","idx":0,"name":"read","ts":315505294665}
-{"t":"status","state":"generating","prefill_done":17,"prefill_total":17,"prefill_tps":0.0,"generated":14,"gen_tps":66.7,"ctx_used":1165,"ctx_size":32768,"power":100,"error":"","ts":315505405662}
-{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":315505421467}
-{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":315505516036}
-{"t":"tool","phase":"param_end","idx":0,"ts":315505516037}
-{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":315505547479}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":47,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1220,"ctx_size":32768,"power":100,"error":"","ts":315505547784}
-{"t":"status","state":"prefill","prefill_done":31,"prefill_total":47,"prefill_tps":153.3,"generated":0,"gen_tps":0.0,"ctx_used":1220,"ctx_size":32768,"power":100,"error":"","ts":315505750063}
-{"t":"status","state":"generating","prefill_done":47,"prefill_total":47,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1220,"ctx_size":32768,"power":100,"error":"","ts":315505840918}
-{"t":"text","s":"\nThe file `seed.txt` ","ts":315505951500}
-{"t":"status","state":"generating","prefill_done":47,"prefill_total":47,"prefill_tps":0.0,"generated":14,"gen_tps":68.1,"ctx_used":1234,"ctx_size":32768,"power":100,"error":"","ts":315506046388}
-{"t":"text","s":"contains:\n\n```\nhello from ","ts":315506062256}
-{"t":"text","s":"golden-tools\n```\n\n","ts":315506125397}
-{"t":"status","state":"idle","prefill_done":47,"prefill_total":47,"prefill_tps":0.0,"generated":18,"gen_tps":67.0,"ctx_used":1240,"ctx_size":32768,"power":100,"error":"","ts":315506125414}
-{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":18,"ctx_used":1238,"ts":315506125415}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1240,"ctx_size":32768,"power":100,"error":"","ts":315506481141}
-{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1264,"ctx_size":32768,"power":100,"error":"","ts":315506685437}
-{"t":"text","s":"\n","ts":315506702223}
-{"t":"tool","phase":"start","idx":0,"ts":315506702229}
-{"t":"tool","phase":"tool","idx":0,"name":"edit","ts":315506783203}
-{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":14,"gen_tps":66.8,"ctx_used":1278,"ctx_size":32768,"power":100,"error":"","ts":315506894987}
-{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":315506910716}
-{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":315507005367}
-{"t":"tool","phase":"param_end","idx":0,"ts":315507005369}
-{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":27,"gen_tps":65.2,"ctx_used":1291,"ctx_size":32768,"power":100,"error":"","ts":315507099801}
-{"t":"tool","phase":"param_begin","idx":0,"kind":"diff_old","name":"old","ts":315507178563}
-{"t":"tool","phase":"param_value","idx":0,"s":"hello","ts":315507257488}
-{"t":"tool","phase":"param_end","idx":0,"ts":315507257490}
-{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":40,"gen_tps":64.5,"ctx_used":1304,"ctx_size":32768,"power":100,"error":"","ts":315507305330}
-{"t":"tool","phase":"param_begin","idx":0,"kind":"diff_new","name":"new","ts":315507416080}
-{"t":"tool","phase":"param_value","idx":0,"s":"hi","ts":315507494988}
-{"t":"tool","phase":"param_end","idx":0,"ts":315507494990}
-{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":53,"gen_tps":64.2,"ctx_used":1317,"ctx_size":32768,"power":100,"error":"","ts":315507510654}
-{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":315507526567}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":85,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1402,"ctx_size":32768,"power":100,"error":"","ts":315507527112}
-{"t":"status","state":"prefill","prefill_done":33,"prefill_total":85,"prefill_tps":160.7,"generated":0,"gen_tps":0.0,"ctx_used":1402,"ctx_size":32768,"power":100,"error":"","ts":315507732516}
-{"t":"status","state":"prefill","prefill_done":72,"prefill_total":85,"prefill_tps":177.3,"generated":0,"gen_tps":0.0,"ctx_used":1402,"ctx_size":32768,"power":100,"error":"","ts":315507933198}
-{"t":"status","state":"generating","prefill_done":85,"prefill_total":85,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1402,"ctx_size":32768,"power":100,"error":"","ts":315507996061}
-{"t":"text","s":"\nEdited `seed.txt`: replaced ","ts":315508107148}
-{"t":"status","state":"generating","prefill_done":85,"prefill_total":85,"prefill_tps":0.0,"generated":14,"gen_tps":67.9,"ctx_used":1416,"ctx_size":32768,"power":100,"error":"","ts":315508202132}
-{"t":"text","s":"\"hello\" with \"hi\". ","ts":315508217977}
-{"t":"text","s":"The file now contains:\n\n```\n","ts":315508328709}
-{"t":"status","state":"generating","prefill_done":85,"prefill_total":85,"prefill_tps":0.0,"generated":27,"gen_tps":65.6,"ctx_used":1429,"ctx_size":32768,"power":100,"error":"","ts":315508407857}
-{"t":"text","s":"hi from golden-tools\n```\n","ts":315508439628}
-{"t":"text","s":"\n","ts":315508439631}
-{"t":"status","state":"idle","prefill_done":85,"prefill_total":85,"prefill_tps":0.0,"generated":28,"gen_tps":65.5,"ctx_used":1432,"ctx_size":32768,"power":100,"error":"","ts":315508439645}
-{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":28,"ctx_used":1430,"ts":315508439646}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1432,"ctx_size":32768,"power":100,"error":"","ts":315508751411}
-{"t":"status","state":"generating","prefill_done":15,"prefill_total":15,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1445,"ctx_size":32768,"power":100,"error":"","ts":315508891752}
-{"t":"text","s":"\n","ts":315508908410}
-{"t":"tool","phase":"start","idx":0,"ts":315508908416}
-{"t":"tool","phase":"tool","idx":0,"name":"list","ts":315508989020}
-{"t":"status","state":"generating","prefill_done":15,"prefill_total":15,"prefill_tps":0.0,"generated":14,"gen_tps":67.2,"ctx_used":1459,"ctx_size":32768,"power":100,"error":"","ts":315509100226}
-{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":315509115972}
-{"t":"tool","phase":"param_value","idx":0,"s":".","ts":315509163278}
-{"t":"tool","phase":"param_end","idx":0,"ts":315509163281}
-{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":315509194904}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":41,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1505,"ctx_size":32768,"power":100,"error":"","ts":315509195196}
-{"t":"status","state":"prefill","prefill_done":29,"prefill_total":41,"prefill_tps":144.6,"generated":0,"gen_tps":0.0,"ctx_used":1505,"ctx_size":32768,"power":100,"error":"","ts":315509395711}
-{"t":"status","state":"generating","prefill_done":41,"prefill_total":41,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1505,"ctx_size":32768,"power":100,"error":"","ts":315509470112}
-{"t":"text","s":"\nThe current directory contains:\n\n-","ts":315509581141}
-{"t":"status","state":"generating","prefill_done":41,"prefill_total":41,"prefill_tps":0.0,"generated":14,"gen_tps":68.0,"ctx_used":1519,"ctx_size":32768,"power":100,"error":"","ts":315509676070}
-{"t":"text","s":" `seed.txt` (20","ts":315509691867}
-{"t":"text","s":" bytes)\n\n","ts":315509739614}
-{"t":"status","state":"idle","prefill_done":41,"prefill_total":41,"prefill_tps":0.0,"generated":17,"gen_tps":67.1,"ctx_used":1524,"ctx_size":32768,"power":100,"error":"","ts":315509739633}
-{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":17,"ctx_used":1522,"ts":315509739635}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1524,"ctx_size":32768,"power":100,"error":"","ts":315510008081}
-{"t":"status","state":"generating","prefill_done":19,"prefill_total":19,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1541,"ctx_size":32768,"power":100,"error":"","ts":315510188505}
-{"t":"text","s":"\n","ts":315510204478}
-{"t":"tool","phase":"start","idx":0,"ts":315510204481}
-{"t":"tool","phase":"tool","idx":0,"name":"bash","ts":315510283606}
-{"t":"status","state":"generating","prefill_done":19,"prefill_total":19,"prefill_tps":0.0,"generated":14,"gen_tps":68.0,"ctx_used":1555,"ctx_size":32768,"power":100,"error":"","ts":315510394484}
-{"t":"tool","phase":"param_begin","idx":0,"kind":"bash_command","name":"command","ts":315510410348}
-{"t":"tool","phase":"param_value","idx":0,"s":"echo hello-world","ts":315510521241}
-{"t":"tool","phase":"param_end","idx":0,"ts":315510521243}
-{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":315510552694}
-{"t":"tool","phase":"output","idx":0,"s":"hello-world\n","ts":315510570576}
-{"t":"status","state":"prefill","prefill_done":0,"prefill_total":62,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1626,"ctx_size":32768,"power":100,"error":"","ts":315510570811}
-{"t":"status","state":"prefill","prefill_done":32,"prefill_total":62,"prefill_tps":158.4,"generated":0,"gen_tps":0.0,"ctx_used":1626,"ctx_size":32768,"power":100,"error":"","ts":315510772791}
-{"t":"status","state":"generating","prefill_done":62,"prefill_total":62,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1626,"ctx_size":32768,"power":100,"error":"","ts":315510930003}
-{"t":"text","s":"\nThe command `echo hello-world`","ts":315511041069}
-{"t":"status","state":"generating","prefill_done":62,"prefill_total":62,"prefill_tps":0.0,"generated":14,"gen_tps":67.9,"ctx_used":1640,"ctx_size":32768,"power":100,"error":"","ts":315511136191}
-{"t":"text","s":" ran successfully and produced the output:","ts":315511152087}
-{"t":"text","s":"\n\n```\nhello-world\n`","ts":315511262839}
-{"t":"text","s":"``\n\n","ts":315511278744}
-{"t":"status","state":"idle","prefill_done":62,"prefill_total":62,"prefill_tps":0.0,"generated":22,"gen_tps":66.1,"ctx_used":1650,"ctx_size":32768,"power":100,"error":"","ts":315511278764}
-{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":22,"ctx_used":1648,"ts":315511278766}
+{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":328097177680}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":32768,"power":100,"error":"","ts":328097177936}
+{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"ts":328097190728}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":32768,"power":100,"error":"","ts":328097487172}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":32768,"power":100,"error":"","ts":328097487228}
+{"t":"status","state":"prefill","prefill_done":15,"prefill_total":74,"prefill_tps":72.0,"generated":0,"gen_tps":0.0,"ctx_used":1032,"ctx_size":32768,"power":100,"error":"","ts":328097695960}
+{"t":"status","state":"prefill","prefill_done":49,"prefill_total":74,"prefill_tps":118.8,"generated":0,"gen_tps":0.0,"ctx_used":1032,"ctx_size":32768,"power":100,"error":"","ts":328097900197}
+{"t":"status","state":"generating","prefill_done":74,"prefill_total":74,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1032,"ctx_size":32768,"power":100,"error":"","ts":328098034483}
+{"t":"text","s":"\n","ts":328098051068}
+{"t":"tool","phase":"start","idx":0,"ts":328098051073}
+{"t":"tool","phase":"tool","idx":0,"name":"write","ts":328098131256}
+{"t":"status","state":"generating","prefill_done":74,"prefill_total":74,"prefill_tps":0.0,"generated":14,"gen_tps":67.7,"ctx_used":1046,"ctx_size":32768,"power":100,"error":"","ts":328098241404}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":328098257425}
+{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":328098353105}
+{"t":"tool","phase":"param_end","idx":0,"ts":328098353107}
+{"t":"status","state":"generating","prefill_done":74,"prefill_total":74,"prefill_tps":0.0,"generated":27,"gen_tps":65.4,"ctx_used":1059,"ctx_size":32768,"power":100,"error":"","ts":328098447565}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"content","name":"content","ts":328098526395}
+{"t":"tool","phase":"param_value","idx":0,"s":"hello from golden-tools","ts":328098652904}
+{"t":"tool","phase":"param_end","idx":0,"ts":328098652910}
+{"t":"status","state":"generating","prefill_done":74,"prefill_total":74,"prefill_tps":0.0,"generated":40,"gen_tps":64.7,"ctx_used":1072,"ctx_size":32768,"power":100,"error":"","ts":328098652926}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":328098684727}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":40,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1113,"ctx_size":32768,"power":100,"error":"","ts":328098685139}
+{"t":"status","state":"prefill","prefill_done":30,"prefill_total":40,"prefill_tps":148.1,"generated":0,"gen_tps":0.0,"ctx_used":1113,"ctx_size":32768,"power":100,"error":"","ts":328098887712}
+{"t":"status","state":"generating","prefill_done":40,"prefill_total":40,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1113,"ctx_size":32768,"power":100,"error":"","ts":328098949782}
+{"t":"text","s":"\nCreated `seed.txt` with ","ts":328099060671}
+{"t":"status","state":"generating","prefill_done":40,"prefill_total":40,"prefill_tps":0.0,"generated":14,"gen_tps":68.0,"ctx_used":1127,"ctx_size":32768,"power":100,"error":"","ts":328099155649}
+{"t":"text","s":"the content `hello from golden-tools`","ts":328099171501}
+{"t":"text","s":".\n\n","ts":328099187291}
+{"t":"status","state":"idle","prefill_done":40,"prefill_total":40,"prefill_tps":0.0,"generated":15,"gen_tps":67.7,"ctx_used":1130,"ctx_size":32768,"power":100,"error":"","ts":328099187304}
+{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":15,"ctx_used":1128,"ts":328099187306}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1130,"ctx_size":32768,"power":100,"error":"","ts":328099562039}
+{"t":"status","state":"generating","prefill_done":17,"prefill_total":17,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1145,"ctx_size":32768,"power":100,"error":"","ts":328099728738}
+{"t":"text","s":"\n","ts":328099745123}
+{"t":"tool","phase":"start","idx":0,"ts":328099745126}
+{"t":"tool","phase":"tool","idx":0,"name":"read","ts":328099825477}
+{"t":"status","state":"generating","prefill_done":17,"prefill_total":17,"prefill_tps":0.0,"generated":14,"gen_tps":67.0,"ctx_used":1159,"ctx_size":32768,"power":100,"error":"","ts":328099937851}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":328099953811}
+{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":328100048502}
+{"t":"tool","phase":"param_end","idx":0,"ts":328100048504}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":328100080283}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":47,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1214,"ctx_size":32768,"power":100,"error":"","ts":328100080633}
+{"t":"status","state":"prefill","prefill_done":31,"prefill_total":47,"prefill_tps":153.3,"generated":0,"gen_tps":0.0,"ctx_used":1214,"ctx_size":32768,"power":100,"error":"","ts":328100282863}
+{"t":"status","state":"generating","prefill_done":47,"prefill_total":47,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1214,"ctx_size":32768,"power":100,"error":"","ts":328100373801}
+{"t":"text","s":"\nThe file `seed.txt` ","ts":328100484642}
+{"t":"status","state":"generating","prefill_done":47,"prefill_total":47,"prefill_tps":0.0,"generated":14,"gen_tps":68.0,"ctx_used":1228,"ctx_size":32768,"power":100,"error":"","ts":328100579597}
+{"t":"text","s":"contains: `hello from golden-tools`","ts":328100595357}
+{"t":"text","s":".\n\n","ts":328100611194}
+{"t":"status","state":"idle","prefill_done":47,"prefill_total":47,"prefill_tps":0.0,"generated":15,"gen_tps":67.7,"ctx_used":1231,"ctx_size":32768,"power":100,"error":"","ts":328100611203}
+{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":15,"ctx_used":1229,"ts":328100611205}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1231,"ctx_size":32768,"power":100,"error":"","ts":328100815505}
+{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1255,"ctx_size":32768,"power":100,"error":"","ts":328101018315}
+{"t":"text","s":"\n","ts":328101034382}
+{"t":"tool","phase":"start","idx":0,"ts":328101034384}
+{"t":"tool","phase":"tool","idx":0,"name":"edit","ts":328101113297}
+{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":14,"gen_tps":68.1,"ctx_used":1269,"ctx_size":32768,"power":100,"error":"","ts":328101223799}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":328101239650}
+{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":328101334306}
+{"t":"tool","phase":"param_end","idx":0,"ts":328101334309}
+{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":27,"gen_tps":65.6,"ctx_used":1282,"ctx_size":32768,"power":100,"error":"","ts":328101429768}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"diff_old","name":"old","ts":328101508845}
+{"t":"tool","phase":"param_value","idx":0,"s":"hello","ts":328101587799}
+{"t":"tool","phase":"param_end","idx":0,"ts":328101587801}
+{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":40,"gen_tps":64.9,"ctx_used":1295,"ctx_size":32768,"power":100,"error":"","ts":328101635121}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"diff_new","name":"new","ts":328101745515}
+{"t":"tool","phase":"param_value","idx":0,"s":"hi","ts":328101824508}
+{"t":"tool","phase":"param_end","idx":0,"ts":328101824509}
+{"t":"status","state":"generating","prefill_done":26,"prefill_total":26,"prefill_tps":0.0,"generated":53,"gen_tps":64.5,"ctx_used":1308,"ctx_size":32768,"power":100,"error":"","ts":328101840269}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":328101855989}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":85,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1393,"ctx_size":32768,"power":100,"error":"","ts":328101856503}
+{"t":"status","state":"prefill","prefill_done":33,"prefill_total":85,"prefill_tps":160.9,"generated":0,"gen_tps":0.0,"ctx_used":1393,"ctx_size":32768,"power":100,"error":"","ts":328102061641}
+{"t":"status","state":"prefill","prefill_done":72,"prefill_total":85,"prefill_tps":177.4,"generated":0,"gen_tps":0.0,"ctx_used":1393,"ctx_size":32768,"power":100,"error":"","ts":328102262355}
+{"t":"status","state":"generating","prefill_done":85,"prefill_total":85,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1393,"ctx_size":32768,"power":100,"error":"","ts":328102325229}
+{"t":"text","s":"\nReplaced \"hello\" with ","ts":328102436206}
+{"t":"status","state":"generating","prefill_done":85,"prefill_total":85,"prefill_tps":0.0,"generated":14,"gen_tps":67.9,"ctx_used":1407,"ctx_size":32768,"power":100,"error":"","ts":328102531387}
+{"t":"text","s":"\"hi\" in `seed.txt`","ts":328102547271}
+{"t":"text","s":". The file now reads: `h","ts":328102658490}
+{"t":"text","s":"i from golden-tools`.\n\n","ts":328102737681}
+{"t":"status","state":"idle","prefill_done":85,"prefill_total":85,"prefill_tps":0.0,"generated":26,"gen_tps":65.5,"ctx_used":1421,"ctx_size":32768,"power":100,"error":"","ts":328102737695}
+{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":26,"ctx_used":1419,"ts":328102737697}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1421,"ctx_size":32768,"power":100,"error":"","ts":328103114512}
+{"t":"status","state":"generating","prefill_done":15,"prefill_total":15,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1434,"ctx_size":32768,"power":100,"error":"","ts":328103255729}
+{"t":"text","s":"\n","ts":328103272202}
+{"t":"tool","phase":"start","idx":0,"ts":328103272206}
+{"t":"tool","phase":"tool","idx":0,"name":"list","ts":328103352180}
+{"t":"status","state":"generating","prefill_done":15,"prefill_total":15,"prefill_tps":0.0,"generated":14,"gen_tps":67.3,"ctx_used":1448,"ctx_size":32768,"power":100,"error":"","ts":328103463688}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":328103479451}
+{"t":"tool","phase":"param_value","idx":0,"s":".","ts":328103526882}
+{"t":"tool","phase":"param_end","idx":0,"ts":328103526884}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":328103558567}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":41,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1494,"ctx_size":32768,"power":100,"error":"","ts":328103558847}
+{"t":"status","state":"prefill","prefill_done":29,"prefill_total":41,"prefill_tps":144.8,"generated":0,"gen_tps":0.0,"ctx_used":1494,"ctx_size":32768,"power":100,"error":"","ts":328103759186}
+{"t":"status","state":"generating","prefill_done":41,"prefill_total":41,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1494,"ctx_size":32768,"power":100,"error":"","ts":328103833658}
+{"t":"text","s":"\nThe current directory contains:\n-","ts":328103945058}
+{"t":"status","state":"generating","prefill_done":41,"prefill_total":41,"prefill_tps":0.0,"generated":14,"gen_tps":67.7,"ctx_used":1508,"ctx_size":32768,"power":100,"error":"","ts":328104040374}
+{"t":"text","s":" `seed.txt` (20","ts":328104056215}
+{"t":"text","s":" bytes)\n\n","ts":328104103964}
+{"t":"status","state":"idle","prefill_done":41,"prefill_total":41,"prefill_tps":0.0,"generated":17,"gen_tps":66.9,"ctx_used":1513,"ctx_size":32768,"power":100,"error":"","ts":328104103982}
+{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":17,"ctx_used":1511,"ts":328104103984}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1513,"ctx_size":32768,"power":100,"error":"","ts":328104361731}
+{"t":"status","state":"generating","prefill_done":19,"prefill_total":19,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1530,"ctx_size":32768,"power":100,"error":"","ts":328104543144}
+{"t":"text","s":"\n","ts":328104559630}
+{"t":"tool","phase":"start","idx":0,"ts":328104559633}
+{"t":"tool","phase":"tool","idx":0,"name":"bash","ts":328104640658}
+{"t":"status","state":"generating","prefill_done":19,"prefill_total":19,"prefill_tps":0.0,"generated":14,"gen_tps":66.8,"ctx_used":1544,"ctx_size":32768,"power":100,"error":"","ts":328104752889}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"bash_command","name":"command","ts":328104768955}
+{"t":"tool","phase":"param_value","idx":0,"s":"echo hello-world","ts":328104880787}
+{"t":"tool","phase":"param_end","idx":0,"ts":328104880789}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":328104912375}
+{"t":"tool","phase":"output","idx":0,"s":"hello-world\n","ts":328104930739}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":62,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1615,"ctx_size":32768,"power":100,"error":"","ts":328104931007}
+{"t":"status","state":"prefill","prefill_done":32,"prefill_total":62,"prefill_tps":158.8,"generated":0,"gen_tps":0.0,"ctx_used":1615,"ctx_size":32768,"power":100,"error":"","ts":328105132538}
+{"t":"status","state":"generating","prefill_done":62,"prefill_total":62,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1615,"ctx_size":32768,"power":100,"error":"","ts":328105289640}
+{"t":"text","s":"\nThe command `echo hello-world`","ts":328105401487}
+{"t":"status","state":"generating","prefill_done":62,"prefill_total":62,"prefill_tps":0.0,"generated":14,"gen_tps":67.4,"ctx_used":1629,"ctx_size":32768,"power":100,"error":"","ts":328105497364}
+{"t":"text","s":" ran successfully and output: `h","ts":328105513209}
+{"t":"text","s":"ello-world`.\n\n","ts":328105560803}
+{"t":"status","state":"idle","prefill_done":62,"prefill_total":62,"prefill_tps":0.0,"generated":17,"gen_tps":66.6,"ctx_used":1634,"ctx_size":32768,"power":100,"error":"","ts":328105560821}
+{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":17,"ctx_used":1632,"ts":328105560823}

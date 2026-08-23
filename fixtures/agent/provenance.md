@@ -1,20 +1,24 @@
-# `golden.ndjson` — capture notes (P7 recapture at submodule `35bf505`)
+# `golden.ndjson` — capture notes (P9 recapture at submodule `c21b831`)
 
 This fixture is a **verbatim, byte-for-byte copy of `ds4-agent`'s stdout** from one real
 `--json-events` session, captured by the committed `swiftstar-drive` program (P5 driver).
-Nothing was hand-written or reformatted. It supersedes the P5 capture (`24caf7b`): the wire
-still carries the **version handshake** (first line) and a **monotonic `ts` on every event**,
-and the capture format still includes the engine's `--trace` output (`golden.trace`) and
-stderr (`golden.stderr`). The P7 recapture re-verifies all of that against the rebuilt binary
-at submodule `35bf505` and, additionally, proves the **D12 turn-outcome fields**
-(`stop_reason`/`generated`/`ctx_used`) the bump added to every turn-end `ready`.
+Nothing was hand-written or reformatted. It supersedes the P5 capture (`24caf7b`) and the P7
+recapture (`35bf505`): the wire still carries the **version handshake** (first line) and a
+**monotonic `ts` on every event**, and the capture format still includes the engine's
+`--trace` output (`golden.trace`) and stderr (`golden.stderr`). The P9 recapture re-verifies
+all of that against the rebuilt binary at submodule `c21b831` and, additionally, proves **D1**:
+the `--host-tools` flag (divergence #10) is off by default, so the bare-CLI wire is unchanged —
+**observation-only, no `tool_request` events** — while the D12 turn-outcome fields
+(`stop_reason`/`generated`/`ctx_used`) the P7 bump added to every turn-end `ready` are intact.
 
 ## Provenance
 
-- Submodule (`external/ds4`) SHA: `35bf505110184f2a4489b7bcc60b16150584f5c8`
-  (the P7 bump — consent flags `--workspace`/`--shell` (divergence #8) plus the turn-outcome
-  `ready` fields `stop_reason`/`generated`/`ctx_used` (divergence #9 / D12). The SwiftStar
-  gitlink pins this exact SHA; the P5 capture was at `24caf7b`.)
+- Submodule (`external/ds4`) SHA: `c21b8319866c2ac625d0c1dab7dc2d0aa75aee18`
+  (the P9 bump — `--host-tools` tool-callback wire (divergence #10): the host owns tool
+  execution; the engine emits `tool_request`/`tool_result` over the same pipe. The flag is off
+  by default, so the bare wire here is observation-only. The amend over `741f722` also closes the
+  `hello` `caps` array the `741f722` edit dropped — see "D1 + the hello `caps` fix" below. The
+  SwiftStar gitlink pins this exact SHA; the P5 capture was at `24caf7b`, the P7 at `35bf505`.)
 - Built with: `just engine` (`make -C external/ds4 ds4-agent`). Binary run in place,
   `external/ds4/ds4-agent`, with `currentDirectoryURL = external/ds4` (so relative
   `metal/*.metal` sources resolve — no `--chdir`, no `DS4_METAL_*_SOURCE` vars; this capture
@@ -25,26 +29,30 @@ at submodule `35bf505` and, additionally, proves the **D12 turn-outcome fields**
 - Model file: `laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf` (Laguna S 2.1, 48 GiB) at
   `~/projects/ds4/gguf/`.
 - `DS4_LOCK_FILE=/tmp/ds4-capture-<pid>.lock`.
-- Wall-clock start: `2026-08-23T01:58:17Z`; handshake `ts` anchor: `315569503767`.
+- Wall-clock start: `2026-08-23T05:26:25Z`; handshake `ts` anchor: `328057802413`.
 
 ## What the handshake adds
 
 The first non-blank line is the version/capability handshake:
 
 ```json
-{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":315569503767}
+{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":328057802413}
 ```
 
 Every event carries `"ts"` — monotonic microseconds since engine start
 (`clock_gettime(CLOCK_MONOTONIC)`). A consumer that needs a capability not listed, or a
 version it does not know, must refuse loudly (binding rule 7). The P1 receive-time sidecar is
 retired; the wall-clock start is recorded in `provenance.md` for correlation with the trace's
-wall-clock stamps.
+wall-clock stamps. With `--host-tools` off (the bare-CLI shape here), `caps` is the same seven
+kinds as P5/P7 — `tool_request` is advertised only when the flag is set (see
+`golden-tools.provenance.md` and the round-trip evidence in
+`docs/superpowers/research/2026-08-22-p9-verification-record.md`).
 
-## D12 turn-outcome fields (P7 bump)
+## D12 turn-outcome fields (P7 bump, still present at `c21b831`)
 
-The turn-end `ready` events now carry `stop_reason` / `generated` / `ctx_used` (divergence #9 /
-D12, added by the `35bf505` bump). Both turns here ended cleanly:
+The turn-end `ready` events carry `stop_reason` / `generated` / `ctx_used` (divergence #9 /
+D12, added by the `35bf505` bump; unchanged by the `741f722`/`c21b831` P9 bump). Both turns
+here ended cleanly:
 
 ```json
 {"t":"ready",...,"stop_reason":"eos","generated":<N>,"ctx_used":<N>,"ts":…}
@@ -56,6 +64,23 @@ from the boot ready — same shape as the memory-plan fields). The fixture is st
 `grep -c '"phase"'` is `0` and `grep -c '"t":"tool"'` is `0` — no tool-call block opens, so
 Task 6's no-tool-events assertion on `golden.ndjson` still holds. The `golden-tools.ndjson`
 fixture is the one that exercises the tool-phase zoo.
+
+## D1 + the hello `caps` fix (P9 bump)
+
+The P9 bump adds `--host-tools` (divergence #10): the host owns tool execution, and the engine
+emits one `tool_request` per call on stdout and blocks on a matching `tool_result` from stdin.
+The flag is **off by default**, so the bare-CLI wire here is **unchanged** — `grep -c
+"tool_request"` is `0` (proves D1: the bare path is observation-only; only the
+`golden-tools`/round-trip path exercises the request/result wire). The `hello` `caps` array
+is the same seven kinds as P5/P7 (`tool_request` appears only when the flag is set).
+
+**The hello `caps` fix.** The `741f722` commit that added the conditional `,"tool_request"`
+into `agent_emit_hello` dropped the `"]"` the parent `b91401d` closed the `caps` array with, so
+the emitted `hello` was invalid JSON (`..."queued","ts","ts":<n>}` — the array never closed).
+The live recapture refused it (`wire handshake refused`); `ds4_agent_test` did not catch it
+(no test parsed the `hello` JSON). The `c21b831` amend closes the `caps` array after the
+conditional and adds `test_agent_emit_hello_caps_array_closes` (red-then-green verified), so
+the `hello` is valid JSON in both the on/off shapes. This is the defect the recapture caught.
 
 ## The memory-budget verification (and the scratch under-report)
 
@@ -104,32 +129,37 @@ on every turn-end) is covered by the P7 `golden-tools.ndjson` fixture (see
 
 ## Event counts
 
-- Kinds: `hello` (1), `status` (20), `ready` (3), `text` (21). No `think`/`tool`/`queued`.
-- `status.state` values observed: `idle` (4), `prefill` (4), `generating` (12).
+- Kinds: `hello` (1), `status` (18), `ready` (3), `text` (19). No `think`/`tool`/`queued`/
+  `tool_request` (D1: the bare wire is observation-only).
+- `status.state` values observed: `idle` (4), `prefill` (4), `generating` (10).
 - All 3 `ready` events carry all four memory fields, byte-identical across the session.
 - The 2 turn-end `ready` events carry `stop_reason:"eos"` plus `generated`/`ctx_used` (D12);
   the startup `ready` carries none (turn-end fields, like the memory-plan fields).
 - `golden.trace` has 2 `prefill sync done` lines (one per turn) — the count the
   `TraceParserTests.goldenTraceParsesWithoutRefusing` assertion pins.
 
-## Count/band drift vs the P5 capture (within tolerance)
+## Count/band drift (within tolerance)
 
-The P5 capture (`24caf7b`) had 43 wire lines / 19 `status` / 5460 bytes; this P7 recapture
-(`35bf505`) has 45 wire lines / 20 `status` / 5833 bytes. The drift is count/band only —
-generation cadence varies run-to-run, so `status`/`text` counts move. The test-critical
-values are unchanged: `planned_bytes` is still `49_943_965_040` (the
+The P5 capture (`24caf7b`) had 43 wire lines / 19 `status` / 5460 bytes; the P7 recapture
+(`35bf505`) had 45 / 20 `status` / 5833 bytes; this P9 recapture (`c21b831`) has 41 wire lines
+/ 18 `status` / 5291 bytes. The drift is count/band only — generation cadence varies
+run-to-run, so `status`/`text` counts move. The test-critical values are unchanged:
+`planned_bytes` is still `49_943_965_040` (the
 `FixtureReplayTests.replayYieldsStatusAndReadyThroughReducer` hard-coded value), the trace
-still has 2 prefill syncs (`TraceParserTests`), the capture is still text-only
-(`DiagnosticsEvidenceFloorTests` no-critical-findings floor), and the memory-plan bytes are
-byte-identical. No exact-value assertion drifted; only the run-to-run cadence counts moved.
+still has 2 prefill syncs (`TraceParserTests`), the capture is still text-only and
+`tool_request`-free (`DiagnosticsEvidenceFloorTests` no-critical-findings floor + D1), and the
+memory-plan bytes are byte-identical. No exact-value assertion drifted; only the run-to-run
+cadence counts moved.
 
 ## Recapture rule
 
 This fixture is the sanctioned output of `swiftstar-drive`. **On every submodule bump, it must
 be recaptured** against the freshly rebuilt binary (`just engine`, then `just capture`),
 because a rebase can apply cleanly and still be semantically wrong — and the handshake
-version/caps, the D12 turn-outcome fields, and the `ts` monotonicity are all part of what a
-recapture re-verifies. The recapture must also be copied to the bundled
+version/caps, the D12 turn-outcome fields, the `ts` monotonicity, and (P9) the
+`tool_request`-free bare wire are all part of what a recapture re-verifies. The P9 recapture
+caught the `hello` `caps` defect this way (see "D1 + the hello `caps` fix" above) — the very
+reason the rule exists. The recapture must also be copied to the bundled
 `Sources/SwiftStarAppKit/Resources/golden.{ndjson,trace}` so the integration-tier
 `FixtureReplayTests.bundledFixtureMatchesRepoFixture` assertion (bundled == repo) stays green —
 the P5 precedent (`9e97bc3`) established that both copies move together.
