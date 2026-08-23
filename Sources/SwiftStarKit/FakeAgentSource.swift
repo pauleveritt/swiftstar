@@ -126,7 +126,7 @@ func emitInterrupt() {
 
 func replayOnce() {
     for (micros, line) in replay {
-        Thread.sleep(forTimeInterval: lineDelay(micros))
+        if speed > 0 { Thread.sleep(forTimeInterval: lineDelay(micros)) }
         if etXPending() { emitInterrupt(); return }
         emit(line)
         if line.contains("\"phase\":\"start\"") { blockOpen = true }
