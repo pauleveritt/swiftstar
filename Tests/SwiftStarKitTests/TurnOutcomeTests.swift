@@ -233,4 +233,23 @@ struct TurnOutcomeTests {
         #expect(outcome.toolCalls.count == 2)
         #expect(outcome.toolCalls.allSatisfy { $0.transitions.contains(.executed) })
     }
+
+    @Test func hostToolsModeDoesNotDoubleCount() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        // The transcript view (`.tool`) AND the execution view (`.toolRequest`)
+        // describe the SAME call; finish() must count it once.
+        b.apply(.tool(AgentToolEvent(phase: .tool, idx: 0, name: "write",
+                                     paramKind: nil, paramName: nil, value: nil,
+                                     status: nil, calls: nil)))
+        b.apply(.tool(AgentToolEvent(phase: .finish, idx: 0, name: nil,
+                                     paramKind: nil, paramName: nil, value: nil,
+                                     status: nil, calls: 1)))
+        b.apply(.toolRequest(idx: 0, name: "write", params: []))
+        b.recordHostVerdict(idx: 0, ok: true, mutations: [],
+                            exitStatus: nil, outputDigest: nil, validationRan: false)
+        let outcome = b.finish()
+        #expect(outcome.toolCalls.count == 1)   // not 2
+        #expect(outcome.toolCalls.first?.name == "write")
+        #expect(outcome.toolCalls.first?.transitions.contains(.executed) == true)
+    }
 }

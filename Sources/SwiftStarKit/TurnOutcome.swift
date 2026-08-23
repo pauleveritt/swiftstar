@@ -162,15 +162,22 @@ public struct TurnOutcomeBuilder {
     /// the wire's reason; a wire predating the D12 fields ends turns with no
     /// reason, so a turn that simply ended defaults to `.eos`.
     public func finish(appStopReason: TurnStopReason? = nil) -> TurnOutcome {
-        var all = completed
-        for idx in order {
-            if let c = calls[idx] {
-                all.append(ToolCallOutcome(name: c.name, transitions: c.transitions))
+        // In host-tools mode the wire carries BOTH the `.tool` transcript phases
+        // and the `.toolRequest` execution events for the SAME calls. Count them
+        // once: the host-tools requests are the authoritative view (they carry
+        // the host's verdict), so prefer them and ignore the transcript view.
+        let all: [ToolCallOutcome]
+        if !hostCalls.isEmpty {
+            all = hostCalls.map { ToolCallOutcome(name: $0.name, transitions: $0.transitions) }
+        } else {
+            var fromTranscript = completed
+            for idx in order {
+                if let c = calls[idx] {
+                    fromTranscript.append(ToolCallOutcome(name: c.name, transitions: c.transitions))
+                }
             }
+            all = fromTranscript
         }
-        all.append(contentsOf: hostCalls.map {
-            ToolCallOutcome(name: $0.name, transitions: $0.transitions)
-        })
         var outcome = TurnOutcome(
             model: model, build: build, sampler: sampler, task: task,
             generatedTokens: generated, ctxUsed: ctxUsed,
