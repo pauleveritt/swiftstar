@@ -1,0 +1,195 @@
+import Testing
+import Foundation
+@testable import SwiftStarKit
+
+struct WorktreeDispatchTests {
+    /// A clean `TurnOutcome` with the given tool-call count and generated tokens.
+    private func outcome(toolCalls: Int = 0, generated: Int = 0) -> TurnOutcome {
+        let calls = (0..<toolCalls).map { _ in
+            ToolCallOutcome(name: "tool", transitions: [.emitted])
+        }
+        return TurnOutcome(model: "m", build: "b", sampler: "s", task: "t",
+                           generatedTokens: generated, ctxUsed: 10,
+                           stopReason: .eos, toolCalls: calls)
+    }
+
+    /// A packet with the given writable files, validation command, and budgets.
+    private func packet(writable: [String] = ["a.txt"], validation: String? = nil,
+                        turnBudget: Int = 10_000, toolCallBudget: Int = 16,
+                        baselines: [String: FileBaseline] = [:]) -> HandoffPacket {
+        HandoffPacket(taskText: "t", writableFiles: writable, validationCommand: validation,
+                      baselines: baselines, turnBudget: turnBudget, toolCallBudget: toolCallBudget)
+    }
+
+    // MARK: - the happy path: allowed mutations yield a candidate
+
+    @Test func allowedMutationsYieldCandidate() {
+        let p = packet(writable: ["a.txt", "b.txt"])
+        let oc = outcome(toolCalls: 1, generated: 5)
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt", "b.txt"],
+                                               turnOutcome: oc, validation: nil)
+        guard case .candidate(let ref, let carried) = result else {
+            Issue.record("expected candidate"); return
+        }
+        // The pure verdict leaves the ref empty; the app-layer dispatcher
+        // fills it after committing the worktree (see D3).
+        #expect(ref == "")
+        #expect(carried == oc)
+    }
+
+    @Test func candidateCarriesTheTurnOutcomeEvidence() {
+        let oc = outcome(toolCalls: 2, generated: 42)
+        let p = packet(writable: ["a.txt"])
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: oc, validation: nil)
+        guard case .candidate(_, let carried) = result else {
+            Issue.record("expected candidate"); return
+        }
+        #expect(carried == oc)
+        #expect(carried.toolCalls.count == 2)
+        #expect(carried.generatedTokens == 42)
+    }
+
+    // MARK: - revision check: a mutation outside writableFiles is refused
+
+    @Test func mutationOutsideWritableFilesIsRefused() {
+        let p = packet(writable: ["a.txt"])
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt", "outside.txt"],
+                                               turnOutcome: outcome(), validation: nil)
+        guard case .receipt(.refusedTool(let path)) = result else {
+            Issue.record("expected refusedTool"); return
+        }
+        #expect(path == "outside.txt")
+    }
+
+    @Test func refusedToolNamesFirstOffendingPath() {
+        let p = packet(writable: ["a.txt"])
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["bad1.txt", "bad2.txt"],
+                                               turnOutcome: outcome(), validation: nil)
+        guard case .receipt(.refusedTool(let path)) = result else {
+            Issue.record("expected refusedTool"); return
+        }
+        #expect(path == "bad1.txt")
+    }
+
+    @Test func refusedToolTakesPrecedenceOverBudgetAndNoChanges() {
+        // An out-of-bounds mutation is a contract violation; it is reported
+        // even when the turn also blew the budget or made no in-bounds changes.
+        let p = packet(writable: ["a.txt"], turnBudget: 1, toolCallBudget: 1)
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["outside.txt"],
+                                               turnOutcome: outcome(toolCalls: 9, generated: 999),
+                                               validation: nil)
+        #expect(result == .receipt(.refusedTool("outside.txt")))
+    }
+
+    // MARK: - budget: tool-call count or turn tokens over the caps
+
+    @Test func toolCallBudgetExceeded() {
+        let p = packet(toolCallBudget: 2)
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: outcome(toolCalls: 3),
+                                               validation: nil)
+        #expect(result == .receipt(.budgetExceeded))
+    }
+
+    @Test func turnTokenBudgetExceeded() {
+        let p = packet(turnBudget: 100)
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: outcome(toolCalls: 1, generated: 101),
+                                               validation: nil)
+        #expect(result == .receipt(.budgetExceeded))
+    }
+
+    @Test func budgetAtLimitIsNotExceeded() {
+        // At the limit (==, not >) the turn is still a candidate.
+        let p = packet(turnBudget: 100, toolCallBudget: 2)
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: outcome(toolCalls: 2, generated: 100),
+                                               validation: nil)
+        if case .receipt = result {
+            Issue.record("expected candidate at the limit, not a receipt")
+        }
+    }
+
+    // MARK: - validation: a non-passing result yields a receipt with exit+digest
+
+    @Test func validationFailedYieldsReceiptWithExitAndDigest() {
+        let p = packet(writable: ["a.txt"], validation: "swift test")
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: outcome(toolCalls: 1, generated: 5),
+                                               validation: ValidationResult(exit: 1, digest: "sha256:fail"))
+        guard case .receipt(.validationFailed(let exit, let digest)) = result else {
+            Issue.record("expected validationFailed"); return
+        }
+        #expect(exit == 1)
+        #expect(digest == "sha256:fail")
+    }
+
+    @Test func validationPassedYieldsCandidate() {
+        let p = packet(writable: ["a.txt"], validation: "swift test")
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: outcome(toolCalls: 1, generated: 5),
+                                               validation: ValidationResult(exit: 0, digest: "sha256:ok"))
+        if case .receipt = result {
+            Issue.record("expected candidate when validation passed")
+        }
+    }
+
+    @Test func noValidationNeededYieldsCandidateWhenValidationIsNil() {
+        // No validation command, no validation result: the turn is a candidate
+        // if it mutated allowed files within budget.
+        let p = packet(writable: ["a.txt"], validation: nil)
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: outcome(toolCalls: 1, generated: 5),
+                                               validation: nil)
+        if case .receipt = result {
+            Issue.record("expected candidate when no validation was required")
+        }
+    }
+
+    // MARK: - no changes: nothing mutated -> nothing to commit
+
+    @Test func noMutationsYieldNoChanges() {
+        let p = packet(writable: ["a.txt"])
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: [],
+                                               turnOutcome: outcome(), validation: nil)
+        #expect(result == .receipt(.noChanges))
+    }
+
+    @Test func noChangesWhenValidationNotRequired() {
+        // No mutations and no validation -> noChanges (nothing to commit).
+        let p = packet(writable: ["a.txt"], validation: nil)
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: [],
+                                               turnOutcome: outcome(), validation: nil)
+        #expect(result == .receipt(.noChanges))
+    }
+
+    @Test func validationFailedBeatsNoChanges() {
+        // Validation ran and failed even though nothing was mutated: the
+        // failing validation is the reason, reported with its exit+digest.
+        let p = packet(writable: ["a.txt"], validation: "swift test")
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: [],
+                                               turnOutcome: outcome(),
+                                               validation: ValidationResult(exit: 2, digest: "sha256:boom"))
+        guard case .receipt(.validationFailed(let exit, _)) = result else {
+            Issue.record("expected validationFailed"); return
+        }
+        #expect(exit == 2)
+    }
+
+    // MARK: - baselines ride on the packet, not the verdict
+
+    @Test func packetBaselinesAreOpaqueToTheVerdict() {
+        // The verdict does not consult baselines (they are for the parent's
+        // drift check, D1); a candidate is returned regardless of baseline
+        // contents as long as the mutations are within writableFiles.
+        let p = packet(writable: ["a.txt"],
+                       baselines: ["a.txt": FileBaseline(sha256: "old", lineEnding: .lf, mode: 0o644)])
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: outcome(toolCalls: 1, generated: 5),
+                                               validation: nil)
+        if case .receipt = result {
+            Issue.record("expected candidate; baselines must not affect the verdict")
+        }
+    }
+}
