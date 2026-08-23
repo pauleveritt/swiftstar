@@ -86,7 +86,17 @@ defer { orch.stop() }
 let txn = WorktreeTransaction(repo: repoURL)
 defer { txn.abort() }
 
-print("[agenttest] spec=\(specName) phases=\(phases.count)")
+// Capture the raw wire to a committed artifact so the analyzer can re-derive
+// everything without rerunning (D5).
+let df = DateFormatter(); df.dateFormat = "yyyyMMdd-HHmmss"
+let captureDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    .appendingPathComponent("captures/agenttest/\(df.string(from: Date()))-\(specName)")
+try FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
+let wireFile = captureDir.appendingPathComponent("wire.ndjson")
+FileManager.default.createFile(atPath: wireFile.path, contents: nil)
+let captureHandle = FileHandle(forWritingAtPath: wireFile.path)
+
+print("[agenttest] spec=\(specName) phases=\(phases.count) capture=\(captureDir.path)")
 let runStart = Date()
 
 for (i, phaseText) in phases.enumerated() {
@@ -101,7 +111,8 @@ for (i, phaseText) in phases.enumerated() {
         baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
     print("[agenttest] phase \(i + 1)/\(phases.count) …")
     let wt = try txn.preparePhase(packet: packet)
-    let outcome = try orch.runPhase(worker: WorkerId(1), packet: packet, worktree: wt.url)
+    let outcome = try orch.runPhase(worker: WorkerId(1), packet: packet, worktree: wt.url,
+                                    capture: captureHandle)
     let result = try txn.finalizePhase(wt, packet: packet, turnOutcome: outcome, validation: nil)
     switch result {
     case .candidate(let ref, let carried, _):
@@ -147,5 +158,16 @@ if let gradeWT = txn.finalWorktree {
 }
 
 txn.discardFinal()
+
+// Analyze the captured wire (D5) — deterministic, re-derivable without a rerun.
+if let wireText = try? String(contentsOf: wireFile, encoding: .utf8) {
+    var p = PoolWireParser()
+    var events: [PoolWireEvent] = []
+    for line in wireText.split(separator: "\n") {
+        if let ev = p.feed(String(line)) { events.append(ev) }
+    }
+    print(AgentTestAnalyzer.analyze(events: events).summary())
+}
+
 print("[agenttest] elapsed: \(Int(Date().timeIntervalSince(runStart)))s")
 print("[agenttest] done")

@@ -54,7 +54,8 @@ public final class PoolOrchestrator {
     /// and confined to `worktree`), and return the turn's `TurnOutcome`
     /// relativized against the worktree. The worker codes blind
     /// (`shellAllowed: false`); validation is the harness's job.
-    public func runPhase(worker: WorkerId, packet: HandoffPacket, worktree: URL) throws -> TurnOutcome {
+    public func runPhase(worker: WorkerId, packet: HandoffPacket, worktree: URL,
+                         capture: FileHandle? = nil) throws -> TurnOutcome {
         var builder = TurnOutcomeBuilder(
             model: model, build: "pooled", sampler: "engine-defaults", task: packet.taskText)
         readCache.removeAll()
@@ -80,6 +81,7 @@ public final class PoolOrchestrator {
             while let nl = buffer.firstIndex(of: 0x0A) {
                 let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
                 buffer.removeSubrange(buffer.startIndex...nl)
+                if let capture { capture.write(Data((line + "\n").utf8)) }
                 guard let poolEvent = parser.feed(line), poolEvent.worker == worker else { continue }
                 let event = poolEvent.event
                 if ProcessInfo.processInfo.environment["AGENTTEST_DEBUG"] != nil {
