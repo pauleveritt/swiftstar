@@ -31,6 +31,16 @@ It drives the real engine twice: one deep session (`-c 131072`) prefilling a
 | Ceiling | 4.2x (analytic upper bound) |
 | **Overhead ratio (D11a)** | **0.88** |
 
+## Second run (2026-08-23, after the Kimi K3 fixes)
+
+A second canonical run, after the correctness fixes, gave **deep 1427.9 s / pool
+451.9 s = 3.16x realized** (overhead ratio 0.75). Across the two runs the
+realized win is **~3.2–3.7x** — the ~0.5x spread is run-to-run prefill-rate
+variation and thermal state (the 25-minute deep arm sustains load far longer
+than the 7-minute pool arm). Both runs sit clearly below the 4.2x ceiling and
+clearly above 1.0x: the pool wins, and the win is real but smaller than the
+analytic bound — the expected result.
+
 The prefill-only estimate is ~3.28x (deep prefill 1520.4 s from `status`
 events; pool prefill ~8 × ~58 s). The wall-clock 3.70x is the honest "does the
 pool win" number — it includes generate and load overhead, which the analytic
