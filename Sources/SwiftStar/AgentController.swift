@@ -282,6 +282,21 @@ final class AgentController {
                 outputDigest: response.outputDigest, validationRan: response.validationRan)
         case .queued, .ignored:
             break
+        case .toolRequestRefused(let idx, let reason):
+            // P9: a malformed tool_request (the engine's protocol violation)
+            // must not hang the wire. The engine emits one request then blocks
+            // on its result, so skipping the result (as the parser's old
+            // `.ignored` did) deadlocks. Write an `ok:false` `tool_result`
+            // (idx best-effort, 0 if unparseable) so the engine unblocks and the
+            // agent sees the refusal reason; the outcome builder already
+            // skipped it (a malformed request is not a real tool call).
+            let response = ToolCallbackResponse(
+                idx: idx, ok: false, s: ToolResultCondenser.condense(reason),
+                mutations: [], exitStatus: nil, outputDigest: nil, validationRan: false)
+            if let pipe = process?.standardInput as? Pipe {
+                pipe.fileHandleForWriting.write(
+                    Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
+            }
         case .refused(let line):
             state = .failed("wire handshake refused: \(line)")
             process?.terminate()

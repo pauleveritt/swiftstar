@@ -66,8 +66,8 @@ public struct AgentTranscript: Equatable, Sendable {
             }
         case .tool(let te):
             applyTool(te)
-        case .toolRequest:
-            break  // P9: the bidirectional request is not a transcript row (the host answers it)
+        case .toolRequest, .toolRequestRefused:
+            break  // P9: the bidirectional request is not a transcript row (the host answers it); a malformed request is likewise not a row
         case .hello, .status, .ready, .queued, .ignored, .refused:
             break
         }

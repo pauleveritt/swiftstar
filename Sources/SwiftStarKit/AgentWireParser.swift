@@ -44,6 +44,13 @@ public enum AgentEvent: Equatable, Sendable {
     /// agent asks the host to run `name` with `params` (reusing the transcript's
     /// `ToolParam`); the host answers with a `tool_result` line on stdin.
     case toolRequest(idx: Int, name: String, params: [ToolParam])
+    /// P9: a malformed `tool_request` the host could not parse. A **loud
+    /// refusal**, not `.ignored`: the engine emits one request then blocks on
+    /// its result, so an `.ignored` malformed request would let the controller
+    /// skip the `tool_result` and the engine would block forever. The
+    /// controller writes an `ok:false` `tool_result` (idx best-effort, 0 if
+    /// unparseable) so the engine unblocks and the agent sees the refusal.
+    case toolRequestRefused(idx: Int, reason: String)
     case ignored(String)
     case refused(String)
 }
@@ -118,7 +125,14 @@ public struct AgentWireParser: Sendable {
             if let req = parseToolRequest(object) {
                 return .toolRequest(idx: req.idx, name: req.name, params: req.params)
             }
-            return .ignored(trimmed)
+            // A malformed tool_request is a LOUD refusal, not `.ignored`: the
+            // engine emits one request then blocks on its result, so skipping
+            // the result (as `.ignored` did) would hang the wire. Surface a
+            // dedicated refusal carrying a best-effort idx (0 if unparseable)
+            // so the controller can write an `ok:false` `tool_result` and
+            // unblock the engine.
+            let idx = (object["idx"] as? NSNumber)?.intValue ?? 0
+            return .toolRequestRefused(idx: idx, reason: "malformed tool_request: \(trimmed)")
         default:
             return .ignored(trimmed)
         }

@@ -149,13 +149,36 @@ struct AgentWireParserTests {
         #expect(p.feed(#"{"t":"tool_request","idx":0,"name":"ping","ts":1}"#) == .toolRequest(idx: 0, name: "ping", params: []))
     }
 
-    @Test func toolRequestMissingNameIgnored() {
+    @Test func toolRequestMissingNameRefused() {
         var p = AgentWireParser()
         _ = p.feed(Self.helloLine)
-        // `name` is required; without it the line is unmodelled, not a fatal
-        // refusal (the wire can grow and the parser tolerates malformed cases).
+        // `name` is required; without it the tool_request is a LOUD refusal,
+        // not `.ignored`: the engine emits one request then blocks on its
+        // result, so an `.ignored` malformed request would let the controller
+        // skip the `tool_result` and the engine would hang forever. The idx is
+        // carried best-effort (0 when unparseable) so the controller can write
+        // an `ok:false` `tool_result` that unblocks the engine.
         let line = #"{"t":"tool_request","idx":0,"params":[],"ts":1}"#
-        #expect(p.feed(line) == .ignored(line))
+        let event = p.feed(line)
+        guard case .toolRequestRefused(let idx, let reason) = event else {
+            Issue.record("expected .toolRequestRefused for a missing-name tool_request, got \(event)"); return
+        }
+        #expect(idx == 0)
+        #expect(reason.contains("malformed tool_request"))
+    }
+
+    @Test func toolRequestMissingNameRefusedCarriesBestEffortIdx() {
+        var p = AgentWireParser()
+        _ = p.feed(Self.helloLine)
+        // The idx is still parseable when only `name` is missing; the refusal
+        // carries it so the controller's `tool_result` matches the engine's
+        // expected idx (avoiding a spurious idx-mismatch on a different call).
+        let line = #"{"t":"tool_request","idx":3,"params":[],"ts":1}"#
+        let event = p.feed(line)
+        guard case .toolRequestRefused(let idx, _) = event else {
+            Issue.record("expected .toolRequestRefused, got \(event)"); return
+        }
+        #expect(idx == 3)
     }
 
     @Test func handshakeMayAdvertiseToolRequestCap() {

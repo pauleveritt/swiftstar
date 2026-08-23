@@ -128,7 +128,7 @@ public struct TurnOutcomeBuilder {
             // host calls by arrival order (the `hostCalls` array), not by idx.
             _ = idx  // traced on the wire; not the key here
             hostCalls.append((name: name, transitions: [.emitted]))
-        case .hello, .status, .queued, .text, .think, .ignored, .refused:
+        case .hello, .status, .queued, .text, .think, .ignored, .refused, .toolRequestRefused:
             break
         }
     }
