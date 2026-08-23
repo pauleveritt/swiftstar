@@ -142,6 +142,108 @@ struct ToolCallbackResponderTests {
         }
     }
 
+    // MARK: - P10 dispatched-mode revision check (D2: writableFiles confines
+    // mutating tools; read aids are unaffected; nil disables the check).
+
+    @Test func consentRefusesWriteOutsideWritableFiles() {
+        // A dispatched attempt (writableFiles set) refuses a `write` whose
+        // workspace-relative path is not in the contract — host-side, so the
+        // tool is never executed.
+        let r = ToolCallbackResponder.consent(
+            idx: 0, name: "write",
+            params: [param("path", "outside.txt"), param("content", "x")],
+            workspace: ws, shellAllowed: false,
+            writableFiles: ["a.txt"])
+        guard case .refuse(let reason) = r else { Issue.record("expected refuse for out-of-contract write"); return }
+        #expect(reason.contains("writable-files") || reason.contains("contract"))
+    }
+
+    @Test func consentRefusesEditOutsideWritableFiles() {
+        let r = ToolCallbackResponder.consent(
+            idx: 0, name: "edit",
+            params: [param("path", "outside.txt"), param("old", "a"), param("new", "b")],
+            workspace: ws, shellAllowed: false,
+            writableFiles: ["a.txt"])
+        guard case .refuse = r else { Issue.record("expected refuse for out-of-contract edit"); return }
+    }
+
+    @Test func consentAllowsWriteInsideWritableFiles() {
+        let r = ToolCallbackResponder.consent(
+            idx: 0, name: "write",
+            params: [param("path", "a.txt"), param("content", "x")],
+            workspace: ws, shellAllowed: false,
+            writableFiles: ["a.txt"])
+        guard case .proceed(let req) = r else { Issue.record("expected proceed for in-contract write"); return }
+        #expect(req.name == "write")
+    }
+
+    @Test func consentAllowsNestedWriteInWritableFiles() {
+        // A nested writable file matches its worktree-relative form.
+        let r = ToolCallbackResponder.consent(
+            idx: 0, name: "write",
+            params: [param("path", "sub/b.txt"), param("content", "x")],
+            workspace: ws, shellAllowed: false,
+            writableFiles: ["sub/b.txt"])
+        guard case .proceed = r else { Issue.record("expected proceed for nested in-contract write"); return }
+    }
+
+    @Test func consentAllowsReadAidsOutsideWritableFiles() {
+        // D2: the worker gets read/write/edit (and list/search as read aids).
+        // The revision check confines only mutating tools; reads are free.
+        for name in ["read", "more", "list", "search"] {
+            let r = ToolCallbackResponder.consent(
+                idx: 0, name: name, params: [param("path", "outside.txt")],
+                workspace: ws, shellAllowed: false,
+                writableFiles: ["a.txt"])
+            guard case .proceed = r else { Issue.record("expected proceed for read aid \(name) outside writableFiles"); return }
+        }
+    }
+
+    @Test func consentIgnoresWritableFilesWhenNil() {
+        // nil writableFiles (the normal Agent-tab mode) disables the check: a
+        // write anywhere in the workspace proceeds.
+        let r = ToolCallbackResponder.consent(
+            idx: 0, name: "write",
+            params: [param("path", "anywhere.txt"), param("content", "x")],
+            workspace: ws, shellAllowed: false,
+            writableFiles: nil)
+        guard case .proceed = r else { Issue.record("expected proceed when writableFiles is nil"); return }
+    }
+
+    @Test func respondRefusesOutContractWriteAndDoesNotExecute() {
+        // A refused revision check returns ok:false with no mutation, and the
+        // executor is never called — the tool is not executed host-side.
+        var didExecute = false
+        let resp = ToolCallbackResponder.respond(
+            idx: 9, name: "write",
+            params: [param("path", "outside.txt"), param("content", "x")],
+            workspace: ws, shellAllowed: false,
+            writableFiles: ["a.txt"],
+            execute: { _ in
+                didExecute = true
+                return ToolExecutionResult(ok: true, text: "should not run",
+                                            mutations: ["outside.txt"])
+            })
+        #expect(resp.ok == false)
+        #expect(resp.idx == 9)
+        #expect(resp.mutations == [], "a refused revision check must not record a mutation")
+        #expect(!didExecute, "an out-of-contract write must not be executed")
+    }
+
+    @Test func respondExecutesInContractWriteAndRecordsMutation() {
+        let resp = ToolCallbackResponder.respond(
+            idx: 1, name: "write",
+            params: [param("path", "a.txt"), param("content", "x")],
+            workspace: ws, shellAllowed: false,
+            writableFiles: ["a.txt"],
+            execute: { req in
+                ToolExecutionResult(ok: true, text: "wrote",
+                                    mutations: [req.resolvedPath ?? ""])
+            })
+        #expect(resp.ok == true)
+        #expect(resp.mutations == ["/tmp/swiftstar-consent-ws/a.txt"])
+    }
+
     // MARK: - respond (the pure request→result mapping; execute is injected)
 
     @Test func respondRefuseReturnsOkFalseAndDoesNotExecute() {

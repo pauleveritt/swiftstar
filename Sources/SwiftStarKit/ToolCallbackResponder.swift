@@ -113,6 +113,10 @@ public enum ToolCallbackResponder {
     /// (`google_search`/`visit_page`) and anything else are not host-executed.
     private static let fileTools: Set<String> = ["read", "more", "write", "list", "edit", "search"]
     private static let shellTools: Set<String> = ["bash", "bash_status", "bash_stop"]
+    /// P10 (D2): the file tools that *mutate* the worktree (versus the read
+    /// aids `read`/`more`/`list`/`search`). A dispatched attempt confines these
+    /// to `writableFiles`; the read aids stay free.
+    private static let mutatingTools: Set<String> = ["write", "edit"]
 
     /// The pure consent check (D1/D6): given the request, the workspace grant,
     /// and the shell toggle, decide whether the host may execute. File tools are
@@ -122,9 +126,17 @@ public enum ToolCallbackResponder {
     /// (resolves `..`, not symlinks). Returns `.proceed` with the
     /// consent-cleared `ToolExecutionRequest` (carrying the confined
     /// `resolvedPath` for file tools), or `.refuse` with a reason.
+    /// `writableFiles` (P10/D2, default `nil`): when set, a dispatched attempt
+    /// revision-checks each *mutating* file tool (`write`/`edit`) against the
+    /// contract — a path whose workspace-relative form is not in the set is
+    /// **refused host-side, not executed** (the host returns `ok:false`; the
+    /// engine never sees the tool). The read aids (`read`/`more`/`list`/
+    /// `search`) are unaffected — the worker may read anywhere in the
+    /// workspace. `nil` (the normal Agent-tab mode) disables the check.
     public static func consent(
         idx: Int, name: String, params: [ToolParam],
-        workspace: URL, shellAllowed: Bool
+        workspace: URL, shellAllowed: Bool,
+        writableFiles: [String]? = nil
     ) -> ToolConsent {
         let wsStd = workspace.standardizedFileURL
 
@@ -141,6 +153,16 @@ public enum ToolCallbackResponder {
             }
             guard resolved.path == wsStd.path || resolved.path.hasPrefix(wsStd.path + "/") else {
                 return .refuse("refused: path is outside the workspace grant")
+            }
+            // P10 (D2): dispatched-mode revision check. A mutating tool may
+            // only touch a path whose workspace-relative form is in
+            // `writableFiles`; the read aids are unaffected. The host refuses
+            // (ok:false, not executed) — the engine never sees it.
+            if let writableFiles, Self.mutatingTools.contains(name) {
+                let rel = Self.workspaceRelative(resolved.path, workspace: wsStd.path)
+                guard writableFiles.contains(rel) else {
+                    return .refuse("refused: path is outside the writable-files contract")
+                }
             }
             return .proceed(ToolExecutionRequest(
                 name: name, params: params, workspace: wsStd, resolvedPath: resolved.path))
@@ -163,13 +185,18 @@ public enum ToolCallbackResponder {
     /// **not** call `execute`; a proceed calls `execute` and condenses its
     /// `text` via `ToolResultCondenser`, carrying the host facts straight
     /// through. Pure given a deterministic `execute`.
+    /// `writableFiles` (P10/D2, default `nil`): thread the dispatched attempt's
+    /// revision check through `consent`. `nil` (the normal Agent-tab call) keeps
+    /// the pre-P10 behavior — mutating tools proceed anywhere in the workspace.
     public static func respond(
         idx: Int, name: String, params: [ToolParam],
         workspace: URL, shellAllowed: Bool,
+        writableFiles: [String]? = nil,
         execute: (ToolExecutionRequest) -> ToolExecutionResult
     ) -> ToolCallbackResponse {
         switch consent(idx: idx, name: name, params: params,
-                       workspace: workspace, shellAllowed: shellAllowed) {
+                       workspace: workspace, shellAllowed: shellAllowed,
+                       writableFiles: writableFiles) {
         case .refuse(let reason):
             return ToolCallbackResponse(
                 idx: idx, ok: false, s: ToolResultCondenser.condense(reason),
@@ -181,6 +208,17 @@ public enum ToolCallbackResponder {
                 mutations: raw.mutations, exitStatus: raw.exitStatus,
                 outputDigest: raw.outputDigest, validationRan: raw.validationRan)
         }
+    }
+
+    /// The workspace-relative form of an absolute `resolvedPath` (P10/D2): the
+    /// path with the workspace prefix stripped, so the revision check can
+    /// compare it against `writableFiles` (which are worktree-relative). A path
+    /// that is the workspace root itself yields `""`; a path outside the
+    /// workspace (already refused by the grant check) is returned as-is.
+    private static func workspaceRelative(_ absPath: String, workspace ws: String) -> String {
+        if absPath == ws { return "" }
+        if absPath.hasPrefix(ws + "/") { return String(absPath.dropFirst(ws.count + 1)) }
+        return absPath
     }
 
     /// The `tool_result` JSON line (D2) to write to the agent's stdin:

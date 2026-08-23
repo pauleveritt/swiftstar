@@ -192,4 +192,53 @@ struct WorktreeDispatchTests {
             Issue.record("expected candidate; baselines must not affect the verdict")
         }
     }
+
+    // MARK: - relativize (D4): the host executor records absolute paths; the
+    // verdict compares worktree-relative forms against `writableFiles`.
+
+    @Test func relativizeStripsTheWorktreePrefix() {
+        let wt = URL(fileURLWithPath: "/tmp/swiftstar-wt-XYZ")
+        var oc = outcome(toolCalls: 1, generated: 5)
+        oc.mutations = ["/tmp/swiftstar-wt-XYZ/a.txt", "/tmp/swiftstar-wt-XYZ/sub/b.txt"]
+        let rel = WorktreeDispatch.relativize(outcome: oc, worktree: wt)
+        #expect(rel.mutations == ["a.txt", "sub/b.txt"])
+    }
+
+    @Test func relativizeKeepsAlreadyRelativePaths() {
+        // A path without the worktree prefix (already relative, or an escape
+        // the grant already refused) is kept unchanged — idempotent for the
+        // integration tier's scripted relative mutations.
+        let wt = URL(fileURLWithPath: "/tmp/swiftstar-wt-XYZ")
+        var oc = outcome(toolCalls: 1, generated: 5)
+        oc.mutations = ["a.txt", "sub/b.txt"]
+        let rel = WorktreeDispatch.relativize(outcome: oc, worktree: wt)
+        #expect(rel.mutations == ["a.txt", "sub/b.txt"])
+    }
+
+    @Test func relativizeKeepsNonWorktreeAbsolutePaths() {
+        // An absolute path outside the worktree (an escape) is kept as-is so
+        // the verdict's revision check refuses it (the host should have, but
+        // the verdict is the backstop).
+        let wt = URL(fileURLWithPath: "/tmp/swiftstar-wt-XYZ")
+        var oc = outcome(toolCalls: 1, generated: 5)
+        oc.mutations = ["/etc/passwd"]
+        let rel = WorktreeDispatch.relativize(outcome: oc, worktree: wt)
+        #expect(rel.mutations == ["/etc/passwd"])
+    }
+
+    @Test func relativizeFeedsTheVerdictRelativeMutations() {
+        // End-to-end: the host records an absolute in-contract mutation;
+        // relativize + verdict yields a candidate (the relative form matches
+        // writableFiles).
+        let wt = URL(fileURLWithPath: "/tmp/swiftstar-wt-XYZ")
+        let p = packet(writable: ["a.txt"])
+        var oc = outcome(toolCalls: 1, generated: 5)
+        oc.mutations = ["/tmp/swiftstar-wt-XYZ/a.txt"]
+        let rel = WorktreeDispatch.relativize(outcome: oc, worktree: wt)
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: rel.mutations,
+                                               turnOutcome: rel, validation: nil)
+        guard case .candidate = result else {
+            Issue.record("expected candidate after relativizing an in-contract mutation"); return
+        }
+    }
 }

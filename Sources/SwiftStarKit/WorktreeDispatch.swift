@@ -21,6 +21,22 @@ import Foundation
 /// 5. **Candidate.** Otherwise → `.candidate(ref: "", turnOutcome:)`. The empty
 ///    `ref` is a sentinel; the app-layer dispatcher fills it after committing.
 public enum WorktreeDispatch {
+    /// Relativize a finished `TurnOutcome`'s mutations to `worktree` (P10/D4):
+    /// the P9 host executor records absolute paths (the confined
+    /// `resolvedPath` under the worktree), but `packet.writableFiles` is
+    /// worktree-relative, so the revision check compares apples-to-apples only
+    /// after this strip. A path without the worktree prefix (already relative,
+    /// or an escape the grant already refused) is kept unchanged. Pure — no
+    /// I/O; the app layer calls it before handing the outcome to `verdict`.
+    public static func relativize(outcome: TurnOutcome, worktree: URL) -> TurnOutcome {
+        let wtPath = worktree.standardizedFileURL.path
+        var o = outcome
+        o.mutations = outcome.mutations.map { mut in
+            if mut.hasPrefix(wtPath + "/") { return String(mut.dropFirst(wtPath.count + 1)) }
+            return mut
+        }
+        return o
+    }
     public static func verdict(
         packet: HandoffPacket,
         allowedMutations: [String],
