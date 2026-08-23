@@ -79,6 +79,36 @@ enum FakeAgentHarness {
         fake.stdin.fileHandleForWriting.write(Data((prompt + "\n").utf8))
     }
 
+    /// Reads the fake's stdout, feeding `PoolWireParser`, until `until` returns
+    /// true or the timeout elapses — the pooled-wire sibling of `readAgentEvents`
+    /// (same raw-byte read loop; the parser is `PoolWireParser`, so each event
+    /// carries its worker id).
+    static func readPoolEvents(_ fake: FakeAgentProcess,
+                               parser: inout PoolWireParser,
+                               until: @escaping ([PoolWireEvent]) -> Bool,
+                               timeout: TimeInterval = 30) throws -> [PoolWireEvent] {
+        var events: [PoolWireEvent] = []
+        let fd = fake.stdout.fileHandleForReading.fileDescriptor
+        let deadline = Date().addingTimeInterval(timeout)
+        var buffer = Data()
+        var chunk = [UInt8](repeating: 0, count: 4096)
+        while Date() < deadline {
+            let n = Darwin.read(fd, &chunk, chunk.count)
+            if n == 0 { throw FakeAgentHarnessError.unexpectedEOF }
+            if n < 0 { if errno == EINTR { continue }; throw FakeAgentHarnessError.readFailed(errno: errno) }
+            buffer.append(contentsOf: chunk[0..<n])
+            while let nl = buffer.firstIndex(of: 0x0A) {
+                let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
+                buffer.removeSubrange(buffer.startIndex...nl)
+                if let event = parser.feed(line) {
+                    events.append(event)
+                    if until(events) { return events }
+                }
+            }
+        }
+        throw FakeAgentHarnessError.timeout(eventCount: events.count)
+    }
+
     static func writeETX(_ fake: FakeAgentProcess) {
         fake.stdin.fileHandleForWriting.write(Data([0x03]))
     }

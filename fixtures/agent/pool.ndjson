@@ -1,0 +1,6 @@
+{"t":"hello","v":1,"caps":["text","tool","status","ts"],"ts":0,"worker":0}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":0,"power":100,"error":"","ts":1,"worker":0}
+{"t":"tool_request","idx":0,"name":"dispatch","params":[{"name":"taskText","value":"fix a.swift"}],"ts":2,"worker":0}
+{"t":"ready","stop_reason":"eos","generated":3,"ctx_used":10,"ts":3,"worker":0}
+{"t":"status","state":"generating","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":0,"power":100,"error":"","ts":4,"worker":1}
+{"t":"ready","stop_reason":"eos","generated":2,"ctx_used":8,"ts":5,"worker":1}
