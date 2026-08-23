@@ -163,3 +163,31 @@ reason the rule exists. The recapture must also be copied to the bundled
 `Sources/SwiftStarAppKit/Resources/golden.{ndjson,trace}` so the integration-tier
 `FixtureReplayTests.bundledFixtureMatchesRepoFixture` assertion (bundled == repo) stays green —
 the P5 precedent (`9e97bc3`) established that both copies move together.
+
+## P11 recapture (2026-08-23) — submodule `d351b40`
+
+Recaptured against the rebuilt binary at submodule `d351b40346629269cbd3639f9cec0345b8d94b1b`
+(the P11 bump — `--subagent-pool` flag + worker-id wire + N-session multiplex, divergence #11).
+
+**N==1 additive proof (the standing-rule check).** The recapture ran with the *default*
+argv — no `--subagent-pool`, so `num_workers == 1`. Verified against the prior
+`c21b831` capture:
+- `hello` is structurally identical: `caps` = `["status","ready","text","think","tool","queued","ts"]`
+  — no `pool` cap, no `tool_request` cap (observation-only, `--host-tools` off).
+- **Zero `"worker"` fields** on any event (the worker field is emitted only when
+  `num_workers > 1`, so the single-session wire is byte-identical).
+- Same event kinds (`hello`/`status`/`ready`/`text`); only the model's sampled text and
+  the per-event `ts` differ run-to-run, as expected.
+
+Captured by `swiftstar-drive` (`CAPTURE_GGUF=<laguna-s-2.1 gguf> CAPTURE_CTX=32768 swift run
+swiftstar-drive`), the same P5 spawn shape (no `CAPTURE_WORKSPACE`/`CAPTURE_SHELL`).
+
+## `pool.ndjson` — first real 2-worker capture (2026-08-23)
+
+`fixtures/agent/pool.ndjson` is a **verbatim** capture of `ds4-agent -c 16384 --metal
+--non-interactive --json-events --host-tools --subagent-pool 2`, driven by two prompts: a
+bare prompt (→ worker 0) and a `PoolPrompt` (`{"s":…,"t":"prompt","worker":1}` → worker 1).
+35 lines: `hello` advertises the `"pool"` and `"tool_request"` caps and `"worker":0`; worker
+0's and worker 1's turn events are each tagged with their worker id. This retires the
+hand-authored `pool.ndjson` stand-in that was created against the typed contract before the
+C patch landed (D2). Submodule `d351b40`; wall-clock 2026-08-23.

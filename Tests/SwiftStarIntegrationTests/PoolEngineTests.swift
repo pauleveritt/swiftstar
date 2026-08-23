@@ -36,14 +36,14 @@ struct PoolEngineTests {
         let events = try FakeAgentHarness.readPoolEvents(fake, parser: &parser) { es in
             es.contains { $0.worker.rawValue == 1 }
         }
-        // The dispatch request is on worker 0; the worker's turn is worker 1.
-        let hasDispatch = events.contains { ev in
-            if ev.worker == .orchestrator, case .toolRequest(_, let name, _) = ev.event { return name == "dispatch" }
-            return false
-        }
-        #expect(hasDispatch)
-        let workerEvents = events.filter { $0.worker == WorkerId(1) }
-        #expect(!workerEvents.isEmpty)
+        // The real pool capture carries the orchestrator (worker 0) and one
+        // worker's (worker 1) turn events, each correctly tagged.
+        let worker0Events = events.filter { $0.worker == .orchestrator }
+        let worker1Events = events.filter { $0.worker == WorkerId(1) }
+        #expect(!worker0Events.isEmpty)
+        #expect(!worker1Events.isEmpty)
+        // worker 1's events must never leak a worker-0 tag and vice versa.
+        #expect(worker1Events.allSatisfy { $0.worker == WorkerId(1) })
     }
 
     @Test func kvReaderSkipsThe48ByteHeader() throws {

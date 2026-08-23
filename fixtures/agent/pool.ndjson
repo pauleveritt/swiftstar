@@ -1,6 +1,35 @@
-{"t":"hello","v":1,"caps":["text","tool","status","ts"],"ts":0,"worker":0}
-{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":0,"power":100,"error":"","ts":1,"worker":0}
-{"t":"tool_request","idx":0,"name":"dispatch","params":[{"name":"taskText","value":"fix a.swift"}],"ts":2,"worker":0}
-{"t":"ready","stop_reason":"eos","generated":3,"ctx_used":10,"ts":3,"worker":0}
-{"t":"status","state":"generating","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":0,"power":100,"error":"","ts":4,"worker":1}
-{"t":"ready","stop_reason":"eos","generated":2,"ctx_used":8,"ts":5,"worker":1}
+{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts","tool_request","pool"],"ts":365888486094,"worker":0}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":16384,"power":100,"error":"","ts":365888486138,"worker":0}
+{"t":"ready","kv_bytes":880803840,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49138658672,"ts":365888496247,"worker":0}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":16384,"power":100,"error":"","ts":365908223860,"worker":0}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":16384,"power":100,"error":"","ts":365908424973,"worker":0}
+{"t":"status","state":"prefill","prefill_done":1,"prefill_total":63,"prefill_tps":3.3,"generated":0,"gen_tps":0.0,"ctx_used":1021,"ctx_size":16384,"power":100,"error":"","ts":365908732288,"worker":0}
+{"t":"status","state":"prefill","prefill_done":30,"prefill_total":63,"prefill_tps":58.6,"generated":0,"gen_tps":0.0,"ctx_used":1021,"ctx_size":16384,"power":100,"error":"","ts":365908937928,"worker":0}
+{"t":"status","state":"generating","prefill_done":63,"prefill_total":63,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1021,"ctx_size":16384,"power":100,"error":"","ts":365909113996,"worker":0}
+{"t":"text","s":"\nThe sky is Earth's ","ts":365909215846,"worker":0}
+{"t":"text","s":"atmospheric envelope that stretches from the surface ","ts":365909329437,"worker":0}
+{"t":"status","state":"generating","prefill_done":63,"prefill_total":63,"prefill_tps":0.0,"generated":14,"gen_tps":65.0,"ctx_used":1035,"ctx_size":16384,"power":100,"error":"","ts":365909329480,"worker":0}
+{"t":"text","s":"up to the edge of space, ","ts":365909443800,"worker":0}
+{"t":"status","state":"generating","prefill_done":63,"prefill_total":63,"prefill_tps":0.0,"generated":27,"gen_tps":63.2,"ctx_used":1048,"ctx_size":16384,"power":100,"error":"","ts":365909541308,"worker":0}
+{"t":"text","s":"appearing blue by day through scattered sunlight,","ts":365909557849,"worker":0}
+{"t":"text","s":" painted in hues of sunrise and ","ts":365909671177,"worker":0}
+{"t":"status","state":"generating","prefill_done":63,"prefill_total":63,"prefill_tps":0.0,"generated":40,"gen_tps":62.6,"ctx_used":1061,"ctx_size":16384,"power":100,"error":"","ts":365909752562,"worker":0}
+{"t":"text","s":"sunset, and at night revealing a ","ts":365909784966,"worker":0}
+{"t":"text","s":"tapestry of stars, moon, and ","ts":365909898732,"worker":0}
+{"t":"status","state":"generating","prefill_done":63,"prefill_total":63,"prefill_tps":0.0,"generated":53,"gen_tps":62.4,"ctx_used":1074,"ctx_size":16384,"power":100,"error":"","ts":365909963820,"worker":0}
+{"t":"text","s":"clouds—each layer a dynamic blend of ","ts":365910011984,"worker":0}
+{"t":"text","s":"physics, chemistry, and perception.\n","ts":365910126004,"worker":0}
+{"t":"text","s":"\n","ts":365910126008,"worker":0}
+{"t":"status","state":"idle","prefill_done":63,"prefill_total":63,"prefill_tps":0.0,"generated":62,"gen_tps":62.3,"ctx_used":1085,"ctx_size":16384,"power":100,"error":"","ts":365910126047,"worker":0}
+{"t":"ready","kv_bytes":880803840,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49138658672,"stop_reason":"eos","generated":62,"ctx_used":1083,"ts":365910126049,"worker":0}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":958,"ctx_size":16384,"power":100,"error":"","ts":365913434492,"worker":1}
+{"t":"status","state":"prefill","prefill_done":1,"prefill_total":60,"prefill_tps":3.2,"generated":0,"gen_tps":0.0,"ctx_used":1018,"ctx_size":16384,"power":100,"error":"","ts":365913746607,"worker":1}
+{"t":"status","state":"prefill","prefill_done":31,"prefill_total":60,"prefill_tps":59.7,"generated":0,"gen_tps":0.0,"ctx_used":1018,"ctx_size":16384,"power":100,"error":"","ts":365913954149,"worker":1}
+{"t":"status","state":"generating","prefill_done":60,"prefill_total":60,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1018,"ctx_size":16384,"power":100,"error":"","ts":365914109412,"worker":1}
+{"t":"text","s":"\nThe first five prime numbers ","ts":365914216028,"worker":1}
+{"t":"status","state":"generating","prefill_done":60,"prefill_total":60,"prefill_tps":0.0,"generated":13,"gen_tps":63.8,"ctx_used":1031,"ctx_size":16384,"power":100,"error":"","ts":365914313181,"worker":1}
+{"t":"text","s":"are:\n\n2, 3,","ts":365914329516,"worker":1}
+{"t":"text","s":" 5, 7, ","ts":365914442944,"worker":1}
+{"t":"text","s":"11\n\n","ts":365914491808,"worker":1}
+{"t":"status","state":"idle","prefill_done":60,"prefill_total":60,"prefill_tps":0.0,"generated":23,"gen_tps":62.8,"ctx_used":1043,"ctx_size":16384,"power":100,"error":"","ts":365914491826,"worker":1}
+{"t":"ready","kv_bytes":880803840,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49138658672,"stop_reason":"eos","generated":23,"ctx_used":1041,"ts":365914491828,"worker":1}
