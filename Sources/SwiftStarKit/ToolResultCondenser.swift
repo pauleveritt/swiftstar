@@ -35,7 +35,20 @@ public enum ToolResultCondenser {
         let tail = String(decoding: bytes[tailStart..<total], as: UTF8.self)
         let shown = headEnd + (total - tailStart)
         let marker = "\n[truncated: \(shown) of \(total) bytes shown]\n"
-        return head + marker + tail
+        let out = head + marker + tail
+        // Floor guard: when `limit` is smaller than the marker itself (keep
+        // clamps to 0 but the marker alone still overflows `limit`), the
+        // head+marker+tail output would exceed `limit`. Truncate the built
+        // output to `limit` bytes on a UTF-8 boundary so the contract ("output
+        // never exceeds `limit`") holds for every `limit`, including ones
+        // below the marker's own length. For `limit >= markerMaxLen` the guard
+        // never trips and the head+marker+tail shape is unchanged.
+        if out.utf8.count > limit {
+            let outBytes = Array(out.utf8)
+            let cut = utf8PrefixCut(outBytes, budget: limit)
+            return String(decoding: outBytes[0..<cut], as: UTF8.self)
+        }
+        return out
     }
 
     /// The largest byte offset ≤ `budget` at which `bytes` can be split without

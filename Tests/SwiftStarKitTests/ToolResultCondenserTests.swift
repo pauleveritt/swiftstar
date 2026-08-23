@@ -83,4 +83,23 @@ struct ToolResultCondenserTests {
         let b = ToolResultCondenser.condense(text, limit: 200)
         #expect(a == b)
     }
+
+    @Test func limitSmallerThanMarkerStaysUnderLimit() {
+        // When `limit` is smaller than the truncation marker's own length,
+        // `keep` clamps to 0 but the marker alone would overflow `limit` (the
+        // "output never exceeds `limit`" contract was false for `limit <
+        // marker`). The floor guard truncates the built output to `limit` bytes
+        // on a UTF-8 boundary so the contract holds for every `limit`.
+        let text = String(repeating: "x", count: 10_000)
+        for limit in [1, 5, 10, 30, 36] {
+            let out = ToolResultCondenser.condense(text, limit: limit)
+            #expect(out.utf8.count <= limit, "limit \(limit): output \(out.utf8.count) exceeds limit")
+            #expect(String(data: Data(out.utf8), encoding: .utf8) == out)  // valid UTF-8
+        }
+        // A `limit` just above the marker's actual length keeps the full marker
+        // (no head/tail) and stays under `limit` (the guard does not trip).
+        let out40 = ToolResultCondenser.condense(text, limit: 40)
+        #expect(out40.utf8.count <= 40)
+        #expect(out40.contains("[truncated:"))
+    }
 }
