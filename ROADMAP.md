@@ -274,6 +274,38 @@ Deferred, each with the condition that reopens it.
   defense in depth.
 - **Specialized tool subagents** — reasoning-light, one-command agents (ruff, pyrefly, pytest, sphinx, roadmap admin) that each own a single tool's lifecycle: run it in a non-human JSON mode where one exists, digest the output into something the caller can act on without bloat, and apply the fix when the run says what it is (e.g., a broken test). Budgeted to fit an 8k context on AFM3; because Swift runs the evocation, repeated invocations make the limit a budget rather than a wall. The open question is dispatch — how the orchestrating model+agent decides which specialized agent to call. The economics are measured, not assumed: locally, prefill is the scarce resource, so deterministic work first is a *performance* rule — `ruff --fix` beats the model typing the same 40-line edit by ~500x, and clustering 40 pytest failures to 2 representatives turns a 178s prefill at depth into 9s (rates from `docs/harvest/telemetry-findings.md`; worked table in the ds4-control survey cited by `2026-08-22-p11-engine-constraints-and-corrections.md`). *Reopens when P11 lands and the pool design can hold a one-command worker; this is a candidate shape for P11's workers, not a phase of its own.* Source: P11 "Subagent pool".
 - **The dispatch decision** — what the handoff packet maker must know to route a task, on three axes. **(1) Parallelism:** dependency edges declared by the plan author are authoritative; the maker may additionally *prove* independence from disjoint writable-file sets plus disjoint validation commands, and must refuse when it cannot — file-disjointness is necessary, not sufficient (an API change and its consumer share no file). **(2) Thinking requirement:** a task is delegable to a reasoning-light worker only when acceptance is a machine-checkable predicate, the tool surface is bounded (`read`/`write`/`edit`, no `bash`), and the writable-file set is exact — and thinking is a stage, not a property: "fix the broken test" needs diagnosis (thinking) before the apply is mechanical. **(3) Executor:** whether the packet goes to a full-context worker or to a specialized Swift subagent running one command in its JSON mode (ruff, pyrefly, pytest, sphinx, roadmap admin), with AFM3's 8k as the budget for the latter and repeat evocations for anything longer. The lesson travels with it: the maker enforces declared intent and computes conservative proofs; it never re-derives semantics with less information than the plan author — the same lesson as the removed contract-blind pre-edit guard. *This is P10's routing design; axis 3 is what the "Specialized tool subagents" entry feeds. Reopens when P10 is planned.* Source: P10 "Isolation", the "Specialized tool subagents" backlog entry.
+- **House style as a compiled artifact** — the long-term goal is an agent that
+  writes code the way the author would have written it. The cheap approach —
+  infer style from surrounding code on every prompt — recomputes a function of
+  a corpus that changes on the scale of days, and matches *the nearest example
+  in context* rather than the dominant convention, so it drifts on
+  first-of-a-kind files and faithfully reproduces whatever outlier grep
+  surfaced. Four moves in dependence order: (1) style compliance becomes a
+  P9/P10 **objective**, so the model discovers convention from rejection
+  instead of carrying it — zero context cost, and it works precisely where
+  inference is weakest; (2) an out-of-band pass **compiles** what it can into
+  executable checks — ruff and refurb are *selected* not authored (neither
+  takes user-written rules), `ast-grep`/`semgrep` carry project-specific
+  patterns, `pyrefly` types, HTML/CSS validation of rendered output for
+  tdom-shaped work, `pytest`/`sybil`/`sphinx` as executable truth; (3) it
+  **elects a canonical exemplar** per pattern-kind, so D5's names-only staged
+  reads point at known-good precedent; (4) the P9/P10 correction stream is
+  **mined** for anti-patterns, which compile easily and arrive for free.
+  Attaches to D6 — same properties (deterministic, out-of-band, incrementally
+  maintained, no inference), different invalidation clock: commits rather than
+  events. The specialist-subagent form is bounded by this engine rather than
+  free: exact-prefix-only KV reuse plus D8's shared-root short-lived workers
+  makes a per-specialist recipe a divergent prefix, costing either the shared
+  root or ~1.5–6.1 GB of scratch per long-lived specialist — which is why
+  existing `tdom`/`hopscotch`/`svcs` skills should *be* the specialist
+  definition rather than a parallel recipe format, and why worker budgets
+  (4k–16k, D8) argue for checks over prose in the first place. **Nothing here
+  is measured.** *Reopens when P9's objectives exist, since the gate is the
+  load-bearing move and needs them. The cheap probe that decides the shape:
+  measure the compile fraction on tdom's practices — high means gates carry it
+  and specialists stay small; low means recipes carry the weight and the
+  residency cost above becomes the real problem.* Source:
+  [`docs/superpowers/research/2026-08-23-house-style-as-a-compiled-artifact.md`](docs/superpowers/research/2026-08-23-house-style-as-a-compiled-artifact.md).
 - **Context-economy tooling** — two deterministic moves that exist because KV
   reuse is exact-prefix-only and prefill is the scarce resource: (1)
   *don't-re-read* — hash+mtime every file the agent has read and answer an
