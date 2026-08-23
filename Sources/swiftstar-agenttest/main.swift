@@ -80,7 +80,7 @@ git(repoURL, ["commit", "-q", "-m", "seed"])
 
 let settings = AgentSettings(
     engineDir: engineDir, modelPath: URL(fileURLWithPath: gguf),
-    contextSize: 32768, workspace: repoURL, shellAllowed: false)
+    contextSize: 16384, workspace: repoURL, shellAllowed: false)
 let orch = try PoolOrchestrator(settings: settings)
 defer { orch.stop() }
 let txn = WorktreeTransaction(repo: repoURL)
@@ -101,14 +101,19 @@ let runStart = Date()
 
 for (i, phaseText) in phases.enumerated() {
     // The prepared context (D4): the phase spec + the shared rubric + the writable
-    // scope, so the worker knows exactly which files it may create/edit.
+    // scope + a bounding directive, so the worker writes directly instead of
+    // exploring/thrashing (the slm-struggles lessons).
     let writableNote = "You may write or edit only these files:\n"
         + writableFiles.map { "- \($0)" }.joined(separator: "\n")
+        + "\n\nWork in one concise pass: write each file exactly once, do not explore\n"
+        + "the workspace or re-read files you just wrote, and run the validation\n"
+        + "command at most once. The acceptance suite checks user-visible behavior,\n"
+        + "not file layout — write the files named above directly."
     let packet = HandoffPacket(
         taskText: phaseText + "\n\n" + writableNote + "\n\n" + sharedContext,
         writableFiles: writableFiles,
         validationCommand: "uv run --project \(pyProject) python -c 'import app'",
-        baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
+        baselines: [:], turnBudget: 100_000, toolCallBudget: 30)
     print("[agenttest] phase \(i + 1)/\(phases.count) …")
     let wt = try txn.preparePhase(packet: packet)
     let outcome = try orch.runPhase(worker: WorkerId(1), packet: packet, worktree: wt.url,

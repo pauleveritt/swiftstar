@@ -58,6 +58,7 @@ public final class PoolOrchestrator {
                          capture: FileHandle? = nil) throws -> TurnOutcome {
         var builder = TurnOutcomeBuilder(
             model: model, build: "pooled", sampler: "engine-defaults", task: packet.taskText)
+        var toolCallCount = 0
         readCache.removeAll()
         vettedBash = packet.validationCommand
         let prompt = PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n"
@@ -95,6 +96,16 @@ public final class PoolOrchestrator {
                 builder.apply(event)
                 switch event {
                 case .toolRequest(let idx, let name, let params):
+                    toolCallCount += 1
+                    if toolCallCount > packet.toolCallBudget {
+                        // Enforce the budget during the turn (D8): refuse the call,
+                        // don't execute it, so a thrashing worker is cut off instead
+                        // of filling the context.
+                        let r = ToolCallbackResponse(idx: idx, ok: false,
+                            s: ToolResultCondenser.condense("tool budget exceeded"))
+                        stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
+                        continue
+                    }
                     let response = ToolCallbackResponder.respond(
                         idx: idx, name: name, params: params,
                         workspace: worktree, shellAllowed: true,  // bash is vetted in the executor
