@@ -37,7 +37,7 @@ public struct HandoffPacket: Codable, Equatable, Sendable {
     public let taskText: String
     public let writableFiles: [String]
     public let validationCommand: String?
-    public let baselines: [String: FileBaseline]
+    public var baselines: [String: FileBaseline]
     public let turnBudget: Int
     public let toolCallBudget: Int
 

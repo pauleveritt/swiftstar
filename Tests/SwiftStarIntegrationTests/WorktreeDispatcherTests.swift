@@ -89,7 +89,7 @@ struct WorktreeDispatcherTests {
         let packet = HandoffPacket(
             taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
             baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { wt in
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
             try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
                                    atomically: true, encoding: .utf8)
             return self.outcome(mutations: ["a.txt"])
@@ -98,11 +98,12 @@ struct WorktreeDispatcherTests {
         guard case .candidate(let ref, let carried, _) = outcome else {
             Issue.record("expected candidate for an in-bounds mutation"); return
         }
-        #expect(!ref.isEmpty, "candidate ref must be a non-empty SHA")
+        #expect(!ref.isEmpty, "candidate ref must be a non-empty namespaced ref")
+        #expect(ref.hasPrefix("refs/swiftstar/candidates/"), "candidate ref must be durable (F7)")
         // Evidence floor: the ref is a real commit that resolves in the repo.
         let resolved = try git(repo, ["rev-parse", ref])
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        #expect(resolved == ref, "candidate ref must resolve via git rev-parse")
+        #expect(resolved.count == 40, "candidate ref must resolve to a commit SHA")
         // The commit changed a.txt (the allowed file).
         let show = try git(repo, ["show", "--stat", "--name-only", ref])
         #expect(show.contains("a.txt"))
@@ -120,7 +121,7 @@ struct WorktreeDispatcherTests {
         let packet = HandoffPacket(
             taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
             baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { wt in
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
             try "second\n".write(to: wt.appendingPathComponent("a.txt"),
                                  atomically: true, encoding: .utf8)
             return self.outcome(mutations: ["a.txt"])
@@ -132,7 +133,7 @@ struct WorktreeDispatcherTests {
         // (dispatch removes it; nothing to assert beyond the ref resolving.)
         let resolved = try git(repo, ["rev-parse", ref])
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        #expect(resolved == ref)
+        #expect(resolved.count == 40)
     }
 
     @Test func candidateCommitDoesNotIncludeUntrackedBuildDir() throws {
@@ -147,7 +148,7 @@ struct WorktreeDispatcherTests {
         let packet = HandoffPacket(
             taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
             baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { wt in
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
             // Mutate the writable file...
             try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
                                    atomically: true, encoding: .utf8)
@@ -263,7 +264,7 @@ struct WorktreeDispatcherTests {
         let packet = HandoffPacket(
             taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
             baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { wt in
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
             try "outside\n".write(to: wt.appendingPathComponent("outside.txt"),
                                  atomically: true, encoding: .utf8)
             return self.outcome(mutations: ["outside.txt"])
@@ -283,7 +284,7 @@ struct WorktreeDispatcherTests {
         let packet = HandoffPacket(
             taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: "false",
             baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { wt in
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
             try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
                                    atomically: true, encoding: .utf8)
             return self.outcome(mutations: ["a.txt"])
@@ -302,7 +303,7 @@ struct WorktreeDispatcherTests {
         let packet = HandoffPacket(
             taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: "true",
             baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { wt in
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
             try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
                                    atomically: true, encoding: .utf8)
             return self.outcome(mutations: ["a.txt"])
@@ -322,7 +323,7 @@ struct WorktreeDispatcherTests {
         let packet = HandoffPacket(
             taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
             baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _ in
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, _ in
             self.outcome(mutations: [], toolCalls: 0)
         }
         guard case .receipt(.noChanges) = outcome else {
@@ -408,7 +409,7 @@ struct WorktreeDispatcherTests {
         let packet = HandoffPacket(
             taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
             baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { wt in
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
             try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
                                    atomically: true, encoding: .utf8)
             return self.outcome(mutations: ["a.txt"])

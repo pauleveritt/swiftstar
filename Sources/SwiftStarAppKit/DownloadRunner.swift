@@ -183,7 +183,11 @@ public final class DownloadRunner {
     }
 
     private nonisolated static func persistMetaTotal(_ total: Int64, dir: URL) {
-        try? "\"\(total)\n\"".data(using: .utf8)?.write(to: dir.appendingPathComponent("meta.txt"), options: .atomic)
+        // Bare integer + newline: loadMetaTotal parses Int64 on the trimmed
+        // string. The old form wrote the value wrapped in quotes, which
+        // Int64(...) never parsed — so resume metadata was silently unreadable
+        // and a changed remote could reuse stale same-sized chunks (F3).
+        try? "\(total)\n".data(using: .utf8)?.write(to: dir.appendingPathComponent("meta.txt"), options: .atomic)
     }
 
     private nonisolated static func loadBitmap(dir: URL, chunkCount: Int) -> DownloadBitmap {

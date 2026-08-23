@@ -455,31 +455,22 @@ final class AgentController {
             guard !command.isEmpty else {
                 return ToolExecutionResult(ok: false, text: "error: bash requires command")
             }
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/bin/bash")
-            p.arguments = ["-c", command]
-            p.currentDirectoryURL = request.workspace
-            let outPipe = Pipe()
-            let errPipe = Pipe()
-            p.standardOutput = outPipe
-            p.standardError = errPipe
+            // SubprocessRunner drains stdout/stderr concurrently and enforces a
+            // timeout (F1: waitUntilExit-before-read deadlocks on a full pipe).
+            let r: SubprocessRunner.Result
             do {
-                try p.run()
-                p.waitUntilExit()
-                let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(),
-                                 encoding: .utf8) ?? ""
-                let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(),
-                                 encoding: .utf8) ?? ""
-                let combined = out + (err.isEmpty ? "" : err)
-                let digest = "sha256:" + SHA256.hash(data: Data(out.utf8))
-                    .map { String(format: "%02x", $0) }.joined()
-                return ToolExecutionResult(
-                    ok: true, text: combined,
-                    exitStatus: Int(p.terminationStatus),
-                    outputDigest: digest, validationRan: true)
+                r = try SubprocessRunner.run(command, in: request.workspace)
             } catch {
                 return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
             }
+            let combined = r.stdout + (r.stderr.isEmpty ? "" : r.stderr)
+            let digest = "sha256:" + SHA256.hash(data: Data(r.stdout.utf8))
+                .map { String(format: "%02x", $0) }.joined()
+            return ToolExecutionResult(
+                ok: r.exit == 0 && !r.timedOut,
+                text: combined,
+                exitStatus: Int(r.exit),
+                outputDigest: digest, validationRan: true)
 
         case "bash_status", "bash_stop":
             // Not yet implemented in host mode: a fresh `Process` would re-run
@@ -618,9 +609,9 @@ final class AgentController {
             let repo = Self.resolveRepoRoot(from: workspace)
             do {
                 let outcome = try WorktreeDispatcher.dispatch(
-                    packet: packet, in: repo) { worktree in
+                    packet: packet, in: repo) { enrichedPacket, worktree in
                     try Self.runDispatchedTurn(
-                        packet: packet, worktree: worktree, baseSettings: baseSettings)
+                        packet: enrichedPacket, worktree: worktree, baseSettings: baseSettings)
                 }
                 await MainActor.run {
                     self?.dispatchOutcome = outcome

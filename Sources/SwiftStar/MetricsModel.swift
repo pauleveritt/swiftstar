@@ -3,12 +3,22 @@ import Observation
 import SwiftStarKit
 import SwiftStarAppKit
 
+/// Where the lead dials' values come from. The Metrics/Diagnostics tabs stay
+/// fixture-driven (D9), so their lead numbers are `.recorded` until a later
+/// phase wires them live — the label is permanent, not a transient replay flag
+/// that disappears the moment the replay finishes (F8: recorded values must
+/// never be displayed as though live).
+enum Provenance {
+    case recorded
+    case live
+}
+
 @MainActor
 @Observable
 final class MetricsModel {
     private(set) var state = MetricsState()
     private(set) var machine = MachineSnapshot(residentBytes: nil, watts: 0, gpuUtilization: 0, cpuUtilization: 0)
-    private(set) var isReplayingWire = false
+    private(set) var provenance: Provenance = .recorded
 
     private let collector = ProcessStatsCollector()
     private var collectTask: Task<Void, Never>?
@@ -32,7 +42,6 @@ final class MetricsModel {
         if replayTask == nil {
             replayTask = Task { [weak self] in
                 guard let self else { return }
-                self.isReplayingWire = true
                 var parser = WireEventParser()
                 let reducer = MetricsReducer()
                 for await line in FixtureReplay.lines() {
@@ -40,7 +49,6 @@ final class MetricsModel {
                         reducer.reduce(&self.state, event)
                     }
                 }
-                self.isReplayingWire = false
             }
         }
     }
@@ -50,7 +58,6 @@ final class MetricsModel {
         collectTask = nil
         replayTask?.cancel()
         replayTask = nil
-        isReplayingWire = false
     }
 
     /// Live boot-line budget wins over the replayed ready-event budget: a

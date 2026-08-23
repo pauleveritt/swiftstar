@@ -14,8 +14,12 @@ It does no inference itself. Inference is delegated to `ds4-server` and
 
 ## Status
 
-**Phase P0 complete: scaffolding.** There is no application yet. What exists is
-the settled design and the plan for building it.
+**Phases P0–P10 complete.** SwiftStar launches a regular macOS app (Chat via
+`ds4-server` SSE; Agent via `ds4-agent` NDJSON with tool cards, consent controls,
+and interruptible turns), downloads and gates model feasibility, replays Metrics
+and Diagnostics from committed captures, bootstraps the Superpowers skills,
+answers tool calls over a bidirectional wire, and dispatches worktree-isolated
+attempts. See [`ROADMAP.md`](ROADMAP.md) for what is next (P11).
 
 - [`BRIEF.md`](BRIEF.md) — the design. Read this first.
 - [`ROADMAP.md`](ROADMAP.md) — phases, concept budget, backlog.

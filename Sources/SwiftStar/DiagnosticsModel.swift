@@ -7,7 +7,7 @@ import SwiftStarAppKit
 @Observable
 final class DiagnosticsModel {
     private(set) var findings: [Finding] = []
-    private(set) var isReplayingCapture = false
+    private(set) var provenance: Provenance = .recorded
 
     private let analyzer = DiagnosticsAnalyzer()
     private let phraser = DeterministicPhraser()
@@ -15,11 +15,9 @@ final class DiagnosticsModel {
     /// Idempotent: computed once from the bundled capture. Live wiring is P7.
     func start() {
         guard findings.isEmpty else { return }
-        isReplayingCapture = true
         if let input = DiagnosticsFixture.load() {
             findings = analyzer.analyze(events: input.events, trace: input.trace)
         }
-        isReplayingCapture = false
     }
 
     func phrase(_ finding: Finding) -> String {

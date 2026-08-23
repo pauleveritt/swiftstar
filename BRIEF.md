@@ -173,23 +173,26 @@ adds a tool-callback protocol. **A bidirectional wire needs a fake *app* side,
 not just a fake engine side** — that cost belongs to P9 and must not be
 discovered inside it.
 
-**Targets.** Three, and the split is what makes the suite fast:
+**Targets.** Four, and the split is what makes the suite fast:
 
 - **`SwiftStarKit`** — no SwiftUI, no IOKit, no `Process`. Wire parsers, the
   supervisor state machine as a pure transition function, feasibility math, the
   telemetry analyzer. Functions of their inputs, tested in milliseconds.
-- **`SwiftStar`** — the app. Scenes, IOReport collectors, actual spawning,
-  the download runner. Thin, because the decisions live in Kit.
+- **`SwiftStarAppKit`** — IOKit/`Process`/downloading but still no SwiftUI: the
+  process-stats collector, power, the download runner, fixture replay, skill
+  staging, and the worktree dispatcher. Testable in the integration tier.
+- **`SwiftStar`** — the app. Scenes, the controllers, actual spawning. Thin,
+  because the decisions live in Kit.
 - **`swiftstar-drive`** — an executable that composes production types and
   drives the real engine to produce captures. Committed. See below.
 
 **The rule that keeps the split honest: if a test wants to assert on source
 text, the thing it is testing is in the wrong target.**
 
-**Surfaces.** One window, five tabs — Chat, Agent, Metrics, Diagnostics, Help —
-plus a `Settings` scene with panes. Chat and Agent stay separate: they are
-different wires (SSE vs NDJSON), different consent models, and different
-products.
+**Surfaces.** One window, six tabs — Chat, Agent, Dispatch, Metrics,
+Diagnostics, Help — plus a `Settings` scene with panes. Chat and Agent stay
+separate: they are different wires (SSE vs NDJSON), different consent models,
+and different products.
 
 **Diagnostics computes deterministically; the model only phrases.** Swift
 computes the findings from a capture; the model's only job is turning a

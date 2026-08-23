@@ -7,7 +7,7 @@ struct MetricsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if model.isReplayingWire {
+                if model.provenance == .recorded {
                     Label("capture replay — context and throughput are from a recorded session",
                           systemImage: "film")
                         .font(.caption)

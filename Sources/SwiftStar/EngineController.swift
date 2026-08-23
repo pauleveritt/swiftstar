@@ -151,6 +151,11 @@ final class EngineController {
         case .stopped, .failed: break
         default: return
         }
+        // Settings apply when the engine next starts (Settings pane caption).
+        // Refresh BEFORE the feasibility gate: the gate must refuse (or admit)
+        // the model the user just selected, never the previous model's plan (F4).
+        settings = EngineController.defaultSettings()
+
         // Feasibility: refuse before spawning with a computed, actionable
         // message (P3). plannedBytes comes from the engine's own boot line,
         // persisted with the model it was measured on; a changed model
@@ -171,8 +176,6 @@ final class EngineController {
                 return
             }
         }
-        // Settings apply when the engine next starts (Settings pane caption).
-        settings = EngineController.defaultSettings()
 
         let binary = ServerCommand.binaryPath(settings: settings)
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
@@ -307,7 +310,17 @@ final class EngineController {
             for try await line in bytes.lines {
                 if let event = parser.feed(line) {
                     transcript.apply(event)
+                    // Turn completion: `.finish` carries the finish_reason when
+                    // the stream ends with a finish chunk; `.done` is the
+                    // [DONE] sentinel that follows a terminal chunk whose
+                    // finish_reason was folded into its content delta. Both end
+                    // the turn — a stream that emits only `.done` must not
+                    // leave Chat stuck in `.generating` (F2).
                     if case .finish = event {
+                        state = Supervisor.transition(from: state, event: .generationFinished)
+                    } else if event == .done {
+                        // The [DONE] sentinel ends a turn whose final chunk
+                        // folded finish_reason into its content delta (F2).
                         state = Supervisor.transition(from: state, event: .generationFinished)
                     }
                 }

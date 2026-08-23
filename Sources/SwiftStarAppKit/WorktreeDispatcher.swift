@@ -31,9 +31,10 @@ public enum WorktreeDispatcher {
     public static func dispatch(
         packet: HandoffPacket,
         in repo: URL,
-        attempt: (URL) throws -> TurnOutcome
+        attempt: (HandoffPacket, URL) throws -> TurnOutcome
     ) throws -> DispatchOutcome {
         let branch = "swiftstar-dispatch-\(UUID().uuidString)"
+        let candidateRefName = "refs/swiftstar/candidates/\(UUID().uuidString)"
         let worktree = FileManager.default.temporaryDirectory
             .appendingPathComponent("swiftstar-wt-\(UUID().uuidString)")
 
@@ -42,10 +43,9 @@ public enum WorktreeDispatcher {
         _ = try git(repo, ["worktree", "add", "-b", branch, worktree.path])
         defer {
             // Remove the worktree and the throwaway branch on completion or
-            // failure. The commit object survives (the parent reviews the ref,
-            // not the worktree); `git rev-parse <sha>` resolves a dangling
-            // commit. `--force` tolerates an unclean tree (a receipt path that
-            // never committed).
+            // failure. The candidate commit stays reachable via the namespaced
+            // ref (refs/swiftstar/candidates/<uuid>) — a raw SHA is GC-eligible
+            // once the branch is deleted, which is not a durable ref (F7).
             try? git(repo, ["worktree", "remove", "--force", worktree.path])
             try? git(repo, ["branch", "-D", branch])
             try? FileManager.default.removeItem(at: worktree)
@@ -65,9 +65,16 @@ public enum WorktreeDispatcher {
                 baselines[path] = baseline
             }
         }
+        // The attempt receives the ENRICHED packet — the declared handoff
+        // packet actually carrying its computed baselines — plus the worktree
+        // (F6: previously the attempt got only the worktree, so production
+        // captured baselines: [:]).
+        var enriched = packet
+        enriched.baselines = baselines
+
         // Run the dispatched turn: the closure mutates files in the worktree
         // and returns the P9 `TurnOutcome` carrying the observed mutations.
-        let turnOutcome = try attempt(worktree)
+        let turnOutcome = try attempt(enriched, worktree)
 
         // Run the packet's validation command parent-side (D3), capturing the
         // exit status and a SHA-256 digest of stdout. `nil` when the packet sets
@@ -82,13 +89,24 @@ public enum WorktreeDispatcher {
             turnOutcome: turnOutcome,
             validation: validation)
         switch verdict {
-        case .candidate(_, let carried, _):
-            // Commit the worktree's diff to the throwaway branch (D3) and return
-            // the commit SHA as the candidate ref. The baselines read above (D1)
-            // ride on the candidate so the parent can diff the candidate against
-            // the pre-attempt state of each writable file.
-            let ref = try commitDiff(in: worktree, writableFiles: packet.writableFiles)
-            return .candidate(ref: ref, turnOutcome: carried, baselines: baselines)
+        case .candidate(_, var carried, _):
+            // Attach the validation evidence to the candidate's TurnOutcome
+            // (F5): validationRan, exit status, and output digest were computed
+            // above but the original TurnOutcome did not carry them.
+            if let validation {
+                carried.validationRan = true
+                carried.exitStatus = Int(validation.exit)
+                carried.outputDigest = validation.digest
+            }
+            // Commit the worktree's diff to the throwaway branch (D3) and
+            // return a durable namespaced ref. The baselines read above (D1)
+            // ride on the candidate so the parent can diff the candidate
+            // against the pre-attempt state of each writable file.
+            let sha = try commitDiff(in: worktree, writableFiles: packet.writableFiles)
+            // Keep the commit reachable via a namespaced ref, not a dangling
+            // SHA (F7): `git update-ref refs/swiftstar/candidates/<uuid> <sha>`.
+            _ = try git(repo, ["update-ref", candidateRefName, sha])
+            return .candidate(ref: candidateRefName, turnOutcome: carried, baselines: baselines)
         case .receipt(let receipt):
             return .receipt(receipt)
         }
@@ -129,20 +147,14 @@ public enum WorktreeDispatcher {
     /// throw); the pure verdict maps it to `.validationFailed`.
     private static func runValidation(_ command: String?, in worktree: URL) throws -> ValidationResult? {
         guard let command else { return nil }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/bash")
-        p.arguments = ["-c", command]
-        p.currentDirectoryURL = worktree
-        let out = Pipe()
-        let err = Pipe()
-        p.standardOutput = out
-        p.standardError = err
-        try p.run()
-        p.waitUntilExit()
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let digest = "sha256:" + SHA256.hash(data: outData)
+        // SubprocessRunner drains stdout/stderr concurrently and enforces a
+        // timeout, so a verbose validation command can neither deadlock on a
+        // full pipe nor hang the dispatch forever.
+        let r = try SubprocessRunner.run(command, in: worktree)
+        let digest = "sha256:" + SHA256.hash(data: Data(r.stdout.utf8))
             .map { String(format: "%02x", $0) }.joined()
-        return ValidationResult(exit: p.terminationStatus, digest: digest)
+        let exit = r.timedOut ? Int32(124) : r.exit  // 124 = timeout, per `timeout(1)` convention
+        return ValidationResult(exit: exit, digest: digest)
     }
 
     /// Commit the worktree's diff to the throwaway branch, staging only the

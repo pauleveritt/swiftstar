@@ -6,7 +6,7 @@ struct DiagnosticsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if model.isReplayingCapture {
+            if model.provenance == .recorded {
                 Text("Results computed from a recorded capture — not a live engine.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
