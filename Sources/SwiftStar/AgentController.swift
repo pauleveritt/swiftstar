@@ -56,6 +56,9 @@ final class AgentController {
     private var activeWorkerPacket: HandoffPacket?
     private var workerOutcomeBuilder: TurnOutcomeBuilder?
     private var activeWorkerId: WorkerId?
+    /// P11: the in-flight worker's disposable worktree — its file mutations
+    /// land here, never in the caller's tree (the P10 isolation guarantee).
+    private var activeWorkerWorktree: WorktreeDispatcher.Worktree?
     private var sentInterrupt = false
     private var buildSHA = "unknown"
     nonisolated(unsafe) private let logHandle: FileHandle?
@@ -392,9 +395,25 @@ final class AgentController {
             injectPendingReceipts()
             return
         }
+        // Prepare the worker's disposable worktree (P10 isolation): its file
+        // mutations land here, never in the caller's tree.
+        let repo = Self.resolveRepoRoot(from: settings.workspace)
+        let worktree: WorktreeDispatcher.Worktree
+        do {
+            worktree = try WorktreeDispatcher.prepare(packet: packet, in: repo)
+        } catch {
+            let receipt = DispatchReceipt(worker: worker, ref: nil,
+                reason: "worktree preparation failed", summary: "\(error)")
+            poolState = PoolScheduler.apply(poolState, .workerFailed(worker, receipt))
+            rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
+            log("worker \(worker.rawValue): worktree prepare failed: \(error)")
+            drainQueuedWorkers()
+            return
+        }
         poolState = PoolScheduler.apply(poolState, .workerStarted(worker))
         activeWorkerId = worker
         activeWorkerPacket = packet
+        activeWorkerWorktree = worktree
         workerOutcomeBuilder = TurnOutcomeBuilder(
             model: settings.modelPath.lastPathComponent,
             build: buildSHA,
@@ -404,7 +423,7 @@ final class AgentController {
             pipe.fileHandleForWriting.write(
                 Data((PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n").utf8))
         }
-        log("worker \(worker.rawValue): turn started")
+        log("worker \(worker.rawValue): turn started (worktree \(worktree.url.lastPathComponent))")
     }
 
     /// Route one worker-tagged event through the worker's turn (D4): answer its
@@ -416,7 +435,8 @@ final class AgentController {
         case .toolRequest(let idx, let name, let params):
             let response = ToolCallbackResponder.respond(
                 idx: idx, name: name, params: params,
-                workspace: settings.workspace, shellAllowed: false,
+                workspace: activeWorkerWorktree?.url ?? settings.workspace,
+                shellAllowed: false,
                 writableFiles: activeWorkerPacket?.writableFiles,
                 execute: Self.executeHostTool)
             writeToolResult(response)
@@ -452,20 +472,45 @@ final class AgentController {
             taskText: "", writableFiles: [], validationCommand: nil,
             baselines: [:], turnBudget: 0, toolCallBudget: 0)
         let receipt: DispatchReceipt
-        switch WorktreeDispatch.verdict(
-            packet: packet, allowedMutations: outcome.mutations,
-            turnOutcome: outcome, validation: nil) {
-        case .candidate:
-            receipt = DispatchReceipt(worker: worker, ref: nil, reason: nil,
-                summary: "candidate: \(outcome.mutations.count) mutation(s), \(outcome.generatedTokens) tokens")
-        case .receipt(let reason):
-            receipt = DispatchReceipt(worker: worker, ref: nil,
-                reason: Self.receiptReason(reason), summary: Self.receiptReason(reason))
+        if let worktree = activeWorkerWorktree {
+            let repo = Self.resolveRepoRoot(from: settings.workspace)
+            let relativized = WorktreeDispatch.relativize(outcome: outcome, worktree: worktree.url)
+            do {
+                let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: worktree.url)
+                let dispatchOutcome = try WorktreeDispatcher.finalize(
+                    worktree, packet: packet, turnOutcome: relativized,
+                    validation: validation, in: repo)
+                switch dispatchOutcome {
+                case .candidate(let ref, _, _):
+                    receipt = DispatchReceipt(worker: worker, ref: ref, reason: nil,
+                        summary: "candidate: \(relativized.mutations.count) mutation(s), \(relativized.generatedTokens) tokens")
+                case .receipt(let r):
+                    receipt = DispatchReceipt(worker: worker, ref: nil,
+                        reason: Self.receiptReason(r), summary: Self.receiptReason(r))
+                }
+            } catch {
+                receipt = DispatchReceipt(worker: worker, ref: nil,
+                    reason: "infrastructure failure", summary: "\(error)")
+            }
+            WorktreeDispatcher.discard(worktree, in: repo)
+        } else {
+            // No worktree (prepare failed earlier): fall back to the pure verdict.
+            switch WorktreeDispatch.verdict(
+                packet: packet, allowedMutations: outcome.mutations,
+                turnOutcome: outcome, validation: nil) {
+            case .candidate:
+                receipt = DispatchReceipt(worker: worker, ref: nil, reason: nil,
+                    summary: "candidate: \(outcome.mutations.count) mutation(s), \(outcome.generatedTokens) tokens")
+            case .receipt(let reason):
+                receipt = DispatchReceipt(worker: worker, ref: nil,
+                    reason: Self.receiptReason(reason), summary: Self.receiptReason(reason))
+            }
         }
         poolState = PoolScheduler.apply(poolState, .workerFinished(worker, receipt))
         rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
         activeWorkerId = nil
         activeWorkerPacket = nil
+        activeWorkerWorktree = nil
         log("worker \(worker.rawValue): \(receipt.summary)")
         drainQueuedWorkers()
     }

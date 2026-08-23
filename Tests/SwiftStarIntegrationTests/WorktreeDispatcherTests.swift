@@ -80,6 +80,40 @@ struct WorktreeDispatcherTests {
         return output
     }
 
+    // P11: the async pooled path — prepare a worktree, mutate it, finalize to a
+    // candidate ref, discard; the caller's tree is never touched.
+    @Test func prepareFinalizeDiscardIsolatesTheCallerTree() throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let packet = HandoffPacket(
+            taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
+            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
+        let worktree = try WorktreeDispatcher.prepare(packet: packet, in: repo)
+
+        // The scripted worker mutates the worktree's a.txt.
+        try "candidate\n".write(to: worktree.url.appendingPathComponent("a.txt"),
+                                atomically: true, encoding: .utf8)
+        // The caller's tree is untouched.
+        let caller = try String(contentsOf: repo.appendingPathComponent("a.txt"), encoding: .utf8)
+        #expect(caller == "seed\n", "the caller's a.txt must be unchanged")
+
+        let result = try WorktreeDispatcher.finalize(
+            worktree, packet: packet, turnOutcome: outcome(mutations: ["a.txt"]),
+            validation: nil, in: repo)
+        guard case .candidate(let ref, _, _) = result else {
+            Issue.record("expected a candidate for an in-bounds mutation"); return
+        }
+        #expect(ref.hasPrefix("refs/swiftstar/candidates/"))
+        let resolved = try git(repo, ["rev-parse", ref])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(resolved.count == 40)
+
+        WorktreeDispatcher.discard(worktree, in: repo)
+        #expect(!FileManager.default.fileExists(atPath: worktree.url.path),
+                "the worktree must be removed after discard")
+    }
+
     // MARK: - the happy path: an allowed mutation commits a candidate ref
 
     @Test func candidateCommitsAllowedMutation() throws {
