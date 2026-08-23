@@ -27,4 +27,11 @@ struct EnvelopeMathTests {
         #expect(PacketPerturbation.taskTextBloat2x.apply(to: t) == PacketPerturbation.taskTextBloat2x.apply(to: t))
         #expect(PacketPerturbation.packetCountSweepCounts == [1, 2, 4, 8])
     }
+    @Test func bloatArmsScaleByTheAdvertisedFactor() {
+        let t = String(repeating: "x", count: 140)  // 140 chars
+        let b15 = PacketPerturbation.taskTextBloat15x.apply(to: t)
+        let b2 = PacketPerturbation.taskTextBloat2x.apply(to: t)
+        #expect((200...220).contains(b15.count))   // ~1.5x (210)
+        #expect((270...290).contains(b2.count))    // ~2x (280)
+    }
 }

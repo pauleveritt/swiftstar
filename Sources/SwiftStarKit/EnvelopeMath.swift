@@ -58,12 +58,13 @@ extension PacketPerturbation {
 
     /// Apply this perturbation to a canonical `taskText` (deterministic filler;
     /// bloat simulates a wordier brief to sample the prefill curve's response to
-    /// input size). `.canonical`/`.failureInjection`/`.packetCountSweep` leave
-    /// the text unchanged.
+    /// input size). " detail" is 7 chars, so ×1/14 ≈ +0.5× the char count
+    /// (≈1.5× total) and ×1/7 ≈ +1× (≈2× total). `.canonical`/
+    /// `.failureInjection`/`.packetCountSweep` leave the text unchanged.
     public func apply(to taskText: String) -> String {
         switch self {
-        case .taskTextBloat15x: return taskText + String(repeating: " detail", count: taskText.count / 2)
-        case .taskTextBloat2x:  return taskText + String(repeating: " detail", count: taskText.count)
+        case .taskTextBloat15x: return taskText + String(repeating: " detail", count: taskText.count / 14)
+        case .taskTextBloat2x:  return taskText + String(repeating: " detail", count: taskText.count / 7)
         case .canonical, .failureInjection, .packetCountSweep: return taskText
         }
     }
