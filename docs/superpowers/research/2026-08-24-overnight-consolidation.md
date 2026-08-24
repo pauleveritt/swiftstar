@@ -1791,11 +1791,19 @@ against the 8192 total cap, n=3:
 | 2 | 1,775 | 30,105 | **all 3 phases `eos`, acceptance exit 0, grader good** |
 | 3 | 3,266 | 55,952 | **all 3 phases `eos`, acceptance exit 0, grader good** |
 
-**1. The budget verifiably fires.** Think segments cluster at a ceiling — 8210,
-9366, 7813 (run 2); 8468, 7965, 8594, 9030, 8294 (run 3) — ≈2,050 tokens at
-~4.4 chars/token, matching the 2048 setting. Unbounded thinking does not cluster
-like that: C13's single phase-2 segment ran 35,154 chars. The forced `</think>`
-is doing the work, not chance.
+**1. The budget verifiably fires — measured in tokens, not inferred from
+characters.** Correlating each think segment against the `status` events'
+per-round `generated` counter gives the segment's exact token span. In
+`20260824-162030-…-run2`: **2040, 78, 710, 2047, 324, 2051, 72**. Every long
+segment terminates within 8 tokens of the 2048 budget — the ±overshoot the
+implementation predicts, since the ceiling is checked at loop top and a
+speculative batch can carry up to ~16 tokens past it — while naturally-closed
+segments end anywhere (72–710). Nothing but the forced `</think>` produces that
+signature.
+
+*(An earlier version of this section argued from think-segment character counts
+clustering near ~9,000 chars. That inference was sound but weak; the token-level
+check above supersedes it and is what should be cited.)*
 
 **2. Reason-then-act is demonstrated for the first time.** Both passing runs
 reasoned substantially (30k and 56k characters) *and* completed all three
@@ -1809,7 +1817,7 @@ model and spec fixed:
 | relative + think (C9) | 0/3 | — |
 | absolute + think (C13) | 0/3 | — |
 | + cwd fact (C14) | 1/3 | **no** (0 think events) |
-| + think budget (C15) | **2/3** | **yes** (1,775 / 3,266 events) |
+| + think budget (C15) | **2/3** all runs (2/2 completed) | **yes** (1,775 / 3,266 events) |
 
 **3. All three C13 failure modes now have a resolution or a name.**
 
@@ -1979,14 +1987,27 @@ run and should not be described as a fix that worked.
 
 **2. The aggregate across three identical-config batches is the honest number.**
 
-| batch | acceptance | note |
-|---|---|---|
-| C15 | 2/2 | reported as the breakthrough |
-| C17 | 0/2 | both died on one bad import line |
-| C18 | 1/2 | this batch |
-| **total** | **3/6** | same config throughout |
+| batch | of completed runs | of all runs | note |
+|---|---|---|---|
+| C15 | 2/2 | 2/3 | reported as the breakthrough |
+| C17 | 0/2 | 0/3 | both died on one bad import line |
+| C18 | 1/2 | 1/3 | this batch |
+| **total** | **3/6** | **3/9** | |
 
-**Roughly a coin flip, with batch-to-batch swings from 0/2 to 2/2.** Any single
+**3/9 end-to-end is the number to quote.** The 3/6 denominator silently excludes
+the run each batch lost — and all three were lost to the *same* cause,
+`budgetExceeded`, which this document lists as a live unfixed failure mode.
+Dropping over-exploration deaths from the denominator while calling
+over-exploration unfixed is inconsistent. So: **over-exploration reliably claims
+about one run in three, and of the runs that survive it, about half pass.**
+"Coin flip" understates the end-to-end picture.
+
+Pooling C18 with C15/C17 is defensible despite the import gate landing between
+them: commit `2172454` changes only the `finalizePhase` call site — no packet
+text, no prompt, no model-facing config — and **the gate never fired**, so all
+three batches were behaviorally identical from the model's side.
+
+Batch-to-batch swings still run 0/2 to 2/2 among completed runs. Any single
 batch quoted alone is misleading, in either direction — including C15's, which
 this document presented as "reason-then-act demonstrated." That claim survives
 (reasoning and completion *did* co-occur, verifiably, and that had never happened

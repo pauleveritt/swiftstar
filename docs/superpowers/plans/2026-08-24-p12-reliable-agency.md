@@ -1,7 +1,35 @@
 # P12 — Reliable agency
 
-**Status:** planned, not started. Written 2026-08-24, replacing the earlier
-"P12 — More models" framing.
+**Status:** in progress. Written 2026-08-24, replacing the earlier "P12 — More
+models" framing.
+
+**Progress as of 2026-08-24 evening** — several steps ran out of the plan's
+order, driven by findings rather than sequence. Landed:
+
+- **P12.1 is done.** `thinkBudget` wiring (`066f28d`), path presentation
+  (`4535dcd`), facts actually rendered into the prompt (`aad4eb0` — they were
+  stored but never sent), plus the commit-level `noChanges` fix (`adc08c0`) and
+  the mandatory import check (`2172454`). Validator/parser hardening is **not**
+  done and is still owed.
+- **P12.3 ran for Laguna** (C13–C18): path presentation is a real lever, the
+  `--think-budget` engine feature works and is verified at the token level, and
+  a pinned working-directory fact removed a specific reasoning loop. Mellum's
+  arm has **not** run — it needs P12.2.
+- **P12.6 effectively ran early**, since validating `--think-budget` was the only
+  way to test the termination fix. Its prediction — that a forced transition
+  would expose the next failure rather than cure everything — held, but the next
+  failure was not the one predicted: it is *completes-and-is-wrong* (up to 7
+  assertion failures with clean imports), not shallow exploration.
+
+**The headline number, so nobody re-derives it:** across three identical-config
+batches, **3/9 end-to-end** (3/6 among runs that survived `budgetExceeded`).
+Tuning the implement arm across those batches advanced mechanism understanding
+substantially and the pass rate not at all. See C15–C18 in the consolidation
+doc.
+
+**Still true and unchanged:** repair has never run in-harness; the import gate is
+verified in isolation but has never fired live; the `--think-budget` submodule
+branch is not merged with the Mellum integration branch (P12.2).
 
 **Direction.** One model, three roles, host-owned structure. The host owns phase
 boundaries, budgets, permissions, validation, and recovery; the model supplies

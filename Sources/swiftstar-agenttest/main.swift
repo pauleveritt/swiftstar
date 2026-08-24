@@ -238,6 +238,26 @@ func runOnce(_ index: Int) throws -> RunOutcome {
 
     print("[agenttest] spec=\(specName) run=\(index + 1)/\(batchCount) phases=\(phases.count) capture=\(captureDir.path)")
 
+    // D3: make the capture self-describing. `wire.ndjson` carries no model name
+    // and no config, so distinguishing two same-morning batches previously meant
+    // reading engine memory-plan lines and guessing.
+    let runConfig: [String: String] = [
+        "model": gguf,
+        "spec": specName,
+        "think": env["AGENTTEST_THINK"] == "1" ? "on" : "nothink",
+        "thinkBudget": env["AGENTTEST_THINK_BUDGET"] ?? "0",
+        "maxTokens": env["AGENTTEST_MAX_TOKENS"] ?? "8192",
+        "toolBudget": env["AGENTTEST_TOOL_BUDGET"] ?? "30",
+        "pathStyle": absolutePathStyle ? "absolute" : "relative",
+        "redacts": redacts.joined(separator: ","),
+    ]
+    if let cfg = try? JSONSerialization.data(withJSONObject: runConfig, options: [.prettyPrinted, .sortedKeys]) {
+        try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))
+    }
+    if let pkt = try? JSONEncoder().encode(phasePacket(phases[0])) {
+        try? pkt.write(to: captureDir.appendingPathComponent("packet.json"))
+    }
+
     for (i, phaseText) in phases.enumerated() {
         // Same builder the up-front validation gate ran against, so what was
         // validated is exactly what is dispatched.
@@ -345,6 +365,13 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         let output = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         print("[agenttest] acceptance exit=\(p.terminationStatus)")
         print(output)
+        // D3: persist the grade. Without this a capture keeps only the grader's
+        // qualitative verdict -- which the project's own record shows returning
+        // "good" for failing code -- so a run's real result lived in terminal
+        // scrollback and could not be reconstructed from the repo.
+        try? "exit=\(p.terminationStatus)\n\n\(output)"
+            .write(to: captureDir.appendingPathComponent("acceptance.txt"),
+                   atomically: true, encoding: .utf8)
     } else {
         return RunOutcome(finish: .stopped, note: "no final worktree to grade",
                           acceptanceExit: nil, verdict: nil, report: nil,
