@@ -1772,3 +1772,70 @@ cause and one has a verified fix: the packet-ambiguity mode is fixed by a pinned
 fact, the termination mode is untouched and is what `--think-budget` targets,
 and the over-exploration/context-exhaustion mode (run 3) is confirmed as a third
 independent problem that neither lever addresses.
+
+### C15. `--think-budget` wired and run — reason-then-act, demonstrated
+
+`AGENTTEST_THINK_BUDGET` → `AgentSettings.thinkBudget` → `AgentCommand.argv` →
+`ds4-agent --think-budget` (commit `066f28d`). The budget is a separate field
+from `maxTokens`, not derived from it: `maxTokens` caps a round's *total*
+generation, the think budget caps only its thinking, and forcing `</think>` at a
+ceiling equal to the total cap would land the transition with no room left to
+act. Both per-round. Default 0 at every layer.
+
+Laguna Q2_K, hard spec, absolute paths, cwd fact pinned, `--think-budget 2048`
+against the 8192 total cap, n=3:
+
+| run | think events | think chars | outcome |
+|---|---:|---:|---|
+| 1 | 5,079 | — | `budgetExceeded (eos)` — 35 tool calls, 19 read / 6 write |
+| 2 | 1,775 | 30,105 | **all 3 phases `eos`, acceptance exit 0, grader good** |
+| 3 | 3,266 | 55,952 | **all 3 phases `eos`, acceptance exit 0, grader good** |
+
+**1. The budget verifiably fires.** Think segments cluster at a ceiling — 8210,
+9366, 7813 (run 2); 8468, 7965, 8594, 9030, 8294 (run 3) — ≈2,050 tokens at
+~4.4 chars/token, matching the 2048 setting. Unbounded thinking does not cluster
+like that: C13's single phase-2 segment ran 35,154 chars. The forced `</think>`
+is doing the work, not chance.
+
+**2. Reason-then-act is demonstrated for the first time.** Both passing runs
+reasoned substantially (30k and 56k characters) *and* completed all three
+phases. This is the claim C14 explicitly could not make — its single pass logged
+**zero** think events, so it showed a deliberation trigger removed, not
+reasoning coexisting with action. The progression across arms, holding the
+model and spec fixed:
+
+| arm | full spec + acceptance | passing run thought? |
+|---|---|---|
+| relative + think (C9) | 0/3 | — |
+| absolute + think (C13) | 0/3 | — |
+| + cwd fact (C14) | 1/3 | **no** (0 think events) |
+| + think budget (C15) | **2/3** | **yes** (1,775 / 3,266 events) |
+
+**3. All three C13 failure modes now have a resolution or a name.**
+
+| mode | status |
+|---|---|
+| packet ambiguity (working directory) | **fixed** — pinned fact; loop terms 49/73/22/26 → 0 |
+| termination failure (never emits `</think>`) | **fixed** — `--think-budget`, firing as measured above |
+| over-exploration → budget/context exhaustion | **isolated, unfixed** |
+
+Run 1 is now a *clean* instance of the third mode rather than a confounded one:
+`budgetExceeded` at `stop=eos`, 35 tool calls against a 30-call ceiling, 19
+reads against 6 writes. It is not a termination failure and not an ambiguity —
+it explored past its allowance. That has a precedent: Flash hit exactly this at
+budget 30 and passed at 64.
+
+**4. Limits, stated plainly.** n=3 is an existence proof, not a rate; 2/3 is not
+a reliability claim and should not be quoted as one. The tool budget of 30 was
+tuned for Laguna's *nothink* behavior, where exploration is cheap because there
+is no reasoning to interleave — carrying it unchanged into a thinking arm was an
+assumption, not a decision. Raising it is the obvious next lever, but it raises
+context pressure too, and context exhaustion already killed a run in C13's
+nothink control at `ctx_pos=23301`. The budget-64 arm is running.
+
+**What this does not establish.** That the pipeline is reliable, that repair
+works in-harness (it has still never run there — see C1 and the P12 plan's
+caveat), or that any of this transfers off the AgentClinic spec. What it does
+establish is that the two levers built from this investigation — a pinned fact
+and a bounded thinking ceiling — each fixed the failure they were designed for,
+verified at the mechanism level rather than inferred from a pass rate.
