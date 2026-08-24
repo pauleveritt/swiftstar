@@ -1839,3 +1839,63 @@ caveat), or that any of this transfers off the AgentClinic spec. What it does
 establish is that the two levers built from this investigation — a pinned fact
 and a bounded thinking ceiling — each fixed the failure they were designed for,
 verified at the mechanism level rather than inferred from a pass rate.
+
+### C16. The budget-64 arm — raising the ceiling did not help, and surfaced two new problems
+
+C15 left one open question: run 1's `budgetExceeded` was arguably a configuration
+error (the 30-call budget was tuned for *nothink* behavior), and Flash's
+precedent said 64 fixed the same symptom. Re-run with `AGENTTEST_TOOL_BUDGET=64`,
+everything else identical to C15:
+
+| run | phases | outcome |
+|---|---|---|
+| 1 | 3/3 `eos` | **acceptance exit 1** — 2 failed, 11 passed |
+| 2 | 2/3 `eos` | `gitFailed` — harness bug, see below |
+| 3 | 3/3 `eos` | acceptance exit 0, grader good |
+
+**Budget 64 is not an improvement over budget 30.** It removed `budgetExceeded`,
+but the acceptance rate went 2/2 → 1/2. At n=3 with a harness failure in the
+middle this is well inside noise — the honest statement is that **there is no
+evidence raising the tool budget helps**, and the C15 hypothesis that the third
+failure mode was a tuning artifact is **not supported**.
+
+**1. A fourth failure mode: completes, and is wrong.** Run 1 finished all three
+phases at `eos` and produced broken code. The two failures are exactly the POST
+tests, and the cause is a real bug worth recording:
+
+```python
+@app.post("/complaints", response_class=HTMLResponse)
+def submit_complaint(request: Request):
+    form = request.form()          # coroutine, never awaited
+    agent_name = form.get("agent_name", "").strip()
+```
+
+`request.form()` is async; the handler is a sync `def`, so `.get()` runs against
+a coroutine object and the request 500s. The redirect status is *correct*
+(`status.HTTP_303_SEE_OTHER`), so this is not the `plausible-wrong-fix` bug —
+it is an async/sync mismatch, a class none of the fixtures cover.
+
+Every prior failure mode was the model failing to *act*. This one is the model
+acting confidently and producing subtly wrong code — which is the mode a repair
+role exists for, and the first naturally-occurring instance in this corpus.
+
+**2. A harness bug, not a model failure.** Run 2 died with
+`gitFailed(status: 1, output: "nothing to commit, working tree clean")` after
+phase 2. The transaction tried to commit a phase that mutated nothing and
+treated git's refusal as fatal. The `noChanges` path is handled at the *receipt*
+level (commit `73cec15`, grade the accumulated tree on clean-eos) but evidently
+not at the *commit* level. This cost a run and is unrelated to anything being
+measured.
+
+**3. What the tool budget actually did.** Run 2's phase 1 spent 20 calls and
+2,148 generated tokens; run 3's phase 1 spent 23 calls. Neither approached 64,
+so for two of three runs the ceiling was never the binding constraint — raising
+it changed nothing for them and only removed a cap that had bound one run in
+C15. That is consistent with over-exploration being *variance in a heavy tail*
+rather than a systematic ceiling problem, which argues for the read-cache /
+bounding work over further budget tuning.
+
+**Standing result.** C15's configuration — absolute paths, cwd fact pinned,
+`--think-budget 2048`, tool budget **30** — remains the best measured arm:
+2/2 acceptance among completed runs, both having reasoned substantially. Budget
+64 should not be adopted on this evidence.
