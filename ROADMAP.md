@@ -10,9 +10,24 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P12 — More models.** Next up; not started. Laguna XS 2.1 and/or
-Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**
-(see the dependency below). P11 — Subagent pool — is complete: context-isolated
+**Phase P12 — Reliable agency.** Next up; not started. **Reframed 2026-08-24**
+from "More models" after an overnight investigation established that the
+blocker is not model *variety* but model *agency*: a local model that can write
+correct code still fails to reliably act, and the failures traced to host-side
+contract and prompt shape more often than to the model. P12 is therefore one
+model in a role-differentiated pipeline — decompose, implement, repair — where
+the host owns phase boundaries, budgets, permissions, validation, and recovery,
+and the model supplies judgment and code. Variants (Laguna XS 2.1, Mellum 2.1)
+move to P13, where the harness that would evaluate them will exist.
+
+The findings that forced the reframe are consolidated in
+[`2026-08-24-overnight-consolidation.md`](docs/superpowers/research/2026-08-24-overnight-consolidation.md)
+(Sections A–D). **P12 opens with a consolidation gate (P12.0)** that retires
+that document into one source of truth — three parallel sessions produced
+overlapping and partly contradictory records, and planning against them as-is
+means re-deriving the same conclusions a fourth time.
+
+P11 — Subagent pool — is complete: context-isolated
 subagents share one locked engine (`--subagent-pool`, one model load, N sessions,
 a `worker` id on every event), driven through a queue over the serialized GPU;
 the packet-maker assembles a prepared context from a deterministic rolling
@@ -152,12 +167,14 @@ appear below.) Defined so far:
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | complete (2026-08-22) |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | complete (2026-08-22) |
 | P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | complete (2026-08-23) |
-| P12 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; see the dependency below | planned |
-| P13 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
+| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | planned |
+| P13 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; deferred behind P12 so there is a harness that can actually evaluate a variant | planned |
+| P14 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
-That directory is empty today; each plan is written as its phase begins.
+Each plan is written as its phase begins. P12's plan is written:
+[`2026-08-24-p12-reliable-agency.md`](docs/superpowers/plans/2026-08-24-p12-reliable-agency.md).
 
 ### Dependencies worth knowing before planning
 
