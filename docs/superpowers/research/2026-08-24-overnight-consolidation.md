@@ -600,3 +600,426 @@ unlanded code with tests and should be landed or explicitly parked; the two swif
 research docs need owners; the `paul/laguna` tblite material needs an
 abandoned-or-pending call from whoever wrote it; and `mini-notes.md`'s uncommitted diff
 should be read before anyone quotes Laguna scratch figures from it.
+
+### B8. Late finding — Mellum's zero-initiation is prompt-shape dependent
+
+**Added after Sections A–C were written. This contradicts a conclusion recorded in A1/A2
+and should be resolved during consolidation, not read past.**
+
+C1 records that for Laguna, "tool use is prompt-shape dependent, not a standing trait" —
+it appeared only on the prompt carrying absolute filesystem paths. **The same test was
+never run on Mellum.** It has now been run, on Q8_0, same harness, same `-n 8192`,
+`DS4_AGENT_TOOL_NUDGE=2`, 180s cap, no code changes.
+
+| Prompt shape | tool calls | files | nudges | pytest | wall |
+|---|---:|---:|---:|---|---:|
+| **Relative paths** (the original, and the basis for "0 tool calls") | **0** | **0/4** | 2 wasted | not-run | gave up, 7s |
+| **Absolute paths only** — original prompt, verbatim, paths swapped | **6** | **4/4** | 2 used | self-test passed | 78s |
+| Absolute + `ls -la` evidence + "none of these exist yet, create with your write tool" | **14** | **4/4** | **0** | self-test passed | hit 180s, still iterating |
+
+**Path shape alone flips it.** The middle row changes exactly one thing against the run
+that produced "0 tool calls" and goes to 4/4 files. So **"Mellum scored 0 tool calls on
+both specs" is a property of those prompts, not of the model.**
+
+**Concreteness buys grounding on top of initiation.** The two acting runs differ in
+quality, not just count. The full-concreteness run needed **no nudge at all** and its test
+asserts `"Come in. Sit down. Tell us about your human."` — verbatim from
+`specs/mission.md:5` and `specs/roadmap.md:16`, so it demonstrably read the specs with
+tools. The absolute-paths-only run invented its content: it asserts `"Welcome to
+AgentClinic"` against route `/home`, neither of which is in the spec.
+
+**Caveats, and they are large:**
+
+- **n=1 per cell.** No replication.
+- **Both "pytest passed" results are the model's own single-test suite, self-graded.** The
+  abspath-only run passes a test asserting an invented string on a route the spec does not
+  define. Per C2's grading finding, this carries little evidential weight; neither run was
+  scored against a real acceptance suite.
+- The full-concreteness run did **not** finish — SIGTERM at the 180s cap, mid-iteration.
+- Q8_0 only. Q4_K not retested under the new prompt shape.
+- The third row changes several variables at once; only the middle row is a clean ablation.
+
+**One further observation, worth retesting rather than trusting:** in the
+full-concreteness run Mellum entered a genuine write → `pytest` → diagnose → fix loop, and
+its visible reasoning correctly identified a stray `</head>` inside a template block from
+the failure output. That is revision under machine evidence, which is the capability A1
+reports Mellum lacking (byte-identical re-emission under an `ImportError`). **These may
+not be in conflict** — different bug class, different evidence shape — but "Mellum cannot
+revise" should be re-run under this prompt shape before it is treated as settled.
+
+**What this changes for the role assignment.** The pre-test position was that Mellum is
+viable only as a decomposer or a harvested generator. The middle row reopens the
+implementer role as *worth measuring* rather than ruled out. It does not establish that
+Mellum passes AgentClinic — the grading here is too weak to claim that.
+
+**Next, in order:** (1) re-run all three cells n=3 against the **real acceptance suite**,
+not the model's own test; (2) re-run the L2 revision test under the absolute-path prompt
+shape, since that is the finding most at risk; (3) if it holds, revisit the typed packet's
+`workspace.paths: workspace-relative` rule, which currently makes an absolute path a
+**hard error** — the one prompt shape now observed to trigger initiation in both Mellum
+and Laguna is the shape the contract forbids.
+
+Runs: `/tmp/agentclinic-runs/p1-q8-abspath/1` and `/tmp/agentclinic-runs/p1-q8-abspath-only/1`
+(prompt, trace, stdout preserved under `.agentlogs/`).
+
+---
+
+## Section C — Laguna revision capability, the packet contract, and what "thinking" actually costs
+
+**Session scope:** 2026-08-23 overnight → 2026-08-24 morning. Began as telemetry
+archaeology on the Flash-vs-Laguna fleet decision, became an investigation of whether
+Laguna can *revise* text under evidence, and ended by building and landing the typed
+packet contract that the failures kept pointing at.
+
+**This section owns the artifacts A8 and B7 flagged as orphaned.** The uncommitted
+`HandoffPacket` feature set, `2026-08-24-laguna-revision-test-spec.md`,
+`2026-08-24-handoff-packet-frontmatter-schema.md`, and the untracked
+`pipeline/run_laguna.sh` + `logs/laguna-revision-*` directories in `mellum-repair-pipeline`
+are all this session's. B7 correctly identified the packet code as the highest-value
+unlanded work; it is still uncommitted at the time of writing, deliberately.
+
+**Reviewed adversarially three times** by an independent model (Fable), which materially
+changed the conclusions each time. Where a claim below is weaker than an earlier session
+stated it, that is usually why.
+
+### C1. Conclusions that still hold
+
+**Laguna's revision capability — the gate question for a repair role**
+
+- **Laguna Q2_K revises correctly under real machine evidence, where Mellum echoed.**
+  Given a real unredacted pytest `ImportError` and a broken `app.py`, with no offending
+  line called out and no fix stated, three runs at temp 0 each produced a minimal,
+  correct, surgical fix (two import lines changed, all 3,877 bytes otherwise preserved),
+  verified at **13/13 on the real acceptance suite**. This is precisely Mellum's round-4
+  condition, which Mellum failed by re-emitting its entire file byte-for-byte. **The
+  non-revision pathology is Mellum-specific, not general to small local models.**
+- **Laguna Q2_K also fixed a `default_factory` bug byte-identically to the reference**
+  (L3, fix stated in prose), as did Q4_K_M. Both 13/13.
+- **Q2_K fits the 55 GiB target natively and Q4_K_M does not.** Measured from the engine's
+  own planning line: Q2_K = 44.94 GiB resident + 4.65 GiB KV = **49.59 GiB planned** at
+  ctx=100k; Q4_K_M = 63.56 + 4.65 = **68.21 GiB**. So the deployable configuration is
+  Q2_K with no SSD streaming and none of its ~42–48% decode/prefill penalty — a
+  materially better outcome than Q4_K_M + streaming, and it drops the S21 SSD port from
+  the critical path for this workload.
+
+**The fleet decision (Flash vs Laguna) — verified, but weaker than it was stated**
+
+This session began as telemetry archaeology on an overnight "fleet" comparison that
+concluded *Flash is the implementer*. Independent re-verification (Fable) confirmed the
+numbers and then undercut the conclusion.
+
+- **The measurements replicate.** Tool-call counts recomputed from raw `tool_request`
+  events match the analysis doc exactly: Flash hard-spec pass = 10/6/8 tool calls, 7/4/6
+  mutations, acceptance exit 0, 735s at tool budget 64; Flash at budget 30 = phase 3
+  `budgetExceeded` after **35** tool calls (read×8, search×9, bash×8). Laguna Q4_K_M =
+  99/122/62 think events, 14/8/2 tool calls. The **acceptance passes replicate too** — the
+  file trees were reconstructed from `code.md` and the real suite re-run under the pinned
+  grading env: Flash hard **13/13**, Q2+nothink hard **13/13**, Q4_K_M easy **13/13**,
+  and the second "mystery" capture **13/13**. These are not transcript-trust.
+- **The double-count bug was real and large.** One capture carries 220 `tool` transcript
+  events against 24 `tool_request` execution events — a 9× inflation if counted naively.
+  The fix (prefer the `tool_request` view in host-tools mode) is confirmed correct.
+- **What the evidence actually supports:** *Flash with reasoning on terminates and acts,
+  where Laguna with reasoning loops.* That is a real, wire-verified qualitative difference
+  in failure mode — over-exploration is recoverable by raising a budget; non-convergent
+  deliberation at Q2 was only fixable by amputating reasoning.
+- **Two "mystery" captures resolved cross-session.**
+  `20260823-235240-roadmap-user-story-mellum-decomposed` and
+  `20260824-000212-roadmap-user-story` are **Section A's specialist-pipeline runs** —
+  Laguna Q2_K (44.94 GiB resident) under `--nothink`, decomposed vs raw hard spec. Their
+  absence from `/tmp` was because their logs live in the `mellum-repair-pipeline` worktree.
+
+**"Host-controlled text mode" was never a mechanism** — the load-bearing correction
+
+- **There is no tool-free path in the engine short of `--raw-prompt`.** Verified in
+  `ds4_agent.c` in *both* builds: `-p --non-interactive` runs
+  `agent_worker_reset_to_sysprompt`, which builds the full agent system prompt including
+  `read`/`write`/`edit`/`bash`/`google_search`/`visit_page` schemas and tool-call
+  tutorials. `-sys` only *appends*. `worker_run_raw_prompt` is the sole tool-free path and
+  neither wrapper script used it.
+- **So `repair.py`'s docstring ("plain text completion, no tool schema") is false, and the
+  Mellum pipeline's "text mode removed tool-call initiation as a confound" is false as
+  stated.** Mellum's outcomes are unaffected — all were pytest-verified — and its
+  zero-initiation finding actually gets *stronger*: it had tools offered and still never
+  used them. But the mechanism was Mellum's own pathology, not harness enforcement.
+- **Laguna proved this by acting.** In the L1/L2 runs it emitted `edit`/`write` tool calls
+  and executed a real `ls -la` mid-generation — confirmed genuine because the returned
+  listing showed the actual scratch directory contents, file size and timestamp, which
+  cannot be fabricated. `ds4-agent -p --non-interactive` is a full agent loop seeded by one
+  prompt, not a completion API.
+- **`--raw-prompt` is dead as a mechanism, for a reason beyond the obvious.**
+  `worker_run_raw_prompt` never consults `think_mode`, and for GLM-syntax models thinking
+  effort is injected as template system text that raw mode skips. It structurally cannot
+  deliver *controlled* thinking, so adopting it would reintroduce `--nothink` through the
+  back door — the one thing explicitly ruled out.
+- **Tool use is prompt-shape dependent, not a standing trait.** Both L3 smokes (same quant,
+  same wrapper, same schemas) emitted a single clean fenced block and zero tool calls. Tool
+  use appeared only on the prompt carrying a traceback full of absolute filesystem paths.
+
+**The packet contract — where the "model pathologies" actually lived**
+
+- **Most of the typed contract already existed.** `HandoffPacket` already had
+  `writableFiles`, per-file `baselines` (SHA-256 + line ending + mode, read from the
+  worktree, never guessed), validation commands, and budgets; `PoolOrchestrator` already
+  enforced `shellAllowed: false` plus a **vetted bash** refusing anything but the packet's
+  own validation command. **The revision experiments bypassed all of it** by shelling
+  directly to `ds4-agent` — which is why Laguna got unsandboxed bash and a bare `/tmp`.
+  The environment guards were never missing; they were routed around.
+- **Redaction must be checked on the *assembled* packet, not the authored one.**
+  `taskText` grows after authoring — the agenttest harness concatenates `sharedContext`
+  ([`main.swift:163`](../../../Sources/swiftstar-agenttest/main.swift)), and
+  `DispatchPacketBuilder` appends digest + loaded files via `ContextAssembly`. The
+  historical contamination lived in exactly that appended content, so a gate on the
+  authored fragment would have missed the failure it exists for.
+- **The gate immediately found real contamination in the shipped fixture.**
+  `fixtures/agenttest/specs/roadmap.md` phase 2 states `default_factory` verbatim, so the
+  near-miss bug is now *mechanically* disqualified as an L1/L2 cell rather than relying on
+  someone reading the spec carefully.
+- **Validation must run before the model loads.** First wiring put it inside the phase
+  loop, i.e. after `PoolOrchestrator` spawns and loads 45–65 GiB — making the
+  "costs microseconds" claim false. Moved to top level; the contaminated run now prints no
+  `ds4:` line at all and exits 2.
+
+**The thinking revision — what changed and why** (the design arc this session is pursuing)
+
+The user's requirement is Laguna *thinking* at three points: decompose (user story →
+scoped packet), implement, and repair. `--nothink` satisfies none of that, so the question
+became how to get reliability without amputating reasoning. The reasoning, in order:
+
+1. **The defect is termination, not reasoning.** Laguna's ~12 redrafts inside thinking
+   were measured **byte-identical** across six files — deliberation changed nothing. It
+   converges on content almost immediately and then fails to stop.
+2. **So `-n` is the wrong bound.** It is a blunt timer: it fires mid-draft (`stop=limit`,
+   no grade, in both Q4_K_M loop runs) and harvests nothing. **Convergence-based
+   termination** — stop when draft N ≈ draft N−1 — gives the model all the thinking it
+   wants and cuts exactly where thinking stops adding value.
+3. **Thinking is not equally valuable per role.** Decompose is genuinely underdetermined
+   and deserves it; implement demonstrably does not (byte-identical redrafts); repair is
+   untested but needed no deliberation on canonical bugs. So the unit of configuration is
+   the **role**, not the process — which is why `--nothink` as a global switch was the
+   wrong abstraction rather than a wrong value.
+4. **The typed packet is what makes bounded thinking safe.** Ambiguity converts directly
+   into deliberation for this model, and pinning one fact merely relocates the
+   deliberation to the next open sub-question. A packet that pins the *whole* contract
+   removes the deliberation triggers, which is what lets the implementer run at `off` or
+   `bounded` without forfeiting anything. **The packet work and the thinking work are the
+   same work** — that is the load-bearing connection, and it is why this session built the
+   contract before running the thinking experiment.
+5. **A typed packet also makes decompose cheap to grade.** Schema-validating a packet costs
+   microseconds; discovering the same defect by running an implementer costs a model load
+   and three phases. That is what makes generous thinking affordable in the one role that
+   needs it — failure is caught by a gate, not by a burned run.
+
+**Framing that survived**
+
+- **The defect is termination, not reasoning.** Laguna's think-loop drafts were previously
+  measured byte-identical across ~12 redrafts of six files — deliberation contributed zero
+  content. That reframes the lever from "less thinking" to "stop when content converges,"
+  which is the only bound that preserves thinking.
+- **Per-role sampling, not a global switch.** `--nothink` as a process-wide flag was the
+  wrong abstraction; think mode belongs in the packet so decompose, implement, and repair
+  can differ.
+- **"Fleet" is not indicated.** The Mellum pipeline's own conclusion — specialization was
+  shallow, roles differed only by prompt text and model binary, no Swift changes needed —
+  argues for three sequential invocations with different bounding policies, not
+  concurrency or per-role engine work.
+
+### C2. Conclusions disproven or superseded — including several of this session's own
+
+| Claim | Status |
+|---|---|
+| **"Laguna revises at L1"** | **Mislabeled; it is L2.** A pytest `ImportError` traceback quotes the offending source line verbatim, so for any import-time error L1 ≡ L2 by construction. The ladder's bottom two rungs collapse for that whole bug class. The result stands, the label does not. |
+| **"temp 0 ⇒ deterministic, so n=3 tells us nothing n=1 wouldn't"** | **False.** The three runs took *different trajectories* (run 1: edit→write; runs 2–3: edit→`ls -la`→write) while converging on a byte-identical artifact. The engine is nondeterministic at temp 0 — plausibly Metal reductions or the speculative-argmax path. n=3 demonstrated artifact stability across nondeterministic paths. |
+| **"3/3 mechanically extractable"** | **2/3 under the pipeline's real parser.** Run 3 hit the token cap and never closed its markdown fence; `repair.py`'s `parse_single_fence` requires a closed fence and would have returned nothing. It was "extractable" only via a lenient regex written after the fact. |
+| **"The near-miss `default_factory` bug is a valid L1 cell"** | **Contaminated.** Its fix appears verbatim in `pipeline/spec_context.md:54` *and* in `roadmap.md`. Caught by manual read, now caught mechanically. **There is currently no valid L1 bug in the design.** |
+| **"Laguna always reaches for tools when offered"** | **Falsified by this session's own L3 smokes** — zero tool calls, same quant, same wrapper, same schemas. |
+| **"`--nothink` is a Q2-specific crutch to be eliminated"** | **Too strong.** For the *implementer* the evidence says thinking adds nothing (byte-identical redrafts; Q2+nothink is the best-replicated pass in the corpus, 3–4 runs). The defensible position is per-role: `off` for implement, `on` for decompose (underdetermined, and failure is cheap once packets are schema-checked), `bounded` for repair. |
+| **"Validating the packet costs microseconds"** (as first wired) | **False as written** — it ran after the model load. True now. |
+| **"The `sampling` field gives per-role thinking"** | **Not yet.** `--nothink`/`-n` are built into worker argv from `AgentSettings` at spawn ([`AgentCommand.swift:64`](../../../Sources/SwiftStarKit/AgentCommand.swift)). The packet field is **descriptive only** — it records the run's config, it does not control it. |
+| **"The quantization hypothesis is confirmed"** (prior doc, `laguna-hard-analysis.md:147`) | **Contradicted by that same document's later runs.** Written on one Q4_K_M pass; the next two Q4_K_M hard runs think-looped to `limit`. Honest form: Q4_K_M changed the acting rate from ~0/4 to ~1/3. n=3 is not confirmation. The bolded claim should be retracted in place. |
+| **"Laguna S Q4 hard: 1/3 acts, 2/3 think-loops"** as a clean binary | **Messier.** One of the two "think-looped" runs made 17 tool calls including 6 writes in a segment that never got a turn-end `ready`. |
+| **"Flash is the implementer" (fleet conclusion)** | **A hypothesis wearing a conclusion's clothes.** It is n=1 at a tool budget chosen *after* watching n=1 fail. Both models needed exactly one accommodation each — Flash budget 64, Laguna `--nothink` + `-n` — so "Flash passes without the crutch" is slanted framing. Flash's budget-30 run also produced 3,485 think events and a silent mid-run context compaction (ctx 15468→9100), so it is not categorically free of the resource-exhaustion family either. |
+| "Flash is better because low quant breaks judgment" | **Not a general law.** Flash is itself a q2-q4 mixed-quant artifact. The claim is Laguna-specific. |
+| The fleet comparison as a complete decision | **Ignores the cost axis.** 91 GiB Flash vs ~48 GiB Laguna-Q2, the latter of which passed the same hard spec 3–4 times. No results table carries a memory or spec-version column. |
+| "Before: 0/3 → after: pass" as a clean before/after | **Confounded by spec drift.** Commits `9abc310` (20:55) and `e00ec58` (21:17) pinned data-model and `.card` contracts *into the hard spec* mid-experiment, so no post-21:17 result is comparable to the 0/3 baseline. The one control that exists — run `20260823-205557`, Q2_K + think + pinned spec + `-n` cap — **still looped** (2,087 think events, 0 tool calls), n=1 evidence that pinning alone does not rescue Q2. |
+| `generated` token counts as a cross-model cost comparison | **Apples-to-oranges.** The value at `ready` is round-scoped, not turn-scoped, in multi-round host-tools runs. The telemetry review fixed "turns" and ctx labeling but left this one. |
+| Grader "DeepSeek good" as corroboration | **Carries no evidential weight.** The project's own verification record shows the grader returning "good" for 7/13 code. Acceptance exit codes are the only signal, and they are **not persisted in captures** — recoverable only because `code.md` is dumped. |
+
+### C3. Open questions this session could not close
+
+- **Does Laguna actually think, and does revision survive when it does?** *The gate
+  question, still open.* All five revision runs showed **zero deliberation** in the raw
+  output despite `--think` — the renderer strips only the `<think>` tags and passes the
+  text through, so thinking would have been visible. The prompts were fully pinned, which
+  is exactly the condition prior work found produces zero think events. **So every
+  "revision works" result above is really "revision works with thinking off."** A batch
+  testing this (Q2_K, hard spec, `AGENTTEST_THINK=1`, n=3, through the newly-wired
+  sandboxed harness) was launched as this section was written; **its result is not in this
+  document.**
+- **Whether Laguna's think-loop and Mellum's byte-identical re-emission share a mechanism.**
+  Both are "emits the same tokens again under new information," at different scopes.
+  Unresolved, and A3 asks the same question from the Mellum side.
+- **Whether a genuine L1 cell can be built for this fixture at all.** It needs a failure
+  whose traceback does *not* quote the defect line (assertion-style), a spec redacted of
+  the fix, and ideally a bug with a plausible *wrong* fix — nothing tested so far
+  distinguishes "revises" from "recites a canonical fix."
+- **Reproducibility of the grading environment.** Grading depends on a mutable out-of-repo
+  uv project; an independent re-run under current PyPI versions flipped one previously-13/13
+  result to 10/13 (legacy `TemplateResponse` signature under newer Starlette/Jinja2).
+  Recorded results are correct *today* only.
+
+### C4. Files written or changed by this session
+
+**swiftstar — `p11-subagent-pool`, all uncommitted at time of writing**
+
+- [`docs/superpowers/research/2026-08-24-laguna-revision-test-spec.md`](2026-08-24-laguna-revision-test-spec.md)
+  — the L1/L2/L3 hand-holding ladder, four named outcomes fixed in advance, and the
+  sequencing note that Q2_K is the *target* (55 GiB, native) tested second only because it
+  carries a confound, not because it is lower priority.
+- [`docs/superpowers/research/2026-08-24-handoff-packet-frontmatter-schema.md`](2026-08-24-handoff-packet-frontmatter-schema.md)
+  — schema v1. B7 saw this as "draft"; it is now **implemented**, with an honest
+  implemented/not-implemented rule list and a documented statement of what the redaction
+  gate *cannot* do.
+- `Sources/SwiftStarKit/HandoffPacket.swift` — **modified.** Adds `facts`, `redacts`,
+  `role` (`PacketRole`), `sampling` (`SamplingPolicy`/`ThinkMode`), plus a hand-written
+  `init(from:)`. **That decoder is not optional:** synthesized `Codable` throws on missing
+  keys, so adding fields silently broke decoding of every persisted dispatch. A test pins it.
+- `Sources/SwiftStarKit/HandoffPacketValidator.swift` — **new.** Redaction across five
+  channels (task, facts, both commands, writable paths), absolute-path and `..`-traversal
+  rejection, budget and empty-field rules.
+- `Sources/SwiftStarKit/PacketFrontmatter.swift` — **new.** Hand-rolled parser, no
+  dependency. Throws on unrecognized `role`/`think` or non-numeric budgets rather than
+  defaulting.
+- `Sources/SwiftStarKit/PhasePacketBuilder.swift` — **new.** Phase assembly extracted from
+  the harness so the assembly order is testable and so the validated packet is provably the
+  dispatched one.
+- `Sources/swiftstar-agenttest/main.swift` — **modified.** Builds packets through
+  `PhasePacketBuilder`, validates every phase **before** the orchestrator constructs,
+  records sampling on the packet, and reads withheld strings from `AGENTTEST_REDACT`.
+- `Tests/SwiftStarKitTests/{HandoffPacketValidatorTests,PacketFrontmatterTests,PhasePacketBuilderTests}.swift`
+  — **new.** 376 tests green overall.
+
+**ds4 — `mellum-repair-pipeline`, untracked (the logs B7 flagged)**
+
+- `pipeline/run_laguna.sh` — fork of `run_mellum.sh` with thinking on. Note the fork fixed
+  a latent **bash 3.2** bug present in the original: `"${ARR[@]}"` on an empty array under
+  `set -u` aborts on macOS's default `/bin/bash`.
+- `pipeline/logs/laguna-revision-l3-nearmiss/` (Q4_K_M), `-l3-nearmiss-q2/` (Q2_K),
+  `-l1-redirect-q2/` (Q2_K, n=3) — prompts, raw and stripped outputs for every run above.
+
+### C5. What this session thinks comes next
+
+**In flight**
+
+1. **The think-on batch** — Q2_K, hard spec, `AGENTTEST_THINK=1`, n=3, through the
+   sandboxed pooled harness. Measures **think events from the wire**, not just pass/fail.
+   Expected to reproduce the think-loop; that failure is the point, since it would be the
+   first observation of the pathology inside a controlled harness with real telemetry, and
+   is the evidence needed to justify convergence-based termination.
+
+**Then, branching on that result**
+
+2. **If it loops → convergence-based termination in the engine.** Stop when draft N ≈
+   draft N−1. This is the only bound that gives thinking *and* reliability; `-n` is a blunt
+   timer that cuts mid-draft and harvests nothing (both prior `stop=limit` runs produced no
+   grade).
+3. **If it holds → wire `sampling` to actually control behavior.** Requires per-phase
+   respawn since argv is fixed at spawn; the reload cost looks tolerable (residency 4907 ms
+   cold, **295 ms warm** in observed logs), so this is plumbing rather than an engine change.
+4. **Then the three-role pipeline**: three sequential invocations, per-role bounding
+   policy, deterministic gate between them. Not concurrency.
+
+**Independent of that branch**
+
+5. **Build a genuine L1 cell** — redacted spec variant plus an assertion-style bug whose
+   traceback does not quote the defect line, and one bug with a plausible wrong fix. The
+   gate now makes contamination loud, which was the prerequisite.
+6. **Persist acceptance evidence in captures** (pytest exit + tail) and **pin the grading
+   environment** into the repo. Demote grader verdicts from results tables until the grader
+   discriminates.
+7. **Finish the validator rules** the doc lists as unimplemented: `packet` version,
+   `workspace.paths`, `sampling.maxTokens > 0`, `validation.command` required. `packet: 99`
+   is accepted today.
+8. **Parser hardening** (all silent-mis-parse class, none yet fixed): trailing `# comment`
+   retained in scalars; `command: |` block scalars yielding the string `"|"`; CRLF
+   documents throwing a misleading `missingFrontmatter` because `.whitespaces` does not
+   strip `\r` — plausible input in a repo that has a `LineEnding.crlf` case.
+9. **Land the packet work.** B7 is right that it is the highest-value unlanded code in any
+   tree.
+
+### C6. Overlaps to resolve during consolidation
+
+- **This section supersedes A6's request** for an authoritative account of the Laguna
+  hard-spec result *only regarding revision and quant footprint*; the `--nothink` + pinned
+  facts fix itself belongs to whichever session owns commits `914a84d` / `7bf00d9`, not
+  this one.
+- **A2's "Mellum has no in-context belief revision" and C1's "Laguna does revise" are the
+  same experiment run on two models** and should be presented together during
+  consolidation — the contrast is the finding, and it is the strongest evidence in the
+  corpus for a model-selection decision on the repair role.
+- **`laguna-hard-analysis.md` needs an in-place retraction** of "the quantization
+  hypothesis is confirmed" (C2). Consolidation should not silently inherit it.
+- **Cluster 5 in A7 lists the frontmatter schema as "designed but not built."** No longer
+  true — it is built, tested, and wired. Cluster 5's framing ("nothing here is measured")
+  still applies to the other two documents in it.
+- **Three Fable reviews shaped this section** and are not written up as standalone
+  documents. If consolidation wants the reasoning rather than the conclusions, it lives
+  only in this session's transcript — a gap worth knowing about.
+- **The revision-test spec's L1 rung is now known to be unreachable for import-class bugs.**
+  Anyone reading that spec fresh will not know this without C2; either cross-link or amend
+  the spec in place.
+
+### C7. Tree state at the close of this session (delta from A8 / B7)
+
+**Read A8 and B7 first — this is an update to them, not a third independent survey.**
+Both were accurate when taken; this session then *added* to the uncommitted set rather
+than landing any of it.
+
+**swiftstar — `p11-subagent-pool`. Still no upstream; this repository has never been
+pushed.** Twelve dirty paths:
+
+| path | state | vs B7 |
+|---|---|---|
+| `Sources/SwiftStarKit/HandoffPacket.swift` | modified | also in B7 |
+| `Sources/SwiftStarKit/HandoffPacketValidator.swift` | untracked | also in B7 |
+| `Sources/SwiftStarKit/PacketFrontmatter.swift` | untracked | also in B7 |
+| `Sources/SwiftStarKit/PhasePacketBuilder.swift` | untracked | **new since B7** |
+| `Sources/swiftstar-agenttest/main.swift` | modified | **new since B7** — the harness wiring |
+| `Tests/.../HandoffPacketValidatorTests.swift` | untracked | also in B7 |
+| `Tests/.../PacketFrontmatterTests.swift` | untracked | also in B7 |
+| `Tests/.../PhasePacketBuilderTests.swift` | untracked | **new since B7** |
+| `research/2026-08-24-handoff-packet-frontmatter-schema.md` | untracked | in B7 as "draft"; now implemented |
+| `research/2026-08-24-laguna-revision-test-spec.md` | untracked | also in B7 |
+| `research/2026-08-24-overnight-consolidation.md` | **modified** | this section |
+| `claude_metrics.png` | untracked | also in B7; **provenance still unknown — not this session's** |
+
+The packet set is now a *larger* coherent feature than B7 assessed: schema + parser +
+validator + builder + harness wiring + three test files, 376 tests green. B7's judgment
+that it is the highest-value unlanded work still stands, more so.
+
+**ds4 — `mellum-repair-pipeline`** (branch has no upstream, exists on one disk):
+untracked `pipeline/run_laguna.sh`, `pipeline/logs/laguna-revision-l1-redirect-q2/`,
+`-l3-nearmiss-q2/`, `-l3-nearmiss/`, and `scratch/`. **These are this session's** and are
+the raw evidence behind every claim in C1. `scratch/` is generated workspaces and is
+disposable; the rest is not.
+
+**Not surveyed here:** the `paul/laguna` tblite material and the bench-worktree CSVs. B7
+covers them and this session did not touch them.
+
+### C8. Research files this session touched, for the consolidation pass
+
+*Written by this session* (all untracked, all in `docs/superpowers/research/`):
+`2026-08-24-laguna-revision-test-spec.md`, `2026-08-24-handoff-packet-frontmatter-schema.md`,
+and Section C of this document.
+
+*Depended on and now partly stale* — these are the ones a consolidator must reconcile,
+and all sit in A7's **Cluster 1**, already named the highest-value merge target:
+
+| file | what this session changed about its standing |
+|---|---|
+| `2026-08-23-p11-agenttest-laguna-hard-analysis.md` | **Needs an in-place retraction** of "the quantization hypothesis is confirmed" (C2). Its Flash section and its own later runs already contradict it. Also carries the un-asterisked before/after table confounded by spec drift. |
+| `2026-08-23-p11-agenttest-telemetry-review.md` | Still sound, and its double-count fix independently re-verified here. One gap it did not close: `generated` is round-scoped (C2). |
+| `2026-08-23-p11-agenttest-verification-record.md` | Its finding that the grader returns "good" for 7/13 code is the reason grader verdicts should be demoted corpus-wide. Underused. |
+| `2026-08-23-p11-agenttest-mellum-verification-record.md` | Unaffected, and the most rigorous document of the set. Pairs with C1's Laguna result — see C6. |
+| `2026-08-24-mellum-specialist-pipeline.md` (ds4 worktree) | Its "host-controlled text mode" framing is **mechanically false** (C1); outcomes unaffected. Needs a footnote, not a retraction. |
+| `2026-08-24-laguna-revision-test-spec.md` | Its L1 rung is unreachable for import-class bugs (C2). Amend in place or cross-link. |
