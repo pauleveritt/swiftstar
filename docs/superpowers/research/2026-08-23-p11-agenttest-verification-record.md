@@ -170,11 +170,16 @@ explore") does not bound thinking.
 
 ## Next
 
-1. **Bound thinking.** The thrash is think-mode tokens, not tool calls. Either
-   disable/limit thinking for the implementer role, drop the context size so a
-   think loop fails faster, or add a think-token budget to the turn budget
-   enforcement — then re-run n=4 to see if the easy spec becomes reliably
-   winnable.
+Companion analysis — a deeper read of the same captures, naming the think-loop
+levers: `2026-08-23-p11-agenttest-laguna-hard-analysis.md`.
+
+1. **Bound thinking.** The thrash is think-mode tokens, not tool calls — the
+   companion analysis shows it is a degenerate loop (12–13 verbatim redrafts of
+   the same solution). Levers, in order: a **facts-not-rules decision sheet** in
+   the packet (pin where `complaints` lives, timestamp format, workspace-relative
+   paths), a **think-token budget** engine-side, and a **self-test that sees the
+   acceptance contract** (the vetted pytest should run `test_acceptance.py`, not
+   the worker's own tests) — then re-run n=4.
 2. **Re-scope the grader.** It says "good" for code the acceptance suite
    rejects (12/13 and 7/13). Either make the prompt force the grader to
    actually run/verify the routes, feed it the acceptance failures, or demote
