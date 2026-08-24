@@ -179,3 +179,21 @@ Port to S21 started tonight (`laguna-s21-ssd` branch off `laguna-xs2.1`): relax
 the variant gate, rebuild, smoke, then a memory sweep for the 55 GiB / 50k-ctx
 target. Streaming cost caveat: ~42% decode / ~48% prefill penalty at worst-case
 cache pressure, and throughput figures on a real 64 GiB host will be SSD-bound.
+
+## Update — DeepSeek V4 Flash (overnight, 2026-08-24)
+
+Downloaded `q2-q4-imatrix` (91 GiB, the "higher quality for 128 GB MacBooks"
+Flash quant). Wire smoke passed (pool cap + worker routing + clean eos). Hard
+spec with reasoning ON:
+
+- **Run 1 (budget 30):** phases 1–2 candidates, phase 3 `budgetExceeded` — Flash
+  terminates reasoning (no think-loop) but is verbose: phase 3 made 35 tool
+  calls (read×8, search×9, bash×8) against the 30-call budget tuned for Laguna.
+- **Run 2 (budget 64):** all 3 phases candidates (10/6/8 tool calls, 7/4/6
+  mutations), **acceptance exit 0 + DeepSeek "good"** (10 reasons), 735s.
+
+**Fleet conclusion:** Flash is the better implementer — it acts (reasoning
+terminates, unlike Laguna S Q4's ~2/3 think-loop rate) and passes the hard
+user-story spec without the `--nothink` crutch. It just needs a higher tool
+budget than Laguna (its failure mode is over-exploration, not deliberation).
+`AGENTTEST_TOOL_BUDGET` is now configurable (default 30).

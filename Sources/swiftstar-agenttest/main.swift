@@ -164,7 +164,8 @@ func runOnce(_ index: Int) throws -> RunOutcome {
             writableFiles: writableFiles,
             validationCommand: vettedImport,
             selfTestCommand: vettedPytest,
-            baselines: [:], turnBudget: 100_000, toolCallBudget: 30)
+            baselines: [:], turnBudget: 100_000,
+            toolCallBudget: Int(env["AGENTTEST_TOOL_BUDGET"] ?? "30") ?? 30)
         print("[agenttest] phase \(i + 1)/\(phases.count) …")
         let wt = try txn.preparePhase(packet: packet)
         let outcome: TurnOutcome
