@@ -201,8 +201,16 @@ func runOnce(_ index: Int) throws -> RunOutcome {
             }
         case .receipt(let r):
             print("[agenttest]   phase \(i + 1): receipt \(r)")
+            if case .noChanges = r, outcome.stopReason == .eos {
+                // A clean-eos noChanges means the phase mutated nothing because a
+                // prior phase front-loaded its work (the user-story phases bleed).
+                // Grade the accumulated tree instead of stopping. A limit/contextFull
+                // noChanges is session exhaustion, not "already done" — stop that.
+                print("[agenttest]   (noChanges + eos: continuing to grade the accumulated tree)")
+                continue
+            }
             return RunOutcome(finish: .stopped,
-                              note: "phase \(i + 1) receipt \(r)",
+                              note: "phase \(i + 1) receipt \(r) (\(outcome.stopReason.rawValue))",
                               acceptanceExit: nil, verdict: nil, report: nil,
                               elapsed: Int(Date().timeIntervalSince(runStart)))
         }
