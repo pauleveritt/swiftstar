@@ -243,13 +243,14 @@ Each plan is written as its phase begins. P12's plan is written:
   `agent_trace()` — no new engine patch required. If P5 fixes the capture
   format without a trace sidecar, P6 re-opens the format to answer "would
   compaction help" (the diagnostics surface's first job) from recorded fact.
-- **P12 inherits an unbuilt artifact, not a finished engine.** Both model lines
+- **P13 inherits an unbuilt artifact, not a finished engine.** *(Was P12 before
+  the 2026-08-24 reframe; the variant work moved to P13.)* Both model lines
   are validated against development quants that fit only the development
   machine: Mellum's evidence is all for a ~12 GiB Q8 build, and the mixed
   Q4_K/Q8 artifact the app would actually ship has never been produced, has no
   imatrix run, and needs a new oracle chain because none of the pinned fixtures
   apply to it. Laguna XS is engineering-complete but still owes a real
-  constrained-hardware acceptance run. **P12's cost is dominated by producing
+  constrained-hardware acceptance run. **P13's cost is dominated by producing
   and gating a shipping quant, not by adding a `Variant`** — and a phase that
   budgets for the latter will discover the former. See
   `docs/harvest/engine-lines.md`.
@@ -427,8 +428,8 @@ Deferred, each with the condition that reopens it.
   remains is confirmation, not new engineering: the 16 GB hardware acceptance
   never ran (the numbers come from a 128 GB dev machine, whose OS page cache
   hides SSD-miss throughput), so the committed target stays 32 GB until the
-  `mini-notes.md` §7 checklist passes on real 16 GB hardware. *Reopens with P12
-  (Laguna XS is a P12 variant) or when a real 16 GB machine is available.*
+  `mini-notes.md` §7 checklist passes on real 16 GB hardware. *Reopens with P13
+  (Laguna XS is a P13 variant) or when a real 16 GB machine is available.*
   Source: `~/projects/ds4/.claude/worktrees/laguna-xs2.1` — `LAGUNA-XS.md`,
   `docs/superpowers/LAGUNA-XS21.md` §6, `docs/superpowers/plans/mini-notes.md`
   §7, and

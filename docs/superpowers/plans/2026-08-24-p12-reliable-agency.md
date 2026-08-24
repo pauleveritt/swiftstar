@@ -93,12 +93,44 @@ points at it, and a capture can tell you which model and config produced it.
 actually driving worker argv instead of being write-only; **path presentation**
 added to the packet schema, separate from the grant.
 
+**Also harden the validation gate, because P12.5 depends on it failing closed.**
+The landed validator and parser have known gaps (C5 items 7–8): no `packet`
+version rule (`packet: 99` is accepted), `sampling.maxTokens` and
+`validation.command` unchecked, and a silent-misparse class in the parser —
+`command: |` block scalars yield the literal string `"|"`, trailing `# comment`
+is retained inside scalars, and a CRLF document throws a misleading
+`missingFrontmatter`. These are tolerable while packets are hand-authored and
+disqualifying once a *model* authors them: a block scalar is the natural way to
+write a multi-line command, and today it mis-parses silently rather than
+refusing.
+
 **Done when:** a packet can express its own sampling policy and path
-presentation, and the harness passes both to the engine.
+presentation, the harness passes both to the engine, and every gap above either
+validates or fails closed.
 
-### P12.2 — Prompt-shape ablation
+### P12.2 — Make Mellum loadable
 
-The cheapest high-information experiment available, and it gates P12.5.
+**P12.3 cannot run without this, and nothing else sequences it.** Mellum is not
+reachable from the current submodule pin: `cde6438` is not even an object in
+`external/ds4` — it exists only in the separate
+`~/projects/ds4/.claude/worktrees/swiftstar-integration-mellum` worktree. Land
+that line, reconcile it with `laguna-think-budget` (`1f9a4c5`, which carries
+`--think-budget`; the two have diverged from `8784fe6`), and bump the submodule
+pin.
+
+Couple the **`ds4.c` admission-contract fix** to this step rather than leaving it
+free-floating in carried debt: the defect is real (verified — the Mellum decode
+contract infers layout from `ffn_gate_exps` alone and never inspects down, so a
+non-Q8_0 down silently runs the Q8_0 batch kernel over foreign bytes) but it
+exists *only* in mellum-branch code, so it cannot bite until this branch lands
+and must not ship with it.
+
+**Done when:** the app can load Mellum from the pinned submodule, and the
+admission contract refuses unsupported quant × path combinations loudly.
+
+### P12.3 — Prompt-shape ablation
+
+The cheapest high-information experiment available, and it gates P12.6.
 Relative vs absolute path presentation × thinking on/off, n=3, **graded by the
 real acceptance suite** — B8's runs were self-graded, which carries little
 weight (C2).
@@ -108,29 +140,42 @@ mechanism failure or a prompt artifact (the harness told every one of those runs
 "never absolute paths"), whether Mellum's initiation finding replicates, and
 whether `--think-budget` is solving a real problem.
 
-**Done when:** the initiation effect is replicated or refuted at n=3 against
-real grading, for both models.
+**Also re-run the Mellum revision test under the absolute-path shape.** D6
+records "Mellum cannot revise" as *at risk*, not settled: B8 observed Mellum
+entering a genuine write → pytest → diagnose → fix loop and correctly reading a
+stray `</head>` from failure output. That must be resolved here, or P12.0's
+source-of-truth document will record a measured limit the corpus marks unsettled.
 
-### P12.3 — The proven pipeline, end to end
+**Done when:** the initiation effect is replicated or refuted at n=3 against
+real grading for both models, **and** Mellum's revision capability is settled
+under the shape that triggers its initiation.
+
+### P12.4 — The proven pipeline, end to end
 
 Hand-authored packets → nothink implement → nothink repair on pytest failure.
 Every component is already replicated; this is assembly.
 
+**One honest caveat:** repair's 3/3 was measured through `repair.py`'s
+fence-parsing *outside* the sandboxed packet harness — C1 records that the
+revision experiments "bypassed all of it." In-harness, packet-driven repair has
+never run. That is normal for an assembly step, and it is why P12.4 can still
+surprise despite every part being individually replicated.
+
 **Done when:** three phases, files written, 13/13 — from packets, not a
 hand-driven harness.
 
-### P12.4 — Model-authored packets
+### P12.5 — Model-authored packets
 
 The one untested link. Decompose → schema validation (microseconds, fails
-closed) → P12.3's proven chain. If decompose is bad, branch: use another model
+closed) → P12.4's proven chain. If decompose is bad, branch: use another model
 for decompose only.
 
-**Done when:** a model-authored packet passes validation and drives P12.3 to the
+**Done when:** a model-authored packet passes validation and drives P12.4 to the
 same result as a hand-authored one — or the gap is characterized.
 
-### P12.5 — Bounded thinking, only where evidence demands it
+### P12.6 — Bounded thinking, only where evidence demands it
 
-Validate `--think-budget` live, for the roles P12.2–P12.4 show actually need
+Validate `--think-budget` live, for the roles P12.3–P12.5 show actually need
 reasoning. **Expect it to expose the next failure** — shallow exploration, no
 writes — rather than cure everything; the 20k run already showed transition
 without productive action.
@@ -144,9 +189,19 @@ the next failure mode is named and classified.
   the odds move, and Q4 exceeds the memory target. A matched Q4 control returns
   only *after* steering is tested (D2).
 - **Footprint work.** Closed as a track: down stays Q8_0, no K-quant can reach a
-  896-wide contiguous dimension (B1).
+  896-wide contiguous dimension (B1). **One exception B5 explicitly kept**: the
+  all-28-layer Q4_K gate/up build *with* imatrix (9.33 → 8.59 GiB) is untested —
+  same format already validated on 22 of 28 layers, so it is far lower risk than
+  any new format. Worth one KLD run before it is adopted or discarded; it is not
+  a reason to reopen the track.
 - **Harvest-from-thinking as a primary lever.** Fallback only — it cannot serve
-  repair, since the model never sees the failure it must react to.
+  repair, since the model never sees the failure it must react to. **Note the
+  fallback is not usable today**: `ThinkHarvest` is landed but unwired, and
+  mechanical harvest misassigned files in 2 of 3 real runs because the model's
+  block-labelling is a per-run stylistic choice (C9). If P12.6's expected failure
+  (transition without writes) occurs, this is not a safety net yet — making it
+  one means pinning the label format as a packet directive and wiring
+  harvest-on-`noChanges`, both currently unowned.
 
 ## Carried debt, tracked here so it is not lost
 
@@ -156,8 +211,22 @@ the next failure mode is named and classified.
   would feel.
 - **Subagent-pool cross-worker coalescing** — already spun off as a task.
 - **Landing `swiftstar-integration-mellum` (`cde6438`)** and bumping the
-  submodule pin — the only step between here and Mellum being *loadable*, worth
-  doing independent of whether Mellum is ever an agent.
+  submodule pin — **now sequenced as P12.2**, not free-floating, because P12.3
+  depends on it.
+- **`--prefill-chunk` is accepted and ignored** (B5.4) — reaches only the
+  estimator, so it silently alters diagnostics and nothing else. Wire it or
+  refuse it. Note the `DS4_MELLUM_PREFILL_CHUNK` env var *does* work; only the
+  CLI flag is inert.
+- **The layer-0 oracle fails on Q4_K** (B5.6) — needs an *independent* Q4_K
+  reference (llama.cpp's layer-0 output on the same artifact) and explicitly must
+  **not** be "fixed" by raising the threshold.
+- **Per-layer prefill eligibility** (B5.3, "piece 3a") — ~1.17–1.20× for the six
+  pure-Q8_0 layers. Cheap *if* paths can mix within one prefill pass; verify that
+  before costing it, and do not sequence it before Q4_K prefill's measurement or
+  neither result is attributable.
+- **Two small Mellum leftovers from A5**: the `SettingsView` modelPath preset
+  (A5.2), and the decision on the drafted-but-unsent Mellum-team report (A5.6 —
+  a user decision, not an engineering task).
 
 ## Mellum
 

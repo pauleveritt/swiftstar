@@ -1468,7 +1468,7 @@ exists to solve.
 |---|---|
 | Quantization as the lever for Laguna agency | Same failure signature at Q2_K and Q4_K_M; only the odds move. ~70% established, and further quant hunting is poor value *now* — a matched Q4 control comes back only after steering is tested (C10.6/other-agent point 7). |
 | Footprint / weight-size reduction (Section B's whole track) | Closed. Down stays Q8_0 (Q5_0 NaNs, MXFP4 ~5.5× KLD); no K-quant can reach a 896-wide contiguous dimension. Real memory ~10.3 GiB at 40k. |
-| "Mellum passed the easy spec" / decomposer flips hard→pass | Both false; A2 records why. |
+| "Mellum passed the easy spec" / decomposer flips hard→pass | First is false; second is **untestable as run** (A2:110 — Laguna already passed the hard spec by then, so the result degraded to a cost measurement). Retired either way. |
 | Convergence-based termination | Superseded before implementation — the model converges; termination was never the problem (C9). |
 | `--raw-prompt` as a text-only mechanism | Structurally cannot deliver controlled thinking; never consults `think_mode` (C1). |
 | Harvest-from-thinking as a primary lever | Demoted to `noChanges` fallback: cannot serve repair (model never sees the failure it must react to), and mechanical labeling is unreliable (C9). |
