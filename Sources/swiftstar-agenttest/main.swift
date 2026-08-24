@@ -41,6 +41,16 @@ let mission = (try? String(contentsOf: fixtureDir.appendingPathComponent("specs/
 let techStack = (try? String(contentsOf: fixtureDir.appendingPathComponent("specs/tech-stack.md"), encoding: .utf8)) ?? ""
 let sharedContext = mission + "\n" + techStack
 
+/// Strings this run's spec is supposed to withhold, comma-separated
+/// (`AGENTTEST_REDACT="default_factory,fastapi.responses"`). An experiment cell
+/// that claims the worker must *diagnose* a fix declares the fix here, and the
+/// harness refuses to dispatch a packet that states it anywhere — the check
+/// that would have caught the near-miss cell shipping its own answer.
+let redacts = (env["AGENTTEST_REDACT"] ?? "")
+    .split(separator: ",")
+    .map { $0.trimmingCharacters(in: .whitespaces) }
+    .filter { !$0.isEmpty }
+
 /// Split a spec on `## Phase` headers. The text before the first phase (the
 /// title, intro, and any shared "data model" section) is returned as the
 /// `preamble`, and is prepended to every packet so shared contract facts reach
@@ -61,6 +71,56 @@ guard !phases.isEmpty else {
 let writableFiles = ["app.py", "models.py",
                      "templates/base.html", "templates/home.html", "templates/complaints.html",
                      "tests/test_app.py"]
+
+/// Build one phase's packet. Phase packets do not depend on the worktree or the
+/// orchestrator, so they can be assembled — and validated — before any model is
+/// loaded.
+func phasePacket(_ phaseText: String) -> HandoffPacket {
+    let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
+    let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
+    let writableNote = [
+        "You may write or edit only these files:",
+        writableFiles.map { "- \($0)" }.joined(separator: "\n"),
+        "All tool paths are relative to the workspace root (e.g. `app.py`,",
+        "`templates/base.html`) — never absolute paths.",
+        "You may run exactly these two commands (and no other shell command):",
+        "- \(vettedImport)   (does app.py import cleanly?)",
+        "- \(vettedPytest)   (do your own tests pass?)",
+        "Work in one concise pass: write each file exactly once, do not explore",
+        "the workspace or re-read files you just wrote, and run those commands at",
+        "most once each. The acceptance suite checks user-visible behavior,",
+        "not file layout — write the files named above directly.",
+    ].joined(separator: "\n")
+
+    return PhasePacketBuilder.build(
+        phaseText: phaseText,
+        writableNote: writableNote,
+        preamble: preamble,
+        sharedContext: sharedContext,
+        writableFiles: writableFiles,
+        validationCommand: vettedImport,
+        selfTestCommand: vettedPytest,
+        toolCallBudget: Int(env["AGENTTEST_TOOL_BUDGET"] ?? "30") ?? 30,
+        redacts: redacts,
+        // The packet records the sampling the run actually used, so a capture is
+        // self-describing rather than needing the invocation to interpret it.
+        sampling: SamplingPolicy(
+            think: env["AGENTTEST_THINK"] == "1" ? .bounded : .off,
+            maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192))
+}
+
+// Validate every phase packet up front — before the model loads. The packets are
+// worktree-independent, so a malformed one (an absolute path, an empty manifest,
+// or a withheld fix leaked through the appended shared context) is caught in
+// microseconds instead of after a 45–65 GiB load and three phases of generation.
+for (i, phaseText) in phases.enumerated() {
+    if case .invalid(let reasons) = HandoffPacketValidator.validate(phasePacket(phaseText)) {
+        FileHandle.standardError.write(Data(
+            ("swiftstar-agenttest: packet rejected for phase \(i + 1):\n"
+             + reasons.map { "  - \($0)" }.joined(separator: "\n") + "\n").utf8))
+        exit(2)
+    }
+}
 
 func git(_ dir: URL, _ a: [String]) {
     let p = Process()
@@ -114,7 +174,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     let settings = AgentSettings(
         engineDir: engineDir, modelPath: URL(fileURLWithPath: gguf),
         contextSize: 32768, workspace: repoURL, shellAllowed: false,
-        maxTokens: 8192,
+        maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192,
         // The worker runs `--nothink` by default: with the contract facts
         // pinned in the spec, it acts directly instead of think-looping to the
         // context limit (the hard-spec failure mode). AGENTTEST_THINK=1 re-enables
@@ -139,33 +199,9 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     print("[agenttest] spec=\(specName) run=\(index + 1)/\(batchCount) phases=\(phases.count) capture=\(captureDir.path)")
 
     for (i, phaseText) in phases.enumerated() {
-        // The prepared context (D4): the phase spec + the shared rubric + the writable
-        // scope + a bounding directive, so the worker writes directly instead of
-        // exploring/thrashing (the slm-struggles lessons). The two vetted commands
-        // are the worker's only feedback loop.
-        let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
-        let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
-        let writableNoteLines = [
-            "You may write or edit only these files:",
-            writableFiles.map { "- \($0)" }.joined(separator: "\n"),
-            "All tool paths are relative to the workspace root (e.g. `app.py`,",
-            "`templates/base.html`) — never absolute paths.",
-            "You may run exactly these two commands (and no other shell command):",
-            "- \(vettedImport)   (does app.py import cleanly?)",
-            "- \(vettedPytest)   (do your own tests pass?)",
-            "Work in one concise pass: write each file exactly once, do not explore",
-            "the workspace or re-read files you just wrote, and run those commands at",
-            "most once each. The acceptance suite checks user-visible behavior,",
-            "not file layout — write the files named above directly.",
-        ]
-        let writableNote = writableNoteLines.joined(separator: "\n")
-        let packet = HandoffPacket(
-            taskText: phaseText + "\n\n" + writableNote + "\n\n" + preamble + "\n\n" + sharedContext,
-            writableFiles: writableFiles,
-            validationCommand: vettedImport,
-            selfTestCommand: vettedPytest,
-            baselines: [:], turnBudget: 100_000,
-            toolCallBudget: Int(env["AGENTTEST_TOOL_BUDGET"] ?? "30") ?? 30)
+        // Same builder the up-front validation gate ran against, so what was
+        // validated is exactly what is dispatched.
+        let packet = phasePacket(phaseText)
         print("[agenttest] phase \(i + 1)/\(phases.count) …")
         let wt = try txn.preparePhase(packet: packet)
         let outcome: TurnOutcome
