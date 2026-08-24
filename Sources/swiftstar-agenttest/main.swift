@@ -267,7 +267,20 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                               acceptanceExit: nil, verdict: nil, report: nil,
                               elapsed: Int(Date().timeIntervalSince(runStart)))
         }
-        let result = try txn.finalizePhase(wt, packet: packet, turnOutcome: outcome, validation: nil)
+        // Run the packet's own vetted import check before the phase may report
+        // a candidate. C17: two runs completed every phase, wrote every file,
+        // and died in acceptance *collection* on one wrong import line
+        // (`fastapi.templates`, and RedirectResponse from the wrong module) --
+        // while this exact command sat in the packet, unused. A phase whose code
+        // cannot be imported is not a candidate, and the verdict already knows
+        // how to say so (`.validationFailed`). Catching it here also stops a
+        // broken tree from being chained into the next phase.
+        let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: wt.url)
+        if let validation, !validation.passed {
+            print("[agenttest]   phase \(i + 1): import check failed (exit \(validation.exit))")
+        }
+        let result = try txn.finalizePhase(wt, packet: packet, turnOutcome: outcome,
+                                           validation: validation)
         switch result {
         case .candidate(let ref, let carried, _):
             let tools = carried.toolCalls.map { $0.name }.joined(separator: ",")

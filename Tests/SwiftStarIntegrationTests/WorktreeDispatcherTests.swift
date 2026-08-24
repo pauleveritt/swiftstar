@@ -178,6 +178,36 @@ struct WorktreeDispatcherTests {
         #expect(resolved == head, "an empty diff should resolve to the unchanged tree")
     }
 
+    /// Characterization, not a regression test: `dispatch` already runs the
+    /// packet's validation command and downgrades a candidate to
+    /// `.validationFailed`. Pinned because C17 exposed that the *agenttest
+    /// harness* never used this -- it drives preparePhase/runPhase/finalizePhase
+    /// directly and passed `validation: nil`, so two runs shipped code that
+    /// could not be imported. The library was right; the call site was not.
+    @Test func dispatchDowngradesCandidateWhenValidationFails() throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let packet = HandoffPacket(
+            taskText: "write a module that does not import",
+            writableFiles: ["a.txt"],
+            // Stands in for `python -c 'import app'`: exits non-zero the way a
+            // real ImportError does.
+            validationCommand: "exit 1",
+            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
+            try "broken\n".write(to: wt.appendingPathComponent("a.txt"),
+                                 atomically: true, encoding: .utf8)
+            return self.outcome(mutations: ["a.txt"])
+        }
+
+        guard case .receipt(.validationFailed(let exit, _)) = outcome else {
+            Issue.record("a failing import check must yield validationFailed, got \(outcome)")
+            return
+        }
+        #expect(exit == 1)
+    }
+
     @Test func candidateCommitResolvesFromOutsideTheWorktree() throws {
         // The worktree is removed by dispatch; the candidate ref must still
         // resolve in the parent repo (the commit object survives the
