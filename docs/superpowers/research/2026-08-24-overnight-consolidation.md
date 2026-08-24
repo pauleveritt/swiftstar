@@ -1711,3 +1711,64 @@ whether `--think-budget` solves a real problem, and the answer is *yes, for part
 of the failure*. Finding 5 adds a third item that was not in the plan: the
 read-cache/bounding work that already exists for Flash needs to apply here, or
 phase 3 will keep dying of context regardless of the other two fixes.
+
+### C14. Pinning the working-directory fact — the first full pass under thinking
+
+**Two bugs had to be fixed before the experiment could mean anything.** A review
+caught that `facts` never reached the model: `PhasePacketBuilder` assembled
+`taskText` from phaseText + writableNote + preamble + sharedContext and dropped
+the field, and `swiftstar-agenttest` never passed `facts:` at all. Since
+`PoolOrchestrator` sends only `taskText`, the planned pin would have been a
+no-op and a null result would have been misread as "the fact didn't help."
+Fixed (`aad4eb0`), facts now lead the prompt, TDD, 383 tests green.
+
+**The fact was verified, not assumed.** `SubprocessRunner.run(command, in:
+request.workspace)` with `workspace: worktree`, and `currentDirectoryURL = cwd`
+— confirmed in source *and* by running the actual `uv run --project` command:
+cwd is preserved, `--project` selects the environment only. Pinning a subtly
+wrong fact would have been worse than pinning none.
+
+Laguna Q2_K, hard spec, absolute paths, `AGENTTEST_THINK=1`, n=3 — one variable
+changed against C13:
+
+| run | think events | tools | outcome |
+|---|---:|---|---|
+| 1 | 1,508 | none | `noChanges (limit)` — pure termination failure |
+| 2 | **0** | 19/6/6 calls across 3 phases, all `stop=eos` | **acceptance exit 0, grader good 10/10** |
+| 3 | 2,343 | 7 list, 7 read, 2 write → **1 mutation** | `session exhausted (limit at ctx_pos=14175)` |
+
+**1. The targeted loop is gone.** In run 2 the terms that dominated C13's
+failure — `working directory` ×49, `temp directory` ×73, `--project` ×22,
+`rootdir` ×26 — are all **zero**. Run 3 shows 7/1/0/0, a trace rather than a
+loop. The fact dissolved the ambiguity instead of relocating it, which is the
+outcome that distinguishes a real fix from the "pin a fact, deliberation moves
+next door" pattern this project has hit before.
+
+**2. First full completion in the thinking-enabled configuration.** All three
+phases `stop=eos`, acceptance exit 0, grader good on all ten rubric points.
+Prior thinking-arm results: 0/3 past phase 1 (C9), 0/3 full spec (C13).
+
+**3. The honest caveat, and it is large: the run that passed did not think.**
+Run 2 recorded **zero** think events despite `AGENTTEST_THINK=1`. So this
+demonstrates the fact removed a deliberation *trigger* — not that Laguna can
+reason and then act. The claim supported is narrower than the headline looks.
+
+**4. Three runs, three distinct modes — the cleanest decomposition so far.**
+Termination failure (run 1, no tools at all), no-deliberation-then-succeed
+(run 2), and reason-then-over-explore-then-exhaust (run 3: 16 calls yielding a
+single mutation, 8192 generated, killed by context). Run 3's tail is the
+familiar shape — *"OK, let me write all 5 files now… Wait, I also want to make
+sure…"* — so the termination pathology is untouched by this change, exactly as
+predicted when scoring by failure mode rather than pass/fail.
+
+**5. Phase-1 completion did not improve.** C13's absolute+think arm got 2/3
+through phase 1; this got 1/3 cleanly. n=3 against n=3 cannot separate that from
+variance, and the meaningful change is at the other end — full-spec completion
+went 0/3 → 1/3. Do not read the phase-1 number as a regression, or the full-spec
+number as a rate.
+
+**What is now established.** Two of the three C13 failure modes have a named
+cause and one has a verified fix: the packet-ambiguity mode is fixed by a pinned
+fact, the termination mode is untouched and is what `--think-budget` targets,
+and the over-exploration/context-exhaustion mode (run 3) is confirmed as a third
+independent problem that neither lever addresses.
