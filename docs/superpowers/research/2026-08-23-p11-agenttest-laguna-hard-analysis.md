@@ -137,3 +137,45 @@ Hard spec after: 16 tool calls (10/3/3), 6/3/3 mutations, ctx 4.5k→7.4k→10.9
 no re-reads, no repeated-identical calls. The remaining follow-up is n=4 for a
 rate, and the model-variance question (does `--nothink` hold up across seeds?)
 that only a batch answers.
+
+## Update — Q4_K_M experiment (2026-08-23)
+
+Re-ran the hard spec with `laguna-s-2.1-Q4_K_M.gguf` (64 GiB, official Poolside
+quant already on disk in the `laguna-s-bench` worktree) and `AGENTTEST_THINK=1`
+(reasoning restored, nothink off, `-n 8192` still bounding).
+
+**The think-loop is gone — the quantization hypothesis is confirmed.**
+
+| phase | think events | tool calls | mutations | stop |
+|---|---|---|---|---|
+| 1 | 99 | 14 | 6 | eos |
+| 2 | 122 | 8 | 6 | eos |
+| 3 | 62 | 2 | 0 | eos |
+
+vs Q2_K: 7,464 think events, 0 tool calls, `limit` at 31k. At Q4_K_M the model
+reasons a moderate amount (99–122 events) and then *acts*. The "stop
+deliberating" judgment that Q2_K lost is restored at Q4_K_M — so `--nothink` is
+a Q2-specific crutch, not the architecture.
+
+Two new secondary findings:
+
+1. **`noChanges` can mean "already done," not "no agency."** Phase 3 read
+   `app.py`/`tests/test_app.py`, found the POST route + form already present
+   (phase 2 front-loaded them), and correctly made 0 changes. The harness's
+   `0 mutations = receipt` rule flags a correct no-op as a failure; for a spec
+   whose phases bleed, the accumulated tree should be graded, not stopped.
+2. **Schema/prompt inconsistency:** the model claimed "the shell tool isn't
+   available" even though the vetted bash works — the engine spawns `--shell
+   off` (schema omits shell) while the packet advertises the vetted commands.
+
+## SSD streaming status (overnight)
+
+`laguna-xs2.1` worktree has the full XS21 SSD streaming path done and tested
+(tasks 5–7: guard + fused decode kernels + byte-identical resident-vs-streamed
+smoke, hit_rate 0.613 under an 800-expert cache). XS21 memory: non-routed
+9.64 GiB, KV 1.31 GiB@32k, scratch 3.97 GiB, expert 1.95 MiB × 9984.
+
+Port to S21 started tonight (`laguna-s21-ssd` branch off `laguna-xs2.1`): relax
+the variant gate, rebuild, smoke, then a memory sweep for the 55 GiB / 50k-ctx
+target. Streaming cost caveat: ~42% decode / ~48% prefill penalty at worst-case
+cache pressure, and throughput figures on a real 64 GiB host will be SSD-bound.
