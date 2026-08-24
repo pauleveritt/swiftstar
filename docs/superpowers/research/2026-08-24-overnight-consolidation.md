@@ -274,6 +274,14 @@ what remains: mixed-layout validation and Q4_K decode are done; only Q4_K prefil
 *Surveyed 2026-08-24. This is a fragility inventory, not a to-do list — but several items
 exist on exactly one disk with no remote.*
 
+> **Merge with B7.** Another session ran this same survey independently within minutes
+> (commit `fcddded`), so A8 and B7 are near-duplicates and must be merged, not read as two
+> corroborating sources. They complement rather than conflict: B7 has line counts and the
+> judgment that the uncommitted `HandoffPacket` feature set is the highest-value unlanded
+> work; A8 has the per-branch upstream table and the unpushed-commit counts. That two
+> sessions duplicated a survey this cheaply, on the same night, is itself evidence for why
+> this consolidation exists.
+
 **swiftstar** (`p11-subagent-pool`, at `87e6a64`)
 
 - **No upstream tracking at all — this repository has never been pushed.** Every commit
