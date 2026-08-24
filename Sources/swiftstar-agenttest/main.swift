@@ -99,6 +99,20 @@ func phasePacket(_ phaseText: String, absoluteRoot: String? = nil) -> HandoffPac
         pathRule = ["All tool paths are relative to the workspace root (e.g. `app.py`,",
                     "`templates/base.html`) — never absolute paths."]
     }
+    // C13: one phase-2 failure burned 44.7k characters of reasoning on whether
+    // the vetted command changes the working directory ("working directory" x49,
+    // "temp directory" x73). It does not -- SubprocessRunner runs it with cwd set
+    // to the worktree, and `--project` selects only the uv environment. Verified
+    // empirically, not assumed. The fact states the consequence the model
+    // actually agonized over, not just the mechanism, and names the directory
+    // literally in the absolute arm so nothing is left to infer.
+    let cwdDescription = absoluteRoot.map { "`\($0)`" } ?? "the workspace root, the same directory the file paths above refer to"
+    let facts = [
+        "The vetted commands run with the working directory set to \(cwdDescription). "
+        + "`--project` selects the Python environment only; it does not change the working directory. "
+        + "So `import app` imports the `app.py` you wrote, and `tests/test_app.py` is the file you wrote.",
+    ]
+
     let writableNote = ([
         "You may write or edit only these files:",
         renderedFiles,
@@ -121,6 +135,7 @@ func phasePacket(_ phaseText: String, absoluteRoot: String? = nil) -> HandoffPac
         validationCommand: vettedImport,
         selfTestCommand: vettedPytest,
         toolCallBudget: Int(env["AGENTTEST_TOOL_BUDGET"] ?? "30") ?? 30,
+        facts: facts,
         redacts: redacts,
         // The packet records the sampling the run actually used, so a capture is
         // self-describing rather than needing the invocation to interpret it.

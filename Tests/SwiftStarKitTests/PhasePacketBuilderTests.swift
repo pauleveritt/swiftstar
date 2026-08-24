@@ -40,6 +40,26 @@ struct PhasePacketBuilderTests {
         #expect(HandoffPacketValidator.validate(packet) == .valid)
     }
 
+    /// Pinned facts exist to stop the worker re-deriving a contract. A fact
+    /// stored on the packet but never rendered into `taskText` is a no-op: the
+    /// orchestrator sends only `taskText` to the model.
+    @Test func factsAreRenderedIntoTaskText() {
+        let packet = PhasePacketBuilder.build(
+            phaseText: "Phase 2.",
+            writableNote: "note",
+            preamble: "preamble",
+            sharedContext: "shared",
+            writableFiles: ["app.py"],
+            validationCommand: "python -c 'import app'",
+            selfTestCommand: "pytest -q",
+            toolCallBudget: 30,
+            facts: ["The vetted commands run with the working directory set to the workspace root."]
+        )
+
+        #expect(packet.taskText.contains(
+            "The vetted commands run with the working directory set to the workspace root."))
+    }
+
     @Test func samplingAndBudgetSurviveOntoThePacket() {
         let packet = build()
         #expect(packet.sampling.think == .off)

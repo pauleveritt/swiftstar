@@ -22,8 +22,17 @@ public enum PhasePacketBuilder {
         sampling: SamplingPolicy = SamplingPolicy(),
         role: PacketRole = .implement
     ) -> HandoffPacket {
-        HandoffPacket(
-            taskText: [phaseText, writableNote, preamble, sharedContext].joined(separator: "\n\n"),
+        // Facts must be rendered, not merely stored: the orchestrator sends only
+        // `taskText` to the worker, so a fact left in the struct field is a no-op.
+        // They lead, because their whole purpose is to pre-empt deliberation the
+        // phase text would otherwise trigger.
+        let factBlock = facts.isEmpty ? nil : ([
+            "Pinned facts — these are settled; do not re-derive them:",
+        ] + facts.map { "- \($0)" }).joined(separator: "\n")
+
+        return HandoffPacket(
+            taskText: ([factBlock, phaseText, writableNote, preamble, sharedContext]
+                        .compactMap { $0 }).joined(separator: "\n\n"),
             writableFiles: writableFiles,
             validationCommand: validationCommand,
             selfTestCommand: selfTestCommand,
