@@ -226,6 +226,87 @@ greedy-generation transcripts. The shipping artifact itself is
   a runbook and the other two are findings — consolidation should keep the runbook thin
   and point it at the findings rather than restating them.
 
+### A7. The corpus that needs consolidating
+
+*Global inventory, contributed by this session — not session-A-specific. Surveyed
+2026-08-24. `docs/superpowers/` in swiftstar currently holds 27 research notes, 12 plans,
+and 13 specs, plus 6 harvest briefs. Listing every file would not help; these are the
+clusters where genuine overlap or staleness lives.*
+
+**Cluster 1 — the P11 agent test (densest overlap, 7 documents).**
+`plans/2026-08-23-p11-agenttest-addendum.md`, `specs/2026-08-23-p11-agenttest-addendum-design.md`,
+and five research notes: `2026-08-23-p11-agenttest-verification-record.md` (Laguna
+baseline), `-mellum-verification-record.md` (this session), `-laguna-hard-analysis.md`,
+`-telemetry-review.md`, plus the untracked `2026-08-24-laguna-revision-test-spec.md`.
+These were written across at least three sessions against a moving harness, and at least
+one baseline (Laguna's hard-spec outcome) changed mid-stream. **Highest-value merge
+target.**
+
+**Cluster 2 — external model reviews of P11 (4 documents).**
+`2026-08-23-p11-glm-5.3-review.md`, `-glm-5.3-spec-plan-review.md`, `-kimi-k3-review.md`,
+and the two gate notes `-p11-measurement-gate.md`, `-p11-smoke-gate.md`. Reviews are
+point-in-time by nature; consolidation should extract what was *acted on* and archive the
+rest rather than keeping five parallel opinions live.
+
+**Cluster 3 — Mellum agentic limits (3 documents).** Covered in A6.
+
+**Cluster 4 — memory and footprint.** This session's `planned_bytes` correction, Section
+B's footprint decomposition, and — easy to miss — an untracked ds4 note,
+`docs/superpowers/research/2026-07-29-laguna-s-streaming-footprint.md` in
+`~/projects/ds4`, which contains the streamed-vs-resident arithmetic and the aging-LFU
+cache-policy findings this session cited. **That note exists only as an untracked file on
+one disk.**
+
+**Cluster 5 — designed but not built.** `2026-08-23-monty-and-the-ane-watcher-tier.md`,
+`2026-08-23-house-style-as-a-compiled-artifact.md`, and the untracked
+`2026-08-24-handoff-packet-frontmatter-schema.md`. All three are explicitly speculative
+("nothing here is measured"). They should stay clearly labelled as unbuilt so a later
+reader does not mistake them for shipped design.
+
+**Cluster 6 — the ds4-side Mellum docs**, in the `mellum-2.1` worktree: `MELLUM.md`
+(runbook), `plans/mellum-q4k-artifact.md` (the three-piece brief, partly completed by
+this session's merge), `tools/mellum/RESULTS-selective-artifact.md`, and the archived
+`research/2026-08-21-mellum-experiment-journal.md`. The brief in particular now overstates
+what remains: mixed-layout validation and Q4_K decode are done; only Q4_K prefill is open.
+
+### A8. Uncommitted and unpushed state across the trees
+
+*Surveyed 2026-08-24. This is a fragility inventory, not a to-do list — but several items
+exist on exactly one disk with no remote.*
+
+**swiftstar** (`p11-subagent-pool`, at `87e6a64`)
+
+- **No upstream tracking at all — this repository has never been pushed.** Every commit
+  from every session tonight exists only locally.
+- Eight dirty paths, including an **in-flight feature from another session**:
+  `Sources/SwiftStarKit/HandoffPacket.swift` (modified), plus untracked
+  `HandoffPacketValidator.swift`, `PacketFrontmatter.swift`, their two test files, and
+  `research/2026-08-24-handoff-packet-frontmatter-schema.md`. Real code, uncommitted.
+- Also untracked: `research/2026-08-24-laguna-revision-test-spec.md`, `claude_metrics.png`.
+
+**ds4 main checkout** (`~/projects/ds4`, branch `paul/laguna`)
+
+- **27 commits unpushed** relative to `origin/laguna-s2.1`.
+- Untracked and unique to this disk: `research/2026-07-29-laguna-s-streaming-footprint.md`
+  (see Cluster 4), `plans/2026-07-29-tblite-harvest-plan.md`, an entire untracked
+  `docs/superpowers/specs/` directory, and `ds4-laguna-s-greedy-pi-extension.ts`.
+
+**ds4 worktrees — none of these branches has an upstream; all exist only on this disk:**
+
+| branch | state |
+|---|---|
+| `swiftstar-integration-mellum` | 4 commits, tip `cde6438`. Clean except an untracked `gguf` symlink. **This is the branch the submodule is meant to pin.** |
+| `mellum-repair-pipeline` | 1 commit, `9e21c05`. Plus **another session's uncommitted Laguna work**: `pipeline/run_laguna.sh` and three `logs/laguna-revision-*` directories — a reuse of this session's pipeline for the Laguna revision test, not captured by `9e21c05`. |
+| `laguna-s21-ssd` (worktree `laguna-xs2.1`) | modified `plans/mini-notes.md` — the source of several streaming measurements cited elsewhere. |
+| `worktree-ds4f-mxfp4-bench` | 3 untracked benchmark CSVs. |
+| `worktree-ds4-main-bench` | 1 untracked benchmark CSV. |
+| `mellum-2.1`, `laguna-s-bench`, `context-firewall` | clean. |
+
+**The two items most at risk of being lost**, both because they are untracked *and* on
+never-pushed branches: the Laguna streaming-footprint note in the ds4 main checkout, and
+the other session's Laguna revision logs inside `mellum-repair-pipeline`. Neither is
+this session's to commit; both should be claimed by their owners before any `git clean`.
+
 ---
 
 ## Section B — Footprint decomposition, host tool-call robustness, and style compilation
