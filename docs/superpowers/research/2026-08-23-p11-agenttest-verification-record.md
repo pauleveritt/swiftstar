@@ -74,14 +74,110 @@ The grader parses into `GraderVerdict.parse(...) == .good`. Wiring this same
 prompt over the harness's *own* output (via the code-dump the harness will write
 before `discardFinal`) is the remaining grader step.
 
-## Next (overnight kick-off)
+## Overnight session — grader end-to-end + n=4 variance (2026-08-23)
 
-1. **Wire the DeepSeek grader end-to-end** — dump the final worktree's code +
-   rubric (spec + `mission.md` + `tech-stack.md`) before `discardFinal`, call
-   `deepseek/deepseek-chat`, parse `GraderVerdict` (parser + reference demo
-   already exist; only the code-dump + live call are missing).
-2. **Re-run easy + hard specs** (n=1) with the vetted pytest self-test +
-   repeat-refusal hint + 32k ctx (commit `9481b86`), and refresh this record
-   with the corrected bounded telemetry.
-3. **Investigate the ~393 generatedTokens cap, then n=4** (batching) for the
-   statistical claim once the grader is green.
+**Status:** the three overnight items are done to the extent the instrument
+allows. The grader is wired and live; the re-runs and the n=4 batch exposed
+that the instrument is **bimodal** — the model either works concisely or
+thrashes in think mode to the 32k context limit — and that the DeepSeek grader
+**does not discriminate** (it returns "good" for code the acceptance suite
+rejects). Commit `accbea6`.
+
+### 1. DeepSeek grader wired end-to-end
+
+`Sources/swiftstar-agenttest/DeepSeekGrader.swift` builds the pinned prompt
+(rubric = spec + `mission.md` + `tech-stack.md`, then the generated code), POSTs
+`deepseek/deepseek-chat` over OpenRouter (timeout 120s + one retry), and parses
+`GraderVerdict` fail-closed. The key comes from `OPENROUTER_API_KEY` or
+`~/.pi/agent/auth.json` (`openrouter-curated`). `main.swift` dumps the final
+worktree's code + rubric to the capture dir (`code.md`, `rubric.md`) **before
+`discardFinal`**, calls the grader, and persists `verdict.json`.
+
+Verified two ways: against the **reference** implementation (returns `good`,
+the original demo), and against the harness's **own** output.
+
+### 2. Re-run easy + hard (n=1) — corrected telemetry, and a grader blind spot
+
+Easy (`roadmap.md`), one clean run, corrected telemetry (no tool/tool_request
+double-count — the analyzer now reports tool-call count, rounds, re-reads,
+repeated-identical):
+
+| Phase | Outcome | Tool calls | Mutations | generated | ctx_pos | stop |
+|---|---|---|---|---|---|---|
+| 1 | candidate | 6 | 4 | 230 | 3242 | eos |
+| 2 | candidate | 6 | 4 | 217 | 5743 | eos |
+| 3 | candidate | 6 | 4 | 201 | 8112 | eos |
+| **Acceptance** | **exit 1 — 12/13** | — | — | — | — | — |
+| **Grader** | **good** | — | — | — | — | — |
+
+18 tool calls, 0 re-reads, 0 repeated-identical, 86s. The one acceptance
+failure: the model put the "Add Complaint" form inside the `{% block title %}`
+of `complaints.html` instead of the content block, so it renders in the page
+`<title>`. The grader still returned `good` — **the grader missed a
+structural template bug the deterministic suite caught**.
+
+Hard (`roadmap-user-story.md`) is **variable in its failure mode**, not the
+single "noChanges" receipt of the first live run:
+
+- Run A (pre-guard): phase 1 candidate with `stop=limit` (12,051 generated,
+  ctx 32,767), then phase 2 died — the pooled worker session was full and could
+  not compact (`not enough context left to request compaction summary`), and
+  the harness crashed on `turnDidNotEnd`.
+- Run B (post-guard): phase 1 `noChanges` receipt after a 28,580-token think
+  thrash, clean stop.
+
+Both runs discriminate (the hard spec never completes), but the mode varies.
+The harness now stops the transaction cleanly when a phase ends
+`limit`/`context_full` instead of reusing a full session and crashing the
+engine.
+
+### 3. The ~393 generatedTokens cap does not exist
+
+Traced in the engine (`external/ds4/ds4_agent.c`): `n_predict` defaults to
+**50000** (`-n` overrides); the per-turn budget is `min(n_predict,
+ctx_room - 1)` at turn start; the stop reason is `context_full` (no room),
+`limit` (budget hit), or `eos`. There is no 393 anywhere.
+
+The `393/393/351` in the telemetry review was selection, not a cap. Real
+per-phase generation is ~200–450 tokens when the model works concisely, and
+**12k–31k** when it thrashes in think mode to the 32k context limit — think
+tokens, not tool calls, dominate (one run generated 31,053 tokens with **zero**
+tool calls).
+
+### n=4 easy batch — the instrument is bimodal
+
+`--batch N` runs the whole transaction N times in fresh repos and aggregates.
+The easy n=4 (captures `20260823-20*roadmap-run*`):
+
+| Run | Result | Phase 1 |
+|---|---|---|
+| 1 | **stopped** — `limit` | 31,053 gen, **0** tool calls, ~14 min |
+| 2 | **stopped** — `limit` | 18,872 gen, 11 tool calls, ~15 min |
+| 3 | completed | 3 phases eos, 29 calls, gen 447/386/526, ~9 min |
+| 4 | killed (timeout) | still in phase 1 when the 40-min wall-clock timeout hit |
+
+Run 3 — the only completion — **failed acceptance 7/13** (the route function
+`def complaints(request)` shadowed the imported `complaints` list, breaking
+`/complaints`), and the grader still returned `good`. So the grader's "green"
+is not a pass signal: it returned `good` for 12/13, 7/13, and reference code
+indiscriminately.
+
+**The statistical claim is now negative and honest:** the easy spec does not
+reliably win under the current instrument — ~1/4 runs complete and even those
+fail acceptance — because the worker's unbounded think mode thrashes the 32k
+context before it emits a tool call. The bounding prompt ("write once, do not
+explore") does not bound thinking.
+
+## Next
+
+1. **Bound thinking.** The thrash is think-mode tokens, not tool calls. Either
+   disable/limit thinking for the implementer role, drop the context size so a
+   think loop fails faster, or add a think-token budget to the turn budget
+   enforcement — then re-run n=4 to see if the easy spec becomes reliably
+   winnable.
+2. **Re-scope the grader.** It says "good" for code the acceptance suite
+   rejects (12/13 and 7/13). Either make the prompt force the grader to
+   actually run/verify the routes, feed it the acceptance failures, or demote
+   it to a supplementary signal and treat `uv run pytest` as the sole grade.
+3. **n=4 hard** only after the think-thrash is bounded — at ~15 min per thrash
+   run it is not worth batching until runs are cheap again.
