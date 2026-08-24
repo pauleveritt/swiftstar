@@ -225,3 +225,223 @@ greedy-generation transcripts. The shipping artifact itself is
   agentic-tool-use finding, the specialist-pipeline record). They agree, but the first is
   a runbook and the other two are findings — consolidation should keep the runbook thin
   and point it at the findings rather than restating them.
+
+---
+
+## Section B — Footprint decomposition, host tool-call robustness, and style compilation
+
+**Session scope:** 2026-08-23 → 2026-08-24, on branch `mellum-2.1-overnight`. Covers the
+tool-calling robustness work and its closing control run, a Laguna XS 2.1 transfer
+investigation, a full weight decomposition and quant-targeting exercise, doc dedup, and
+one unrelated swiftstar research note.
+
+**Read A2 first.** This session's headline recommendation — target Q5_0 on down —
+**was measured and killed by Section A**, whose evidence is authoritative here. What
+survives is the structural analysis that motivated the shootout, one release-blocking
+correctness defect, and the procedural call to measure before building.
+
+### B1. Conclusions that still hold
+
+**Weight decomposition** (computed from GGUF block geometry; reproduces the published
+12.03 / 9.33 GiB totals, the measured `mapped 9554.64 MiB` load, and — as an out-of-sample
+check — the official artifact's known 7.52 GiB from its verified inventory)
+
+| Category | Q8_0 (12.03) | selective (9.33) |
+|---|---:|---:|
+| Expert gate | 3.66 | 2.30 |
+| Expert up | 3.66 | 2.30 |
+| **Expert down** | **3.66** | **3.66** |
+| Attention / embed / head / norms | 1.05 | 1.05 |
+
+- **Down is 39% of the shipping artifact and the only expert projection untouched.**
+  This remains the correct statement of where the weight is, even though the attempt to
+  compress it failed.
+- **No K-quant can ever reach down.** Its contiguous dimension is 896; K-quants use
+  256-element superblocks and 896 ÷ 256 = 3.5. Enforced in ds4 at `ds4.c:4576` and
+  `ds4.c:5444–5456`; no padding or partial-block path exists. **Q8_0 works only because
+  its block is 32.** So this is geometry, not a tunable — and it means **Q6_K is not a
+  candidate for down in any future attempt**, and on gate/up it is *larger* than the Q4_K
+  already shipping (0.8203 vs 0.5625 B/elem). Both directions dead.
+- **Context is nearly free.** Only 7 of 28 layers scale with `--ctx`; the other 21 are
+  sliding-window pinned at 1024 rows. KV alone is 0.26 GiB at 16k, 0.48 at 32k, **0.59 at
+  40k**. Independently consistent with Section A's ~0.9–1.0 GiB true KV+scratch at 40k.
+  **Weights are the whole game; context budget is not the constraint.**
+
+**A release-blocking correctness defect — the highest-value item in this section**
+
+- **Batch-prefill eligibility infers layout from the wrong tensor.**
+  `ds4_engine_bind_mellum_decode_contract` sets `mellum_batched_prefill_unsupported` by
+  testing **only** `src->ffn_gate_exps->type == DS4_TENSOR_Q4_K` (`ds4.c:36895`). It never
+  inspects down, and all four down kernels are Q8_0-only (`metal/moe.metal:2984, 3038,
+  3211, 3230`). Any artifact with Q8_0 gate/up and a non-Q8_0 down leaves that boolean
+  *false*, engages the batch path, and runs `kernel_mellum_q8_0_down_batch_f32` over
+  foreign bytes — **wrong output, no error**. Verified in code.
+- **The fix is an admission contract, not a wider boolean.** No dispatch site should infer
+  Q8_0 layout from "not Q4_K"; that inference *is* the defect, and widening the test
+  leaves the same trap for the next format. Define supported quant × path combinations
+  (decode, token-batch, grouped prefill) and refuse the rest loudly.
+- **This survives the death of Q5_0 entirely.** It is a latent silent-corruption pattern
+  in the dispatch layer, not a quantization concern.
+
+**Laguna XS 2.1's memory wins do not transfer** (both checked against code, not assumed)
+
+- **The prefill-chunk scratch win has no analogue.** Mellum's per-chunk-token cost is
+  ~0.13 GB (prefill workspace alone) or ~0.20 GB counting the MoE bucketing statics —
+  20–30× smaller than Laguna's 3.97 GiB. Nothing to recover. Two corrections worth
+  keeping: the ~6.1 GB figure associated with Laguna is a *total-resident projection*, not
+  scratch; and **Mellum's 1024 chunk cap is structural, not a stale guard** — the sliding
+  layers' KV ring is allocated at exactly `DS4_N_SWA`, so a wider chunk would wrap. The
+  opposite of Laguna's incidental family-level refusal.
+- **The slab-class win does not exist here.** That machinery is SSD-streaming-only and
+  Mellum refuses `--ssd-streaming` outright. Unrelated to Mellum having no dense prefix,
+  which was the first guess and was wrong.
+- **What does transfer is the lesson, via a different mechanism:** the whole-model
+  eligibility boolean above is Laguna's uniformity penalty in miniature — non-uniformity
+  tripping an all-or-nothing gate that costs more than the non-uniform part. Scoping it
+  per layer would recover the six pure-Q8_0 layers, worth **~1.17–1.20× on prefill**
+  (arithmetic on published path ratios; 0.21× → ~0.25×). Whether the two paths can be
+  mixed *within one prefill pass* is **unverified** — if not, this is a loop restructure,
+  not a scoping change.
+
+**`use_more_bits` is positional** (verified against pinned llama.cpp source)
+
+`src/llama-quant.cpp:426` is `i_layer < n_layers/8 || i_layer >= 7*n_layers/8 ||
+(i_layer - n_layers/8)%3 == 2` — first eighth, last eighth, every third middle layer. It
+consults no imatrix, no weights, no measurement of any model. For n=28 it yields the
+official artifact's exact split (Q8_0: 0,1,2,5,8,11,14,17,20,23–27). **Useful to keep:
+any future appeal to "the reference artifact chose these layers" is appealing to a
+generic positional formula, not to measured sensitivity.**
+
+**Host tool-call robustness** — landed in `66cbf83`, independent of Mellum's competence
+
+- Malformed tool calls retried without limit (one observed turn looped 63 rounds); now
+  capped at 2 corrections.
+- An unterminated tool call grew unbounded — an observed write degenerated to ~26K output
+  tokens and only stopped when compaction failed, losing the whole attempt including
+  completed earlier rounds. Now a 64 KiB cap plus a tail-repetition detector.
+- **That detector had a false positive on ordinary content:** at unit=1 it fired on 24
+  identical bytes, so a markdown rule, an RST underline or a run of padding inside any
+  write past 512 bytes was killed as "degeneration". Fixed with a 64-byte span floor;
+  regression test trips at byte 2141 under the old constant and passes under the floor,
+  while the real `V5V5` runaway is still caught at byte 512 unchanged.
+- Host corrections (nudge, preflight error, malformed-call error) were sent as `role=tool`
+  with no matching `tool_call` in history, causing a self-referential confusion loop.
+  Now `role=user`; only genuinely executed calls are `role=tool`.
+- Hitting `-n` mid-call is now classified apart from malformed JSON — "cut off before you
+  could finish valid JSON" reads very differently to a model than "you wrote invalid JSON".
+
+### B2. Conclusions disproven or superseded
+
+| Claim | Status |
+|---|---|
+| **"Target Q5_0 on down; ~8.53 GiB at 40k is the shipping target"** | **Superseded by measurement (Section A).** Q5_0 down produces reproducible `NaN` on held-out text; MXFP4 lands ~5.5× Q8_0's own KLD from BF16. **Down stays Q8_0.** The whole 7.29–8.53 GiB target family is void. |
+| "MXFP4 is worth evaluating as a cheaper alternative" | **Evaluated and rejected** (Section A). The loop this session opened is closed. |
+| "The official 14/14 split evidences that 5-bit down is safe" | **Self-retracted twice.** First: the split is a mechanical shape-fallback (Q6_K→Q8_0, Q4_K→Q5_0), not a quality choice. Then: my repair — that the *placement* still encodes a real sensitivity ranking — was **also wrong**, since `use_more_bits` is purely positional. Section A then made the whole question moot. |
+| "Mellum's `buffers 0.00 GiB` means graph scratch is omitted from the planned total" | **Wrong mechanism, right smell.** Scratch *is* summed in; it prints 0.00 because the missing family branch leaves the estimate at ~99 KB. Corroborated and **already fixed** by Section A's `5208cce`. |
+| "KV is under-reported ~7× flat" | **Imprecise.** The reported figure is ctx-invariant (0.068 GiB always), so the error is 3.8× at 16k and ~7× at 32k, growing with context. |
+| "Mellum's prefill scratch is ~202 KiB/token" | **~55% high and unshown.** ~130 KiB/token for the prefill workspace proper; the extra 74 KiB is MoE bucketing statics whose membership in the same budget is unresolved. Conclusion unaffected. |
+| "The target lands in the class of something demonstrated on the hardware — no swap at 10.9 GB free" | **Imported invalidated evidence.** The source note disavows its own pressure test: the zero-page ballast compressed away, so that proves nothing. Only the 8.24–10.18 GB RSS band is citable. |
+| "Thinking mode causes Mellum's tool-call failure" | **Ruled out** — agrees with A2. This session ran the Q8_0 `--nothink` control: rc=0 in 7s, 0 tool calls, 0/4 files, both nudges exhausted, model narrated "I cannot directly access files" and stopped on its own. Possibly the same run A2 cites; see B6. |
+| "`make test` is a green/red signal in this worktree" | **It is not.** `ds4_test` aborts at `long-context` needing `ds4flash.gguf`, absent here, and fails identically on a stashed tree. Everything else in the target builds and passes. |
+| Plan doc: "Still missing: a layer-level gate" | **Stale.** `test_metal_mellum_q4_layer` exists. Section should be deleted. |
+
+### B3. The procedural call that paid off
+
+This session's sequence put a **llama.cpp-only format shootout ahead of any ds4 kernel
+work**, explicitly to avoid committing four new kernels before resolving the one question
+that decides which kernels to write. Section A then ran that shootout and both candidates
+failed. **The ordering saved the kernel project.** Worth preserving as a rule: when a
+format decision gates a multi-kernel commitment and the format is measurable in a tool
+that already supports it, measure first — and use teacher-forced logits, greedy-token
+agreement and perplexity, not agent task scores, which are too noisy and (here) drawn
+from prompts inside the imatrix calibration set.
+
+### B4. Files written or changed
+
+**ds4 — branch `mellum-2.1-overnight`** (`~/projects/ds4/.claude/worktrees/mellum-2.1`),
+seven commits `2f8bd32`…`e739816`. **Not merged into
+`swiftstar-integration-mellum`;** Section A's merge (`d40d4f8`) predates these.
+
+- [`docs/superpowers/research/2026-08-23-mellum-footprint-target.md`](file:///Users/pauleveritt/projects/ds4/.claude/worktrees/mellum-2.1/docs/superpowers/research/2026-08-23-mellum-footprint-target.md)
+  — **new.** The decomposition, geometry argument, Laguna non-transfer, estimator defects.
+  **Its target section is now void** per Section A and needs a superseded banner.
+- [`docs/superpowers/plans/mellum-q4k-artifact.md`](file:///Users/pauleveritt/projects/ds4/.claude/worktrees/mellum-2.1/docs/superpowers/plans/mellum-q4k-artifact.md)
+  — deduped against `MELLUM.md` (`442e8d3`), then given pieces 3a and 4 and a sequence
+  that is now partly void.
+- [`docs/superpowers/MELLUM.md`](file:///Users/pauleveritt/projects/ds4/.claude/worktrees/mellum-2.1/docs/superpowers/MELLUM.md)
+  — the `--nothink` control paragraph; Mellum marked paused.
+- `ds4_agent.c` — the robustness work in B1, plus three regression tests.
+- `tools/mellum/agent-eval/{phase1.sh,run_arm.sh}` — `-n` 4096 → 8192.
+
+**swiftstar — branch `p11-subagent-pool`**, commit `5ffc16c`
+
+- [`docs/superpowers/research/2026-08-23-house-style-as-a-compiled-artifact.md`](2026-08-23-house-style-as-a-compiled-artifact.md)
+  — **new, unrelated to Mellum.** Style inference re-run per prompt is a recomputation
+  over a slowly-changing corpus; the load-bearing move is *style as a P9/P10 objective*
+  rather than prompt content, with an out-of-band pass compiling what it can into
+  executable checks, canonical exemplar election feeding D5's names-only staged reads, and
+  the correction stream mined for anti-patterns. Records the constraint that bounds
+  specialists: exact-prefix-only KV reuse plus D8's shared-root short-lived workers makes a
+  per-specialist recipe a divergent prefix, so recipes are not free. **Nothing in it is
+  measured**; it names the compile fraction on tdom's practices as the falsifying number.
+- `ROADMAP.md` — matching backlog entry.
+
+**Memory** — `project_mellum_fabricated_validation.md` (fabricated-validation finding and
+the P9/P10 action-mode design that answers it).
+
+### B5. What this section thinks comes next
+
+**Footprint is closed as a track.** With down locked at Q8_0 and Laguna's levers ruled
+out, there is no multi-GiB weight lever left. Real memory stays ~10.3 GiB at 40k
+(Section A). **Prefill is now the only engine item a user would feel** — which agrees with
+Section A's ranking, arrived at independently.
+
+1. **The admission contract** (`ds4.c:36895`). Release-blocking, format-independent,
+   silent-corruption class. Should land regardless of what happens to quantization.
+2. **Q4_K expert-major prefill (piece 3)** — the 0.21× penalty. Target **~300–350 t/s**,
+   restoring the Q8_0 expert-major rate, *not* llama.cpp's ~4,000. Endpoint is one shared
+   grouped schedule with format-specific row staging; tensor-core work is unnecessary.
+3. **Piece 3a, per-layer eligibility** — ~1.17–1.20× for the six pure-Q8_0 layers.
+   Cheap *if* paths can mix in one pass; verify that before costing it. Do **not**
+   sequence it before piece 3's measurement, or neither result is attributable.
+4. **`--prefill-chunk` is accepted and ignored** — it reaches only the estimator, so it
+   silently alters diagnostics and nothing else. Wire it or refuse it as GLM does. Note
+   the `DS4_MELLUM_PREFILL_CHUNK` **env var does work**; only the CLI flag is inert.
+5. **One surviving footprint candidate, small and untested:** extend Q4_K gate/up from
+   layers 0–21 to all 28 (9.33 → 8.59 GiB). Same format already validated on 22 of 28
+   layers, so far lower risk than any new format on down. A2 notes an 8.59 GiB all-28
+   build exists *without* imatrix — **all-28 with imatrix appears untested**, and whether
+   the 0–21 restriction was itself a quality decision is not something this session has
+   evidence about. Worth one KLD run before it is either adopted or discarded.
+6. **Carried debt:** the layer-0 oracle fails on Q4_K (`max_abs=0.0298` against a `0.006`
+   limit calibrated for Q8_0) and needs an *independent* Q4_K reference — llama.cpp's
+   layer-0 output on the same artifact — and explicitly must **not** be "fixed" by raising
+   the threshold. Plus the `ds4_gpu_mellum_q8_0_*` naming fossils now carrying Q4_K, and
+   the stale layer-level-gate section to delete.
+
+**Not scheduled: Mellum agent competence.** Paused deliberately. Generic retry cannot fix
+fabricated validation, and the answer is the P9/P10 host-controlled action mode — declared
+objectives, host-reported state, a retry round requiring a registered tool call, and
+claimed test results never trusted without a recorded execution. Section A's host-controlled
+text-mode result is the first positive evidence for that design and should be read as
+support for it.
+
+### B6. Overlaps to resolve during consolidation
+
+- **Section A supersedes this section on quantization.** Where B named a Q5_0/MXFP4
+  target, A has measurements. A wins. B's decomposition and geometry argument remain the
+  explanation for *why* down was the target and why nothing else can reach it — keep those,
+  drop the target.
+- **The `--nothink` control may be double-counted.** A2 and B2 both report thinking mode
+  ruled out. B ran a Q8_0 control at `-n 8192`, nudge=2, 180s (rc=0 in 7s, 0 calls, 0/4
+  files). If A's is the same run, keep one; if independent, note n=2.
+- **The estimator fix is recorded twice.** B diagnosed it on `mellum-2.1-overnight`; A
+  fixed it on `swiftstar-integration-mellum` (`5208cce`). Keep A's, and check B's KV
+  arithmetic (0.26 / 0.48 / 0.59 GiB at 16k / 32k / 40k) against what A actually shipped.
+- **Seven commits on `mellum-2.1-overnight` are not in the integration branch.** One is
+  code (`66cbf83`, tool-call robustness), the rest are docs. The code commit is
+  independent of Mellum and should be carried forward; the doc commits need the
+  superseded-target banner first.
+- **`mellum-q4k-artifact.md` now contains a sequence that is partly void.** Steps 1–3 of
+  its "agreed sequence" were the format shootout, which A has run. Rewrite to start at the
+  admission contract.
