@@ -1,0 +1,85 @@
+# P11 agenttest — Laguna on the harder problem: preliminary analysis (2026-08-23)
+
+**Status:** preliminary, n=1 per failure mode, from the captured wire
+(`captures/agenttest/20260823-*-roadmap-user-story/wire.ndjson`). Three hard-spec
+runs, three distinct-but-related failure signatures; one easy-spec comparison.
+
+## The headline
+
+The user-story spec does **not** defeat Laguna at planning — its opening
+reasoning is a correct decomposition, and its first think-draft is a complete,
+coherent implementation. It defeats Laguna at **convergence**: the model
+redrafts that solution verbatim ~12 times inside its thinking, never emits a
+tool call (2 of 3 runs), and dies mid-draft when the context hits 32,767.
+
+## Evidence
+
+| run | spec | think events | tool calls | text | end |
+|---|---|---|---|---|---|
+| 19:26 | hard | 5,738 | 21 | 47 | `stop=limit gen=12051 ctx=32767` |
+| 19:42 | hard | 5,111 | 0 | 0 | (turn never ended — timeout) |
+| 19:53 | hard | 7,464 | 0 | 0 | `stop=limit gen=31151 ctx=32767` |
+| 19:24 | **easy** | **0** | 16 | — | acceptance green, DeepSeek "good" |
+
+The 19:53 run generated **31,151 tokens for zero output** (0 tool calls, 0 text).
+Its think stream is 122,512 chars: `"Actually"` ×69, `"OK"` ×68, `"Wait"` ×17,
+`"Hmm"` ×18, and **12–13 complete drafts** of the whole file set
+(`"### templates/base.html"` ×12, `"from fastapi import"` ×14).
+
+## Finding 1 — the redrafts are verbatim
+
+Extracted draft #1 and the last complete draft from the think stream and diffed
+them: **byte-identical** (models.py 197 B, app.py 1147 B, base.html 760 B,
+home.html 431 B, complaints.html 1044 B, test_app.py 2073 B). The
+"deliberation" does not change the output — the model re-emits the identical
+solution after each micro-reconsideration. This is a degenerate loop, not
+engineering.
+
+## Finding 2 — the one real defect is a hidden contract
+
+Draft #1 fails the acceptance suite on exactly one point: the suite requires
+`models.complaints` (the in-memory list must live in `models.py`); Laguna puts it
+in `app.py`. The hard spec never says where the list lives; the easy spec pins it
+explicitly ("Create a module-level list `complaints: list[Complaint]` in
+`models.py`"). So 31k tokens of reconsideration never touched the only thing that
+mattered, and the model had no way to discover it — its vetted self-test runs its
+*own* tests, not the acceptance suite.
+
+## Finding 3 — ambiguity converts directly into think-tokens
+
+The tool budget (30) bounds tool calls; nothing bounds thinking. The user-story
+spec leaves every micro-decision open (quote handling in the tagline, timestamp
+format, relative vs absolute template paths, test isolation, form validation),
+and each open decision triggers a full redraft. The easy spec pins everything →
+**zero think events**. This sharpens the local-ai-pi doctrine ("facts work, rules
+of conduct do not"): for this model, *ambiguity → unbounded deliberation →
+context death*.
+
+## Finding 4 — it is not hard-spec-exclusive
+
+The 32k batch on the **easy** spec reproduced the same think-loop: runs 1 and 2
+both ended `stop=limit` (gen 31,053 / 18,872, ctx 32,767) with **no grade**,
+whereas the pre-revert 16k easy runs passed in ~2 min at ~9k ctx, and the 19:24
+easy run passed at 32k with 0 think events. So the think-loop is a general
+Laguna failure mode that ambiguity makes near-certain, and a larger context just
+scales the damage (31k wasted tokens instead of ~16k).
+
+## Secondary pathology (19:26 run, which did act)
+
+It first burned **6 writes on absolute paths** (`/Users/pauleveritt/projects/...`
+— refused: outside the workspace grant), likely primed by the prompt's vetted
+commands carrying absolute paths (`uv run --project /Users/...`). It recovered,
+completed phase 1, then died of session exhaustion in phase 2 (the pooled worker
+session cannot compact for the next phase).
+
+## Levers (next work, in order)
+
+1. **Facts, not rules** (harness-side): a decision sheet in the packet — where
+   the in-memory list lives, timestamp format, "paths are workspace-relative",
+   quote handling. Removes the deliberation triggers and the hidden-contract trap.
+2. **Bound think-tokens** (engine-side, ds4): a think-token budget analogous to
+   the tool budget — the only real bound on the loop. Until this exists, any
+   ambiguity is potentially unbounded.
+3. **Let the self-test see the acceptance contract** (harness-side): the vetted
+   pytest command should run the acceptance suite, not the worker's own tests, so
+   the model can discover the real contract instead of redrafting blind.
