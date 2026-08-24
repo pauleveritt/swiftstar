@@ -1899,3 +1899,62 @@ bounding work over further budget tuning.
 `--think-budget 2048`, tool budget **30** — remains the best measured arm:
 2/2 acceptance among completed runs, both having reasoned substantially. Budget
 64 should not be adopted on this evidence.
+
+### C17. Clean re-run of the C15 config — 2/2 does not replicate, and the failure is now repair-shaped
+
+The commit-level `noChanges` bug (C16) was fixed first (`adc08c0`), so run 2's
+slot was no longer a coin-flip on a harness defect. Same configuration as C15 —
+absolute paths, cwd fact, `--think-budget 2048`, tool budget 30 — n=3:
+
+| run | phases | outcome |
+|---|---|---|
+| 1 | 3/3 `eos` | `acceptance exit 2` — collection error |
+| 2 | — | `budgetExceeded (eos)` |
+| 3 | 3/3 `eos` | `acceptance exit 2` — collection error |
+
+**1. C15's 2/2 does not replicate. Same config, 0/2 here.** This is the
+strongest available evidence for something already recorded as a caveat but
+easy to forget: **n=3 is an existence proof, not a rate.** C15 demonstrated that
+reason-then-act *can* complete; it did not establish that it reliably does, and
+this run shows the same configuration producing zero passes. Any future quote of
+"2/3" or "2/2" from C15 without this alongside it is misleading.
+
+**2. My fix is not the cause — verified, not assumed.** `acceptance exit 2` is
+pytest's collection/usage error, not a test failure (exit 1). Both are
+`ImportError` during collection, from code the model wrote:
+
+- Run 1: `ModuleNotFoundError: No module named 'fastapi.templates'` — should be
+  `fastapi.templating`.
+- Run 3: `ImportError: cannot import name 'RedirectResponse' from 'fastapi'` —
+  should be `from fastapi.responses import RedirectResponse`.
+
+Nothing in the commit path is implicated; the worktrees committed fine and the
+suite ran against them.
+
+**3. The failure mode has consolidated, and it is exactly what repair is for.**
+Both runs completed all three phases at `eos`, wrote every file, and failed on a
+**single wrong import line**. This is C16's fourth mode — completes, and is
+wrong — now appearing 2/2 rather than as a one-off, and in its most tractable
+form: one line, machine-diagnosable, with a real traceback naming the module.
+
+**4. Run 3's bug is verbatim the corpus's most-studied bug.**
+`from fastapi import ... RedirectResponse` is precisely what Mellum re-emitted
+byte-for-byte when shown its own offending line and the exact `ImportError`
+(A2), and precisely the bug **Laguna repaired correctly 3/3, 13/13 acceptance**
+(C1). So the implement role now reliably produces a bug the repair role is
+already demonstrated to fix — on the same model, on the same bug, with a
+verified result.
+
+That is the strongest argument yet for wiring repair, and it changes the
+priority: further tuning of the *implement* arm has diminishing returns while a
+proven repair step sits unbuilt. The relevant caveats stay on the record — repair
+has still never run in-harness, was measured with thinking not engaged, and its
+file picker is known-weak (C1, and the P12 plan's caveat) — but the bug class it
+would be handed here is the one it was measured on.
+
+**Also worth noting:** both errors are hallucinated module paths, not reasoning
+failures. `fastapi.templates` for `fastapi.templating`, and a symbol imported
+from the wrong module. These are recall errors of exactly the kind an import
+check would catch instantly — and the packet already carries a vetted
+`python -c 'import app'` command intended for that purpose, which neither run
+used before finishing.
