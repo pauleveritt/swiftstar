@@ -445,3 +445,69 @@ support for it.
 - **`mellum-q4k-artifact.md` now contains a sequence that is partly void.** Steps 1–3 of
   its "agreed sequence" were the format shootout, which A has run. Rewrite to start at the
   admission contract.
+
+### B7. Uncommitted and untracked work across the trees (survey, 2026-08-24)
+
+**Not written by this session** — surveyed because consolidation needs to know what is
+unlanded and at risk. Nothing below has been touched, staged, or committed here.
+
+**swiftstar — `p11-subagent-pool`, working tree**
+
+- `docs/superpowers/research/2026-08-24-handoff-packet-frontmatter-schema.md` (133 lines)
+  — **untracked research.** "Handoff packet frontmatter schema — draft v1."
+- `docs/superpowers/research/2026-08-24-laguna-revision-test-spec.md` (179 lines) —
+  **untracked research.** "Laguna S revision test — spec." Section A names this as
+  another session's artifact and as out of its scope; it is unlanded.
+- **An unlanded feature**, coherent as a set: `Sources/SwiftStarKit/HandoffPacket.swift`
+  (modified) plus untracked `HandoffPacketValidator.swift`, `PacketFrontmatter.swift`, and
+  `Tests/SwiftStarKitTests/{HandoffPacketValidatorTests,PacketFrontmatterTests}.swift`.
+  This is the frontmatter-schema doc's implementation. **Highest-value uncommitted work in
+  any tree** — it is P10/P11 packet machinery with tests, and it exists only in the
+  working tree.
+- `claude_metrics.png` — untracked, provenance unknown.
+
+**ds4 — main checkout `paul/laguna`**
+
+- Untracked research: `docs/superpowers/research/2026-07-29-laguna-s-streaming-footprint.md`,
+  `docs/superpowers/research/ds4-laguna-s-greedy-pi-extension.ts`.
+- Untracked plan + spec: `docs/superpowers/plans/2026-07-29-tblite-harvest-plan.md`, and
+  the entire `docs/superpowers/specs/` directory (one file,
+  `2026-07-29-tblite-harvest-design.md`, 12.1K) — **the directory itself is untracked**,
+  so nothing in it is under version control.
+- Modified: `docs/superpowers/plans/2026-07-29-tblite-scoping-brief.md`,
+  `docs/superpowers/superpowers/roadmap-backlog.md`.
+- `p28-prefill.log` — untracked output.
+- **These are all ~2026-07-29 tblite/Laguna-S work, older than any session in this
+  document.** They predate the Mellum line and may be abandoned rather than pending;
+  someone who knows that history should decide, not a consolidation pass.
+
+**ds4 — `laguna-xs2.1` (branch `laguna-s21-ssd`)**
+
+- Modified `docs/superpowers/plans/mini-notes.md` — this is the file Section A and B both
+  cite for Laguna's scratch and 32 GB acceptance numbers, so an uncommitted edit to it is
+  worth reading before quoting either.
+- Untracked `gguf` and `p28-prefill.log`.
+
+**ds4 — `mellum-repair-pipeline`**
+
+- Untracked `pipeline/run_laguna.sh` and three untracked log directories
+  (`laguna-revision-l1-redirect-q2`, `laguna-revision-l3-nearmiss-q2`,
+  `laguna-revision-l3-nearmiss`), plus `scratch/`. Section A committed `pipeline/` at
+  `9e21c05`; **these Laguna-revision runs came after and are not in it** — they are
+  evidence for the revision-test spec above.
+
+**ds4 — bench worktrees**
+
+- `ds4-main-bench`: `speed-bench/main_bench.csv`.
+- `ds4f-mxfp4-bench`: `speed-bench/mxfp4branch_{iq2xxs,mxfp4,mxfp4_rerun}_bench.csv` —
+  **MXFP4 benchmark data**, possibly relevant to A2's MXFP4 rejection, which was a
+  *quality* result; these are speed.
+- `swiftstar-integration-mellum`: untracked `gguf`.
+
+**Clean:** `mellum-2.1` (all seven commits landed), `context-firewall`, `laguna-s-bench`.
+
+**What a consolidator should do with this:** the swiftstar packet-validator set is real
+unlanded code with tests and should be landed or explicitly parked; the two swiftstar
+research docs need owners; the `paul/laguna` tblite material needs an
+abandoned-or-pending call from whoever wrote it; and `mini-notes.md`'s uncommitted diff
+should be read before anyone quotes Laguna scratch figures from it.
