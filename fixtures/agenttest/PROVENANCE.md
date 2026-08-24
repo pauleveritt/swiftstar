@@ -11,6 +11,11 @@ ds4-control project. Recovered from git history because the current
 - `acceptance/test_acceptance.py` (cumulative Phase 1+2+3, harness-owned) — `8af05f8`.
 - `reference/` (the full 3-phase solution) — `8af05f8` (`examples/reference/phase-3/`).
 - `broken/app.py` (bare FastAPI app, zero routes) — current `local-ai-pi` tree.
+- `repair/` (2026-08-24) — **authored here, not transplanted.** Two repair-role
+  bugs, each a minimal delta from `reference/app.py`, built to close gaps the
+  existing repair evidence leaves open: every bug tested so far had a traceback
+  that quoted its own defective line and a single canonical fix. See
+  `repair/README.md`. Verified against the real suite (12/13 each).
 
 The acceptance suite is **the grade**: human-authored, cumulative, contract-not-
 implementation, and non-vacuous (the local-ai-pi `examples/acceptance/README.md`
