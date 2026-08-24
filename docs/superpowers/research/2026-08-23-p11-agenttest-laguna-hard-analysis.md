@@ -103,3 +103,37 @@ data-model contract (`Complaint` fields, timezone-aware `timestamp`,
 `models.complaints`) via a preamble that reaches every packet, and (3) the packet
 now states tool paths are workspace-relative (the 19:26 run's absolute-path
 waste).
+
+## Resolution — what fixed it (2026-08-23)
+
+The loop is "can't stop deliberating," not "missing a fact." Pin a fact and the
+model moves its deliberation to the next open sub-question (after pinning the
+list location, it obsessed over timestamp uniqueness — 30 `timezone`/28
+`default_factory` mentions). The fixes that worked, in combination:
+
+1. **`--nothink` (the decisive one).** Disabling the reasoning phase makes the
+   worker emit tool calls directly instead of think-looping. With the contract
+   facts pinned in the spec, it does not need to deliberate — it just executes
+   (the "model is only the implementer" posture from D1). This is now the
+   agent-test default (`AGENTTEST_THINK=1` re-enables reasoning for comparison).
+2. **Complete contract facts.** The spec now pins every detail the acceptance
+   suite checks that the user-story omitted: the `Complaint` dataclass fields,
+   the timezone-aware `default_factory` timestamp, `models.complaints`, and the
+   **Bootstrap `.card`** rendering (the `--nothink` run failed 12/13 on exactly
+   that last one — `document.select(".card")` found 0).
+3. **`-n 8192`** bounds any residual loop (a think-loop now stops at 8192 tokens
+   in ~2 min instead of 31k tokens / context exhaustion).
+4. **Grader fence parse.** DeepSeek returns ```json-fenced output despite the
+   prompt; the parser now reads the first `{`..last `}`.
+
+### Final result (n=1 each)
+
+| spec | before | after |
+|---|---|---|
+| easy | 1/3 pass (2 think-loops), ~2–14 min | **pass**, acceptance + DeepSeek "good", ~2 min |
+| hard | 0/3 (think-loop → `noChanges`) | **pass**, acceptance exit 0 + DeepSeek "good" (9 reasons), 210s |
+
+Hard spec after: 16 tool calls (10/3/3), 6/3/3 mutations, ctx 4.5k→7.4k→10.9k,
+no re-reads, no repeated-identical calls. The remaining follow-up is n=4 for a
+rate, and the model-variance question (does `--nothink` hold up across seeds?)
+that only a batch answers.
