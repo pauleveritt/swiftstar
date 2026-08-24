@@ -41,6 +41,14 @@ let mission = (try? String(contentsOf: fixtureDir.appendingPathComponent("specs/
 let techStack = (try? String(contentsOf: fixtureDir.appendingPathComponent("specs/tech-stack.md"), encoding: .utf8)) ?? ""
 let sharedContext = mission + "\n" + techStack
 
+/// Path *presentation* — how deliverable paths are rendered in the task text.
+/// Distinct from the grant (`writableFiles`), which stays workspace-relative
+/// because it is the boundary the dispatcher revision-checks against. B8 found
+/// that swapping relative deliverable paths for absolute ones — one variable —
+/// took Mellum from 0 tool calls to 4-of-4 files, and C1 found the same
+/// correlation for Laguna. `AGENTTEST_PATH_STYLE=absolute` runs that arm.
+let absolutePathStyle = env["AGENTTEST_PATH_STYLE"] == "absolute"
+
 /// Strings this run's spec is supposed to withhold, comma-separated
 /// (`AGENTTEST_REDACT="default_factory,fastapi.responses"`). An experiment cell
 /// that claims the worker must *diagnose* a fix declares the fix here, and the
@@ -75,14 +83,26 @@ let writableFiles = ["app.py", "models.py",
 /// Build one phase's packet. Phase packets do not depend on the worktree or the
 /// orchestrator, so they can be assembled — and validated — before any model is
 /// loaded.
-func phasePacket(_ phaseText: String) -> HandoffPacket {
+/// `absoluteRoot` renders the deliverable list as absolute paths under that
+/// root. The worktree only exists after `preparePhase`, so the caller builds
+/// once relatively to create it, then rebuilds with the real root.
+func phasePacket(_ phaseText: String, absoluteRoot: String? = nil) -> HandoffPacket {
     let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
     let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
-    let writableNote = [
+    let renderedFiles: String
+    let pathRule: [String]
+    if let root = absoluteRoot {
+        renderedFiles = writableFiles.map { "- \(root)/\($0)" }.joined(separator: "\n")
+        pathRule = ["All tool paths above are absolute; use them exactly as written."]
+    } else {
+        renderedFiles = writableFiles.map { "- \($0)" }.joined(separator: "\n")
+        pathRule = ["All tool paths are relative to the workspace root (e.g. `app.py`,",
+                    "`templates/base.html`) — never absolute paths."]
+    }
+    let writableNote = ([
         "You may write or edit only these files:",
-        writableFiles.map { "- \($0)" }.joined(separator: "\n"),
-        "All tool paths are relative to the workspace root (e.g. `app.py`,",
-        "`templates/base.html`) — never absolute paths.",
+        renderedFiles,
+    ] + pathRule + [
         "You may run exactly these two commands (and no other shell command):",
         "- \(vettedImport)   (does app.py import cleanly?)",
         "- \(vettedPytest)   (do your own tests pass?)",
@@ -90,7 +110,7 @@ func phasePacket(_ phaseText: String) -> HandoffPacket {
         "the workspace or re-read files you just wrote, and run those commands at",
         "most once each. The acceptance suite checks user-visible behavior,",
         "not file layout — write the files named above directly.",
-    ].joined(separator: "\n")
+    ]).joined(separator: "\n")
 
     return PhasePacketBuilder.build(
         phaseText: phaseText,
@@ -201,9 +221,21 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     for (i, phaseText) in phases.enumerated() {
         // Same builder the up-front validation gate ran against, so what was
         // validated is exactly what is dispatched.
-        let packet = phasePacket(phaseText)
+        let seedPacket = phasePacket(phaseText)
         print("[agenttest] phase \(i + 1)/\(phases.count) …")
-        let wt = try txn.preparePhase(packet: packet)
+        let wt = try txn.preparePhase(packet: seedPacket)
+        // The worktree path is only known now, so the absolute arm rebuilds
+        // here and is re-validated — the up-front gate ran before the model
+        // loaded, this one guarantees the dispatched packet is well-formed.
+        let packet = absolutePathStyle
+            ? phasePacket(phaseText, absoluteRoot: wt.url.path)
+            : seedPacket
+        if case .invalid(let reasons) = HandoffPacketValidator.validate(packet) {
+            FileHandle.standardError.write(Data(
+                ("[agenttest] dispatched packet rejected for phase \(i + 1):\n"
+                 + reasons.map { "  - \($0)" }.joined(separator: "\n") + "\n").utf8))
+            exit(2)
+        }
         let outcome: TurnOutcome
         do {
             outcome = try orch.runPhase(worker: WorkerId(1), packet: packet, worktree: wt.url,
