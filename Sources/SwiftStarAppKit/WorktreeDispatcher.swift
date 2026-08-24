@@ -170,7 +170,18 @@ public enum WorktreeDispatcher {
         if !paths.isEmpty {
             _ = try git(worktree, ["add", "--"] + paths)
         }
-        _ = try git(worktree, ["commit", "-m", "SwiftStar dispatch candidate"])
+        // A worker can "mutate" a file by rewriting it with byte-identical
+        // content: the host records the write, so `mutations` is non-empty and
+        // the verdict is a candidate, but git has nothing staged and `commit`
+        // exits 1 ("nothing to commit, working tree clean"). Treating that as a
+        // failure killed a real run mid-transaction. The tree genuinely is the
+        // parent's tree, so the parent commit *is* the candidate — report it
+        // rather than manufacturing an empty commit that claims a change.
+        let staged = try git(worktree, ["status", "--porcelain"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !staged.isEmpty {
+            _ = try git(worktree, ["commit", "-m", "SwiftStar dispatch candidate"])
+        }
         return try git(worktree, ["rev-parse", "HEAD"])
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }

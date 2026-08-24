@@ -145,6 +145,39 @@ struct WorktreeDispatcherTests {
         #expect(carried.mutations == ["a.txt"])
     }
 
+    /// A worker can "mutate" a file by rewriting it with byte-identical content.
+    /// The host records the write, so `mutations` is non-empty, but git sees no
+    /// diff and `git commit` exits 1 with "nothing to commit, working tree
+    /// clean". Observed in a real batch (C16 run 2: 8 mutations, then
+    /// gitFailed), where it killed the run mid-transaction.
+    @Test func rewritingIdenticalContentDoesNotFailTheCommit() throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+
+        let head = try git(repo, ["rev-parse", "HEAD"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let packet = HandoffPacket(
+            taskText: "rewrite a.txt with what it already says",
+            writableFiles: ["a.txt"], validationCommand: nil,
+            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
+        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
+            // Byte-identical to the seed commit.
+            try "seed\n".write(to: wt.appendingPathComponent("a.txt"),
+                                atomically: true, encoding: .utf8)
+            return self.outcome(mutations: ["a.txt"])
+        }
+
+        guard case .candidate(let ref, _, _) = outcome else {
+            Issue.record("expected a candidate, not a throw or a receipt"); return
+        }
+        // The tree is unchanged, so the candidate is the parent commit itself —
+        // honest, and it keeps the phase chain resolvable.
+        let resolved = try git(repo, ["rev-parse", ref])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(resolved == head, "an empty diff should resolve to the unchanged tree")
+    }
+
     @Test func candidateCommitResolvesFromOutsideTheWorktree() throws {
         // The worktree is removed by dispatch; the candidate ref must still
         // resolve in the parent repo (the commit object survives the
