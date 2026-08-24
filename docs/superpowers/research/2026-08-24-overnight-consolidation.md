@@ -1641,3 +1641,73 @@ experiment available and precedes bounded-thinking validation:
 - **R5 (bounded thinking) drops behind R3.5.** Validating `--think-budget`
   against a result that may be a prompt artifact would attribute a fix to the
   wrong cause.
+
+### C13. The prompt-shape ablation (P12.3) — run, with a real effect and a wall behind it
+
+`AGENTTEST_PATH_STYLE=absolute` added (commit `4535dcd`): path *presentation*
+split from the grant, which stays workspace-relative. The worktree only exists
+after `preparePhase`, so the absolute arm builds the packet twice — once
+relatively to create the worktree, then again with the real root — and the
+dispatched packet is re-validated at that point.
+
+Laguna Q2_K, hard spec, n=3 per arm, real acceptance suite:
+
+| arm | phase 1 completed | full spec | acceptance |
+|---|---|---|---|
+| relative + think *(C9 baseline)* | **0/3** | 0/3 | never reached |
+| absolute + think | **2/3** | 0/3 | never reached |
+| absolute + nothink | 3/3 | **2/3** | **2/2 pass** |
+
+**1. Path presentation is a real lever, and the B8 effect replicates on Laguna.**
+Under thinking, absolute presentation took phase-1 completion from 0/3 to 2/3 —
+both with `stop=eos` (the model ending its turn naturally, not hitting a cap)
+and six file writes each. This is the first time phase 1 has ever completed
+under thinking. **It is also a partial answer to C9/C11: "Laguna 0/3 with
+thinking" was substantially a prompt artifact, not purely the `</think>`
+mechanism** — exactly the confound D6 predicted.
+
+**2. It does not reach completion.** 0/3 finished the spec, so acceptance was
+never graded in the thinking arm. Fixing initiation revealed the next wall
+rather than curing the problem — the failure boundary moved from phase 1 to
+phase 2.
+
+**3. The phase-2 failures are two distinct things, and only one was predicted.**
+
+- **Run 3 — the known termination failure.** Drafts a complete solution, writes
+  *"OK, let me finalize all the files now,"* then *"Actually, I need to reconsider
+  one thing…"* and deliberates about Python list-reference semantics to the cap.
+  The C11 pattern verbatim. This is what `--think-budget` targets.
+- **Run 2 — a packet defect, not a model defect.** 44,702 characters of thinking
+  about whether the vetted command changes the working directory: `working
+  directory` ×49, `temp directory` ×73, `--project` ×22, `rootdir` ×26. The
+  packet says to run `uv run --project <a different absolute path> python -m
+  pytest tests/test_app.py` and **never states which directory the command runs
+  in**, so the model reasoned in circles about whether its own files would be
+  found. Same class as the `models.complaints` ambiguity that cost ~31k tokens.
+  Cheaply fixable with a pinned fact — and plausibly *worsened* by absolute
+  presentation, which puts more paths in front of a model already unsure how they
+  resolve.
+
+**4. The proven config is not broken by the path change — but do not read
+"unchanged" into it.** 2/2 of the completed nothink runs passed acceptance
+(13/13, `stop=eos` on every phase). However relative+nothink is recorded as
+passing 3–4× and this arm went 2/3, with one run lost. n=3 cannot distinguish a
+mild regression from ordinary variance; treat absolute+nothink as *supported*,
+not as replicated to the same standard.
+
+**5. New failure mode, and it is not about thinking at all.** The lost nothink
+run died of **context exhaustion driven by over-exploration**: phase 1 spent the
+entire 30-call budget (`read`×6 … `edit`×5 … `read`×6, mostly re-reads) for 8
+mutations, phase 2 reached `ctx_pos=23301` of 32768, and phase 3 failed with
+`orchestrator error (worker session unusable)`. This is Flash's documented
+over-exploration pattern appearing in Laguna, in the *nothink* arm — so it is a
+budget/context problem, not a reasoning problem, and neither `--think-budget`
+nor path presentation addresses it.
+
+**What this changes for the plan.** Both levers now have direct evidence and
+neither is sufficient alone: pin the command-semantics fact (run 2's mode), and
+bound thinking (run 3's mode). P12.3 did its job — it was supposed to establish
+whether `--think-budget` solves a real problem, and the answer is *yes, for part
+of the failure*. Finding 5 adds a third item that was not in the plan: the
+read-cache/bounding work that already exists for Flash needs to apply here, or
+phase 3 will keep dying of context regardless of the other two fixes.
