@@ -1958,3 +1958,63 @@ from the wrong module. These are recall errors of exactly the kind an import
 check would catch instantly — and the packet already carries a vetted
 `python -c 'import app'` command intended for that purpose, which neither run
 used before finishing.
+
+### C18. The import gate — unvalidated, and the aggregate rate is the real finding
+
+Same configuration as C15/C17 (absolute paths, cwd fact, `--think-budget 2048`,
+tool budget 30) with the mandatory import check wired in, n=3:
+
+| run | phases | outcome |
+|---|---|---|
+| 1 | 3/3 `eos` | **acceptance exit 0** |
+| 2 | phase 3 | `budgetExceeded (eos)` |
+| 3 | 3/3 `eos` | `acceptance exit 1` — **7 failed, 6 passed** |
+
+**1. The gate never fired. It is unvalidated.** Zero `import check failed`
+lines: no run produced a bad import this batch, so the check had nothing to
+catch. **Run 1's pass gives it no credit** — it shows the config can still
+succeed, not that the gate helped. The change is sound in principle and verified
+in isolation against C17's actual bug, but it has never been exercised by a live
+run and should not be described as a fix that worked.
+
+**2. The aggregate across three identical-config batches is the honest number.**
+
+| batch | acceptance | note |
+|---|---|---|
+| C15 | 2/2 | reported as the breakthrough |
+| C17 | 0/2 | both died on one bad import line |
+| C18 | 1/2 | this batch |
+| **total** | **3/6** | same config throughout |
+
+**Roughly a coin flip, with batch-to-batch swings from 0/2 to 2/2.** Any single
+batch quoted alone is misleading, in either direction — including C15's, which
+this document presented as "reason-then-act demonstrated." That claim survives
+(reasoning and completion *did* co-occur, verifiably, and that had never happened
+before), but the reliability implication does not. The mechanism findings —
+the budget verifiably firing, the cwd loop measurably gone — are unaffected;
+they were established at the mechanism level, not inferred from a pass rate.
+
+**3. Run 3 is a new severity of the "completes, and is wrong" mode.** Seven
+failures, not one: seed-complaint rendering, the POST redirect, the posted
+complaint appearing, and the add-complaint form. Imports were clean, all phases
+`eos`, every file written. This is not a one-line slip — it is a phase-2/3
+implementation that is substantially wrong while looking complete. An import
+check cannot reach it, and neither can a think budget.
+
+**4. Failure modes now stand at four, with three unaddressed.**
+
+| mode | status |
+|---|---|
+| packet ambiguity | fixed (C14), holding |
+| termination / never emits `</think>` | fixed (C15), holding |
+| over-exploration → `budgetExceeded` | **unfixed** — run 2, and 64 did not help (C16) |
+| completes-and-wrong | **unfixed** — run 3, and now at 7-failure severity |
+| bad import specifically | gated, **but the gate is unvalidated** |
+
+**What this says about where effort belongs.** Three batches of tuning the
+implement arm have moved the mechanism understanding a great deal and the pass
+rate not at all (3/6). The two live failure modes are exactly what a validated
+repair step consumes: a tree that completes but fails its suite, with a real
+pytest failure to react to. Repair remains unbuilt in-harness, and run 3 — seven
+concrete assertion failures against a complete tree — is a better repair input
+than anything the fixtures currently supply.
