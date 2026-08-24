@@ -854,8 +854,8 @@ became how to get reliability without amputating reasoning. The reasoning, in or
   is exactly the condition prior work found produces zero think events. **So every
   "revision works" result above is really "revision works with thinking off."** A batch
   testing this (Q2_K, hard spec, `AGENTTEST_THINK=1`, n=3, through the newly-wired
-  sandboxed harness) was launched as this section was written; **its result is not in this
-  document.**
+  sandboxed harness) was launched as this section was written. **It has since reported —
+  see C9, which closes this question.**
 - **Whether Laguna's think-loop and Mellum's byte-identical re-emission share a mechanism.**
   Both are "emits the same tokens again under new information," at different scopes.
   Unresolved, and A3 asks the same question from the Mellum side.
@@ -1023,3 +1023,546 @@ and all sit in A7's **Cluster 1**, already named the highest-value merge target:
 | `2026-08-23-p11-agenttest-mellum-verification-record.md` | Unaffected, and the most rigorous document of the set. Pairs with C1's Laguna result — see C6. |
 | `2026-08-24-mellum-specialist-pipeline.md` (ds4 worktree) | Its "host-controlled text mode" framing is **mechanically false** (C1); outcomes unaffected. Needs a footnote, not a retraction. |
 | `2026-08-24-laguna-revision-test-spec.md` | Its L1 rung is unreachable for import-class bugs (C2). Amend in place or cross-link. |
+
+### C9. The think-on batch result — the gate question, answered
+
+**Laguna Q2_K with thinking on does not act. 0/3.** Reproduced cleanly inside the
+sandboxed harness with wire telemetry, the first controlled observation of the pathology.
+
+| run | think events | tool calls | text | generated | ctx_used | capture |
+|---|---:|---:|---:|---:|---:|---|
+| 1 | 1,480 | 0 | 0 | 8,192 (cap) | 10,081 | `20260824-100526-…-run1` |
+| 2 | 1,827 | 0 | 0 | 8,192 (cap) | 10,081 | `20260824-100815-…-run2` |
+| 3 | 2,016 | 0 | 0 | 8,192 (cap) | 10,081 | `20260824-101146-…-run3` |
+
+All three hit the `-n 8192` cap in ~2–4 minutes with **zero output**, stopping at
+ctx 10,081 of 32,768 — so `-n` converted the old context-death failure into a bounded
+one. Every run stopped at phase 1 with `receipt noChanges (limit)`; phases 2 and 3
+never ran.
+
+**The failure is a transition failure, not a convergence failure — this corrects C1.**
+The think stream holds a *complete file set*: 27 fenced blocks in run 1, two full drafts.
+`base.html` is **byte-identical** between drafts (898 B both) while `models.py` differs by
+2 bytes, so content does converge. The pathology is visible verbatim in the tail:
+
+> *"OK, let me write all the files now. I'm confident in my plan. One last thing: I need
+> to make sure the `app.py` file doesn't have any syntax errors. Let me review it:"*
+
+It announces readiness to act, then defers to one more review, indefinitely. So the
+earlier "byte-identical redraft" framing and this are the same trajectory seen at
+different budgets — and **convergence detection alone is the wrong lever**: stopping
+yields nothing. The useful action is to *harvest what converged and write it*.
+
+**Harvest works, and is not yet mechanically reliable.** Extracting run 1's second draft
+and running the real acceptance suite gives **5/13 — exactly the phase-1 tests, all of
+them, with all 8 failures in phases 2–3.** The model did its assigned phase completely and
+correctly and never emitted a tool call. That is direct evidence for the harvest lever
+Section A proposed as its untested next step, pointed at Laguna instead of Mellum.
+
+**But the labeling convention is unstable, which is the blocking detail.** Harvest depends
+on pairing each fenced block with a filename. Run 1 emitted **12** `### \`path\`` headings;
+runs 2 and 3 emitted **zero**. Consequently a mechanical harvester recovers run 1 correctly
+but misassigns runs 2–3 (`app.py` receives `models.py`'s body in run 2; `models.py`
+receives HTML in run 3). **Mechanical harvest therefore needs the label format pinned as a
+packet directive** — the same "pin the contract" lever that already works, and cheap to
+add.
+
+`ThinkHarvest` ([`Sources/SwiftStarKit/ThinkHarvest.swift`](../../../Sources/SwiftStarKit/ThinkHarvest.swift),
+new, TDD, 6 tests) implements the rules that survived: closed fences only (an unterminated
+trailing block is the cap cutting mid-draft, and writing it would overwrite a good earlier
+draft), allowlist-bounded so harvest can never widen the packet's grant, and last-draft-wins.
+One bug in it was **found by running it against real captures**: `app.py` matches as a
+substring inside `tests/test_app.py` at a later index, so a plain substring search handed
+the test file's body to `app.py`. Fixed with a boundary check and pinned by a regression
+test named for the capture that found it.
+
+**Revised next step, replacing C5's item 2.** Not "convergence-based termination" but:
+(1) pin the block-label format in the packet, (2) harvest on a `noChanges` outcome and
+write the harvested files into the worktree so the phase chain continues, (3) rerun the
+batch and see whether the full 13/13 falls out of thinking that never became action.
+Phases 2–3 have never executed under thinking, so that remains genuinely unmeasured.
+
+### C10. Second Fable review of C9 — the mechanism, and three overclaims corrected
+
+Reviewed adversarially again before acting on C9's plan. This review changed the plan
+materially, not just the framing.
+
+**The mechanism: `--nothink` and `.bounded` are the same lever at different times, and
+Laguna Q2_K is stuck on the un-implemented one.** Traced in the engine source
+(`ds4.c:37471-37480`, `ds4_chat_append_assistant_prefix`): when thinking is enabled the
+engine pushes `think_start_id` as the assistant-turn prefix; when disabled it pushes
+`think_end_id` directly. **`--nothink` does not disable reasoning — it pre-emits `</think>`
+so the turn starts already in the act channel.** With thinking on, the model must itself
+emit the single token `</think>` to transition, and Laguna Q2_K never produces it under
+this prompt. `HandoffPacket.ThinkMode.bounded` already declares "reasons under a token
+ceiling" ([`HandoffPacket.swift:44-48`](../../../Sources/SwiftStarKit/HandoffPacket.swift))
+— nothing implements it. `packet.sampling` is consumed by no orchestrator code (write-only,
+confirmed by grep); `AgentCommand.argv` maps think to only `--nothink` or engine default;
+the engine itself has only NONE/HIGH/MAX (`ds4.h:26-28`), no ceiling. **The fix is a forced
+`</think>` injection at a token budget** — the standard thinking-budget technique, and a
+small patch to an engine this project already patches. It preserves thinking at all three
+pipeline points and produces *committed* tool calls rather than scraped drafts.
+
+**Control confirmed: think-then-act already works on this exact harness, for another
+model.** `captures/agenttest/20260824-071332-roadmap-user-story` (Flash, budget-30 run)
+carries **4,353 think events *and* 63 `tool_request`s** through the identical pooled
+`--host-tools` path and identical packet text. That isolates C9's failure to Laguna's
+inability to self-emit the transition token — not tools, not prompt, not wire.
+
+**Three corrections to C9:**
+
+1. **"Defers indefinitely" outran the evidence.** All three runs end mid-sentence at the
+   `-n 8192` cap. Supported: "defers past 8,192 tokens through two full draft-review
+   cycles." Not supported: indefinitely. One phase-1 run at a higher cap settles it — see
+   C11.
+2. **Harvest is a fallback, not a destination, and structurally cannot serve repair.** The
+   model never sees the pytest output it would need to react to inside a harvested draft,
+   so harvest cannot satisfy think-at-repair — a third of the actual requirement. 5/13 was
+   n=1, best-case, hand-extracted; mechanical harvest recovers only 1 of 3 runs (C9's own
+   finding). Harvested results must stay labeled as such: they measure drafting quality,
+   not agency.
+3. **`ThinkHarvest` has two more bugs of the class already fixed, found by independent
+   reimplementation against the real captures, not by unit tests:**
+   - `isWholePath` ([`ThinkHarvest.swift:74`](../../../Sources/SwiftStarKit/ThinkHarvest.swift))
+     checks only the *preceding* character. `models.py` matches inside `models.pyc`;
+     `app.py` inside `app.py.bak` — the mirror image of the `test_app.py` bug already fixed.
+   - The fence regex `[a-zA-Z]*` rejects digit-bearing language tags (`jinja2`, `html5`);
+     an unmatched opener flips fence parity and turns prose into a "file body." Not
+     triggered in these three runs, but the label format is exactly what is not yet pinned.
+   - **It is last-*block*-wins, not last-*draft*-wins**, and this already bit: reimplementing
+     the exact rules against the real captures reproduces both C9 misassignments precisely,
+     and shows why — the re-review tail is dominated by *snippet* fences (a single import, a
+     single test function) that carry a granted filename in their preceding window. In run 1
+     a 30-byte `from models import complaints` block gets assigned to `app.py`; only a later
+     full second draft rescues it. Since compulsive re-review is this model's own pathology,
+     tail snippets will systematically overwrite good drafts as harvest scales. Fix once
+     labels are pinned: match **only** explicitly-labeled blocks, fail closed (unlabeled →
+     no file, never the wrong file), and validate the harvested tree with the packet's own
+     vetted commands before treating it as a result.
+
+**One comment in the codebase is now known false.** [`main.swift:105`](../../../Sources/swiftstar-agenttest/main.swift)
+claims the packet's sampling makes captures self-describing; the packet is never written
+to `captureDir`. Working from artifacts alone, distinguishing the Laguna batch from the
+same-morning Flash runs required opening `wire.ndjson` and reading memory-plan lines.
+Ten-line fix (write `packet.json` into the capture dir); not yet done.
+
+**Revised order, replacing C9's "revised next step":**
+
+1. One phase-1 run at a higher token cap — zero code beyond an env var, settles the
+   "indefinitely" question. **Run as this section was written; see C11.**
+2. Implement `.bounded` as forced `</think>` injection in the engine.
+3. Keep harvest as the `noChanges` fallback only, with label-only matching and a
+   vetted-command validation gate — not the primary lever.
+4. Make captures self-describing.
+
+Phases 2–3 under thinking remain unmeasured under any of the above; the forced-transition
+path is the one that reaches them without laundering a result through harvest.
+
+### C10.5 — resolved: `<think>` reopens after `</think>`, unrestricted, confirmed in source and on the wire
+
+The open question C11 left unresolved is answered.
+
+**Structurally: nothing gates it.** Searched the full engine for any logit ban, grammar
+constraint, or sampling restriction tied to `think_start_id`. There is none —
+`ds4_chat_append_assistant_prefix` ([`ds4.c:37471`](../../../external/ds4/ds4.c)) decides
+only the turn's *opening* token; nothing afterward stops the model sampling `<think>`
+again. The `in_think` flag that does exist ([`ds4_agent.c:4558-4570`](../../../external/ds4/ds4_agent.c))
+is purely reactive — it toggles rendering/parsing based on tags the model already emitted,
+not a constraint on what it can emit next.
+
+**Empirically: it happened, in the `-n 20000` run, unforced.** At wire line 1588 two tool
+calls finished and their results were fed back. The model's very next generated bytes
+([`captures/agenttest/20260824-110645-roadmap-user-story/wire.ndjson:1589-1593`](../../../captures/agenttest/20260824-110645-roadmap-user-story/wire.ndjson))
+are classified `think` by the renderer's literal `bytes_has_prefix(cur, rem, think_open)`
+check — the model re-emitted the actual `<think>` tag, immediately, unprompted, right
+after seeing real tool output. It didn't drift back gradually; it walked straight back in.
+
+**Scope of the fix: a standing per-turn ban, not a one-time prefix decision.**
+
+- **Location, confirmed by reading the loop.** `worker_run_turn`
+  ([`ds4_agent.c:13108`](../../../external/ds4/ds4_agent.c)) contains *both* the tool-call
+  round-trip (`for (int tool_round = 0; ; tool_round++)`, ~line 13163) and the per-token
+  sampling loop (`while (generated < max_tokens...)`, ~line 13296) in the same C function,
+  same stack frame — the code's own comment documents this design ("after a DSML stanza
+  completes we terminate that assistant message, append the tool result as a tool message,
+  then ask the model to continue"). **A ban flag can therefore be an ordinary function-local
+  variable**, declared once above the `tool_round` loop: it survives every tool round-trip
+  within a turn for free, and resets naturally on the next call (next turn). No promotion
+  to the `agent_worker` struct is needed — the earlier hedge that this might require
+  cross-call persistence was wrong; the loop structure rules it out.
+- **The mechanism.** `ds4_session_sample` ([`ds4.c:63262`](../../../external/ds4/ds4.c))
+  reads logits straight from `s->logits`, which the caller already has direct access to.
+  Immediately after each `int token = ds4_session_sample(...)` call in the sampling loop,
+  add `if (token == vocab->think_end_id) think_closed = true;` (symmetric with the existing
+  `ds4_token_is_stop` check one line below it). Immediately *before* each sampling call,
+  when `think_closed` is true, set `w->session->logits[vocab->think_start_id] = -INFINITY`.
+  There are two sampling call sites inside `worker_run_turn`'s scope pattern (the plain path
+  and the speculative-argmax path); both need the mask, or the wrapper `worker_sample_with_mode`
+  ([`ds4_agent.c:13020`](../../../external/ds4/ds4_agent.c)) — which already demonstrates the
+  precedent of conditionally altering sampling behavior from loop state, for the DSML
+  greedy-sampling case — is the natural place to centralize it.
+- **Composing with `.bounded` / forced injection.** `HandoffPacket.ThinkMode.bounded`
+  ([`HandoffPacket.swift:44-48`](../../../Sources/SwiftStarKit/HandoffPacket.swift)) needs
+  forced `</think>` injection at a token budget (C10's original proposal) *and* this standing
+  ban firing at the same moment the injection fires — otherwise forced injection reproduces
+  exactly the `-n 20000` run's outcome (act briefly, walk back in, cap with nothing written).
+  The two are one change, not two: whatever sets `think_closed = true` — the model's own
+  `think_end_id` token, or a host-forced injection at the budget boundary — is the single
+  event the mask keys on.
+- **Config plumbing needed.** `effective_think_mode` ([`ds4_agent.c:1022`](../../../external/ds4/ds4_agent.c))
+  and `ds4_think_mode` ([`ds4.h:26-28`](../../../external/ds4/ds4.h), currently
+  `NONE`/`HIGH`/`MAX`) have no ceiling concept. A `.bounded` mode needs a token-count field
+  carried from `HandoffPacket.sampling.maxTokens` through `AgentSettings` → `AgentCommand.argv`
+  → `agent_config` → `worker_run_turn`'s budget check, alongside the existing `max_tokens`
+  the loop already tracks (so the boundary trigger is "budget reached," not a second
+  independent counter).
+- **One thing not yet checked:** whether `<think>` is tokenized as a single vocab id in
+  every code path that matters, or whether the model could in principle spell the tag out
+  via separate BPE pieces (`<`, `think`, `>`) that bypass a single-token logit mask. The
+  `vocab_lookup(vocab, "<think>")` calls throughout `ds4.c` (37035, 37063, 37084) treat it
+  as one id, which is the normal case for a special/control token, but this should be
+  confirmed against Laguna's actual tokenizer before relying on the mask being unconditionally
+  effective.
+- **Verification plan.** Rerun the `-n 20000`-shape batch with the ban active. Success is
+  either a completed write within budget, or a `budgetExceeded` that traces to genuine tool
+  exploration (Flash's documented over-exploration pattern, already observed once Laguna
+  acts at all) — not to renewed thinking. Both are progress; the second still needs the tool
+  budget tuned per C1's Flash precedent, not a new failure to diagnose.
+
+### C10.6 — second review corrects the reopening mechanism; C10.5's fix design is superseded
+
+**Directionally right that bounded thinking is the next lever. Wrong about the mechanism,
+and the "standing sampled-token ban" in C10.5 cannot work as designed.** Independently
+verified against source below — every point held up.
+
+**The reopening is host-forced, not model-sampled — this overturns C10.5's "empirical
+proof."** `ds4_chat_append_assistant_prefix` is called unconditionally at the top of
+*every* `tool_round` iteration ([`ds4_agent.c:13184-13185`](../../../external/ds4/ds4_agent.c)),
+same function and same `think_mode` as true turn start. The renderer struct is rebuilt
+fresh each round with `.in_think = ds4_think_mode_enabled(think_mode)`
+([13252-13260](../../../external/ds4/ds4_agent.c)) — seeded `true` *before the model
+generates anything*. So the `think` event C10.5 read as the model "walking back in" after
+tool results is the **host re-inserting a `<think>` prefix into the prompt at the start of
+every round**, prefilled ahead of sampling. It never passes through `ds4_session_sample`.
+**A sampled-token logit mask — C10.5's entire proposed mechanism — cannot prevent a token
+injected during prompt construction.** The fix has to change the prefix policy itself, not
+the sampler.
+
+**The budget is per-round, not per-turn — this corrects C11 too.** `int generated = 0;`
+and `int max_tokens = cfg->gen.n_predict;` are both declared *inside* the `tool_round` loop
+body ([`ds4_agent.c:~13239-13270`](../../../external/ds4/ds4_agent.c)), reset every round.
+So `AGENTTEST_MAX_TOKENS=20000` was never a turn-total budget: round 0 spent ~2,037 tokens
+(thinking + brief exploration, ending naturally at the tool calls) and completed; round 1
+then received its *own fresh* 20,000-token allowance and spent all of it on forced-then-
+unescaped thinking. C11's "hit the 20,000 token cap" should read as **round 1 alone burning
+a full independent 20,000-token budget**, not a turn-wide total — true tokens generated
+across the run were closer to 22,000.
+
+**A second bypass, lower priority but real.** `speculative_argmax` mode
+(`ds4_session_eval_speculative_argmax` → `ds4_session_eval_dflash_speculative_argmax` for
+Laguna, [`ds4.c:68910`](../../../external/ds4/ds4.c)) can emit multiple draft tokens in one
+batch, outside the single-token `ds4_session_sample` call a mask would gate. Any fix must
+also cover this path or disable speculative decoding once a forced-closed state is active.
+
+**Corrected design.** Each `tool_round` legitimately *may* still open with `<think>` — that
+preserves reasoning over freshly-returned tool output, which is exactly what the repair role
+needs and what C1's Flash control shows already works (4,353 think events across many
+rounds, alongside 63 real `tool_request`s). The fix is not to forbid the reopen; it is to
+give thinking its **own smaller ceiling, separate from the round's total generation budget**:
+
+1. Track tokens generated while `in_think` is true, *within the current round*, against a
+   ceiling smaller than `max_tokens` (the round's existing total cap, kept as-is for action).
+2. When that smaller ceiling is hit, **force `</think>` mid-stream** — override the next
+   sampled token with `think_end_id` directly rather than letting the model choose it. This
+   is a different mechanism than prefix injection: it happens inside the per-token loop, at
+   the point the ceiling triggers, not at round start.
+3. **C10.5's standing ban is still correct, but only for this narrower scope**: after a
+   mid-round forced closure, mask `think_start_id` in `ds4_session_sample` for the
+   *remainder of that round* — this is the one place a sampled-token ban is architecturally
+   valid, since resampling `<think>` after a mid-round forced close genuinely would go
+   through the sampler. It does not apply across rounds, where the reopen is legitimate and
+   prefix-governed, not sampler-governed.
+4. Cover the speculative-decoding path — either extend the ceiling check to run per
+   accepted draft token, or force `speculative_argmax` off once a round's thinking has been
+   force-closed.
+
+No files changed for this correction (review-only). C10.5's `worker_run_turn`
+loop-structure finding (tool rounds and token sampling share one stack frame, so per-round
+state can be an ordinary local variable) still holds and is reused here — only the trigger
+condition and the injection mechanism change.
+
+**Light-reviewed (Fable) — sound, no blockers, one real gap folded in.**
+
+- **Step 2 is not new mechanism, it's reuse.** The edit-old auto-`[upto]` forcer
+  ([`ds4_agent.c:13318-13328`](../../../external/ds4/ds4_agent.c)) already samples a token,
+  discards it, and substitutes forced text via `worker_force_generated_text` →
+  `worker_accept_generated_token` ([12944](../../../external/ds4/ds4_agent.c)) — transcript,
+  renderer, and KV eval all handled consistently. `ds4_session_sample` is pure (no side
+  effects beyond the RNG), so discard-and-substitute is safe. The forced `</think>` should
+  be a single `worker_accept_generated_token(w, think_end_id, ...)` call through this
+  existing path, not new machinery.
+- **Real gap: speculative decoding must be covered for the *counting*, not just the
+  post-close mask.** `can_speculate` checks only `!stream.dsml_active` — no `in_think`
+  condition — so in a greedy run most think tokens arrive in batches of up to 17
+  ([`ds4_agent.c:13337-13380`](../../../external/ds4/ds4_agent.c)), and a ceiling check that
+  only runs once per loop iteration would badly undercount. The per-draft `toks[]` scan
+  already exists for stop-token detection; the think-ceiling check needs to run in the same
+  place, not just gate speculation after force-close (step 4 as written only covered the
+  after case).
+- **Confirmed, not assumed:** think tokens are not stop tokens when thinking is enabled
+  (`ds4_token_is_stop_for_think_mode`, [`ds4.c:37660`](../../../external/ds4/ds4.c)) — a
+  sampled `<think>` genuinely flows through, so step 3's sampler-side ban is doing real
+  work, not redundant with an existing stop check.
+- **Flagged, correctly, as unverified rather than assumed:** forcing `</think>` does not
+  force *action* — the model resumes from an abruptly truncated thought and could still
+  ramble or hit EOS. Plausible given Flash's control run, but a thing to measure once built,
+  not to assume.
+- **Two minor implementation wrinkles:** `ds4_session_sample` has no mask parameter and
+  `ds4_session` is opaque to `ds4_agent.c` — the ban needs either the existing
+  `ds4_session_copy_logits`/`set_logits` pair (works, an extra vocab-sized copy per token) or
+  a small new `ds4_session_ban_token` helper. And per-draft-token checking clearly beats
+  disabling speculation on force-close: the latter sacrifices decode throughput exactly in
+  the post-close action phase the fix exists to reach, and still doesn't solve the counting
+  gap above — "a half-measure twice over."
+
+### C11. The `-n 20000` run — "indefinitely" is wrong, but so is "just needs a bigger budget"
+
+`AGENTTEST_MAX_TOKENS` added as a harness env var (`main.swift`, following the
+`AGENTTEST_TOOL_BUDGET`/`AGENTTEST_THINK` convention) since `maxTokens` was hardcoded to
+8192 in two places. One phase-1-only run, Laguna Q2_K, hard spec, `AGENTTEST_THINK=1`,
+`AGENTTEST_MAX_TOKENS=20000`. Capture:
+`captures/agenttest/20260824-110645-roadmap-user-story`.
+
+**Result: `receipt noChanges`, generated exactly 20,000 (cap), ctx 27,888/32,768. Still no
+files written.** But the wire is not a repeat of the three `-n 8192` runs — it is a
+different and more informative shape.
+
+**The model crossed `</think>` on its own, mid-run, with no forced injection.** At wire
+line 949 (of 9,520) it emitted `text` announcing a plan ("I'll start by checking the
+workspace structure... then write all files in one pass"), then four real `tool_request`
+calls: `list /`, `list .`, `search` for `pyproject.toml`, `search` for `uv.lock`. This
+falsifies C9/C10's "defers indefinitely, needs forced transition to ever act" as stated —
+the model **can** self-emit the transition token.
+
+**Then it reverted to thinking and never acted again.** Every event after wire line 1591
+is a `think` event — all the way to the token cap. Of the run's 6,146 total think events,
+the large majority came *after* the four tool calls, not before. So the shape is not
+"stuck in thinking, then acts once given room" — it is **thinking → brief, shallow action
+(exploration only, no writes) → thinking again → cap**. A bigger budget did not convert
+deliberation into completed work; it bought one more round-trip through the same loop.
+
+**This complicates C10's recommended fix.** Forced `</think>` injection at a token budget
+would reliably produce the *first* transition — but this run shows the model can already
+produce that transition unforced, and the harder problem is that it **retreats back into
+`<think>`** after acting rather than continuing to completion. Whether the engine allows
+`<think>` to reopen after a forced `</think>` in the same turn is unknown and matters: if
+forcing the exit token once is not sticky, forced injection alone reproduces this run's
+outcome, not a fix for it. **Open question for whoever picks this up: does one forced
+`</think>` injection, or does it need to gate against re-entering `<think>` for the rest of
+the turn?**
+
+**Also unresolved: the four tool calls were exploration, not the writes the packet
+requested.** This is Flash's documented over-exploration pattern (35 tool calls at budget
+30 on the hard spec), now observed in Laguna too, once it does act — a second failure mode
+sitting behind the transition failure, not a competing explanation for it.
+
+### C12. `--think-budget` implemented in `ds4_agent.c`
+
+The C10.6 design (light-reviewed, no blockers) is now real code, in the `external/ds4`
+submodule (uncommitted, detached HEAD at `8784fe6`). Four files:
+
+- **`ds4.h`/`ds4.c`**: two token accessors mirroring the existing `ds4_token_eos` pattern
+  (`ds4_token_think_start`, `ds4_token_think_end`), and `ds4_session_ban_token(s, token)` —
+  masks one token's logit to `DS4_NEG_INF`, same idiom as the existing (previously unused)
+  `ds4_session_argmax_excluding`. Both additions are ~5 lines each, no changes to existing
+  functions.
+- **`ds4_agent.c`**: a new `--think-budget N` flag (0 = disabled, the default — matches
+  existing behavior exactly when unset) threaded into `agent_generation_options`. Inside
+  `worker_run_turn`'s per-round scope: three new locals
+  (`think_tokens_this_round`/`think_forced_closed_this_round`/`round_in_think`, reset every
+  `tool_round` — confirmed safe as ordinary locals per C10.5's loop-structure finding). A
+  check at the top of the per-token `while` loop forces `</think>` via
+  `worker_accept_generated_token(w, ds4_token_think_end(...), ...)` once the budget is hit —
+  reusing the exact discard/accept path Fable identified in the edit-`[upto]` forcer, not new
+  machinery. After a forced close, `ds4_session_ban_token` masks `think_start_id` before
+  every subsequent sample this round, and `can_speculate` is additionally gated on
+  `!think_forced_closed_this_round` so the ban can't be bypassed by a speculative batch
+  (the accepted throughput tradeoff C10.6/Fable both flagged — post-close generation loses
+  speculative decode for the rest of that round). Pre-close, the speculative batch's
+  `toks[i]` loop is scanned for counting and start/end toggling (Fable's finding 2), so the
+  ceiling isn't undercounted when most think-tokens arrive via speculation — overshoot is
+  bounded to at most one batch (~16 tokens), matching what C10.6's review called acceptable.
+- **`ds4_help.c`**: one-line help entry.
+
+**Verified, not just written:**
+
+- `make ds4_agent_test` (pure-logic unit suite, no GPU/model needed) — clean compile, all
+  existing tests pass unchanged.
+- `make ds4-agent` (the real binary swiftstar links against) — clean compile, zero warnings
+  on any changed file.
+- `./ds4-agent --help sampling` lists `--think-budget N` with the intended text.
+- `make ds4_test` — completed, `ds4 tests: ok` (metal-tensor-equivalence, decode/prefill
+  correctness, and the full suite all green; MTP/DSpark/SSD-streaming stages skipped, gated
+  on env vars this run didn't set, not failures). B2's prior note that this binary aborts on
+  a missing `ds4flash.gguf` was from a different environment/worktree; this one had what it
+  needed, so that finding does not apply here — correcting the record rather than repeating
+  a stale caveat.
+
+**Not done — explicitly out of scope for this step, and the natural next one.** The flag is
+implemented and default-off, but nothing calls it yet: `AgentSettings`/`AgentCommand.swift`
+have no `thinkBudget` field, so the Swift harness cannot pass `--think-budget`, and
+`HandoffPacket.sampling.maxTokens` still cannot reach the engine (the gap C10.5 already
+named as "config plumbing needed"). **The mechanism has not been validated against the
+actual Laguna pathology** (the `-n 20000` run's think→brief-explore→think-again→cap shape)
+— that requires the Swift wiring plus a live rerun, which needs its own turn given the size
+of what's already landed here.
+
+---
+
+## Section D — The merge pass: retire, consolidate, slot into the roadmap
+
+**This is the pass Sections A/B/C were staged for.** A, B, and C are session
+records — three parallel investigations that overlap, contradict each other in
+places, and each carry their own live-looking direction list. Read as a set they
+imply far more open work than actually exists. This section retires what is
+dead, names the one document that becomes the source of truth, and sequences
+what survives into roadmap actions.
+
+**Rule applied throughout:** a direction is *retired* when its question is
+answered (whatever the answer), *merged* when it survives only as part of a
+larger settled finding, and *carried* when it is genuine open work. Retired does
+not mean deleted — the evidence stays, the direction stops being live.
+
+### D1. The single source of truth
+
+**One new document replaces the live-findings role of eleven.**
+
+`docs/superpowers/research/2026-08-24-local-model-agency.md` — *to be written as
+the first roadmap action*, containing only what is settled and load-bearing:
+
+1. **What each model can and cannot do**, as measured: Laguna's implement/repair
+   competence and its thinking-transition failure; Mellum's zero tool-initiation
+   and absent belief revision; Flash's terminate-and-act with over-exploration.
+2. **The deployable configuration** — Q2_K, 49.59 GiB, nothink for
+   implement/repair, native fit inside 55 GiB with no SSD dependency.
+3. **The architecture doctrine** — host owns phase boundaries, budgets,
+   permissions, validation, recovery; model supplies judgment and code.
+   Deliberation happens once at decompose and is crystallized into packet facts,
+   so implementers execute rather than re-derive.
+4. **The measurement rules** that make any future number trustworthy (D3 below).
+
+Everything else in Clusters 1–3 of A7 keeps its evidence value and stops being a
+place to look for current truth. Each gets a one-line banner pointing here:
+`> Superseded as a live finding by 2026-08-24-local-model-agency.md. Retained as
+the evidence record for <what it uniquely holds>.`
+
+**This consolidation document itself is retired on the same day it is merged.**
+It is a staging area, not a reference; leaving it live recreates the problem it
+exists to solve.
+
+### D2. Retirement ledger
+
+**Retired — question answered, stop working on it**
+
+| direction | resolution |
+|---|---|
+| Quantization as the lever for Laguna agency | Same failure signature at Q2_K and Q4_K_M; only the odds move. ~70% established, and further quant hunting is poor value *now* — a matched Q4 control comes back only after steering is tested (C10.6/other-agent point 7). |
+| Footprint / weight-size reduction (Section B's whole track) | Closed. Down stays Q8_0 (Q5_0 NaNs, MXFP4 ~5.5× KLD); no K-quant can reach a 896-wide contiguous dimension. Real memory ~10.3 GiB at 40k. |
+| "Mellum passed the easy spec" / decomposer flips hard→pass | Both false; A2 records why. |
+| Convergence-based termination | Superseded before implementation — the model converges; termination was never the problem (C9). |
+| `--raw-prompt` as a text-only mechanism | Structurally cannot deliver controlled thinking; never consults `think_mode` (C1). |
+| Harvest-from-thinking as a primary lever | Demoted to `noChanges` fallback: cannot serve repair (model never sees the failure it must react to), and mechanical labeling is unreliable (C9). |
+| "Host-controlled text mode" as an engine capability | It never existed; `-p` always injects tool schemas. The *principle* (host owns verification) survives and moves into the doctrine above. |
+| SSD streaming as a Laguna-agency dependency | Q2_K fits natively. S21/XS21 port remains valuable for other models/contexts but is off this critical path. |
+
+**Merged — survives only inside the source-of-truth document**
+
+- Laguna revision capability (C1), the thinking-transition mechanism (C10.6),
+  the Q2_K footprint numbers, Mellum's two hard limits, Flash's failure mode,
+  and the `--nothink`-is-forced-transition insight. None of these needs its own
+  live document.
+
+**Carried — genuine open work, sequenced in D4**
+
+- The three-role pipeline (decompose → implement → repair) with typed packets.
+- Laguna decompose: never tested. The one untested link in an otherwise proven chain.
+- `--think-budget`: built, unwired, never validated live.
+- The `ds4.c:36895` admission contract — release-blocking silent-corruption bug,
+  independent of everything else here.
+- Q4_K expert-major prefill (0.21× penalty) — the only engine item a user feels.
+- The subagent-pool cross-worker coalescing bug (already spun off).
+
+### D3. Cross-cutting fixes that gate trust in any future measurement
+
+These are cheap, and until they land every new number inherits the same doubts
+this consolidation had to spend effort resolving.
+
+1. **Stop citing grader verdicts.** The project's own record shows "good"
+   returned for 7/13 code. Acceptance exit codes only.
+2. **Persist acceptance evidence in the capture dir** (pytest exit + tail) — it
+   is currently recoverable only because `code.md` happens to be dumped.
+3. **Make captures self-describing** — write `packet.json` + run config into
+   `captureDir`. A capture currently cannot tell you which model produced it.
+4. **Pin the grading environment** into the repo. A dependency bump already
+   flipped one 13/13 to 10/13.
+5. **Tag every results table with a spec version.** "Hard spec" names at least
+   three different documents across this corpus.
+
+### D4. Roadmap slotting
+
+Sequenced so each step's failure is cheap and informative.
+
+**R1 — Land and consolidate (no model runs).** Commit both trees. Write the
+source-of-truth document; banner the superseded ones; retire this document.
+Apply D3's five measurement fixes. *Nothing below is trustworthy without R1.*
+
+**R2 — Wire the packet contract into the real pipeline.** `thinkBudget` through
+`AgentSettings`/`AgentCommand`; `HandoffPacket.sampling` actually driving worker
+argv instead of being write-only. Small, mechanical, unblocks R3–R5.
+
+**R3 — The proven pipeline, end to end.** Hand-authored packets → nothink
+implement → nothink repair on pytest failure. Every component here is already
+replicated; this is assembly and should mostly work. Success criterion: writes
+and 13/13, not tool calls.
+
+**R4 — Laguna decompose.** The untested link. Model-authored packet → schema
+validation (microseconds, fails closed) → R3's proven chain. Failure is cheap
+and diagnosable. If Laguna decomposes badly, branch: Mellum did this once, or
+use a larger model for decompose only.
+
+**R5 — Bounded thinking, where evidence demands it.** Validate `--think-budget`
+live against the hard spec. Only now, and only for the roles R3/R4 show actually
+need reasoning. Expect it to expose the *next* failure (shallow exploration, no
+writes) rather than cure everything — the 20k run already showed transition
+without productive action.
+
+**R6 — Engine debt, independent of the above.** The admission contract
+(release-blocking), then Q4_K prefill.
+
+### D5. Mellum — explicitly parked, with re-entry criteria
+
+**Parked, not abandoned.** Mellum has two measured hard limits — zero tool
+initiation across both specs, and no in-context belief revision under
+contradicting evidence (byte-identical re-emission shown its own error). Neither
+is a tuning problem, and generic retry cannot fix fabricated validation.
+
+**What stays live for Mellum regardless:** landing
+`swiftstar-integration-mellum` (`cde6438`) and bumping the submodule pin — that
+is the only step between here and Mellum being *loadable*, and it is worth doing
+independent of whether Mellum is ever an agent.
+
+**Re-entry criteria — return to Mellum investigation when any of these holds:**
+
+1. The R3–R5 pipeline works with Laguna, and there is a *narrow, validated*
+   packet role to test Mellum in — its failures are agency failures, not
+   competence failures, so a sufficiently scoped role may be within reach.
+2. The all-Mellum host-controlled build step is worth one run (Section A's own
+   untested next step): Mellum's easy-spec failure was producing a complete,
+   correct five-file solution as prose and never writing it. Cheap, and directly
+   implied by the mode finding.
+3. P12 needs a second variant for reasons other than agency (a "focused tasks"
+   model rather than an autonomous coding agent — the framing A5 already
+   recommends).
+
+**Explicitly not a reason to return:** more quantization work on Mellum. That
+track is closed by A2/B2.
