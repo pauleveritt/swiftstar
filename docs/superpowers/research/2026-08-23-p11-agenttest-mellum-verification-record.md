@@ -180,3 +180,113 @@ candidate to grade on Mellum today.
 - The ds4 submodule pin and the SwiftStar app itself were not touched — this
   was an eval-only run against an external worktree engine build.
 - GPU lock confirmed released: no `ds4-agent` process running after the run.
+
+## Follow-up (same day): `DS4_AGENT_TOOL_NUDGE=2` under `--host-tools`, n=1 easy spec
+
+**Question:** does the one documented mitigation for Mellum's "narrates instead
+of calling tools" failure — the engine's bounded corrective nudge,
+`DS4_AGENT_TOOL_NUDGE` (`ds4_agent.c:494-507`, consumed in `worker_run_turn`
+at ~14142/~14460) — actually reach and affect a turn run through
+`PoolOrchestrator`'s `--host-tools` path? MELLUM.md's own prior measurement
+(`DS4_AGENT_TOOL_NUDGE=2` turning 0 tool calls into 8, 2/4 files) predates
+host-tools and was taken on the standalone engine path, so it does not by
+itself establish this.
+
+### Step 1 — accounting check: does the nudge gate look at the right signal under `--host-tools`?
+
+Read `ds4_agent.c` closely around the gate (`worker_run_turn`, ~14260-14487)
+and around `agent_execute_tool_calls` (~13409-13460, the `--host-tools`
+bidirectional-wire dispatcher). Finding, concretely:
+
+- The nudge fires on `bool got_tool`, which is set **only** by the DSML/tagged
+  tool-call parser reaching `AGENT_DSML_DONE` with `calls.len > 0`
+  (`ds4_agent.c:14392-14393`, confirmed again at `:14414-14415`) — i.e. purely
+  from whether the model's own token stream contains a syntactically parseable
+  tool-call, decided token-by-token in the same per-round generation loop for
+  both host-tools and non-host-tools runs.
+- `agent_execute_tool_calls` — the function containing the `--host-tools`
+  bidirectional wire (`w->cfg->host_tools` branch at `:13412`, emit
+  `tool_request` / block on stdin `tool_result`) — is only ever called
+  **after** `got_tool` is already true (call site `:14538`, inside the `else`
+  branch that is unreachable when `nudge_now`/`malformed_tool`/`early_tool_error`
+  are set). So host-tools execution verdicts (ok:true/false, refusals) happen
+  strictly downstream of the nudge decision and never feed back into it.
+- Conclusion: for Mellum's specific failure mode — the model emits **zero**
+  tool-call syntax at all, only narration — `got_tool` is false regardless of
+  `--host-tools`, so the nudge gate's signal is unaffected by host-tools mode
+  and does **not** silently no-op for this case. (A different scenario — model
+  emits a syntactically valid call that the host then refuses via `ok:false`
+  — would already have `got_tool=true` and never reach the nudge gate at all;
+  that's a separate, unrelated code path and not what Mellum is doing here.)
+- Environment plumbing confirmed separately: `PoolOrchestrator.swift:29,38,46`
+  copies the full parent `ProcessInfo.processInfo.environment` into the
+  `ds4-agent` child process (only adding `DS4_METAL_*_SOURCE` vars on top), and
+  `AgentCommand.swift:57-62` always passes `--json-events --host-tools`. So
+  `DS4_AGENT_TOOL_NUDGE` set on the harness invocation reaches the engine
+  subprocess unmodified.
+
+**Verdict: the accounting is correct.** The nudge is engine-generation-side
+and syntax-only; it is not blind under `--host-tools` for the "zero tool
+calls" pattern this task is chasing. This is a genuine test of the mitigation,
+not a no-op.
+
+### Step 2 — n=1 easy spec (`roadmap.md`) with `DS4_AGENT_TOOL_NUDGE=2`
+
+```bash
+DS4_AGENT_TOOL_NUDGE=2 SWIFTSTAR_MODEL=~/models/mellum-thinking-TARGET.gguf \
+DS4_DIR=~/projects/ds4/.claude/worktrees/swiftstar-integration-mellum \
+  swift run swiftstar-agenttest --spec roadmap
+```
+
+Capture: `captures/agenttest/20260823-221314-roadmap/wire.ndjson`. Result:
+**phase 1 again stopped with a `noChanges` receipt** — same outcome as the
+un-nudged baseline above. But the wire trace shows the nudge mechanism
+*did* engage, exactly as configured:
+
+- **3 generation rounds** for the worker, not 1: round 1 prefills the full
+  packet (`prefill_total=1066`, generates to ~1055 tokens, no tool call);
+  round 2 begins with a small incremental prefill (`prefill_total=49` — the
+  injected "Continue the original request..." correction appended on top of
+  the existing KV cache, generates to ~1095 tokens, no tool call); round 3
+  begins with another `prefill_total=49` (second nudge, generates to 1105
+  tokens, no tool call, ends `stop_reason: eos`). Two nudge rounds = exactly
+  `nudge_max=2` as set — the mechanism consumed its full budget before the
+  turn ended, matching the `nudges_used < nudge_max` → exhausted →
+  `AGENT_TURN_STOP_EOS` path in the source.
+- **Zero `tool`/`tool_request` events across the entire capture**
+  (`grep -c '"t":"tool' wire.ndjson` → 0, all 3 rounds included).
+- **What the model actually did with each nudge**: reconstructing the text
+  per round shows round 2 opens with "I need to continue the original
+  request. The user wants me to create the home page for AgentClinic. I've
+  already created the files `app.py`, `templates/base.html`, and
+  `templates/home.html`. Now I need to create `templates/complaints.html` and
+  `tests/test_app.py`..." and then resumes writing fenced code blocks as chat
+  text — never a tool call. Round 3's opening ~400 characters are
+  near-byte-identical to round 2's (same files, same narration, same
+  ordering) — the model treated the nudge as a cue to keep narrating from
+  where it left off, not as an instruction to switch to tool-call syntax.
+  Total generation across the turn grew from baseline's 1359 tokens (1 round,
+  no nudge) to ~3256 tokens across 3 rounds here, and `ctx_used` grew from
+  3234 to 5247 — the nudge cost real context budget and wall clock for no
+  behavioral change.
+
+### Step 3 — hard spec: not run
+
+Per the task's own gating (`if tool calls still don't appear: don't try
+further engine-side knobs, stop, report`), the hard spec was **not** run,
+since step 2 already shows zero tool calls under the nudge on the easy spec.
+
+### Net finding
+
+This is a genuine **"the fix doesn't help"** result, not a "the fix didn't
+get a fair test" result. The nudge mechanism is correctly wired for
+`--host-tools`/pool-path turns (step 1), the environment variable correctly
+reaches the engine subprocess, and it visibly fired exactly twice as
+configured (step 2) — but Mellum's response to the corrective message was to
+keep re-narrating a plausible-looking answer as chat text rather than switch
+to tool-call syntax, in both nudge rounds. The one documented mitigation for
+this failure mode does not fix it under the harness's actual `--host-tools`
+pool path. No further engine-side knobs were tried, per the task's stop
+condition. GPU lock confirmed released after this run (`ps aux` shows no
+`ds4-agent` process); no files outside `captures/agenttest/` and this record
+were modified.
