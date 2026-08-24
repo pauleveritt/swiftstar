@@ -11,6 +11,10 @@ public struct AgentSettings: Equatable, Sendable {
     /// The shell toggle (D1/D2): false = `--shell off` (bash removed from
     /// schema and refused in dispatch). The app's default posture is deny.
     public var shellAllowed: Bool
+    /// Per-round generation cap (`-n`): bounds a single assistant round's
+    /// tokens (thinking + text). 0 = engine default. The agent test sets this
+    /// to bound a think-loop that otherwise fills the whole context.
+    public var maxTokens: Int
     /// The system prompt (D1): passed inline as `-sys <text>` after `--shell`.
     /// nil omits the flag. The app passes the Superpowers bootstrap (P8).
     public var systemPrompt: String?
@@ -21,6 +25,7 @@ public struct AgentSettings: Equatable, Sendable {
         contextSize: Int = 32768,
         workspace: URL,
         shellAllowed: Bool = false,
+        maxTokens: Int = 0,
         systemPrompt: String? = nil
     ) {
         self.engineDir = engineDir
@@ -28,6 +33,7 @@ public struct AgentSettings: Equatable, Sendable {
         self.contextSize = contextSize
         self.workspace = workspace
         self.shellAllowed = shellAllowed
+        self.maxTokens = maxTokens
         self.systemPrompt = systemPrompt
     }
 }
@@ -49,6 +55,9 @@ public enum AgentCommand {
             // agent emits `tool_request` and blocks on `tool_result` (D1).
             "--host-tools",
         ]
+        if settings.maxTokens > 0 {
+            argv.append(contentsOf: ["-n", String(settings.maxTokens)])
+        }
         if let systemPrompt = settings.systemPrompt {
             argv.append(contentsOf: ["-sys", systemPrompt])
         }

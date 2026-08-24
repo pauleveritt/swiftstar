@@ -57,12 +57,39 @@ that exploration works but termination does not. One commit in that history is
 worth the whole branch as a cultural artifact: *"Correct a false green: make
 test does not pass in this worktree."*
 
-Resident Q8 decode is green at ~144 tok/s; batched true prefill is correct but
-**not yet wired into `ds4_session_sync`**; the mixed Q4_K/Q8 artifact SwiftStar
-would actually ship **has never been built** and its primitive has no caller
-outside its own test. That last item is the line's largest unpriced work, and it
-is what P12 would inherit — not the Q8 harness, which fits only the development
-machine.
+**Corrected 2026-08-23 — superseded by real progress on the branch.** Resident
+Q8 decode is green at ~144 tok/s and batched true prefill is now wired into
+`ds4_session_sync`. The mixed Q4_K/Q8 artifact SwiftStar would ship **has been
+built and measured**: 9.33 GiB (Q4_K expert gate/up on layers 0-21, Q8_0
+elsewhere), and ds4 **loads and generates from it** — a dedicated
+`kernel_mellum_q4_K_pair_swiglu_f32` exists (not just the borrowed GLM kernel),
+~25% faster than the generic one, decode at ~0.94x of Q8_0. This is no longer
+the line's largest unpriced work.
+
+What P12 actually inherits instead, in order of what blocks it:
+
+1. **The branch itself was never merged.** SwiftStar's `external/ds4` submodule
+   pins `swiftstar-integration-5-ge1312b8` — verified to contain zero Mellum
+   commits and no Mellum files. All of the above lives only on
+   `mellum-2.1-overnight`, unmerged. P1's branch policy applies here at full
+   weight: this is a real merge with likely real conflicts, not a formality.
+2. **Prefill is still slow for the Q4_K/Q8 artifact.** The expert-major batch
+   kernel stages Q8_0 rows and cannot run Q4_K, so Q4_K/Q8 sessions fall back to
+   the tokenwise sync path — measured 0.21x versus Q8_0's batched prefill. This
+   is the practical bottleneck a user would feel.
+3. **`planned_bytes` has no Mellum branch and under-reports non-weight memory
+   by ~0.7-1.0 GiB at 40k context**, the same class of bug found on Laguna
+   (`ds4_context_memory_estimate_with_prefill_mode`, ds4.c:36293, falls through
+   to a generic path built for a different, compressive-KV architecture — hard
+   caps KV rows at 8192 regardless of `--ctx`, and misses the
+   `mellum_prefill_workspace` and MoE `s_partial` allocations entirely). Matters
+   for P12 specifically because P3's feasibility gate would inherit this on day
+   one. Net effect at the current 9.33 GiB artifact: real total ≈ 10.3 GiB at
+   40k context — still clears a 13 GiB checkpoint with margin, just not the
+   number the engine itself would report.
+4. No SwiftStar-side fixtures exist for Mellum yet (`fixtures/agent/`,
+   `fixtures/server/` are Laguna/GLM-shaped) — P1/P5's golden-capture pattern
+   has nothing to build against.
 
 Two findings from that branch are worth carrying whether or not P12 ever ships a
 Mellum `Variant`, because neither is about kernels. First, the branch's

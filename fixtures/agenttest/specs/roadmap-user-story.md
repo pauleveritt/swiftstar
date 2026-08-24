@@ -6,6 +6,20 @@ It targets the identical app: same routes, same redirect contract, same
 seed content. Read it as "what agents experience," not "what files to
 create."
 
+## Shared data model
+
+All three phases build on one in-memory store, so the data model is part of
+the contract from the start:
+
+- `Complaint` is a dataclass recording three fields: `agent_name` (who filed
+  it), `text` (what they said), and `timestamp` (when it was filed).
+- `timestamp` is timezone-aware — a real instant, never a bare, zone-less
+  value. Each complaint gets its own filing moment, generated fresh at
+  creation time (a `default_factory`, never a shared default), so two
+  complaints are never stamped with literally the same instant.
+- The store itself is a module-level list named `complaints`, defined in
+  `models.py`; `app.py` imports it from there.
+
 ## Phase 1 — A welcoming front door
 
 When an agent arrives at the clinic's home address (`/`), they should feel

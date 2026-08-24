@@ -62,6 +62,23 @@ struct AgentCommandTests {
         #expect(!argv.contains("-sys"))
     }
 
+    @Test func argvEmitsTokenCapWhenSet() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        let settings = AgentSettings(
+            engineDir: URL(fileURLWithPath: "/tmp/fake-engine"),
+            modelPath: URL(fileURLWithPath: "/tmp/model.gguf"),
+            workspace: ws, maxTokens: 8192)
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(argv.contains("-n"))
+        #expect(argv[argv.firstIndex(of: "-n")! + 1] == "8192")
+    }
+
+    @Test func argvOmitsTokenCapWhenZero() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        let argv = AgentCommand.argv(settings: makeSettings(workspace: ws))
+        #expect(!argv.contains("-n"))
+    }
+
     @Test func binaryPathIsDs4Agent() {
         let settings = makeSettings(workspace: URL(fileURLWithPath: "/tmp/ws"))
         #expect(AgentCommand.binaryPath(settings: settings) == URL(fileURLWithPath: "/tmp/fake-engine/ds4-agent"))

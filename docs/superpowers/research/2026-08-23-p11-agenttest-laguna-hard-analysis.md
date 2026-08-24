@@ -83,3 +83,23 @@ session cannot compact for the next phase).
 3. **Let the self-test see the acceptance contract** (harness-side): the vetted
    pytest command should run the acceptance suite, not the worker's own tests, so
    the model can discover the real contract instead of redrafting blind.
+
+## Update — n=4 easy-spec batch baseline (pre-fix, 32k)
+
+The `--batch 4` run on the **easy** spec (before the fixes) finished 3 of 4
+runs before being interrupted mid-run-4:
+
+| run | outcome |
+|---|---|
+| 1 | think-loop → `limit` (gen 31,053), no grade |
+| 2 | think-loop → `limit` (gen 18,872), no grade |
+| 3 | **pass** — 3 phases eos (ctx 8.7k→14.3k→21.8k), acceptance + DeepSeek "good" |
+| 4 | interrupted mid-turn (was progressing, 5 tool calls — not looping) |
+
+So at 32k the easy spec passes roughly 1 in 3, with the other runs think-looping
+to the context limit. The fixes applied next: (1) a per-round `-n 8192` token cap
+(bounds a think-loop before it fills the context), (2) the hard spec now pins the
+data-model contract (`Complaint` fields, timezone-aware `timestamp`,
+`models.complaints`) via a preamble that reaches every packet, and (3) the packet
+now states tool paths are workspace-relative (the 19:26 run's absolute-path
+waste).

@@ -41,10 +41,17 @@ let mission = (try? String(contentsOf: fixtureDir.appendingPathComponent("specs/
 let techStack = (try? String(contentsOf: fixtureDir.appendingPathComponent("specs/tech-stack.md"), encoding: .utf8)) ?? ""
 let sharedContext = mission + "\n" + techStack
 
-func decomposePhases(_ text: String) -> [String] {
-    text.components(separatedBy: "\n## Phase ").dropFirst().map { "## Phase " + $0 }
+/// Split a spec on `## Phase` headers. The text before the first phase (the
+/// title, intro, and any shared "data model" section) is returned as the
+/// `preamble`, and is prepended to every packet so shared contract facts reach
+/// the worker even though they are not phase text.
+func decompose(_ text: String) -> (preamble: String, phases: [String]) {
+    let parts = text.components(separatedBy: "\n## Phase ")
+    let preamble = parts.first ?? ""
+    let phases = parts.dropFirst().map { "## Phase " + $0 }
+    return (preamble, phases)
 }
-let phases = decomposePhases(specText)
+let (preamble, phases) = decompose(specText)
 guard !phases.isEmpty else {
     FileHandle.standardError.write(Data("swiftstar-agenttest: no phases found in \(specName).md\n".utf8))
     exit(2)
@@ -106,7 +113,8 @@ func runOnce(_ index: Int) throws -> RunOutcome {
 
     let settings = AgentSettings(
         engineDir: engineDir, modelPath: URL(fileURLWithPath: gguf),
-        contextSize: 32768, workspace: repoURL, shellAllowed: false)
+        contextSize: 32768, workspace: repoURL, shellAllowed: false,
+        maxTokens: 8192)
     let orch = try PoolOrchestrator(settings: settings)
     defer { orch.stop() }
     let txn = WorktreeTransaction(repo: repoURL)
@@ -132,17 +140,22 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // are the worker's only feedback loop.
         let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
         let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
-        let writableNote = "You may write or edit only these files:\n"
-            + writableFiles.map { "- \($0)" }.joined(separator: "\n")
-            + "\n\nYou may run exactly these two commands (and no other shell command):\n"
-            + "- \(vettedImport)   (does app.py import cleanly?)\n"
-            + "- \(vettedPytest)   (do your own tests pass?)\n"
-            + "\nWork in one concise pass: write each file exactly once, do not explore\n"
-            + "the workspace or re-read files you just wrote, and run those commands at\n"
-            + "most once each. The acceptance suite checks user-visible behavior,\n"
-            + "not file layout — write the files named above directly."
+        let writableNoteLines = [
+            "You may write or edit only these files:",
+            writableFiles.map { "- \($0)" }.joined(separator: "\n"),
+            "All tool paths are relative to the workspace root (e.g. `app.py`,",
+            "`templates/base.html`) — never absolute paths.",
+            "You may run exactly these two commands (and no other shell command):",
+            "- \(vettedImport)   (does app.py import cleanly?)",
+            "- \(vettedPytest)   (do your own tests pass?)",
+            "Work in one concise pass: write each file exactly once, do not explore",
+            "the workspace or re-read files you just wrote, and run those commands at",
+            "most once each. The acceptance suite checks user-visible behavior,",
+            "not file layout — write the files named above directly.",
+        ]
+        let writableNote = writableNoteLines.joined(separator: "\n")
         let packet = HandoffPacket(
-            taskText: phaseText + "\n\n" + writableNote + "\n\n" + sharedContext,
+            taskText: phaseText + "\n\n" + writableNote + "\n\n" + preamble + "\n\n" + sharedContext,
             writableFiles: writableFiles,
             validationCommand: vettedImport,
             selfTestCommand: vettedPytest,
