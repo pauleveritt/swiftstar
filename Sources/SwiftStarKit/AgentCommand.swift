@@ -19,6 +19,14 @@ public struct AgentSettings: Equatable, Sendable {
     /// worker emits tool calls directly instead of deliberating. false = the
     /// engine default (DS4_THINK_HIGH).
     public var noThink: Bool
+    /// `--think-budget`: per-round ceiling on *thinking* tokens, distinct from
+    /// `maxTokens`, which caps the round's total generation. At the ceiling the
+    /// engine forces `</think>` and bans reopening for the rest of that round,
+    /// so a model that drafts a complete answer and then never transitions to
+    /// acting is bounded without amputating reasoning the way `noThink` does.
+    /// 0 = disabled. Must stay smaller than `maxTokens`, or the forced
+    /// transition lands with no room left to act.
+    public var thinkBudget: Int
     /// The system prompt (D1): passed inline as `-sys <text>` after `--shell`.
     /// nil omits the flag. The app passes the Superpowers bootstrap (P8).
     public var systemPrompt: String?
@@ -31,6 +39,7 @@ public struct AgentSettings: Equatable, Sendable {
         shellAllowed: Bool = false,
         maxTokens: Int = 0,
         noThink: Bool = false,
+        thinkBudget: Int = 0,
         systemPrompt: String? = nil
     ) {
         self.engineDir = engineDir
@@ -40,6 +49,7 @@ public struct AgentSettings: Equatable, Sendable {
         self.shellAllowed = shellAllowed
         self.maxTokens = maxTokens
         self.noThink = noThink
+        self.thinkBudget = thinkBudget
         self.systemPrompt = systemPrompt
     }
 }
@@ -66,6 +76,9 @@ public enum AgentCommand {
         }
         if settings.noThink {
             argv.append("--nothink")
+        }
+        if settings.thinkBudget > 0 {
+            argv.append(contentsOf: ["--think-budget", String(settings.thinkBudget)])
         }
         if let systemPrompt = settings.systemPrompt {
             argv.append(contentsOf: ["-sys", systemPrompt])

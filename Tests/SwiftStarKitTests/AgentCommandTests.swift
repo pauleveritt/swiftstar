@@ -89,6 +89,28 @@ struct AgentCommandTests {
         #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--nothink"))
     }
 
+    /// `--think-budget` bounds a single round's *thinking* separately from
+    /// `-n`, which caps the round's total generation. Forcing `</think>` when
+    /// the total cap is already exhausted would end the round with no room to
+    /// act, so the two must stay distinct.
+    @Test func argvEmitsThinkBudgetWhenSet() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        let settings = AgentSettings(
+            engineDir: URL(fileURLWithPath: "/tmp/fake-engine"),
+            modelPath: URL(fileURLWithPath: "/tmp/model.gguf"),
+            workspace: ws, maxTokens: 8192, thinkBudget: 2048)
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(argv.contains("--think-budget"))
+        #expect(argv[argv.firstIndex(of: "--think-budget")! + 1] == "2048")
+        // The total cap must still be emitted and must not be overwritten.
+        #expect(argv[argv.firstIndex(of: "-n")! + 1] == "8192")
+    }
+
+    @Test func argvOmitsThinkBudgetWhenZero() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--think-budget"))
+    }
+
     @Test func binaryPathIsDs4Agent() {
         let settings = makeSettings(workspace: URL(fileURLWithPath: "/tmp/ws"))
         #expect(AgentCommand.binaryPath(settings: settings) == URL(fileURLWithPath: "/tmp/fake-engine/ds4-agent"))

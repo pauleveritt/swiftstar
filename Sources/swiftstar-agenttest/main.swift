@@ -214,7 +214,12 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // pinned in the spec, it acts directly instead of think-looping to the
         // context limit (the hard-spec failure mode). AGENTTEST_THINK=1 re-enables
         // the reasoning phase for comparison.
-        noThink: env["AGENTTEST_THINK"] != "1")
+        noThink: env["AGENTTEST_THINK"] != "1",
+        // AGENTTEST_THINK_BUDGET bounds a round's thinking while leaving the
+        // rest of maxTokens for action. C14 run 3 spent 2,343 think events and
+        // 8,192 generated tokens to produce one mutation before dying of
+        // context; a ceiling well under the total cap is the point.
+        thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0)
     let orch = try PoolOrchestrator(settings: settings)
     defer { orch.stop() }
     let txn = WorktreeTransaction(repo: repoURL)
