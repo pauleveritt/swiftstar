@@ -1566,3 +1566,78 @@ independent of whether Mellum is ever an agent.
 
 **Explicitly not a reason to return:** more quantization work on Mellum. That
 track is closed by A2/B2.
+
+### D6. Reconciliation with B8 — written after D1–D5, and it reorders them
+
+**B8 landed after Sections C and D were written and falsifies a premise D5 rests
+on.** Recording rather than quietly editing, per this document's convention.
+
+**Mellum is no longer parked on the initiation finding.** D5 named "zero tool
+initiation across both specs" as one of two measured hard limits. B8's middle
+row is a clean one-variable ablation — relative deliverable paths swapped for
+absolute, nothing else — and takes Mellum from 0 calls / 0-of-4 files to 6 calls
+/ 4-of-4. That premise is gone. The second limit (no belief revision under
+contradicting evidence) is *at risk but not falsified*: B8 observed Mellum
+entering a genuine write → pytest → diagnose → fix loop and correctly
+identifying a stray `</head>` from failure output. Different bug class and
+different evidence shape than the byte-identical `ImportError` re-emission, so
+these may not conflict — but "Mellum cannot revise" must be re-run under the
+absolute-path prompt shape before being treated as settled.
+
+**D5 is therefore superseded**: Mellum moves from "parked with re-entry
+criteria" to **reopened, pending replication**. Its re-entry does not wait on
+R3–R5. What has *not* changed: B8's own caveats are large (n=1 per cell,
+self-graded single-test suites rather than the real acceptance suite, the
+best run SIGTERM'd incomplete at 180s, Q8_0 only). B8 establishes that the
+initiation finding was prompt-shaped; it does not establish that Mellum passes
+AgentClinic.
+
+**The confound is cross-cutting, and it reaches this session's headline result.**
+The harness writable-note reads "All tool paths are relative to the workspace
+root … never absolute paths"
+([`main.swift:85`](../../../Sources/swiftstar-agenttest/main.swift)) — present in
+**every** Laguna thinking-enabled run, including the 0/3 batch (C9) and the 20k
+run (C11). That is precisely the prompt shape B8 shows suppresses initiation in
+Mellum, and that C1 independently found correlated with initiation in Laguna
+(tool use appeared only on the prompt carrying absolute paths in a traceback).
+
+So **"Laguna Q2_K with thinking on does not act, 0/3" may be partly
+prompt-shape, not purely the `</think>` transition mechanism.** The mechanism
+finding still stands on its own evidence — the engine forces `<think>` per round
+and the model must self-emit the closing token — but *why* it fails to emit may
+be that the prompt gives it no concrete filesystem to believe in. These are
+separable and both cheap to test. The 20k run is mild counter-evidence (it did
+initiate, under relative paths) but produced exploration, not writes.
+
+**The packet schema needs a distinction it currently lacks.** Validator rule 3
+refuses absolute paths outright, and B8's point (3) reads that as conflicting
+with the one shape now observed to trigger initiation in both models. On
+inspection these are two different things and the fix is to separate them:
+
+- **The grant** (`writableFiles`) stays workspace-relative. This is the security
+  boundary the dispatcher revision-checks against; absolute entries there were
+  never the initiation lever, and the 19:26 run's six refused writes are why the
+  rule exists.
+- **The presentation** (how deliverable paths appear in task text) is a separate
+  concern the schema does not currently model, and is what B8 actually varied.
+  A packet should be able to render its manifest as absolute paths for
+  concreteness while still granting relative ones.
+
+That is a small schema addition, not a retraction of rule 3 — but it must land
+before any prompt-shape ablation, or the harness cannot express the treatment
+arm.
+
+**Reordering D4.** A prompt-shape ablation is now the cheapest high-information
+experiment available and precedes bounded-thinking validation:
+
+- **R2.5 (new, before R3)** — add path *presentation* to the packet schema,
+  separate from the grant.
+- **R3.5 (new)** — prompt-shape ablation, both models, against the **real
+  acceptance suite** (B8's runs were self-graded, which C2 already established
+  carries little weight): relative vs absolute presentation × thinking on/off,
+  n=3. This is the single experiment that could most change the roadmap, because
+  it bears on the 0/3 result, on Mellum's viability, and on whether
+  `--think-budget` is solving a real problem or a prompt artifact.
+- **R5 (bounded thinking) drops behind R3.5.** Validating `--think-budget`
+  against a result that may be a prompt artifact would attribute a fix to the
+  wrong cause.
