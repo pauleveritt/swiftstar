@@ -79,6 +79,16 @@ struct AgentCommandTests {
         #expect(!argv.contains("-n"))
     }
 
+    @Test func argvEmitsNothinkWhenSet() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        let settings = AgentSettings(
+            engineDir: URL(fileURLWithPath: "/tmp/fake-engine"),
+            modelPath: URL(fileURLWithPath: "/tmp/model.gguf"),
+            workspace: ws, noThink: true)
+        #expect(AgentCommand.argv(settings: settings).contains("--nothink"))
+        #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--nothink"))
+    }
+
     @Test func binaryPathIsDs4Agent() {
         let settings = makeSettings(workspace: URL(fileURLWithPath: "/tmp/ws"))
         #expect(AgentCommand.binaryPath(settings: settings) == URL(fileURLWithPath: "/tmp/fake-engine/ds4-agent"))

@@ -20,10 +20,18 @@ public struct GraderVerdict: Equatable, Sendable {
     }
 
     /// Parse the grader's response: `{"verdict":"good"|"bad","reasons":[…]}`.
+    /// The model sometimes wraps the JSON in ```json fences despite the prompt,
+    /// so the parse takes the substring between the first `{` and the last `}`.
     /// Any shape that does not carry a recognised `verdict` string yields
     /// `.error` (fail closed — never interpret garbage as a pass).
     public static func parse(_ json: String) -> GraderVerdict {
-        guard let data = json.data(using: .utf8),
+        guard let open = json.firstIndex(of: "{"),
+              let close = json.lastIndex(of: "}"),
+              open < close else {
+            return GraderVerdict(verdict: .error, reasons: [])
+        }
+        let inner = String(json[open...close])
+        guard let data = inner.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let raw = obj["verdict"] as? String,
               let verdict = Verdict(rawValue: raw) else {

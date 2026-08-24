@@ -15,6 +15,10 @@ public struct AgentSettings: Equatable, Sendable {
     /// tokens (thinking + text). 0 = engine default. The agent test sets this
     /// to bound a think-loop that otherwise fills the whole context.
     public var maxTokens: Int
+    /// `--nothink` (DS4_THINK_NONE): disable the reasoning/think phase so the
+    /// worker emits tool calls directly instead of deliberating. false = the
+    /// engine default (DS4_THINK_HIGH).
+    public var noThink: Bool
     /// The system prompt (D1): passed inline as `-sys <text>` after `--shell`.
     /// nil omits the flag. The app passes the Superpowers bootstrap (P8).
     public var systemPrompt: String?
@@ -26,6 +30,7 @@ public struct AgentSettings: Equatable, Sendable {
         workspace: URL,
         shellAllowed: Bool = false,
         maxTokens: Int = 0,
+        noThink: Bool = false,
         systemPrompt: String? = nil
     ) {
         self.engineDir = engineDir
@@ -34,6 +39,7 @@ public struct AgentSettings: Equatable, Sendable {
         self.workspace = workspace
         self.shellAllowed = shellAllowed
         self.maxTokens = maxTokens
+        self.noThink = noThink
         self.systemPrompt = systemPrompt
     }
 }
@@ -57,6 +63,9 @@ public enum AgentCommand {
         ]
         if settings.maxTokens > 0 {
             argv.append(contentsOf: ["-n", String(settings.maxTokens)])
+        }
+        if settings.noThink {
+            argv.append("--nothink")
         }
         if let systemPrompt = settings.systemPrompt {
             argv.append(contentsOf: ["-sys", systemPrompt])

@@ -114,7 +114,12 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     let settings = AgentSettings(
         engineDir: engineDir, modelPath: URL(fileURLWithPath: gguf),
         contextSize: 32768, workspace: repoURL, shellAllowed: false,
-        maxTokens: 8192)
+        maxTokens: 8192,
+        // The worker runs `--nothink` by default: with the contract facts
+        // pinned in the spec, it acts directly instead of think-looping to the
+        // context limit (the hard-spec failure mode). AGENTTEST_THINK=1 re-enables
+        // the reasoning phase for comparison.
+        noThink: env["AGENTTEST_THINK"] != "1")
     let orch = try PoolOrchestrator(settings: settings)
     defer { orch.stop() }
     let txn = WorktreeTransaction(repo: repoURL)
