@@ -1,5 +1,3 @@
-import Foundation
-
 /// The repair packet's machine-evidence channel (D6): pytest failure output +
 /// the current writable-file contents, injected post-validation and exempt from
 /// the redaction *gate* (but audited, not enforced). Constructible only from a
@@ -17,17 +15,49 @@ public struct MachineEvidence: Equatable, Sendable {
 
     /// Tail-cap a pytest run's output: the failure summary is at the end.
     /// Returns the kept text and a note when anything was dropped.
+    /// Caps on UTF-8 byte length, not Character count, to respect true payload size.
     public static func cappedFailureOutput(_ output: String, cap: Int) -> (String, String?) {
-        guard output.count > cap else { return (output, nil) }
-        let kept = String(output.suffix(cap))
-        return (kept, "failure output truncated: \(output.count) -> \(kept.count) bytes")
+        let byteCount = output.utf8.count
+        guard byteCount > cap else { return (output, nil) }
+
+        // Keep the last `cap` bytes, but don't split a multi-byte Character.
+        // Walk backward from the end, accumulating byte count until we exceed the cap.
+        var byteIndex = byteCount
+        var charIndex = output.endIndex
+
+        while byteIndex > cap && charIndex > output.startIndex {
+            output.formIndex(before: &charIndex)
+            let char = output[charIndex]
+            byteIndex -= char.utf8.count
+        }
+
+        let kept = String(output[charIndex...])
+        return (kept, "failure output truncated: \(byteCount) -> \(kept.utf8.count) bytes")
     }
 
     /// Cap one file's content, noting the truncation.
+    /// Caps on UTF-8 byte length, not Character count, to respect true payload size.
     public static func cappedContent(_ content: String, cap: Int) -> (String, String?) {
-        guard content.count > cap else { return (content, nil) }
-        let kept = String(content.prefix(cap))
-        return (kept, "file content truncated: \(content.count) -> \(kept.count) bytes")
+        let byteCount = content.utf8.count
+        guard byteCount > cap else { return (content, nil) }
+
+        // Keep the first `cap` bytes, but don't split a multi-byte Character.
+        // Walk forward from the start, accumulating byte count until we would exceed the cap.
+        var byteAccum = 0
+        var charIndex = content.startIndex
+
+        while charIndex < content.endIndex {
+            let char = content[charIndex]
+            let charBytes = char.utf8.count
+            if byteAccum + charBytes > cap {
+                break
+            }
+            byteAccum += charBytes
+            content.formIndex(after: &charIndex)
+        }
+
+        let kept = String(content[..<charIndex])
+        return (kept, "file content truncated: \(byteCount) -> \(kept.utf8.count) bytes")
     }
 
     /// Non-fatal redaction audit: which redacted strings are visible in the
