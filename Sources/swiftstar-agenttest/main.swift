@@ -533,20 +533,23 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                               acceptanceExit: nil, verdict: nil, report: nil,
                               elapsed: Int(Date().timeIntervalSince(runStart)))
         }
-        // Step-0 forcing gate (experiment): on a zero-tool-call turn, re-prompt with
-        // an explicit "emit a tool call" directive, bounded by AGENTTEST_FORCE.
-        var forced = 0
-        var forcingOutcome = outcome
-        let maxForces = Int(env["AGENTTEST_FORCE"] ?? "0") ?? 0
-        while forcingOutcome.toolCalls.isEmpty, forced < maxForces {
-            forced += 1
-            print("[agenttest]   forcing re-prompt \(forced)/\(maxForces) (0 tool calls)")
-            let forcingPacket = phasePacket(
-                "The previous turn produced no tool calls. Do not narrate a plan: emit a tool call now and keep working.")
-            forcingOutcome = try orch.runPhase(worker: WorkerId(1), packet: forcingPacket, worktree: wt.url,
-                                               capture: captureHandle)
+        // Step-0 forcing gate (experiment, agentic builds only — a text-contract
+        // turn has 0 tool calls by design and must never be re-prompted, or the
+        // forced turn discards the valid harvest).
+        if !packet.textContract {
+            var forced = 0
+            var forcingOutcome = outcome
+            let maxForces = Int(env["AGENTTEST_FORCE"] ?? "0") ?? 0
+            while forcingOutcome.toolCalls.isEmpty, forced < maxForces {
+                forced += 1
+                print("[agenttest]   forcing re-prompt \(forced)/\(maxForces) (0 tool calls)")
+                let forcingPacket = phasePacket(
+                    "The previous turn produced no tool calls. Do not narrate a plan: emit a tool call now and keep working.")
+                forcingOutcome = try orch.runPhase(worker: WorkerId(1), packet: forcingPacket, worktree: wt.url,
+                                                   capture: captureHandle)
+            }
+            outcome = forcingOutcome
         }
-        outcome = forcingOutcome
         // Text-contract harvest: a zero-tool-call eos turn's labeled blocks become the
         // phase's mutations (spec Section 2 step 3).
         if packet.textContract, outcome.toolCalls.isEmpty, outcome.stopReason == .eos {
