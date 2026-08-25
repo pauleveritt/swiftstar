@@ -177,7 +177,15 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
         "Work in one concise pass: make the minimal edit that fixes the failure,",
         "then run those commands at most once each.",
     ]).joined(separator: "\n")
-    let think: ThinkMode = env["AGENTTEST_REPAIR_THINK"] == "1" ? .bounded : .off
+    // The packet records the sampling the run actually used (same invariant as
+    // phasePacket, above): thinking is a property of the whole pooled engine
+    // process, set once at spawn time via AgentSettings.noThink (AGENTTEST_THINK),
+    // not something dispatch can override per-packet. AGENTTEST_REPAIR_THINK is
+    // reserved for a per-worker think override — not yet wired; see P12.6 — and
+    // has no effect today, so deriving from it here would make the capture claim
+    // a sampling mode the engine did not actually run under.
+    _ = env["AGENTTEST_REPAIR_THINK"]
+    let think: ThinkMode = env["AGENTTEST_THINK"] == "1" ? .bounded : .off
     return PhasePacketBuilder.build(
         phaseText: directive,
         writableNote: writableNote,
@@ -198,13 +206,36 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
 // worktree-independent, so a malformed one (an absolute path, an empty manifest,
 // or a withheld fix leaked through the appended shared context) is caught in
 // microseconds instead of after a 45–65 GiB load and three phases of generation.
-for (i, phaseText) in phases.enumerated() {
-    if case .invalid(let reasons) = HandoffPacketValidator.validate(phasePacket(phaseText)) {
-        FileHandle.standardError.write(Data(
-            ("swiftstar-agenttest: packet rejected for phase \(i + 1):\n"
-             + reasons.map { "  - \($0)" }.joined(separator: "\n") + "\n").utf8))
-        exit(2)
+// Fixture mode (D10) never builds `phases`/`phasePacket` at all — it grades a
+// pre-seeded fixture and drives `repairPacket` directly — so this loop is
+// skipped entirely when `--fixture` is active; guarding it here rather than
+// deferring `phases`/`decompose` themselves keeps the non-fixture path unchanged.
+if fixtureName == nil {
+    for (i, phaseText) in phases.enumerated() {
+        if case .invalid(let reasons) = HandoffPacketValidator.validate(phasePacket(phaseText)) {
+            FileHandle.standardError.write(Data(
+                ("swiftstar-agenttest: packet rejected for phase \(i + 1):\n"
+                 + reasons.map { "  - \($0)" }.joined(separator: "\n") + "\n").utf8))
+            exit(2)
+        }
     }
+}
+
+// Validate the repair packet up front too (both fixture and live paths dispatch
+// one), using a synthetic/representative RepairContext — repairPacket does not
+// read the context's fields when assembling the directive/contract, only the
+// shared spec/redacts state closed over above, so a placeholder context is
+// sufficient to catch the same class of defect (an absolute path, an empty
+// manifest, a withheld fix leaked through) before a model loads. Without this,
+// a malformed repairPacket only surfaces as RepairLoopError.packetInvalid from
+// inside RepairLoop.run, at repair-round time — after a full model load and all
+// implement phases have already run.
+let syntheticRepairContext = RepairContext(failedRef: "", grade: GradeResult(exit: 1, output: ""), round: 1)
+if case .invalid(let reasons) = HandoffPacketValidator.validate(repairPacket(syntheticRepairContext)) {
+    FileHandle.standardError.write(Data(
+        ("swiftstar-agenttest: repair packet rejected:\n"
+         + reasons.map { "  - \($0)" }.joined(separator: "\n") + "\n").utf8))
+    exit(2)
 }
 
 func git(_ dir: URL, _ a: [String]) {
@@ -281,12 +312,27 @@ func runFixtureOnce(_ name: String) throws {
         thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0))
     defer { orch.stop() }
 
+    // Give the fixture tier the same capture trail runOnce gets (D5/D9). D10's
+    // own caveat is that this tier — a single fixed repair scenario, not a
+    // guaranteed-pass smoke test — is the one most likely to fail on a first
+    // attempt, so it is exactly the tier that most needs an evidence trail
+    // (repair-packet-N.json / repair-round-N.json / wire.ndjson) when it does.
+    let df = DateFormatter(); df.dateFormat = "yyyyMMdd-HHmmss"
+    let captureDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("captures/agenttest/\(df.string(from: Date()))-fixture-\(name)")
+    try FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
+    let wireFile = captureDir.appendingPathComponent("wire.ndjson")
+    FileManager.default.createFile(atPath: wireFile.path, contents: nil)
+    let captureHandle = FileHandle(forWritingAtPath: wireFile.path)
+    print("[agenttest] fixture \(name): capture=\(captureDir.path)")
+
     let result = try RepairLoop.run(
         repo: repo, failedRef: failedRef, initialGrade: initial,
         packetBuilder: repairPacket,
         runPhase: { pkt, wt, cap in try orch.runPhase(worker: WorkerId(1), packet: pkt, worktree: wt, capture: cap) },
         grade: { wt in try AcceptanceGrader.grade(worktree: wt, acceptanceSource: acceptanceSource, pyProject: pyProject) },
-        captureDir: nil)
+        capture: captureHandle,
+        captureDir: captureDir)
 
     switch result {
     case .passed(_, let grade, let wt):
@@ -384,6 +430,13 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         "toolBudget": env["AGENTTEST_TOOL_BUDGET"] ?? "30",
         "pathStyle": absolutePathStyle ? "absolute" : "relative",
         "redacts": redacts.joined(separator: ","),
+        // D9: run-config gains the repair fields too. repairThink mirrors what
+        // repairPacket's think mode actually derives from (AGENTTEST_THINK, per
+        // the fix above) rather than the unwired AGENTTEST_REPAIR_THINK, so the
+        // capture stays honest about what the engine ran under. repairMaxRounds
+        // is RepairLoop.run's default bound (not currently env-configurable).
+        "repairThink": env["AGENTTEST_THINK"] == "1" ? "on" : "nothink",
+        "repairMaxRounds": "2",
     ]
     if let cfg = try? JSONSerialization.data(withJSONObject: runConfig, options: [.prettyPrinted, .sortedKeys]) {
         try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))
