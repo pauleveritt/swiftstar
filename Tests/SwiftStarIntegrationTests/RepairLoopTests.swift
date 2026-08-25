@@ -135,6 +135,30 @@ struct RepairLoopTests {
         }
     }
 
+    /// A throw from `runPhase` (an infrastructure-style failure, per its own
+    /// doc comment) must still discard the already-prepared disposable
+    /// worktree before propagating — otherwise the worktree directory and its
+    /// throwaway branch leak on disk. Regression test for that gap.
+    private struct BoomError: Error {}
+
+    @Test func runPhaseThrowDiscardsWorktree() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        var capturedWorktreeURL: URL?
+        #expect(throws: BoomError.self) {
+            _ = try RepairLoop.run(
+                repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+                packetBuilder: { _ in self.authoredPacket() },
+                runPhase: { _, wt, _ in
+                    capturedWorktreeURL = wt
+                    throw BoomError()
+                },
+                grade: self.gradingScheme())
+        }
+        let url = try #require(capturedWorktreeURL)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
     @Test func writesPerRoundCapture() throws {
         let repo = try makeRepo()
         defer { try? FileManager.default.removeItem(at: repo) }

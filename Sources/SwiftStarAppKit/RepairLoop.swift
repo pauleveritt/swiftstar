@@ -61,6 +61,12 @@ public enum RepairLoop {
             }
 
             let wt = try WorktreeDispatcher.prepare(packet: authored, in: repo, baseRef: head)
+            // Discard the disposable worktree on every exit from this iteration
+            // (normal fall-through, `continue`-equivalent, `return`, or `throw`)
+            // except the `.passed` path below, which hands the live worktree to
+            // the caller and clears this flag before returning.
+            var shouldDiscardWorktree = true
+            defer { if shouldDiscardWorktree { WorktreeDispatcher.discard(wt, in: repo) } }
 
             // Assemble machine evidence from the worktree + the failing grade.
             var contents: [String: String] = [:]
@@ -104,7 +110,6 @@ public enum RepairLoop {
 
             let turn = try runPhase(packet, wt.url, capture)
             if turn.stopReason == .limit || turn.stopReason == .contextFull {
-                WorktreeDispatcher.discard(wt, in: repo)
                 throw RepairLoopError.sessionExhausted(turn.stopReason)
             }
             let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: wt.url)
@@ -118,15 +123,14 @@ public enum RepairLoop {
                 write(record: RoundRecord(round: round, candidateRef: ref, receipt: nil, grade: g, elapsed: elapsed),
                       to: captureDir)
                 if g.passed {
+                    shouldDiscardWorktree = false
                     return .passed(ref: ref, grade: g, worktree: wt)
                 }
                 head = ref
                 lastGrade = g
-                WorktreeDispatcher.discard(wt, in: repo)
             case .receipt(let receipt):
                 write(record: RoundRecord(round: round, candidateRef: nil, receipt: receipt, grade: nil, elapsed: elapsed),
                       to: captureDir)
-                WorktreeDispatcher.discard(wt, in: repo)
                 return .exhausted(lastGrade: lastGrade, receipt: receipt)
             }
         }
