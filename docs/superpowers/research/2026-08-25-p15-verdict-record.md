@@ -48,7 +48,13 @@ The two-turn emission protocol fired in 3 of the 4 and rescued all three.
 
 - **0 `contractNotFollowed`** across all 9 (previously 3 of 4 runs).
 - **3 of 9 runs reach 13/13** on the real acceptance suite, all three phases,
-  **0 tool calls**, 90–132s per passing run.
+  **0 tool calls**. A passing run alone takes 85–128s (measured from the wire's
+  own timestamps, which start ~5s after `elapsed:` due to worktree setup before
+  the first engine event). But that figure describes only the run that happened
+  to succeed — reaching a success costs the failed attempts along the way too.
+  Summed across all 9 runs' wall-clock (successes and failures alike, since the
+  harness ran them sequentially and there was no way to know in advance which
+  would land): 840s for 3 successes, **≈4.7 minutes per completed app**.
 - No failure is a harvest failure. The observed taxonomy, now legible because
   `05a4fcc` captures validation output:
 

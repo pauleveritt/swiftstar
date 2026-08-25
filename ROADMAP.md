@@ -18,12 +18,14 @@ closing it returns the roadmap to its own line of work.
 
 **The open choice.** P14 (A docs site) is the only numbered planned phase, and
 its precondition — "once there is a reader who isn't the author" — has not
-obviously arrived. The alternative is to promote one of P15's carry-forwards
-(see [Backlog](#backlog)), of which **phase-level repair** is the substantive
-one: the build arm's failures are now all content defects at a phase boundary,
-the repair loop already fixes that defect class 4/4, and the two are not
-connected. That is a harness capability, not a Mellum capability, which is why
-it belongs to a phase rather than to P15's tail.
+obviously arrived. The alternative is **reopening P12** for phase-level repair
+(see [Backlog](#backlog)) — not new phase work: P12's own charter was "the host
+owning phase boundaries, budgets, permissions, validation, **and recovery**,"
+and P12.4 wired recovery only at the end-of-run acceptance boundary. Phase-level
+recovery was P12's stated scope from the start; it is unfinished, not superseded.
+The build arm's failures are now all content defects at a phase boundary
+(P15's verdict record), the repair loop already fixes that defect class 4/4, and
+the two are not connected — closing that gap is P12.8.
 
 *Nothing is in progress. The next phase is picked deliberately, not by
 momentum.*
@@ -156,7 +158,7 @@ appear below.) Defined so far:
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | complete (2026-08-22) |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | complete (2026-08-22) |
 | P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | complete (2026-08-23) |
-| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | complete (2026-08-25) |
+| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | complete (2026-08-25) — **reopen candidate: P12.8, phase-level recovery** |
 | P13 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; deferred behind P12 so there is a harness that can actually evaluate a variant | complete (2026-08-25) — verdict: blocked on Mellum's competence gate, not the harness |
 | P14 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
 | P15 | Host-controlled action mode | The model drafts as text (`#path` + fenced blocks), the host harvests, writes, and verifies — isolating "should I act" from content competence for Mellum-class models; exit is a verdict, not a product | complete (2026-08-25) — verdict: **harness-addressable**; repair 4/4 at 13/13, build 3/9 at 13/13 with 0 tool calls |
@@ -285,22 +287,24 @@ P15's plan is written:
 
 Deferred, each with the condition that reopens it.
 
-- **Phase-level repair (P15 carry-forward, the substantive one).** A build phase
-  that fails its import check aborts the run before `commitBack()`, so the
-  repair loop — which *is* wired after acceptance failure, on worker 2 — is
-  never reachable. This stopped 5 of the 6 failing build runs, and every one of
-  those was a one-line content defect (`from .models import …`;
-  `RedirectResponse` from the wrong module; a `StaticFiles` mount on a directory
-  outside the grant) — exactly the class the repair loop fixes 4/4. Not a wiring
-  change: (1) the abort is deliberate (finding C17 — it stops a broken tree
-  chaining into the next phase), so it must be *replaced* by repair, not
-  removed; (2) `repairPacket` builds from a `GradeResult` while a phase failure
-  yields a `ValidationResult`, so the evidence types need bridging — the
-  prerequisite, capturing validation output, landed in `05a4fcc`; and (3)
-  `RepairLoop`'s grade closure runs the full acceptance suite, which cannot pass
-  mid-roadmap, so a phase-level repair needs the *validation* command as its
-  success condition. *Reopens whenever the build arm's pass rate is the thing to
-  improve; it is a harness capability, not a model capability.*
+- **Phase-level recovery (reopens P12 as P12.8 — not new phase work).** P12's
+  own charter was host-owned "budgets, permissions, validation, **and
+  recovery**"; P12.4 wired recovery only at the end-of-run acceptance boundary,
+  leaving phase-boundary recovery unfinished rather than out of scope. A build
+  phase that fails its import check aborts the run before `commitBack()`, so
+  the repair loop — wired after acceptance failure, on worker 2 — is never
+  reachable. This stopped 5 of 6 failing P15 build runs, every one a one-line
+  content defect (`from .models import …`; `RedirectResponse` from the wrong
+  module; a `StaticFiles` mount on a directory outside the grant) — exactly the
+  class the repair loop fixes 4/4. Not a wiring change: (1) the abort is
+  deliberate (finding C17 — it stops a broken tree chaining into the next
+  phase), so it must be *replaced* by repair, not removed; (2) `repairPacket`
+  builds from a `GradeResult` while a phase failure yields a `ValidationResult`,
+  so the evidence types need bridging — the prerequisite, capturing validation
+  output, landed in `05a4fcc`; and (3) `RepairLoop`'s grade closure runs the
+  full acceptance suite, which cannot pass mid-roadmap, so a phase-level repair
+  needs the *validation* command as its success condition. *Reopens whenever
+  the build arm's pass rate is the thing to improve.*
 - **`RepairLoop` exits on every receipt, including `validationFailed`.** The
   rationale holds as written — the receipt path discards the worktree and never
   advances `head`/`lastGrade`, so a retry would replay a byte-identical dispatch
@@ -803,7 +807,9 @@ Completed phases move here when the roadmap outgrows the front page.
   change, no different model.
 
   Measured: repair **4/4 at 13/13**; build **3/9 at 13/13**, all three phases,
-  **0 tool calls**, 90–132s per passing run. All nine build runs harvested (0
+  **0 tool calls** — 85–128s for the run that happens to pass, but the failed
+  attempts along the way cost wall-clock too: summed across all 9 sequential
+  runs, **≈4.7 minutes per completed app**. All nine build runs harvested (0
   `contractNotFollowed`, previously 3 of 4). The phase's own bar asks for a
   host-verified candidate with content-bucketed failures and explicitly defers
   any per-model pass-rate guarantee, so 3-of-9 is a recorded measurement rather
