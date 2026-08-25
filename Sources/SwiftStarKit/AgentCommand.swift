@@ -27,6 +27,10 @@ public struct AgentSettings: Equatable, Sendable {
     /// 0 = disabled. Must stay smaller than `maxTokens`, or the forced
     /// transition lands with no room left to act.
     public var thinkBudget: Int
+    /// `--seed`: sampling seed for reproducible non-greedy runs. 0 = engine
+    /// default (time-derived). Non-zero pins the run so a stochastic cell can
+    /// be replicated or swept.
+    public var seed: UInt64
     /// The system prompt (D1): passed inline as `-sys <text>` after `--shell`.
     /// nil omits the flag. The app passes the Superpowers bootstrap (P8).
     public var systemPrompt: String?
@@ -40,6 +44,7 @@ public struct AgentSettings: Equatable, Sendable {
         maxTokens: Int = 0,
         noThink: Bool = false,
         thinkBudget: Int = 0,
+        seed: UInt64 = 0,
         systemPrompt: String? = nil
     ) {
         self.engineDir = engineDir
@@ -50,6 +55,7 @@ public struct AgentSettings: Equatable, Sendable {
         self.maxTokens = maxTokens
         self.noThink = noThink
         self.thinkBudget = thinkBudget
+        self.seed = seed
         self.systemPrompt = systemPrompt
     }
 }
@@ -79,6 +85,9 @@ public enum AgentCommand {
         }
         if settings.thinkBudget > 0 {
             argv.append(contentsOf: ["--think-budget", String(settings.thinkBudget)])
+        }
+        if settings.seed > 0 {
+            argv.append(contentsOf: ["--seed", String(settings.seed)])
         }
         if let systemPrompt = settings.systemPrompt {
             argv.append(contentsOf: ["-sys", systemPrompt])

@@ -115,4 +115,18 @@ struct AgentCommandTests {
         let settings = makeSettings(workspace: URL(fileURLWithPath: "/tmp/ws"))
         #expect(AgentCommand.binaryPath(settings: settings) == URL(fileURLWithPath: "/tmp/fake-engine/ds4-agent"))
     }
+
+    @Test func argvPassesSeedWhenNonZero() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        var settings = makeSettings(workspace: ws)
+        settings.seed = 7
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(argv.contains("--seed"))
+        #expect(argv[argv.firstIndex(of: "--seed")! + 1] == "7")
+    }
+
+    @Test func argvOmitsSeedWhenZero() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--seed"))
+    }
 }

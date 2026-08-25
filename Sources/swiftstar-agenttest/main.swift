@@ -343,7 +343,8 @@ func runFixtureOnce(_ name: String) throws {
         contextSize: 32768, workspace: repo, shellAllowed: false,
         maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192,
         noThink: env["AGENTTEST_THINK"] != "1",
-        thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0))
+        thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0,
+        seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0))
     defer { orch.stop() }
 
     // Give the fixture tier the same capture trail runOnce gets (D5/D9). D10's
@@ -433,7 +434,8 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // rest of maxTokens for action. C14 run 3 spent 2,343 think events and
         // 8,192 generated tokens to produce one mutation before dying of
         // context; a ceiling well under the total cap is the point.
-        thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0)
+        thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0,
+        seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0)
     let orch = try PoolOrchestrator(settings: settings)
     defer { orch.stop() }
     let txn = WorktreeTransaction(repo: repoURL)
@@ -478,6 +480,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
             ? "engine-family-default"
             : (resolvedVariant?.sampler?.description ?? ""),
         "availableBytesGiB": String(format: "%.1f", Double(MemorySnapshot.availableBytes()) / 1_073_741_824),
+        "seed": env["AGENTTEST_SEED"] ?? "0",
     ]
     if let cfg = try? JSONSerialization.data(withJSONObject: runConfig, options: [.prettyPrinted, .sortedKeys]) {
         try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))
