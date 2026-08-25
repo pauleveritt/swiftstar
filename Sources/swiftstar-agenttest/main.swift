@@ -507,7 +507,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                  + reasons.map { "  - \($0)" }.joined(separator: "\n") + "\n").utf8))
             exit(2)
         }
-        let outcome: TurnOutcome
+        var outcome: TurnOutcome
         do {
             outcome = try orch.runPhase(worker: WorkerId(1), packet: packet, worktree: wt.url,
                                         capture: captureHandle)
@@ -518,6 +518,20 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                               acceptanceExit: nil, verdict: nil, report: nil,
                               elapsed: Int(Date().timeIntervalSince(runStart)))
         }
+        // Step-0 forcing gate (experiment): on a zero-tool-call turn, re-prompt with
+        // an explicit "emit a tool call" directive, bounded by AGENTTEST_FORCE.
+        var forced = 0
+        var forcingOutcome = outcome
+        let maxForces = Int(env["AGENTTEST_FORCE"] ?? "0") ?? 0
+        while forcingOutcome.toolCalls.isEmpty, forced < maxForces {
+            forced += 1
+            print("[agenttest]   forcing re-prompt \(forced)/\(maxForces) (0 tool calls)")
+            let forcingPacket = phasePacket(
+                "The previous turn produced no tool calls. Do not narrate a plan: emit a tool call now and keep working.")
+            forcingOutcome = try orch.runPhase(worker: WorkerId(1), packet: forcingPacket, worktree: wt.url,
+                                               capture: captureHandle)
+        }
+        outcome = forcingOutcome
         // Run the packet's own vetted import check before the phase may report
         // a candidate. C17: two runs completed every phase, wrote every file,
         // and died in acceptance *collection* on one wrong import line
