@@ -31,7 +31,7 @@ struct RepairLoopTests {
     }
 
     private func authoredPacket() -> HandoffPacket {
-        HandoffPacket(taskText: "fix it", writableFiles: ["a.txt"], validationCommand: nil,
+        HandoffPacket(taskText: "fix it", writableFiles: ["a.txt"], validationCommand: "true",
                       baselines: [:], turnBudget: 1000, toolCallBudget: 8,
                       role: .repair, sampling: SamplingPolicy(think: .off))
     }
@@ -167,7 +167,7 @@ struct RepairLoopTests {
         let repo = try makeRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
         let packetWithMissingFile = HandoffPacket(
-            taskText: "fix it", writableFiles: ["a.txt", "never_created.py"], validationCommand: nil,
+            taskText: "fix it", writableFiles: ["a.txt", "never_created.py"], validationCommand: "true",
             baselines: [:], turnBudget: 1000, toolCallBudget: 8,
             role: .repair, sampling: SamplingPolicy(think: .off))
         let result = try RepairLoop.run(
@@ -189,7 +189,7 @@ struct RepairLoopTests {
         try FileManager.default.createDirectory(at: cap, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: cap) }
         let packetWithMissingFile = HandoffPacket(
-            taskText: "fix it", writableFiles: ["a.txt", "never_created.py"], validationCommand: nil,
+            taskText: "fix it", writableFiles: ["a.txt", "never_created.py"], validationCommand: "true",
             baselines: [:], turnBudget: 1000, toolCallBudget: 8,
             role: .repair, sampling: SamplingPolicy(think: .off))
         let result = try RepairLoop.run(
@@ -225,7 +225,7 @@ struct RepairLoopTests {
         try FileManager.default.createDirectory(at: cap, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: cap) }
         let packetWithUndecodableFile = HandoffPacket(
-            taskText: "fix it", writableFiles: ["a.txt", "binary.bin"], validationCommand: nil,
+            taskText: "fix it", writableFiles: ["a.txt", "binary.bin"], validationCommand: "true",
             baselines: [:], turnBudget: 1000, toolCallBudget: 8,
             role: .repair, sampling: SamplingPolicy(think: .off))
         let result = try RepairLoop.run(
