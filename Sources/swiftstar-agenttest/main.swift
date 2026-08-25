@@ -23,6 +23,7 @@ func argValue(_ flag: String) -> String? {
 let specName = argValue("--spec") ?? "roadmap"
 let batchCount = Int(argValue("--batch") ?? "1") ?? 1
 let explicitRepo = argValue("--repo")
+let fixtureName = argValue("--fixture")
 let pyProject = env["AGENTTEST_PY_PROJECT"] ?? NSHomeDirectory() + "/projects/pauleveritt/local-ai-pi"
 
 guard let gguf = env["SWIFTSTAR_MODEL"], !gguf.isEmpty else {
@@ -214,6 +215,90 @@ func git(_ dir: URL, _ a: [String]) {
     p.standardError = Pipe()
     try? p.run()
     p.waitUntilExit()
+}
+
+func gitOutput(_ dir: URL, _ a: [String]) throws -> String {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    p.arguments = ["-C", dir.path] + a
+    let out = Pipe(); p.standardOutput = out; p.standardError = Pipe()
+    try p.run(); p.waitUntilExit()
+    return String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+}
+
+func copyTree(_ from: URL, into to: URL) throws {
+    let items = try FileManager.default.contentsOfDirectory(at: from, includingPropertiesForKeys: nil)
+    for src in items {
+        let dst = to.appendingPathComponent(src.lastPathComponent)
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: src.path, isDirectory: &isDir), isDir.boolValue {
+            try FileManager.default.createDirectory(at: dst, withIntermediateDirectories: true)
+            try copyTree(src, into: dst)
+        } else {
+            try FileManager.default.copyItem(at: src, to: dst)
+        }
+    }
+}
+
+/// D10: seed a repo with `reference/*` + a fixture's buggy `app.py`, commit it
+/// as the failed candidate ref, grade (12/13), run RepairLoop, and assert 13/13.
+func runFixtureOnce(_ name: String) throws {
+    let fixtureBug = fixtureDir.appendingPathComponent("repair/\(name)/app.py")
+    let referenceRoot = fixtureDir.appendingPathComponent("reference")
+    let acceptanceSource = try String(
+        contentsOf: fixtureDir.appendingPathComponent("acceptance/test_acceptance.py"),
+        encoding: .utf8)
+
+    let repo = FileManager.default.temporaryDirectory
+        .appendingPathComponent("agenttest-fixture-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: repo) }
+    git(repo, ["init", "-q"])
+    git(repo, ["config", "user.email", "agenttest@local"])
+    git(repo, ["config", "user.name", "AgentTest"])
+
+    // Overlay reference/* then the fixture's buggy app.py.
+    try copyTree(referenceRoot, into: repo)
+    try FileManager.default.removeItem(at: repo.appendingPathComponent("app.py"))
+    try String(contentsOf: fixtureBug, encoding: .utf8)
+        .write(to: repo.appendingPathComponent("app.py"), atomically: true, encoding: .utf8)
+    git(repo, ["add", "-A"])
+    git(repo, ["commit", "-q", "-m", "fixture baseline"])
+
+    let failedRef = try gitOutput(repo, ["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let initial = try AcceptanceGrader.grade(worktree: repo, acceptanceSource: acceptanceSource, pyProject: pyProject)
+    print("[agenttest] fixture \(name): baseline exit=\(initial.exit)")
+    guard initial.exit != 0 else {
+        print("[agenttest] fixture \(name): expected a failing baseline, got 13/13 — overlay is wrong")
+        exit(2)
+    }
+
+    let orch = try PoolOrchestrator(settings: AgentSettings(
+        engineDir: engineDir, modelPath: URL(fileURLWithPath: gguf),
+        contextSize: 32768, workspace: repo, shellAllowed: false,
+        maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192,
+        noThink: env["AGENTTEST_THINK"] != "1",
+        thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0))
+    defer { orch.stop() }
+
+    let result = try RepairLoop.run(
+        repo: repo, failedRef: failedRef, initialGrade: initial,
+        packetBuilder: repairPacket,
+        runPhase: { pkt, wt, cap in try orch.runPhase(worker: WorkerId(1), packet: pkt, worktree: wt, capture: cap) },
+        grade: { wt in try AcceptanceGrader.grade(worktree: wt, acceptanceSource: acceptanceSource, pyProject: pyProject) },
+        captureDir: nil)
+
+    switch result {
+    case .passed(_, let grade, let wt):
+        print("[agenttest] fixture \(name): repaired — exit=\(grade.exit)")
+        WorktreeDispatcher.discard(wt, in: repo)
+        if grade.exit == 0 { print("[agenttest] fixture \(name): 13/13 ✓"); return }
+        print("[agenttest] fixture \(name): repaired but still failing — \(grade.exit)")
+        exit(1)
+    case .exhausted(_, let receipt):
+        print("[agenttest] fixture \(name): repair exhausted — \(receipt)")
+        exit(1)
+    }
 }
 
 // MARK: - one run
@@ -502,6 +587,15 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     return RunOutcome(finish: .completed, note: repairNote,
                       acceptanceExit: acceptanceExit, verdict: verdict, report: report,
                       elapsed: elapsed)
+}
+
+// MARK: - fixture driver (D10)
+
+if let fixtureName {
+    do { try runFixtureOnce(fixtureName) }
+    catch { print("[agenttest] fixture run failed: \(error)"); exit(1) }
+    print("[agenttest] done")
+    exit(0)
 }
 
 // MARK: - batch driver
