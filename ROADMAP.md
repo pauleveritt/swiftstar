@@ -10,33 +10,34 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P12 — Reliable agency.** Next up; not started. **Reframed 2026-08-24**
-from "More models" after an overnight investigation established that the
-blocker is not model *variety* but model *agency*: a local model that can write
-correct code still fails to reliably act, and the failures traced to host-side
-contract and prompt shape more often than to the model. P12 is therefore one
-model in a role-differentiated pipeline — decompose, implement, repair — where
-the host owns phase boundaries, budgets, permissions, validation, and recovery,
-and the model supplies judgment and code. Variants (Laguna XS 2.1, Mellum 2.1)
-move to P13, where the harness that would evaluate them will exist.
+**Phase P15 — Host-controlled action mode.** In progress; started 2026-08-25,
+mixed result so far. P12 (Reliable agency) and P13 (More models) are both
+**complete** — see [Prior work](#prior-work) — and P13's own verdict is what
+opens P15: Mellum 2.1 reliably fails SwiftStar's tool-call initiation gate
+under the tested harness (path presentation × nudge × seed, published
+sampler), a content-competent model that does not reliably *act*. P15 asks a
+narrower question than "is Mellum shippable" — **is Mellum harness-addressable
+(a host-side fix reaches it) or content-broken (it isn't)** — by removing
+tool-initiation from the loop entirely: the model emits `#path` headings plus
+fenced code blocks as plain text, the host (`LabeledBlockParser`) harvests and
+writes them, injects the harvested paths into `TurnOutcome.mutations` so the
+existing verdict machinery can produce a candidate, then validates and grades
+as usual. No engine work; the model stays in the agent loop with tools wired
+but is directed not to call them.
 
-The findings that forced the reframe are consolidated in
-[`2026-08-24-overnight-consolidation.md`](docs/superpowers/research/2026-08-24-overnight-consolidation.md)
-(Sections A–D). **P12 opens with a consolidation gate (P12.0)** that retires
-that document into one source of truth — three parallel sessions produced
-overlapping and partly contradictory records, and planning against them as-is
-means re-deriving the same conclusions a fourth time.
+Measured 2026-08-25, live, on the `mellum-2.1` variant: the **repair** arm
+meets its bar — 4/4 runs reach 13/13 on the `plausible-wrong-fix` fixture,
+via a two-turn emission protocol (`RepairLoop`'s `emissionFollowUp`) that
+re-prompts the same pooled worker session when a turn reasons correctly but
+stops at eos exactly where it should start writing the file. The **build**
+arm does not yet meet its bar — 1 candidate-producing run out of 4, the rest
+either emitting headings with no fenced body or running to the token limit —
+and has no equivalent follow-up seam yet. Design:
+[`2026-08-25-host-controlled-action-mode-design.md`](docs/superpowers/specs/2026-08-25-host-controlled-action-mode-design.md).
+Plan:
+[`2026-08-25-host-controlled-action-mode.md`](docs/superpowers/plans/2026-08-25-host-controlled-action-mode.md).
 
-P11 — Subagent pool — is complete: context-isolated
-subagents share one locked engine (`--subagent-pool`, one model load, N sessions,
-a `worker` id on every event), driven through a queue over the serialized GPU;
-the packet-maker assembles a prepared context from a deterministic rolling
-digest; a `dispatch` host-tool enqueues workers and receipts fold back into the
-orchestrator. The measurement gate's canonical arm is measured: **3.70x realized
-win vs the 4.2x ceiling** (overhead ratio 0.88) — the sensitivity envelope is the
-remaining follow-up pass.
-
-*P0–P11 are complete; their summaries live in [Prior work](#prior-work), not
+*P0–P13 are complete; their summaries live in [Prior work](#prior-work), not
 here, so this section stays a true "what's happening now."*
 
 ## Concept budget
@@ -167,14 +168,20 @@ appear below.) Defined so far:
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | complete (2026-08-22) |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | complete (2026-08-22) |
 | P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | complete (2026-08-23) |
-| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | planned |
-| P13 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; deferred behind P12 so there is a harness that can actually evaluate a variant | planned |
+| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | complete (2026-08-25) |
+| P13 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; deferred behind P12 so there is a harness that can actually evaluate a variant | complete (2026-08-25) — verdict: blocked on Mellum's competence gate, not the harness |
 | P14 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
+| P15 | Host-controlled action mode | The model drafts as text (`#path` + fenced blocks), the host harvests, writes, and verifies — isolating "should I act" from content competence for Mellum-class models; exit is a verdict, not a product | **in progress** (2026-08-25) — repair arm 4/4, build arm 1/4 |
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
 Each plan is written as its phase begins. P12's plan is written:
 [`2026-08-24-p12-reliable-agency.md`](docs/superpowers/plans/2026-08-24-p12-reliable-agency.md).
+P13's design and benchmark record:
+[`2026-08-25-p13-mellum-variant-design.md`](docs/superpowers/specs/2026-08-25-p13-mellum-variant-design.md),
+[`2026-08-25-p13-mellum-benchmark-record.md`](docs/superpowers/research/2026-08-25-p13-mellum-benchmark-record.md).
+P15's plan is written:
+[`2026-08-25-host-controlled-action-mode.md`](docs/superpowers/plans/2026-08-25-host-controlled-action-mode.md).
 
 ### Dependencies worth knowing before planning
 
@@ -721,6 +728,36 @@ Completed phases move here when the roadmap outgrows the front page.
   [`smoke gate`](docs/superpowers/research/2026-08-23-p11-smoke-gate.md),
   [`measurement gate`](docs/superpowers/research/2026-08-23-p11-measurement-gate.md).
   Spec: [`docs/superpowers/specs/2026-08-23-p11-subagent-pool-design.md`](docs/superpowers/specs/2026-08-23-p11-subagent-pool-design.md).
+
+- **P12 — Reliable agency (2026-08-25).** Reframed 2026-08-24 from "More
+  models" after an overnight investigation found the blocker was model
+  *agency*, not model *variety*: a local model that writes correct code still
+  fails to reliably act, and the failures traced to host-side contract and
+  prompt shape more often than to the model. One model runs a
+  role-differentiated pipeline — decompose, implement, repair — with the host
+  owning phase boundaries, budgets, permissions, validation, and recovery.
+  Sub-phases: P12.0 consolidated three overlapping overnight research records
+  into one source of truth; P12.1 hardened the packet validator/parser
+  (schema version, CRLF, block-scalar, comment-stripping fixes) and wired
+  `thinkBudget` and path presentation as a real lever; P12.2 made the Mellum
+  Q5_0 quant loadable; P12.4 added the repair role; P12.7 corrected the
+  cross-system metric definitions the measurement gate reports against.
+  Plan: [`2026-08-24-p12-reliable-agency.md`](docs/superpowers/plans/2026-08-24-p12-reliable-agency.md).
+
+- **P13 — More models (2026-08-25).** Mellum 2.1 wired as a first-class
+  `Variant` (memory-gated, contract-enforced admission before any engine
+  spawn) and benchmarked live against P12's harness: path presentation × nudge
+  × seed, at Mellum's published sampler (temp 0.6, top-k 20, top-p 0.95,
+  min-p 0.0 — not a hostile setting). **Verdict: the competence gate fails —
+  Mellum reliably fails the tool-call initiation gate under the tested
+  harness** (0 tool calls across every cell of the 2×2, seed-swept). This
+  blocks shipping Mellum as a preset; it is not a claim that Mellum's agent
+  competence fails in the absolute, and the variant plumbing itself is
+  complete and correct. The verdict named its own reopen condition — the
+  out-of-phase host-controlled action mode — which became P15. Design:
+  [`2026-08-25-p13-mellum-variant-design.md`](docs/superpowers/specs/2026-08-25-p13-mellum-variant-design.md).
+  Benchmark record:
+  [`2026-08-25-p13-mellum-benchmark-record.md`](docs/superpowers/research/2026-08-25-p13-mellum-benchmark-record.md).
 
 ## Workflow
 
