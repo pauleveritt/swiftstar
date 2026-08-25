@@ -222,9 +222,10 @@ cross the `@MainActor` app boundary and the nonisolated `swiftstar-agenttest`
   provenance (9.33 GiB weights + ~0.4 GiB scratch + linear KV anchored at
   16k/32k/40k). ctx outside [16k, 40k] is refused for the Mellum variant as
   unsupported. For a preset variant, the gate uses the declared budget as the
-  *floor*; if a persisted engine plan exists for the same variant + context
-  size, the gate uses `max(declared, persisted)`. The persisted-plan +
-  Laguna-correction path is unchanged for the raw/custom case.
+  authoritative floor. (Refining it upward with the engine's persisted
+  `planned_bytes` once a plan exists for the same variant + context size is
+  **deferred** — the persisted-plan + Laguna-correction path is unchanged for
+  the raw/custom case.)
 - **D5** — `VariantGate.admit` is the single admission entry point for app and
   harness; verify-then-memory order; `.unreadableFile` is gate-synthesized.
 - **D6** — sampler defaults are `optional` and **not wired to argv** this phase

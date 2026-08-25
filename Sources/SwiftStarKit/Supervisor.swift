@@ -7,6 +7,7 @@ public enum EngineFailure: Equatable, Sendable {
     case exited(code: Int32, stderrTail: String)
     case timeout
     case infeasible(String)   // P3: refused before spawn, computed message
+    case variantMismatch(String)  // P13: contract refusal, pre-spawn direct assignment
 }
 
 public enum SupervisorState: Equatable, Sendable {

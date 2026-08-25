@@ -8,9 +8,10 @@ import SwiftStarAppKit
 // chained-worktree transaction, then grade the result with the deterministic
 // acceptance suite and the DeepSeek qualitative read (D6).
 //
-// Usage: swift run swiftstar-agenttest --spec <roadmap|roadmap-user-story> [--repo DIR] [--batch N]
-// Env:   SWIFTSTAR_MODEL (gguf), DS4_DIR (engine), AGENTTEST_PY_PROJECT (the uv
-//        project with the acceptance deps; default ~/projects/pauleveritt/local-ai-pi)
+// Usage: swift run swiftstar-agenttest --spec <roadmap|roadmap-user-story> [--repo DIR] [--batch N] [--variant mellum-2.1]
+// Env:   SWIFTSTAR_MODEL (gguf, custom-path escape hatch), SWIFTSTAR_VARIANT,
+//        DS4_DIR (engine), AGENTTEST_PY_PROJECT (the uv project with the
+//        acceptance deps; default ~/projects/pauleveritt/local-ai-pi)
 
 let env = ProcessInfo.processInfo.environment
 let args = CommandLine.arguments
@@ -26,9 +27,38 @@ let explicitRepo = argValue("--repo")
 let fixtureName = argValue("--fixture")
 let pyProject = env["AGENTTEST_PY_PROJECT"] ?? NSHomeDirectory() + "/projects/pauleveritt/local-ai-pi"
 
-guard let gguf = env["SWIFTSTAR_MODEL"], !gguf.isEmpty else {
-    FileHandle.standardError.write(Data("swiftstar-agenttest: SWIFTSTAR_MODEL is required\n".utf8))
+// P13: resolve the model. A selected variant (--variant / SWIFTSTAR_VARIANT) is
+// verified + memory-gated once up front — before any engine is spawned —
+// covering every spawn site (roadmap, fixture, repair) (C1). SWIFTSTAR_MODEL
+// remains the custom-path escape hatch, recorded as unverified.
+let variantID = argValue("--variant") ?? env["SWIFTSTAR_VARIANT"]
+let resolvedVariant = variantID.flatMap { VariantRegistry.resolve($0) }
+let gguf: String
+if let v = resolvedVariant {
+    switch VariantGate.admit(v, contextSize: 32_768, availableBytes: MemorySnapshot.availableBytes()) {
+    case .admitted:
+        break
+    case .contractMismatch(let mismatches):
+        FileHandle.standardError.write(Data(
+            ("swiftstar-agenttest: variant '\(v.id)' refused:\n"
+             + mismatches.map(\.message).joined(separator: "\n") + "\n").utf8))
+        exit(2)
+    case .infeasible(let reason):
+        FileHandle.standardError.write(Data(
+            "swiftstar-agenttest: variant '\(v.id)' infeasible: \(reason.message)\n".utf8))
+        exit(2)
+    }
+    gguf = v.modelFile.path
+} else if variantID != nil {
+    FileHandle.standardError.write(Data("swiftstar-agenttest: unknown variant '\(variantID!)'\n".utf8))
     exit(2)
+} else {
+    guard let m = env["SWIFTSTAR_MODEL"], !m.isEmpty else {
+        FileHandle.standardError.write(Data(
+            "swiftstar-agenttest: SWIFTSTAR_MODEL is required (or pass --variant <id>)\n".utf8))
+        exit(2)
+    }
+    gguf = m
 }
 let engineDir = URL(fileURLWithPath: env["DS4_DIR"] ?? FileManager.default.currentDirectoryPath + "/external/ds4")
 
@@ -441,6 +471,11 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // is RepairLoop.run's default bound (not currently env-configurable).
         "repairThink": env["AGENTTEST_THINK"] == "1" ? "on" : "nothink",
         "repairMaxRounds": "2",
+        // P13: record the variant + sampler source + available memory so the
+        // capture is self-describing (I2/I7).
+        "variant": resolvedVariant?.id ?? "custom-unverified",
+        "samplerSource": resolvedVariant != nil ? "engine-family-default (undocumented)" : "custom-unverified",
+        "availableBytesGiB": String(format: "%.1f", Double(MemorySnapshot.availableBytes()) / 1_073_741_824),
     ]
     if let cfg = try? JSONSerialization.data(withJSONObject: runConfig, options: [.prettyPrinted, .sortedKeys]) {
         try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))

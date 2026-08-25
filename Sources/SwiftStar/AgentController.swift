@@ -95,14 +95,15 @@ final class AgentController {
             engineDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 .appendingPathComponent("external/ds4")
         }
-        let modelPath: URL
-        if let path = defaults.string(forKey: "modelPath"), !path.isEmpty {
-            modelPath = URL(fileURLWithPath: path)
-        } else if let env = ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"], !env.isEmpty {
-            modelPath = URL(fileURLWithPath: env)
-        } else {
-            modelPath = URL(fileURLWithPath: "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
-        }
+        // P13: resolve the model through the shared resolver, so a selected
+        // variant takes precedence over the legacy path (M1), with the hardcoded
+        // Laguna default only as the final fallback.
+        let modelPath = VariantResolver.resolveModelFile(
+            selectedVariantID: defaults.string(forKey: "selectedVariantID"),
+            modelPath: defaults.string(forKey: "modelPath"),
+            envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
+            fallback: URL(fileURLWithPath: "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
+        ).url
         let contextSize = defaults.object(forKey: "contextSize") as? Int ?? 32768
         let workspace: URL
         if let dir = defaults.string(forKey: "agentWorkspace"), !dir.isEmpty {
@@ -129,6 +130,27 @@ final class AgentController {
         switch state {
         case .stopped, .failed: break
         default: return
+        }
+        // P13: refresh settings so a selected variant applies (mirrors
+        // EngineController), then admit it before spawn (C1).
+        settings = AgentController.defaultSettings()
+        if let variant = VariantResolver.resolveVariant(
+            selectedVariantID: UserDefaults.standard.string(forKey: "selectedVariantID")) {
+            let admission = VariantGate.admit(
+                variant, contextSize: settings.contextSize,
+                availableBytes: MemorySnapshot.availableBytes())
+            switch admission {
+            case .admitted:
+                break
+            case .contractMismatch(let mismatches):
+                state = .failed(mismatches.map(\.message).joined(separator: "\n"))
+                log("variant refusal: \(mismatches)")
+                return
+            case .infeasible(let reason):
+                state = .failed(reason.message)
+                log("feasibility refusal: \(reason.message)")
+                return
+            }
         }
         let binary = AgentCommand.binaryPath(settings: settings)
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {

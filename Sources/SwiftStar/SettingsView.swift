@@ -1,9 +1,11 @@
 import SwiftUI
 import SwiftStarAppKit
+import SwiftStarKit
 
 struct SettingsView: View {
     @AppStorage("engineDir") private var engineDir = ""
     @AppStorage("modelPath") private var modelPath = ""
+    @AppStorage("selectedVariantID") private var selectedVariantID = ""
     @AppStorage("contextSize") private var contextSize = 32768
     @AppStorage("port") private var port = 0
 
@@ -60,10 +62,22 @@ struct SettingsView: View {
         Form {
             Section("Engine") {
                 TextField("Engine directory (DS4_DIR)", text: $engineDir)
-                TextField("Model file", text: $modelPath)
+                Picker("Variant", selection: $selectedVariantID) {
+                    Text("Custom file…").tag("")
+                    ForEach(VariantRegistry.all) { variant in
+                        Text(variant.displayName).tag(variant.id)
+                    }
+                }
+                if selectedVariantID.isEmpty {
+                    TextField("Model file", text: $modelPath)
+                } else if let variant = VariantRegistry.resolve(selectedVariantID) {
+                    Text(variant.modelFile.path)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Stepper("Context size: \(contextSize)", value: $contextSize, in: 1024...262144, step: 1024)
                 Stepper("Port (0 = auto): \(port)", value: $port, in: 0...65535, step: 1)
-                Text("Settings apply when the engine next starts.")
+                Text("A selected variant is verified before launch; a custom file is not. Settings apply when the engine next starts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

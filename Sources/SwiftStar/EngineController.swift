@@ -70,16 +70,15 @@ final class EngineController {
             engineDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 .appendingPathComponent("external/ds4")
         }
-        let modelPath: URL
-        if let path = defaults.string(forKey: "modelPath"), !path.isEmpty {
-            modelPath = URL(fileURLWithPath: path)
-        } else if let env = ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"], !env.isEmpty {
-            modelPath = URL(fileURLWithPath: env)
-        } else {
-            // Development-machine default (P1 weights). Override via Settings or
-            // SWIFTSTAR_MODEL; a missing model surfaces as an engine-exited failure.
-            modelPath = URL(fileURLWithPath: "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
-        }
+        // P13: resolve the model through the shared resolver, so a selected
+        // variant takes precedence over the legacy path (M1), with the hardcoded
+        // Laguna default only as the final fallback.
+        let modelPath = VariantResolver.resolveModelFile(
+            selectedVariantID: defaults.string(forKey: "selectedVariantID"),
+            modelPath: defaults.string(forKey: "modelPath"),
+            envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
+            fallback: URL(fileURLWithPath: "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
+        ).url
         let contextSize = defaults.object(forKey: "contextSize") as? Int ?? 32768
         let savedPort = defaults.object(forKey: "port") as? Int ?? 0
         return EngineSettings(
@@ -155,6 +154,28 @@ final class EngineController {
         // Refresh BEFORE the feasibility gate: the gate must refuse (or admit)
         // the model the user just selected, never the previous model's plan (F4).
         settings = EngineController.defaultSettings()
+
+        // P13: admit a selected variant before spawn — the contract gate runs
+        // at selection/launch, before anything expensive happens (C1).
+        if let variant = VariantResolver.resolveVariant(
+            selectedVariantID: UserDefaults.standard.string(forKey: "selectedVariantID")) {
+            let admission = VariantGate.admit(
+                variant, contextSize: settings.contextSize,
+                availableBytes: MemorySnapshot.availableBytes())
+            switch admission {
+            case .admitted:
+                break
+            case .contractMismatch(let mismatches):
+                let message = mismatches.map(\.message).joined(separator: "\n")
+                state = .failed(.variantMismatch(message))
+                log("variant refusal: \(message)")
+                return
+            case .infeasible(let reason):
+                state = .failed(.infeasible(reason.message))
+                log("feasibility refusal: \(reason.message)")
+                return
+            }
+        }
 
         // Feasibility: refuse before spawning with a computed, actionable
         // message (P3). plannedBytes comes from the engine's own boot line,

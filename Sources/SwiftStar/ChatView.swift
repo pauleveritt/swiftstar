@@ -72,6 +72,7 @@ struct ChatView: View {
         case .exited(let code, let tail): return "engine exited (\(code)): \(tail)"
         case .timeout: return "engine start timed out"
         case .infeasible(let message): return message
+        case .variantMismatch(let message): return message
         }
     }
 
