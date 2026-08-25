@@ -45,6 +45,7 @@ public struct TurnOutcome: Equatable, Sendable {
     /// empty/nil/nil/false and the app sets them on the finished record. They
     /// are `var` for that reason; the wire-derived fields above stay `let`.
     public var mutations: [String] = []
+    public var text: String = ""
     public var exitStatus: Int? = nil
     public var outputDigest: String? = nil
     public var validationRan: Bool = false
@@ -100,6 +101,7 @@ public struct TurnOutcomeBuilder {
     private var hostCalls: [(name: String, transitions: [ToolLifecycle])] = []
     /// P9 host-authoritative facts (D5), accumulated from `recordHostVerdict`.
     private var mutations: [String] = []
+    private var text = ""
     private var exitStatus: Int?
     private var outputDigest: String?
     private var validationRan = false
@@ -128,7 +130,9 @@ public struct TurnOutcomeBuilder {
             // host calls by arrival order (the `hostCalls` array), not by idx.
             _ = idx  // traced on the wire; not the key here
             hostCalls.append((name: name, transitions: [.emitted]))
-        case .hello, .status, .queued, .text, .think, .ignored, .refused, .toolRequestRefused:
+        case .text(let s):
+            text += s
+        case .hello, .status, .queued, .think, .ignored, .refused, .toolRequestRefused:
             break
         }
     }
@@ -188,6 +192,7 @@ public struct TurnOutcomeBuilder {
         outcome.exitStatus = self.exitStatus
         outcome.outputDigest = self.outputDigest
         outcome.validationRan = self.validationRan
+        outcome.text = self.text
         return outcome
     }
 

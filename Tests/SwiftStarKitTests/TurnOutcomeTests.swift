@@ -11,6 +11,14 @@ struct TurnOutcomeTests {
                              paramName: nil, value: value, status: status, calls: calls))
     }
 
+    @Test func builderAccumulatesText() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        b.apply(.text("Hello "))
+        b.apply(.text("world."))
+        let o = b.finish()
+        #expect(o.text == "Hello world.")
+    }
+
     @Test func cleanReadCallIsEmittedParsedExecuted() {
         var b = TurnOutcomeBuilder(model: "m.gguf", build: "abc123", sampler: "engine-defaults", task: "read it")
         for e in [Self.hello, tool(.start), tool(.tool, name: "read"), tool(.paramBegin),
