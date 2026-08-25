@@ -151,6 +151,26 @@ struct PacketFrontmatterTests {
         }
     }
 
+    /// `Int("01") == 1`, so a naive `Int(raw)` parse accepts a leading-zero
+    /// literal that is not canonical YAML/JSON integer syntax. Silently
+    /// accepting it means a typo like `packet: 01` parses as version 1
+    /// instead of being caught as malformed.
+    @Test func leadingZeroPacketVersionThrows() {
+        #expect(throws: (any Error).self) {
+            try PacketFrontmatter.parse(Self.sample.replacingOccurrences(of: "packet: 1",
+                                                                        with: "packet: 01"))
+        }
+    }
+
+    /// Likewise `Int("+1") == 1` — an explicit leading `+` is not canonical
+    /// integer syntax and must not be silently accepted as version 1.
+    @Test func explicitPlusPacketVersionThrows() {
+        #expect(throws: (any Error).self) {
+            try PacketFrontmatter.parse(Self.sample.replacingOccurrences(of: "packet: 1",
+                                                                        with: "packet: +1"))
+        }
+    }
+
     /// A trailing `# comment` on a scalar's line must not become part of the
     /// parsed value — that is silent corruption of the actual field.
     @Test func trailingCommentIsStrippedFromScalar() throws {

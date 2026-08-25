@@ -60,7 +60,12 @@ public enum PacketFrontmatter {
         guard let raw else {
             throw PacketFrontmatterError.malformed("packet: version is required")
         }
-        guard let version = Int(raw), version == supportedPacketVersion else {
+        // `Int(raw)` alone would accept non-canonical literals like a
+        // leading-zero `"01"` or an explicit-plus `"+1"` — both parse to the
+        // integer 1 but are not how a version 1 packet should be written.
+        // Round-tripping through `String(_:)` catches anything that isn't
+        // already in canonical form.
+        guard let version = Int(raw), String(version) == raw, version == supportedPacketVersion else {
             throw PacketFrontmatterError.malformed("packet: unsupported version \"\(raw)\"")
         }
     }
