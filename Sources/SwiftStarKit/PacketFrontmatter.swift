@@ -22,7 +22,7 @@ public enum PacketFrontmatter {
 
     public static func parse(_ document: String) throws -> HandoffPacket {
         let (frontmatter, body) = try split(document)
-        let fields = parseFields(frontmatter)
+        let fields = try parseFields(frontmatter)
 
         try requireKnownPacketVersion(fields.scalars["packet"])
 
@@ -128,7 +128,7 @@ public enum PacketFrontmatter {
     /// an indented `toolCalls:` becomes `budget.toolCalls`. Scalars and string
     /// lists are the only two value shapes v1 admits, plus the `|` block
     /// scalar as an alternate way to author a (potentially multi-line) scalar.
-    private static func parseFields(_ frontmatter: String) -> (scalars: [String: String], lists: [String: [String]]) {
+    private static func parseFields(_ frontmatter: String) throws -> (scalars: [String: String], lists: [String: [String]]) {
         var scalars: [String: String] = [:]
         var lists: [String: [String]] = [:]
         var parentKey: String?
@@ -171,7 +171,7 @@ public enum PacketFrontmatter {
             let qualified = if indent > 0, let parent = parentKey { "\(parent).\(key)" } else { key }
 
             if isBlockScalarIndicator(strippedValue) {
-                let (content, nextIndex) = consumeBlockScalar(rawLines, from: index + 1, parentIndent: indent)
+                let (content, nextIndex) = try consumeBlockScalar(rawLines, from: index + 1, parentIndent: indent)
                 scalars[qualified] = content
                 listKey = nil
                 index = nextIndex
@@ -209,9 +209,16 @@ public enum PacketFrontmatter {
     /// inside the block are kept as empty lines; trailing blank lines are
     /// clipped, matching `|`'s default "clip" chomping (a single trailing
     /// newline, i.e. no trailing blank entries once joined).
+    ///
+    /// A later content line indented *less* than the established block
+    /// indent (but still more than `parentIndent`, so it isn't the block's
+    /// end) is a YAML syntax error, not something to dedent-and-truncate: a
+    /// naive `dropFirst(min(blockIndent, line.count))` would silently drop
+    /// real leading characters from that line instead of failing. Per this
+    /// parser's "reject what you don't understand" philosophy, throw.
     private static func consumeBlockScalar(
         _ rawLines: [String], from start: Int, parentIndent: Int
-    ) -> (content: String, nextIndex: Int) {
+    ) throws -> (content: String, nextIndex: Int) {
         var lines: [String] = []
         var blockIndent: Int?
         var index = start
@@ -225,8 +232,16 @@ public enum PacketFrontmatter {
             }
             let candidateIndent = candidate.prefix { $0 == " " }.count
             if candidateIndent <= parentIndent { break }
-            if blockIndent == nil { blockIndent = candidateIndent }
-            lines.append(String(candidate.dropFirst(min(blockIndent!, candidate.count))))
+            if let blockIndent {
+                guard candidateIndent >= blockIndent else {
+                    throw PacketFrontmatterError.malformed(
+                        "block scalar content line is indented less than the block's established indent"
+                    )
+                }
+            } else {
+                blockIndent = candidateIndent
+            }
+            lines.append(String(candidate.dropFirst(blockIndent!)))
             index += 1
         }
 

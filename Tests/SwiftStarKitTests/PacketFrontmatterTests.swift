@@ -223,6 +223,27 @@ struct PacketFrontmatterTests {
         #expect(packet.validationCommand == "set -e\npytest -q")
     }
 
+    /// A block scalar content line indented less than the block's own
+    /// established indent (per the first content line), but still more than
+    /// the parent key's indent, is a YAML syntax error — real YAML would
+    /// reject it. Silently dedenting by `min(blockIndent, line.count)` would
+    /// instead drop real leading characters from that line and corrupt the
+    /// value. This parser's stated philosophy is to reject what it doesn't
+    /// understand rather than guess, so this must throw.
+    @Test func underIndentedBlockScalarContentThrows() {
+        let underIndented = Self.sample.replacingOccurrences(
+            of: "  command: \"pytest -q\"",
+            with: """
+              command: |
+                set -e
+               pytest -q
+            """
+        )
+        #expect(throws: (any Error).self) {
+            try PacketFrontmatter.parse(underIndented)
+        }
+    }
+
     /// A CRLF-terminated document is plausible input — this repo already
     /// models `LineEnding.crlf` for worktree files — not exotic, and must
     /// parse rather than throw the misleading `missingFrontmatter` (caused by
