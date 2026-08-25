@@ -145,6 +145,8 @@ func phasePacket(_ phaseText: String, absoluteRoot: String? = nil) -> HandoffPac
     ]
 
     let writableNote = ([
+        TextContract.directive,
+        "",
         "You may write or edit only these files:",
         renderedFiles,
     ] + pathRule + [
@@ -166,6 +168,8 @@ func phasePacket(_ phaseText: String, absoluteRoot: String? = nil) -> HandoffPac
         validationCommand: vettedImport,
         selfTestCommand: vettedPytest,
         toolCallBudget: Int(env["AGENTTEST_TOOL_BUDGET"] ?? "30") ?? 30,
+        textContract: true,
+        turnBudget: max(100_000, renderedFiles.utf8.count * 4),
         facts: facts,
         redacts: redacts,
         // The packet records the sampling the run actually used, so a capture is
@@ -535,6 +539,21 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                                                capture: captureHandle)
         }
         outcome = forcingOutcome
+        // Text-contract harvest: a zero-tool-call eos turn's labeled blocks become the
+        // phase's mutations (spec Section 2 step 3).
+        if packet.textContract, outcome.toolCalls.isEmpty, outcome.stopReason == .eos {
+            let harvest = LabeledBlockParser.parse(outcome.text, writableFiles: seedPacket.writableFiles)
+            if harvest.files.isEmpty {
+                return RunOutcome(finish: .stopped,
+                                  note: "phase \(i + 1) contractNotFollowed (0 labeled blocks)",
+                                  acceptanceExit: nil, verdict: nil, report: nil,
+                                  elapsed: Int(Date().timeIntervalSince(runStart)))
+            }
+            for (path, content) in harvest.files {
+                try WorktreeDispatcher.writeFile(content, to: path, in: wt.url)
+            }
+            outcome.mutations = harvest.files.map(\.path)
+        }
         // Run the packet's own vetted import check before the phase may report
         // a candidate. C17: two runs completed every phase, wrote every file,
         // and died in acceptance *collection* on one wrong import line
