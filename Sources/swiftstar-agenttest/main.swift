@@ -79,6 +79,9 @@ let sharedContext = mission + "\n" + techStack
 /// took Mellum from 0 tool calls to 4-of-4 files, and C1 found the same
 /// correlation for Laguna. `AGENTTEST_PATH_STYLE=absolute` runs that arm.
 let absolutePathStyle = env["AGENTTEST_PATH_STYLE"] == "absolute"
+// D11: the text-contract build is gated behind an env flag so the default
+// remains agentic (the forcing-gate experiment must run agentic too).
+let textContractBuild = env["AGENTTEST_TEXT_CONTRACT"] == "1"
 
 /// Strings this run's spec is supposed to withhold, comma-separated
 /// (`AGENTTEST_REDACT="default_factory,fastapi.responses"`). An experiment cell
@@ -117,7 +120,7 @@ let writableFiles = ["app.py", "models.py",
 /// `absoluteRoot` renders the deliverable list as absolute paths under that
 /// root. The worktree only exists after `preparePhase`, so the caller builds
 /// once relatively to create it, then rebuilds with the real root.
-func phasePacket(_ phaseText: String, absoluteRoot: String? = nil) -> HandoffPacket {
+func phasePacket(_ phaseText: String, absoluteRoot: String? = nil, textContract: Bool = false) -> HandoffPacket {
     let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
     let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
     let renderedFiles: String
@@ -144,9 +147,11 @@ func phasePacket(_ phaseText: String, absoluteRoot: String? = nil) -> HandoffPac
         + "So `import app` imports the `app.py` you wrote, and `tests/test_app.py` is the file you wrote.",
     ]
 
-    let writableNote = ([
-        TextContract.directive,
-        "",
+    // The text-contract directive ("Do not call tools …") only belongs on
+    // text-contract phase packets; the forcing re-prompt and default agentic
+    // builds pass textContract: false and must stay clean of it.
+    let contractPrefix: [String] = textContract ? [TextContract.directive, ""] : []
+    let writableNote = (contractPrefix + [
         "You may write or edit only these files:",
         renderedFiles,
     ] + pathRule + [
@@ -168,8 +173,8 @@ func phasePacket(_ phaseText: String, absoluteRoot: String? = nil) -> HandoffPac
         validationCommand: vettedImport,
         selfTestCommand: vettedPytest,
         toolCallBudget: Int(env["AGENTTEST_TOOL_BUDGET"] ?? "30") ?? 30,
-        textContract: true,
-        turnBudget: max(100_000, renderedFiles.utf8.count * 4),
+        textContract: textContract,
+        turnBudget: textContract ? max(100_000, renderedFiles.utf8.count * 4) : 100_000,
         facts: facts,
         redacts: redacts,
         // The packet records the sampling the run actually used, so a capture is
@@ -253,7 +258,7 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
 // deferring `phases`/`decompose` themselves keeps the non-fixture path unchanged.
 if fixtureName == nil {
     for (i, phaseText) in phases.enumerated() {
-        if case .invalid(let reasons) = HandoffPacketValidator.validate(phasePacket(phaseText)) {
+        if case .invalid(let reasons) = HandoffPacketValidator.validate(phasePacket(phaseText, textContract: textContractBuild)) {
             FileHandle.standardError.write(Data(
                 ("swiftstar-agenttest: packet rejected for phase \(i + 1):\n"
                  + reasons.map { "  - \($0)" }.joined(separator: "\n") + "\n").utf8))
@@ -488,25 +493,26 @@ func runOnce(_ index: Int) throws -> RunOutcome {
             : (resolvedVariant?.sampler?.description ?? ""),
         "availableBytesGiB": String(format: "%.1f", Double(MemorySnapshot.availableBytes()) / 1_073_741_824),
         "seed": env["AGENTTEST_SEED"] ?? "0",
+        "textContract": textContractBuild ? "on" : "off",
     ]
     if let cfg = try? JSONSerialization.data(withJSONObject: runConfig, options: [.prettyPrinted, .sortedKeys]) {
         try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))
     }
-    if let pkt = try? JSONEncoder().encode(phasePacket(phases[0])) {
+    if let pkt = try? JSONEncoder().encode(phasePacket(phases[0], textContract: textContractBuild)) {
         try? pkt.write(to: captureDir.appendingPathComponent("packet.json"))
     }
 
     for (i, phaseText) in phases.enumerated() {
         // Same builder the up-front validation gate ran against, so what was
         // validated is exactly what is dispatched.
-        let seedPacket = phasePacket(phaseText)
+        let seedPacket = phasePacket(phaseText, textContract: textContractBuild)
         print("[agenttest] phase \(i + 1)/\(phases.count) …")
         let wt = try txn.preparePhase(packet: seedPacket)
         // The worktree path is only known now, so the absolute arm rebuilds
         // here and is re-validated — the up-front gate ran before the model
         // loaded, this one guarantees the dispatched packet is well-formed.
         let packet = absolutePathStyle
-            ? phasePacket(phaseText, absoluteRoot: wt.url.path)
+            ? phasePacket(phaseText, absoluteRoot: wt.url.path, textContract: textContractBuild)
             : seedPacket
         if case .invalid(let reasons) = HandoffPacketValidator.validate(packet) {
             FileHandle.standardError.write(Data(
