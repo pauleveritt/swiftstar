@@ -261,6 +261,59 @@ without productive action.
 **Done when:** a role that needs reasoning completes with bounded thinking, or
 the next failure mode is named and classified.
 
+### P12.7 — Honest cross-system comparison
+
+**Added 2026-08-25**, after a session's ad-hoc comparison against a Claude
+Code course exercise turned out to have measured the wrong metric (single
+final `ctx_used` — a live session position — compared against a stateless
+architecture's cumulative resend total) and needed a Fable correction to
+catch. This phase builds the comparison properly instead of re-deriving it
+by hand next time.
+
+Four pieces:
+
+1. **Trace-channel capture in `swiftstar-agenttest`.** The harness currently
+   captures only `wire.ndjson`; the `--trace` channel (already parsed
+   elsewhere by `TraceParser`, built for P6) carries the `prefill sync done
+   … cached=X suffix=Y` lines needed to compute real cumulative context.
+   Wire it into this harness's capture the way `swiftstar-drive` already
+   does.
+2. **Two new metrics, computed from that trace data**, added to
+   `run-config.json`/the report:
+   - **Cumulative context processed** — sum of `suffix` (freshly-prefilled
+     tokens) across every inference round in a run. This is the
+     Claude-comparable number; the single final `ctx_used` is not.
+   - **Stateful tokens** — `cumulative context processed − final ctx_used`:
+     tokens that were logically part of the session but never needed
+     reprocessing, thanks to the persistent KV session. Structurally
+     undefined for a stateless-per-call architecture (no persistent
+     session to compare against) — reports as N/A in that column, not
+     zero.
+3. **`DumbImplementer`** — a naive, flag-gated packet-builder mode that
+   sends a minimal "here's the spec, build it" packet instead of
+   `phasePacket`'s engineered prompt (no pinned facts, no "don't re-explore"
+   rule, no terse writable-note discipline), still dispatched through
+   `PoolOrchestrator` — isolating how much of Laguna's context economy is
+   architectural (persistent session, the read-cache, `ToolResultCondenser`)
+   versus prompt engineering specific to this harness.
+4. **Warm-started timing.** `runOnce`'s wall-clock/context counters
+   currently start before the engine attaches to Metal and loads weights —
+   conflating one-time engine-boot cost with task performance. Attach, run
+   one throwaway warm-up prompt, then start every counter this harness
+   reports from that point. One number, not two.
+
+DeepSeek grading (`DeepSeekGrader`, already working via `OPENROUTER_API_KEY`/
+`~/.pi/agent/auth.json`) needs no new work — it already grades whatever
+lands in `writableFiles`; `DumbImplementer` runs go through the same
+`runOnce` grading step.
+
+**Done when:** a `DumbImplementer` run against `roadmap`/`roadmap-user-story`
+reports cumulative-context-processed and stateful-tokens alongside the
+existing metrics, warm-started timing is in place, and the comparison
+against Claude Code's L3 config is redone with the corrected metric —
+written up in `docs/cool_things/` alongside the persistent-session-vs-
+stateless-API finding that motivated this phase.
+
 ## Explicit non-goals
 
 - **More quantization hunting.** Same failure signature at Q2_K and Q4_K_M; only
