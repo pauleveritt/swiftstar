@@ -268,9 +268,11 @@ Code course exercise turned out to have measured the wrong metric (single
 final `ctx_used` — a live session position — compared against a stateless
 architecture's cumulative resend total) and needed a Fable correction to
 catch. This phase builds the comparison properly instead of re-deriving it
-by hand next time.
+by hand next time. **Revised 2026-08-25 (same day)** after a second,
+deeper-diving agent found the first correction's own replacement metric was
+still wrong, plus a real accumulation bug — see items 2 and 2a below.
 
-Four pieces:
+Five pieces:
 
 1. **Trace-channel capture in `swiftstar-agenttest`.** The harness currently
    captures only `wire.ndjson`; the `--trace` channel (already parsed
@@ -278,24 +280,48 @@ Four pieces:
    … cached=X suffix=Y` lines needed to compute real cumulative context.
    Wire it into this harness's capture the way `swiftstar-drive` already
    does.
-2. **Two new metrics, computed from that trace data**, added to
-   `run-config.json`/the report:
-   - **Cumulative context processed** — sum of `suffix` (freshly-prefilled
-     tokens) across every inference round in a run. This is the
-     Claude-comparable number; the single final `ctx_used` is not.
-   - **Stateful tokens** — `cumulative context processed − final ctx_used`:
-     tokens that were logically part of the session but never needed
-     reprocessing, thanks to the persistent KV session. Structurally
-     undefined for a stateless-per-call architecture (no persistent
-     session to compare against) — reports as N/A in that column, not
-     zero.
+2. **Three separate metrics from that trace data, not one.** The first
+   draft of this plan proposed summing `suffix` alone as "cumulative
+   context processed" — wrong: `suffix` measures fresh prefill *compute*,
+   not the API-style "total input tokens" a system like Claude Code
+   reports (which includes cache-read tokens — per OpenAI's own prompt-
+   caching docs, cached tokens stay counted in total input tokens, tracked
+   separately, billed at a reduced rate, even though their KV state avoids
+   repeated computation). Capture and report all three, per run:
+   - **Σprompt** — total tokens presented to the model each round, summed
+     across every round. Only this one is plausibly comparable to a
+     Claude-style "context processed" figure.
+   - **Σcached** — the portion of Σprompt served from KV without
+     recomputation.
+   - **Σsuffix** — the portion that was freshly prefilled (Σprompt − Σcached).
+   - **Stateful tokens** — `Σprompt − final ctx_used`: tokens that were
+     logically part of the session but never needed *reprocessing* thanks
+     to the persistent KV session — i.e. what a stateless-per-call
+     architecture would have paid for again that this architecture didn't.
+     Structurally undefined for a stateless system (no persistent session
+     to diff against) — reports as N/A in that column, not zero.
+   2a. **Fix a real bug while wiring this: `generated` is last-value-wins,
+   not accumulated.** `TurnOutcomeBuilder` (`Sources/SwiftStarKit/TurnOutcome.swift`)
+   overwrites `self.generated` on every `.ready` event
+   (`if let generated { self.generated = generated }`) rather than summing
+   across rounds. If `.ready` fires once per tool-calling round with a
+   per-round count, a multi-round phase's reported `generatedTokens` is
+   only its last round's generation, not the phase's total — silently
+   undercounting every "generated tokens" figure this harness has ever
+   reported, not just the ones in this comparison. Fix: accumulate across
+   rounds, not overwrite.
 3. **`DumbImplementer`** — a naive, flag-gated packet-builder mode that
    sends a minimal "here's the spec, build it" packet instead of
    `phasePacket`'s engineered prompt (no pinned facts, no "don't re-explore"
    rule, no terse writable-note discipline), still dispatched through
    `PoolOrchestrator` — isolating how much of Laguna's context economy is
-   architectural (persistent session, the read-cache, `ToolResultCondenser`)
-   versus prompt engineering specific to this harness.
+   architectural (the persistent session, `ToolResultCondenser`'s 8000-
+   *byte* cap) versus prompt engineering specific to this harness. Note:
+   the SHA-256 read-cache (`PoolOrchestrator.readCache`) is **not** part of
+   that architectural floor the way the design doc previously implied — it
+   is cleared at the start of every `runPhase` call (`readCache.removeAll()`),
+   so it helps only *within* a phase's own tool-calling rounds, not across
+   the whole multi-phase run.
 4. **Warm-started timing.** `runOnce`'s wall-clock/context counters
    currently start before the engine attaches to Metal and loads weights —
    conflating one-time engine-boot cost with task performance. Attach, run
@@ -308,11 +334,13 @@ lands in `writableFiles`; `DumbImplementer` runs go through the same
 `runOnce` grading step.
 
 **Done when:** a `DumbImplementer` run against `roadmap`/`roadmap-user-story`
-reports cumulative-context-processed and stateful-tokens alongside the
-existing metrics, warm-started timing is in place, and the comparison
-against Claude Code's L3 config is redone with the corrected metric —
-written up in `docs/cool_things/` alongside the persistent-session-vs-
-stateless-API finding that motivated this phase.
+reports Σprompt/Σcached/Σsuffix and stateful-tokens alongside the existing
+(now-fixed, truly-accumulated) generated-token count, warm-started timing
+is in place, and the comparison against Claude Code's L3 config is redone
+with Σprompt as the comparable figure — written up in `docs/cool_things/`
+alongside the persistent-session-vs-stateless-API finding that motivated
+this phase, stated as a hypothesis pending that real measurement, not a
+result, until the trace capture actually lands.
 
 ## Explicit non-goals
 
