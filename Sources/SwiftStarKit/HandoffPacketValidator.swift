@@ -67,6 +67,14 @@ public enum HandoffPacketValidator {
             reasons.append("turnBudget must be greater than zero")
         }
 
+        if packet.sampling.maxTokens <= 0 {
+            reasons.append("sampling.maxTokens must be greater than zero")
+        }
+
+        if packet.validationCommand?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+            reasons.append("validation.command is required")
+        }
+
         for path in packet.writableFiles {
             if path.hasPrefix("/") {
                 reasons.append("writable path \"\(path)\" is absolute; paths are workspace-relative")

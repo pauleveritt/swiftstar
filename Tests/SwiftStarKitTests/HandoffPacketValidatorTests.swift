@@ -195,6 +195,52 @@ struct HandoffPacketValidatorTests {
         #expect(decoded.redacts == [])
     }
 
+    /// `sampling.maxTokens` is the `-n` cap passed to the worker process; zero
+    /// or negative is not "unlimited," it is a worker that generates nothing.
+    @Test func zeroMaxTokensIsRejected() {
+        let packet = HandoffPacket(
+            taskText: "Add the route.",
+            writableFiles: ["app.py"],
+            validationCommand: "pytest -q",
+            baselines: [:],
+            turnBudget: 1,
+            toolCallBudget: 30,
+            sampling: SamplingPolicy(think: .bounded, maxTokens: 0, temperature: 0)
+        )
+
+        #expect(HandoffPacketValidator.validate(packet) != .valid)
+    }
+
+    /// A packet with no validation command gives the parent nothing to run to
+    /// find out whether the worker's change is correct.
+    @Test func absentValidationCommandIsRejected() {
+        let packet = HandoffPacket(
+            taskText: "Add the route.",
+            writableFiles: ["app.py"],
+            validationCommand: nil,
+            baselines: [:],
+            turnBudget: 1,
+            toolCallBudget: 30
+        )
+
+        #expect(HandoffPacketValidator.validate(packet) != .valid)
+    }
+
+    /// Whitespace-only is the same failure as absent — there is still nothing
+    /// runnable.
+    @Test func blankValidationCommandIsRejected() {
+        let packet = HandoffPacket(
+            taskText: "Add the route.",
+            writableFiles: ["app.py"],
+            validationCommand: "   ",
+            baselines: [:],
+            turnBudget: 1,
+            toolCallBudget: 30
+        )
+
+        #expect(HandoffPacketValidator.validate(packet) != .valid)
+    }
+
     @Test func emptyTaskTextIsRejected() {
         let packet = HandoffPacket(
             taskText: "   \n  ",
