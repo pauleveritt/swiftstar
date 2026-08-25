@@ -394,69 +394,96 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     }
     print("[agenttest] final candidate: \(ref)")
 
-    // MARK: - grade (deterministic acceptance suite)
+    // MARK: - grade (deterministic acceptance suite) + repair on failure
 
-    var acceptanceExit: Int32 = -1
-    if let gradeWT = txn.finalWorktree {
-        let acceptance = try String(contentsOf: fixtureDir.appendingPathComponent("acceptance/test_acceptance.py"), encoding: .utf8)
-        try acceptance.write(to: gradeWT.url.appendingPathComponent("test_acceptance.py"), atomically: true, encoding: .utf8)
-
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        p.arguments = ["uv", "run", "--project", pyProject, "pytest", "-q", "test_acceptance.py"]
-        p.currentDirectoryURL = gradeWT.url
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = out
-        try p.run()
-        p.waitUntilExit()
-        acceptanceExit = p.terminationStatus
-        let output = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        print("[agenttest] acceptance exit=\(p.terminationStatus)")
-        print(output)
-        // D3: persist the grade. Without this a capture keeps only the grader's
-        // qualitative verdict -- which the project's own record shows returning
-        // "good" for failing code -- so a run's real result lived in terminal
-        // scrollback and could not be reconstructed from the repo.
-        try? "exit=\(p.terminationStatus)\n\n\(output)"
-            .write(to: captureDir.appendingPathComponent("acceptance.txt"),
-                   atomically: true, encoding: .utf8)
-    } else {
+    guard let failedWT = txn.finalWorktree else {
         return RunOutcome(finish: .stopped, note: "no final worktree to grade",
                           acceptanceExit: nil, verdict: nil, report: nil,
                           elapsed: Int(Date().timeIntervalSince(runStart)))
     }
+    let acceptanceSource = try String(
+        contentsOf: fixtureDir.appendingPathComponent("acceptance/test_acceptance.py"),
+        encoding: .utf8)
+    var grade = try AcceptanceGrader.grade(
+        worktree: failedWT.url, acceptanceSource: acceptanceSource, pyProject: pyProject)
+    var acceptanceExit = grade.exit
+    print("[agenttest] acceptance exit=\(grade.exit)")
+    print(grade.output)
+    try? "exit=\(grade.exit)\n\n\(grade.output)"
+        .write(to: captureDir.appendingPathComponent("acceptance.txt"),
+               atomically: true, encoding: .utf8)
 
-    // MARK: - DeepSeek grader (qualitative read, D6)
+    var gradeWorktree = failedWT
+    var gradeWorktreeOwnedByTxn = true
+    var repairNote = ""
 
-    // Dump the final worktree's generated code + the fixed rubric into the capture
-    // dir (the committed artifact the record cites), then grade with DeepSeek. This
-    // runs BEFORE `discardFinal`, while the final worktree is still present.
-    var verdict = GraderVerdict(verdict: .error, reasons: [])
-    if let gradeWT = txn.finalWorktree {
-        var codeDump = ""
-        for file in writableFiles {
-            let url = gradeWT.url.appendingPathComponent(file)
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            codeDump += "=== \(file) ===\n\(text)\n\n"
-        }
-        let rubric = specText + "\n\n" + mission + "\n\n" + techStack
-        try codeDump.write(to: captureDir.appendingPathComponent("code.md"), atomically: true, encoding: .utf8)
-        try rubric.write(to: captureDir.appendingPathComponent("rubric.md"), atomically: true, encoding: .utf8)
-
-        print("[agenttest] grader: calling \(DeepSeekGrader.model) …")
-        verdict = DeepSeekGrader.grade(rubric: rubric, code: codeDump)
-        print("[agenttest] grader verdict: \(verdict.verdict.rawValue)")
-        for reason in verdict.reasons {
-            print("[agenttest]   - \(reason)")
-        }
-        let verdictObj: [String: Any] = ["verdict": verdict.verdict.rawValue, "reasons": verdict.reasons]
-        if let data = try? JSONSerialization.data(withJSONObject: verdictObj, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: captureDir.appendingPathComponent("verdict.json"))
+    if !grade.passed {
+        do {
+            let repair = try RepairLoop.run(
+                repo: repoURL,
+                failedRef: ref,          // txn.candidateRef (the failed implement chain)
+                initialGrade: grade,
+                packetBuilder: repairPacket,
+                runPhase: { pkt, wt, cap in
+                    try orch.runPhase(worker: WorkerId(2), packet: pkt, worktree: wt, capture: cap)
+                },
+                grade: { wt in try AcceptanceGrader.grade(
+                    worktree: wt, acceptanceSource: acceptanceSource, pyProject: pyProject) },
+                capture: captureHandle,
+                captureDir: captureDir)
+            switch repair {
+            case .passed(let repairedRef, let g, let wt):
+                grade = g
+                acceptanceExit = g.exit
+                gradeWorktree = wt
+                gradeWorktreeOwnedByTxn = false
+                repairNote = "repaired \(repairedRef)"
+                print("[agenttest] repair: passed — \(repairedRef) (exit \(g.exit))")
+                try? "exit=\(g.exit)\n\n\(g.output)\n\nrepaired: \(repairedRef)"
+                    .write(to: captureDir.appendingPathComponent("acceptance.txt"),
+                           atomically: true, encoding: .utf8)
+            case .exhausted(_, let receipt):
+                repairNote = "repair exhausted (\(receipt))"
+                print("[agenttest] repair: exhausted — \(receipt)")
+            }
+        } catch RepairLoopError.sessionExhausted(let reason) {
+            txn.discardFinal()
+            return RunOutcome(finish: .stopped,
+                              note: "repair session exhausted (\(reason.rawValue))",
+                              acceptanceExit: nil, verdict: nil, report: nil,
+                              elapsed: Int(Date().timeIntervalSince(runStart)))
         }
     }
 
-    txn.discardFinal()
+    // MARK: - DeepSeek grader (qualitative read, D6) against the graded tree
+
+    var verdict = GraderVerdict(verdict: .error, reasons: [])
+    var codeDump = ""
+    for file in writableFiles {
+        let url = gradeWorktree.url.appendingPathComponent(file)
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+        codeDump += "=== \(file) ===\n\(text)\n\n"
+    }
+    let rubric = specText + "\n\n" + mission + "\n\n" + techStack
+    try codeDump.write(to: captureDir.appendingPathComponent("code.md"), atomically: true, encoding: .utf8)
+    try rubric.write(to: captureDir.appendingPathComponent("rubric.md"), atomically: true, encoding: .utf8)
+
+    print("[agenttest] grader: calling \(DeepSeekGrader.model) …")
+    verdict = DeepSeekGrader.grade(rubric: rubric, code: codeDump)
+    print("[agenttest] grader verdict: \(verdict.verdict.rawValue)")
+    for reason in verdict.reasons { print("[agenttest]   - \(reason)") }
+    let verdictObj: [String: Any] = ["verdict": verdict.verdict.rawValue, "reasons": verdict.reasons]
+    if let data = try? JSONSerialization.data(withJSONObject: verdictObj, options: [.prettyPrinted, .sortedKeys]) {
+        try? data.write(to: captureDir.appendingPathComponent("verdict.json"))
+    }
+
+    // Discard the graded worktree: txn-owned via discardFinal, repair-owned via WorktreeDispatcher.
+    if gradeWorktreeOwnedByTxn {
+        txn.discardFinal()
+    } else {
+        WorktreeDispatcher.discard(gradeWorktree, in: repoURL)
+        txn.discardFinal()
+    }
 
     // Analyze the captured wire (D5) — deterministic, re-derivable without a rerun.
     var report: AgentTestReport?
@@ -472,7 +499,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
 
     let elapsed = Int(Date().timeIntervalSince(runStart))
     print("[agenttest] elapsed: \(elapsed)s")
-    return RunOutcome(finish: .completed, note: "",
+    return RunOutcome(finish: .completed, note: repairNote,
                       acceptanceExit: acceptanceExit, verdict: verdict, report: report,
                       elapsed: elapsed)
 }
