@@ -487,6 +487,24 @@ Deferred, each with the condition that reopens it.
   can ship.* Source: `SWIFTSTAR.md`.
 - **A menu-bar extra.** Explicitly declined 2026-08-21. *Reopens only on a
   direct request; the at-a-glance glance is the one thing it was good for.*
+- **Warm-started metrics for `swiftstar-agenttest`.** Wall-clock elapsed and
+  context/token counters currently start (`runStart = Date()`,
+  `Sources/swiftstar-agenttest/main.swift`) *before* `PoolOrchestrator` is
+  constructed — i.e. before the engine attaches to Metal and the weights are
+  mapped in. On a cold page cache this can add real seconds (observed:
+  ~200ms warm, ~4.6s on one cold load this session) that have nothing to do
+  with task performance, and it's exactly the wrong number for the question
+  people actually ask — "how fast does this run in the middle of a work
+  session," not "how fast including the one-time engine boot." Fix
+  direction: attach the engine, run one throwaway minimal prompt ("hello
+  world" or similar) to absorb first-prompt-specific setup cost, *then*
+  start every counter this harness reports (wall-clock, `ctx_used`, tool
+  calls) from that point. One number, not two — the warm-up is a discarded
+  pre-step, not a second reported figure. *Reopens when someone needs a
+  trustworthy wall-clock/context comparison from this harness again* (it
+  already bit one such comparison this session — see
+  `.superpowers/sdd/2026-08-24-p12-4-repair-role/progress.md` if that
+  session's ledger is still around). Source: this session, 2026-08-25.
 
 ## Prior work
 
