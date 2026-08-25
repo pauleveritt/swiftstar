@@ -96,8 +96,16 @@ public enum PacketFrontmatter {
     }
 
     /// Splits `---`-fenced frontmatter from the markdown body.
+    ///
+    /// CRLF is normalized to LF up front rather than trimmed line-by-line: a
+    /// CRLF document is plausible input (this repo already models
+    /// `LineEnding.crlf` for worktree files), and `.whitespaces` — used
+    /// throughout this parser to trim fence and key/value lines — does not
+    /// strip `\r`, so an untouched CRLF fence line never compares equal to
+    /// `"---"` and the parser threw the misleading `missingFrontmatter`.
     private static func split(_ document: String) throws -> (String, String) {
-        let lines = document.components(separatedBy: "\n")
+        let normalized = document.replacingOccurrences(of: "\r\n", with: "\n")
+        let lines = normalized.components(separatedBy: "\n")
         guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else {
             throw PacketFrontmatterError.missingFrontmatter
         }

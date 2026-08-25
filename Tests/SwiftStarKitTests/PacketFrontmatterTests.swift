@@ -188,4 +188,17 @@ struct PacketFrontmatterTests {
         let packet = try PacketFrontmatter.parse(withBlock)
         #expect(packet.validationCommand == "set -e\npytest -q")
     }
+
+    /// A CRLF-terminated document is plausible input — this repo already
+    /// models `LineEnding.crlf` for worktree files — not exotic, and must
+    /// parse rather than throw the misleading `missingFrontmatter` (caused by
+    /// `.whitespaces` not stripping `\r`, so the fence line `"---\r"` never
+    /// compares equal to `"---"`).
+    @Test func crlfDocumentParses() throws {
+        let crlf = Self.sample.replacingOccurrences(of: "\n", with: "\r\n")
+        let packet = try PacketFrontmatter.parse(crlf)
+        #expect(packet.taskText == "Implement phase 2: the complaints board.")
+        #expect(packet.writableFiles == ["app.py", "templates/complaints.html"])
+        #expect(packet.validationCommand == "pytest -q")
+    }
 }
