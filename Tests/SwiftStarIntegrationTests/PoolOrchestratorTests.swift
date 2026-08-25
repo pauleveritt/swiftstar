@@ -20,7 +20,7 @@ struct PoolOrchestratorTests {
             contextSize: 16384,
             workspace: URL(fileURLWithPath: "/tmp/w"),
             shellAllowed: false)
-        let argv = AgentCommand.argv(settings: settings) + ["--subagent-pool", "2"]
+        let argv = PoolEngine.argv(settings: settings, workers: 3)
 
         let capture = try Data(contentsOf: FakeAgentHarness.fixture("pool.ndjson"))
         let source = try FakeAgentSource.generate(capture: capture, engineArgv: argv, hostTools: false)
