@@ -150,4 +150,26 @@ struct PacketFrontmatterTests {
                                                                         with: ""))
         }
     }
+
+    /// A trailing `# comment` on a scalar's line must not become part of the
+    /// parsed value — that is silent corruption of the actual field.
+    @Test func trailingCommentIsStrippedFromScalar() throws {
+        let withComment = Self.sample.replacingOccurrences(
+            of: "toolCalls: 30",
+            with: "toolCalls: 30  # max tool calls per phase"
+        )
+        let packet = try PacketFrontmatter.parse(withComment)
+        #expect(packet.toolCallBudget == 30)
+    }
+
+    /// A `#` that is part of a quoted scalar's actual content is not a
+    /// comment and must survive.
+    @Test func hashInsideQuotedScalarIsNotStrippedAsComment() throws {
+        let withHash = Self.sample.replacingOccurrences(
+            of: "command: \"pytest -q\"",
+            with: "command: \"pytest -q -k 'not #slow'\""
+        )
+        let packet = try PacketFrontmatter.parse(withHash)
+        #expect(packet.validationCommand == "pytest -q -k 'not #slow'")
+    }
 }

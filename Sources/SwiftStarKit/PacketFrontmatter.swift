@@ -128,13 +128,16 @@ public enum PacketFrontmatter {
 
             if line.hasPrefix("- ") {
                 guard let key = listKey else { continue }
-                lists[key, default: []].append(unquote(String(line.dropFirst(2))))
+                let item = stripTrailingComment(String(line.dropFirst(2)))
+                    .trimmingCharacters(in: .whitespaces)
+                lists[key, default: []].append(unquote(item))
                 continue
             }
 
             guard let colon = line.firstIndex(of: ":") else { continue }
             let key = String(line[line.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
-            let value = unquote(String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces))
+            let rawValue = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            let value = unquote(stripTrailingComment(rawValue).trimmingCharacters(in: .whitespaces))
 
             if indent == 0 { parentKey = nil }
             let qualified = if indent > 0, let parent = parentKey { "\(parent).\(key)" } else { key }
@@ -150,6 +153,30 @@ public enum PacketFrontmatter {
         }
 
         return (scalars, lists)
+    }
+
+    /// Truncates at a `#` that starts a trailing comment — one preceded by
+    /// whitespace (or at the very start) and outside of quotes — leaving a
+    /// `#` that is part of the scalar's actual quoted content untouched.
+    private static func stripTrailingComment(_ value: String) -> String {
+        var inSingleQuote = false
+        var inDoubleQuote = false
+        var previousWasSpace = true
+        var result = ""
+
+        for char in value {
+            if char == "\"" && !inSingleQuote { inDoubleQuote.toggle() }
+            if char == "'" && !inDoubleQuote { inSingleQuote.toggle() }
+
+            if char == "#" && !inSingleQuote && !inDoubleQuote && previousWasSpace {
+                break
+            }
+
+            result.append(char)
+            previousWasSpace = (char == " " || char == "\t")
+        }
+
+        return result.trimmingCharacters(in: .whitespaces)
     }
 
     private static func unquote(_ value: String) -> String {
