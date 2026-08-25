@@ -74,6 +74,16 @@ loop that consumes that evidence's plumbing rather than `repair.py`'s.
   packet, so the repair surface is identical to every implement phase's — no
   per-phase narrowing exists to reconcile.
 
+  **This makes the task strictly harder than the 3/3 evidence base, and the
+  plan's "repair is proven" framing does not carry over.** The recorded 3/3 ran
+  with the target file supplied directly — `repair.py`'s picker (and the
+  localization problem it existed to solve) was bypassed, not merely working
+  correctly. Full-surface repair asks the model to localize among six files
+  *and* edit correctly, which is a materially different and harder task than
+  anything measured. Treat P12.4 as testing an unproven capability, not
+  assembling a proven one; the fixture tier should be expected to fail on the
+  first attempt rather than read as a smoke test of known-good plumbing.
+
 - **D3 — Repair reuses `HandoffPacket`, unchanged.** No repair-specific packet
   type. The repair packet is built with `role: .repair`, `sampling: .off` by
   default (overridable via `AGENTTEST_REPAIR_THINK=1` → `.bounded` for the
@@ -85,8 +95,13 @@ loop that consumes that evidence's plumbing rather than `repair.py`'s.
   consumers.
 
 - **D4 — Two candidate rounds, then `.repairExhausted`; a receipt ends the loop
-  immediately.** Repair is bounded: up to 2 *candidate-producing* rounds, each
-  re-graded. A wrong fix is detected by re-grading and becomes the next round's
+  immediately.** *The bound of 2 is a starting value, not a derived one — no
+  evidence sets it. The prior repair evidence was single-shot (one round, 3/3),
+  so 1 would match the evidence and 2 buys one chance to act on a re-grade,
+  which is the loop's whole premise. Cheap to revisit once the fixture tier
+  reports how often round 2 helps: a round-2 rescue is a signal to raise it;
+  round 2 never helping is a signal to drop to 1.* Repair is bounded: up to 2
+  *candidate-producing* rounds, each re-graded. A wrong fix is detected by re-grading and becomes the next round's
   evidence. A round that yields a receipt (`noChanges` / `validationFailed` /
   `budgetExceeded` / `refusedTool`) produces no new candidate and no new
   evidence, so retrying it would replay the same dispatch — it terminates the
