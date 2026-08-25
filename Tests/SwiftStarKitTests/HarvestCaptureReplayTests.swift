@@ -11,9 +11,11 @@ import Foundation
 /// Before the lenient harvest, three of these four runs harvested nothing and
 /// the build arm scored 1/4.
 struct HarvestCaptureReplayTests {
-    /// The Phase-1 grant the build arm dispatches.
+    /// The Phase-1 grant the build arm actually dispatches, copied from the
+    /// captures' own `packet.json` — `models.py` included. An approximated grant
+    /// would make these replays test a contract the real runs never ran under.
     private let allowlist = [
-        "app.py", "templates/base.html", "templates/home.html",
+        "app.py", "models.py", "templates/base.html", "templates/home.html",
         "templates/complaints.html", "tests/test_app.py",
     ]
 
@@ -30,16 +32,16 @@ struct HarvestCaptureReplayTests {
         // 20260825-162522 — the one run that fenced its blocks, and the only
         // build-arm success before this change. It must stay a success.
         //
-        // It also repeats: after a complete five-file pass it emits an
-        // out-of-grant `models.py`, then `app.py` and `complaints.html` twice
-        // more. So resampling-after-the-answer is not unique to the run that hit
-        // the token wall — it is present in the success too, which is why
-        // `degenerateRepetition` alone must never be read as a failure. What
-        // separates the two is whether a complete pass landed first.
+        // It also repeats: after a complete pass over the granted set it emits
+        // `app.py` and `complaints.html` twice more. So resampling-after-the-
+        // answer is not unique to the run that hit the token wall — it is
+        // present in the success too, which is why `degenerateRepetition` alone
+        // must never be read as a failure. What separates the two is whether a
+        // complete pass landed first.
         let r = LabeledBlockParser.parse(try capture("fenced"), writableFiles: allowlist)
-        #expect(r.files.count == 5)
+        #expect(r.files.count == 6)
         #expect(r.degenerateRepetition)
-        #expect(r.outOfGrantHeadings == ["models.py"])
+        #expect(r.outOfGrantHeadings.isEmpty)
         #expect(r.files.map(\.path).contains("app.py"))
     }
 
