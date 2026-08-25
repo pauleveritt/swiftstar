@@ -4,15 +4,11 @@ import Foundation
 /// "use your write tool" note (spec Section 1).
 public enum TextContract {
     public static let directive = """
-    Do not call tools. For each file you change, emit one heading line, then one fenced code block.
-
-    A heading line is exactly: three hash signs, one space, one backtick, the file path (relative to the \
-    workspace root), one backtick. Example heading for the app.py file: ### `app.py`
-
-    Immediately after the heading line, emit a fenced code block: three backticks on their own line, the \
-    complete file contents, then three backticks on their own line.
-
-    A fenced code block with no preceding heading line is ignored.
+    Do not call tools. For each file you change, emit a heading line: one or more hash signs followed \
+    by the file path (relative to the workspace root), with no spaces — for example: #app.py. \
+    Immediately after the heading line, emit a fenced code block: three backticks on their own line, \
+    the complete file contents, then three backticks on their own line. A fenced code block with no \
+    preceding heading line is ignored.
     """
 }
 
@@ -122,9 +118,19 @@ public enum LabeledBlockParser {
 
     static func headingPath(_ line: String) -> String? {
         let t = line.trimmingCharacters(in: .whitespaces)
-        guard t.hasPrefix("### `"), t.hasSuffix("`") else { return nil }
-        let inner = t.dropFirst(5).dropLast()
-        guard !inner.contains("`") else { return nil }
-        return String(inner)
+        guard t.hasPrefix("#") else { return nil }
+        var rest = t
+        while rest.hasPrefix("#") { rest.removeFirst() }
+        rest = rest.trimmingCharacters(in: .whitespaces)
+        guard !rest.isEmpty else { return nil }
+        // Backtick-quoted form (### `path`)
+        if rest.hasPrefix("`"), rest.hasSuffix("`"), rest.count >= 2 {
+            let inner = rest.dropFirst().dropLast()
+            guard !inner.contains("`") else { return nil }
+            return String(inner)
+        }
+        // Bare form (#path, to end of line)
+        guard !rest.contains("`") else { return nil }
+        return rest
     }
 }

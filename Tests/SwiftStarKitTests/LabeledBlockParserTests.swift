@@ -85,8 +85,31 @@ struct LabeledBlockParserTests {
         #expect(r.outOfGrantHeadings == ["README.md"])
     }
 
-    @Test func noBacktickHeadingIsNotAHeading() {
-        // A prose line like "### app.py" (no backticks) is not a label.
-        #expect(LabeledBlockParser.parse("### app.py\n```\nx=1\n```\n", writableFiles: allowlist).files.isEmpty)
+    @Test func hashPathHeadingIsAccepted() {
+        let text = "#app.py\n```\nfrom fastapi import FastAPI\n```\n"
+        let r = LabeledBlockParser.parse(text, writableFiles: allowlist)
+        #expect(r.files.count == 1)
+        #expect(r.files[0].path == "app.py")
+        #expect(r.files[0].content == "from fastapi import FastAPI")
+    }
+
+    @Test func hashPathCommentInsideFenceIsNotAHeading() {
+        // Load-bearing: `#app.py` is a Python comment; a heading-looking line
+        // inside a fenced body must never flip attribution.
+        let text = "#app.py\n```\n#app.py\nx = 1\n```\n"
+        let r = LabeledBlockParser.parse(text, writableFiles: allowlist)
+        #expect(r.files.count == 1)
+        #expect(r.files[0].content == "#app.py\nx = 1")
+    }
+
+    @Test func hashPathOutOfGrantIsRecorded() {
+        let text = "#README.md\n```\nsecret\n```\n"
+        let r = LabeledBlockParser.parse(text, writableFiles: allowlist)
+        #expect(r.files.isEmpty)
+        #expect(r.outOfGrantHeadings == ["README.md"])
+    }
+
+    @Test func hashPathHeadingWithNoFenceIsDropped() {
+        #expect(LabeledBlockParser.parse("#app.py\nsome prose\n", writableFiles: allowlist).files.isEmpty)
     }
 }

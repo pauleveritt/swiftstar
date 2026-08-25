@@ -145,6 +145,7 @@ public enum RepairLoop {
             if packet.textContract, turn.toolCalls.isEmpty, turn.stopReason == .eos {
                 let harvest = LabeledBlockParser.parse(turn.text, writableFiles: packet.writableFiles)
                 if harvest.files.isEmpty {
+                    FileHandle.standardError.write(Data("[repair] harvest: 0 labeled blocks from text:\n\(turn.text)\n".utf8))
                     write(record: RoundRecord(round: round, candidateRef: nil, receipt: .contractNotFollowed, grade: nil, elapsed: Int(Date().timeIntervalSince(start))), to: captureDir)
                     return .exhausted(lastGrade: lastGrade, receipt: .contractNotFollowed)
                 }

@@ -200,11 +200,13 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
         + "So `import app` imports the `app.py` in this workspace, and `tests/test_app.py` is the file in this workspace.",
     ]
     let directive = ([
-        "The acceptance suite failed against the code written by a prior phase.",
-        "Diagnose the defect from the failure output and the current file contents",
-        "appended below under \"Failure evidence (machine output)\", then fix exactly",
-        "the file(s) that are wrong. Edit the code — do not rewrite working files,",
-        "and do not add new files or routes.",
+        "The acceptance suite failed against the code written by a prior phase. The",
+        "failure output and the current file contents are appended below under",
+        "\"Failure evidence (machine output)\".",
+        "Return the complete corrected contents of exactly the file that is wrong —",
+        "not an explanation of the failure, and do not describe what you will do.",
+        "Emit that file as the heading line and fenced code block described above.",
+        "Do not rewrite working files and do not add new files or routes.",
     ]).joined(separator: " ")
     let writableNote = ([
         TextContract.directive,
@@ -550,6 +552,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         if packet.textContract, outcome.toolCalls.isEmpty, outcome.stopReason == .eos {
             let harvest = LabeledBlockParser.parse(outcome.text, writableFiles: seedPacket.writableFiles)
             if harvest.files.isEmpty {
+                FileHandle.standardError.write(Data("[agenttest] harvest: 0 labeled blocks from text:\n\(outcome.text)\n".utf8))
                 return RunOutcome(finish: .stopped,
                                   note: "phase \(i + 1) contractNotFollowed (0 labeled blocks)",
                                   acceptanceExit: nil, verdict: nil, report: nil,

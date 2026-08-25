@@ -150,10 +150,21 @@ contract becomes:
   re-review tail cannot overwrite a good draft"). Neither is evidence-backed yet;
   the counter is what makes the live captures settle it.
 
-**Deliberately not pinned yet.** Everything past this set waits on a real
-capture. The repair experiment (Section 2) runs against the minimal parser
-first; the contract is tightened against what Mellum actually emits, not against
-predicted failure modes.
+**Deliberately not pinned yet — measured 2026-08-25.** The heading form is now
+settled by measurement, not prediction: Mellum's *build* turns emit **`#<path>`**
+headings (single hash, no space, no backticks) immediately before fenced blocks
+(evidence: P13 captures `20260825-120531-roadmap` — `#app.py`,
+`#templates/base.html`, `#tests/test_app.py`). The parser therefore accepts
+**both** `#<path>` (one-or-more `#`, optional whitespace, bare path to end of
+line — matched by the project's own regex, *not* a Markdown ATX parse, since
+`#app.py` without a space is not a valid CommonMark heading) **and** the earlier
+`### \`<path>\`` backtick form. Exact allowlist match stays the only attribution
+gate — `#` is now a common prose/comment character, so no normalization slack is
+added to catch near-misses. **Fence parity is now structural, not defensive:**
+`#app.py` is a Python comment, so a heading-looking line inside a fenced body
+must never flip attribution; this is tested explicitly. The repair arm's failure
+(no block at all, correct prose diagnosis) is a *separate* finding from the
+build arm's `#<path>` emission and is tracked as such.
 
 **Rule deleted from the earlier draft:** *"an unexpected tool call during a
 harvest turn → abort the harvest."* It is unreachable. Harvest runs post-turn on
