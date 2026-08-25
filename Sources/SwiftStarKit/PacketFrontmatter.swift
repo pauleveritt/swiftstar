@@ -113,34 +113,59 @@ public enum PacketFrontmatter {
 
     /// Flattens the schema's one-level nesting into dotted keys — `budget:` with
     /// an indented `toolCalls:` becomes `budget.toolCalls`. Scalars and string
-    /// lists are the only two value shapes v1 admits.
+    /// lists are the only two value shapes v1 admits, plus the `|` block
+    /// scalar as an alternate way to author a (potentially multi-line) scalar.
     private static func parseFields(_ frontmatter: String) -> (scalars: [String: String], lists: [String: [String]]) {
         var scalars: [String: String] = [:]
         var lists: [String: [String]] = [:]
         var parentKey: String?
         var listKey: String?
 
-        for rawLine in frontmatter.components(separatedBy: "\n") {
+        let rawLines = frontmatter.components(separatedBy: "\n")
+        var index = 0
+
+        while index < rawLines.count {
+            let rawLine = rawLines[index]
             let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line.hasPrefix("#") { continue }
+            if line.isEmpty || line.hasPrefix("#") {
+                index += 1
+                continue
+            }
 
             let indent = rawLine.prefix { $0 == " " }.count
 
             if line.hasPrefix("- ") {
-                guard let key = listKey else { continue }
+                guard let key = listKey else {
+                    index += 1
+                    continue
+                }
                 let item = stripTrailingComment(String(line.dropFirst(2)))
                     .trimmingCharacters(in: .whitespaces)
                 lists[key, default: []].append(unquote(item))
+                index += 1
                 continue
             }
 
-            guard let colon = line.firstIndex(of: ":") else { continue }
+            guard let colon = line.firstIndex(of: ":") else {
+                index += 1
+                continue
+            }
             let key = String(line[line.startIndex..<colon]).trimmingCharacters(in: .whitespaces)
             let rawValue = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-            let value = unquote(stripTrailingComment(rawValue).trimmingCharacters(in: .whitespaces))
+            let strippedValue = stripTrailingComment(rawValue).trimmingCharacters(in: .whitespaces)
 
             if indent == 0 { parentKey = nil }
             let qualified = if indent > 0, let parent = parentKey { "\(parent).\(key)" } else { key }
+
+            if isBlockScalarIndicator(strippedValue) {
+                let (content, nextIndex) = consumeBlockScalar(rawLines, from: index + 1, parentIndent: indent)
+                scalars[qualified] = content
+                listKey = nil
+                index = nextIndex
+                continue
+            }
+
+            let value = unquote(strippedValue)
 
             if value.isEmpty {
                 // A bare `key:` opens either a nested mapping or a list.
@@ -150,9 +175,50 @@ public enum PacketFrontmatter {
                 scalars[qualified] = value
                 listKey = nil
             }
+            index += 1
         }
 
         return (scalars, lists)
+    }
+
+    /// `|` (and its chomping variants `|-`/`|+`) is YAML's literal block
+    /// scalar indicator — the natural way to author a multi-line value like a
+    /// shell command. Folded (`>`) style is out of scope for v1: nothing in
+    /// the schema needs it, and admitting only what is used keeps the parser
+    /// able to reject what it does not understand instead of guessing.
+    private static func isBlockScalarIndicator(_ value: String) -> Bool {
+        value == "|" || value == "|-" || value == "|+"
+    }
+
+    /// Consumes every line more indented than `parentIndent` as the block
+    /// scalar's content, dedenting by the first content line's indentation
+    /// (per YAML: that line sets the block's indentation level). Blank lines
+    /// inside the block are kept as empty lines; trailing blank lines are
+    /// clipped, matching `|`'s default "clip" chomping (a single trailing
+    /// newline, i.e. no trailing blank entries once joined).
+    private static func consumeBlockScalar(
+        _ rawLines: [String], from start: Int, parentIndent: Int
+    ) -> (content: String, nextIndex: Int) {
+        var lines: [String] = []
+        var blockIndent: Int?
+        var index = start
+
+        while index < rawLines.count {
+            let candidate = rawLines[index]
+            if candidate.trimmingCharacters(in: .whitespaces).isEmpty {
+                lines.append("")
+                index += 1
+                continue
+            }
+            let candidateIndent = candidate.prefix { $0 == " " }.count
+            if candidateIndent <= parentIndent { break }
+            if blockIndent == nil { blockIndent = candidateIndent }
+            lines.append(String(candidate.dropFirst(min(blockIndent!, candidate.count))))
+            index += 1
+        }
+
+        while lines.last == "" { lines.removeLast() }
+        return (lines.joined(separator: "\n"), index)
     }
 
     /// Truncates at a `#` that starts a trailing comment — one preceded by

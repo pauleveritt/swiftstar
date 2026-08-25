@@ -172,4 +172,20 @@ struct PacketFrontmatterTests {
         let packet = try PacketFrontmatter.parse(withHash)
         #expect(packet.validationCommand == "pytest -q -k 'not #slow'")
     }
+
+    /// `command: |` is a YAML block scalar — the natural way to author a
+    /// multi-line command. It must parse to the block's actual content, not
+    /// the literal two-character string `"|"`.
+    @Test func blockScalarCommandParsesToItsContent() throws {
+        let withBlock = Self.sample.replacingOccurrences(
+            of: "  command: \"pytest -q\"",
+            with: """
+              command: |
+                set -e
+                pytest -q
+            """
+        )
+        let packet = try PacketFrontmatter.parse(withBlock)
+        #expect(packet.validationCommand == "set -e\npytest -q")
+    }
 }
