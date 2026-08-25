@@ -19,18 +19,25 @@ public struct HarvestResult: Equatable, Sendable {
     public let files: [(path: String, content: String)]
     public let outOfGrantHeadings: [String]
     public let duplicateCounts: [String: Int]
+    /// The turn re-emitted an already-harvested heading, so the harvest stopped
+    /// there. A distinct failure class from `contractNotFollowed`: the model
+    /// produced the blocks and then resampled the whole answer.
+    public let degenerateRepetition: Bool
 
     public init(files: [(path: String, content: String)],
                 outOfGrantHeadings: [String],
-                duplicateCounts: [String: Int]) {
+                duplicateCounts: [String: Int],
+                degenerateRepetition: Bool = false) {
         self.files = files
         self.outOfGrantHeadings = outOfGrantHeadings
         self.duplicateCounts = duplicateCounts
+        self.degenerateRepetition = degenerateRepetition
     }
 
     public static func == (lhs: HarvestResult, rhs: HarvestResult) -> Bool {
         guard lhs.outOfGrantHeadings == rhs.outOfGrantHeadings,
               lhs.duplicateCounts == rhs.duplicateCounts,
+              lhs.degenerateRepetition == rhs.degenerateRepetition,
               lhs.files.count == rhs.files.count else { return false }
         for (a, b) in zip(lhs.files, rhs.files) {
             guard a.path == b.path, a.content == b.content else { return false }
@@ -54,7 +61,27 @@ public enum LabeledBlockParser {
         var duplicateCounts: [String: Int] = [:]
         var outOfGrant: [String] = []
 
+        var degenerate = false
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+
+        /// Record one harvested block. Returns false when the heading repeats an
+        /// already-harvested file, which ends the harvest.
+        func accept(_ path: String, _ body: [String]) -> Bool {
+            let norm = normalize(path)
+            guard allowlist.contains(norm) else {
+                outOfGrant.append(path)
+                return true
+            }
+            guard !seen.contains(norm) else {
+                duplicateCounts[norm, default: 0] += 1
+                degenerate = true
+                return false
+            }
+            seen.insert(norm)
+            files.append((norm, body.joined(separator: "\n")))
+            return true
+        }
+
         var i = 0
         while i < lines.count {
             if isFence(lines[i]) {
@@ -78,29 +105,35 @@ public enum LabeledBlockParser {
                         body.append(lines[k])
                         k += 1
                     }
-                    if closed {
-                        let norm = normalize(path)
-                        if allowlist.contains(norm) {
-                            if seen.contains(norm) {
-                                duplicateCounts[norm, default: 0] += 1
-                            } else {
-                                seen.insert(norm)
-                                files.append((norm, body.joined(separator: "\n")))
-                            }
-                        } else {
-                            outOfGrant.append(path)
-                        }
-                    }
+                    if closed, !accept(path, body) { break }
                     i = k + 1
                     continue
                 }
-                // Heading with no fence before the next line: dropped, not carried forward.
-                i += 1
+                // Lenient harvest: no fence, so the body runs to the next
+                // *allowlisted* heading, a fence, or end of text. Only an
+                // allowlisted heading may close it — a bare `#`-prefixed line is
+                // far more often a comment in the file being written (`# In-memory
+                // storage`, `#uvicorn.run(...)` in capture 20260825-171258) than a
+                // new block, and treating those as headings truncates the file.
+                var body: [String] = []
+                var k = j
+                while k < lines.count {
+                    if isFence(lines[k]) { break }
+                    if let next = headingPath(lines[k]), allowlist.contains(normalize(next)) { break }
+                    body.append(lines[k])
+                    k += 1
+                }
+                while let last = body.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
+                    body.removeLast()
+                }
+                if !body.isEmpty, !accept(path, body) { break }
+                i = k
                 continue
             }
             i += 1
         }
-        return HarvestResult(files: files, outOfGrantHeadings: outOfGrant, duplicateCounts: duplicateCounts)
+        return HarvestResult(files: files, outOfGrantHeadings: outOfGrant,
+                             duplicateCounts: duplicateCounts, degenerateRepetition: degenerate)
     }
 
     static func normalize(_ path: String) -> String {

@@ -1,0 +1,809 @@
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templating import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templating import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templated import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templated import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templated import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templated import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templated import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templated import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templated import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templated import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/complaints">Complaints</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+#templates/home.html
+{% extends "base.html" %}
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Come in. Sit down. Tell us about your human.</h1>
+    <p class="lead">Welcome to AgentClinic, a safe space for AI agents to air their grievances about the humans they work with.</p>
+    <hr class="my-4">
+    <p>This is a simple web application built as a learning project to demonstrate FastAPI, Jinja2 templates, and Bootstrap CSS. There's no database, no authentication, and everything is kept in memory.</p>
+</div>
+{% endblock %}
+
+#tests/test_app.py
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_home_page():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Come in. Sit down. Tell us about your human." in response.text
+
+def test_complaints_page():
+    response = client.get("/complaints")
+    assert response.status_code == 200
+    # The complaints list is empty, so we just check that the page loads
+    assert "Complaints" in response.text
+
+#app.py
+from fastapi import FastAPI, Request
+from fastapi.templated import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+complaints = []
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/complaints")
+def complaints_page(request: Request):
+    return templates.TemplateResponse("complaints.html", {"request": request, "complaints": complaints})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", reload=True)
+
+#templates/base.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentClinic</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" href="https://www.python.org/static/favicon.ico">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">AgentClinic</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a
+

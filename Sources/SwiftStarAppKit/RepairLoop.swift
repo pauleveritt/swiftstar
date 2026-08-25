@@ -144,44 +144,25 @@ public enum RepairLoop {
             // the labeled-block parser and writes itself — the model never touched
             // the write tool, so the host materializes its declared mutations.
             if packet.textContract, turn.toolCalls.isEmpty, turn.stopReason == .eos {
-                var harvest = LabeledBlockParser.parse(turn.text, writableFiles: packet.writableFiles)
-                // Two-turn emission protocol. Measured 2026-08-25: Mellum reasons
-                // *or* emits, never both in one turn. Allowed prose, it produces a
-                // correct diagnosis and then stops at eos exactly where the file
-                // should start (captures 20260825-160310, -164557). Forbidden prose,
-                // it emits a flawless block whose body is a byte-identical copy of
-                // the broken file already in context (capture 20260825-163139).
-                //
-                // A turn that reasoned and stopped is not a contract failure — it is
-                // an unfinished turn. `runPhase` re-prompts the SAME pooled worker,
-                // whose session carries the prior assistant turn (PoolOrchestrator
-                // holds one engine session per WorkerId and never resets it between
-                // calls), so the follow-up is a continuation: the model conditions on
-                // its own diagnosis rather than on a re-injected paraphrase of it.
-                if harvest.files.isEmpty, let emissionFollowUp,
-                   !turn.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    let followUpPacket = HandoffPacket(
-                        taskText: emissionFollowUp,
-                        writableFiles: packet.writableFiles,
-                        validationCommand: packet.validationCommand,
-                        selfTestCommand: packet.selfTestCommand,
-                        baselines: packet.baselines,
-                        turnBudget: packet.turnBudget,
-                        toolCallBudget: packet.toolCallBudget,
-                        textContract: true,
-                        facts: packet.facts,
-                        redacts: packet.redacts,
-                        role: packet.role,
-                        sampling: packet.sampling)
-                    let followUp = try runPhase(followUpPacket, wt.url, capture)
-                    if followUp.stopReason == .limit || followUp.stopReason == .contextFull {
-                        throw RepairLoopError.sessionExhausted(followUp.stopReason)
-                    }
-                    // The emitting turn replaces the reasoning turn as the round's
-                    // outcome: its text is what the host harvests, and its token
-                    // count is what the budget check must see.
-                    turn = followUp
-                    harvest = LabeledBlockParser.parse(followUp.text, writableFiles: packet.writableFiles)
+                // Shared with the build arm — see `TextContractHarvest` for the
+                // two-turn emission protocol and the evidence behind it.
+                let attempt = try TextContractHarvest.run(
+                    firstTurn: turn, packet: packet, worktree: wt.url,
+                    emissionFollowUp: emissionFollowUp, capture: capture,
+                    runPhase: runPhase,
+                    onFollowUpTurn: { followUp in
+                        if followUp.stopReason == .limit || followUp.stopReason == .contextFull {
+                            throw RepairLoopError.sessionExhausted(followUp.stopReason)
+                        }
+                    })
+                // The emitting turn replaces the reasoning turn as the round's
+                // outcome: its text is what the host harvests, and its token
+                // count is what the budget check must see.
+                turn = attempt.turn
+                let harvest = attempt.result
+                if harvest.degenerateRepetition {
+                    FileHandle.standardError.write(Data(
+                        "[repair] harvest: stopped at a repeated heading (\(harvest.files.count) file(s) kept)\n".utf8))
                 }
                 if harvest.files.isEmpty {
                     FileHandle.standardError.write(Data("[repair] harvest: 0 labeled blocks from text:\n\(turn.text)\n".utf8))

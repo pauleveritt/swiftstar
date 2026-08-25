@@ -218,6 +218,16 @@ let repairEmissionFollowUp = ([
     "Do not explain anything further and do not restate the diagnosis.",
 ]).joined(separator: " ")
 
+/// The build arm's half of the two-turn emission protocol. Same shape as
+/// `repairEmissionFollowUp`, but a build phase writes a set of files rather than
+/// the one file it just diagnosed.
+let buildEmissionFollowUp = ([
+    "Now emit the files. Your entire response must be, for each file, the heading",
+    "line followed immediately by one fenced code block containing that file's",
+    "complete contents. Nothing before the first heading line and nothing after",
+    "the last closing fence. Do not explain anything and do not restate the plan.",
+]).joined(separator: " ")
+
 func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
     let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
     let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
@@ -621,7 +631,23 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // Text-contract harvest: a zero-tool-call eos turn's labeled blocks become the
         // phase's mutations (spec Section 2 step 3).
         if packet.textContract, outcome.toolCalls.isEmpty, outcome.stopReason == .eos {
-            let harvest = LabeledBlockParser.parse(outcome.text, writableFiles: seedPacket.writableFiles)
+            // Same protocol as the repair arm, same implementation: harvest, and
+            // if the turn reasoned instead of emitting, ask once more before
+            // calling it a contract failure.
+            let attempt = try TextContractHarvest.run(
+                firstTurn: outcome, packet: packet, worktree: wt.url,
+                emissionFollowUp: buildEmissionFollowUp, capture: captureHandle,
+                runPhase: { pkt, tree, cap in
+                    try orch.runPhase(worker: WorkerId(1), packet: pkt, worktree: tree, capture: cap)
+                })
+            if attempt.usedFollowUp {
+                print("[agenttest]   phase \(i + 1): emission follow-up (first turn harvested 0 blocks)")
+                outcome = attempt.turn
+            }
+            let harvest = attempt.result
+            if harvest.degenerateRepetition {
+                print("[agenttest]   phase \(i + 1): repeated heading — harvest stopped after \(harvest.files.count) file(s)")
+            }
             if harvest.files.isEmpty {
                 FileHandle.standardError.write(Data("[agenttest] harvest: 0 labeled blocks from text:\n\(outcome.text)\n".utf8))
                 return RunOutcome(finish: .stopped,
