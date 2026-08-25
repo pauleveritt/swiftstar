@@ -121,6 +121,7 @@ public enum RepairLoop {
                 baselines: authored.baselines,
                 turnBudget: authored.turnBudget,
                 toolCallBudget: authored.toolCallBudget,
+                textContract: authored.textContract,
                 facts: authored.facts,
                 redacts: authored.redacts,
                 role: authored.role,
