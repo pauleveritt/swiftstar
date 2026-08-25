@@ -193,6 +193,20 @@ struct PacketFrontmatterTests {
         #expect(packet.validationCommand == "pytest -q -k 'not #slow'")
     }
 
+    /// An apostrophe inside a *plain* (unquoted) scalar is just a literal
+    /// character — it does not open YAML single-quoting. The comment
+    /// stripper must not mistake it for one and let a trailing `#` comment
+    /// survive because it thinks it is "inside a quote" for the rest of the
+    /// line.
+    @Test func apostropheInPlainScalarDoesNotDefeatCommentStripping() throws {
+        let withApostrophe = Self.sample.replacingOccurrences(
+            of: "command: \"pytest -q\"",
+            with: "command: don't stop  # slow"
+        )
+        let packet = try PacketFrontmatter.parse(withApostrophe)
+        #expect(packet.validationCommand == "don't stop")
+    }
+
     /// `command: |` is a YAML block scalar — the natural way to author a
     /// multi-line command. It must parse to the block's actual content, not
     /// the literal two-character string `"|"`.

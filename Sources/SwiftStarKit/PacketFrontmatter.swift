@@ -237,15 +237,26 @@ public enum PacketFrontmatter {
     /// Truncates at a `#` that starts a trailing comment — one preceded by
     /// whitespace (or at the very start) and outside of quotes — leaving a
     /// `#` that is part of the scalar's actual quoted content untouched.
+    ///
+    /// Quote tracking only applies to a scalar that is *itself* quoted YAML —
+    /// i.e. one whose first non-space character is `"` or `'`. A plain
+    /// scalar's apostrophe (`don't`) is just a literal character, not YAML
+    /// single-quoting, and must not make the stripper think the rest of the
+    /// line is "inside a quote" and let a real trailing comment survive.
     private static func stripTrailingComment(_ value: String) -> String {
+        let firstNonSpace = value.first { $0 != " " && $0 != "\t" }
+        let isQuotedScalar = firstNonSpace == "\"" || firstNonSpace == "'"
+
         var inSingleQuote = false
         var inDoubleQuote = false
         var previousWasSpace = true
         var result = ""
 
         for char in value {
-            if char == "\"" && !inSingleQuote { inDoubleQuote.toggle() }
-            if char == "'" && !inDoubleQuote { inSingleQuote.toggle() }
+            if isQuotedScalar {
+                if char == "\"" && !inSingleQuote { inDoubleQuote.toggle() }
+                if char == "'" && !inDoubleQuote { inSingleQuote.toggle() }
+            }
 
             if char == "#" && !inSingleQuote && !inDoubleQuote && previousWasSpace {
                 break
