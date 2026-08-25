@@ -131,4 +131,23 @@ struct PacketFrontmatterTests {
                                                                         with: "turns: x"))
         }
     }
+
+    /// `packet: 99` must not be silently accepted — an unknown schema version
+    /// means the parser cannot know the fields it is reading mean what it
+    /// thinks they mean.
+    @Test func unknownPacketVersionThrows() {
+        #expect(throws: (any Error).self) {
+            try PacketFrontmatter.parse(Self.sample.replacingOccurrences(of: "packet: 1",
+                                                                        with: "packet: 99"))
+        }
+    }
+
+    /// A packet missing the version field entirely is just as unknown as one
+    /// declaring an unsupported version.
+    @Test func missingPacketVersionThrows() {
+        #expect(throws: (any Error).self) {
+            try PacketFrontmatter.parse(Self.sample.replacingOccurrences(of: "packet: 1\n",
+                                                                        with: ""))
+        }
+    }
 }

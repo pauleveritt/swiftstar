@@ -16,9 +16,15 @@ public enum PacketFrontmatterError: Error, Equatable {
 /// `baselines` are intentionally not parseable. They are read from the worktree
 /// at dispatch time and never authored, so a packet file cannot assert them.
 public enum PacketFrontmatter {
+    /// The only schema version this parser understands. Bumping this without a
+    /// matching parser change is exactly the mistake rule 1 exists to catch.
+    private static let supportedPacketVersion = 1
+
     public static func parse(_ document: String) throws -> HandoffPacket {
         let (frontmatter, body) = try split(document)
         let fields = parseFields(frontmatter)
+
+        try requireKnownPacketVersion(fields.scalars["packet"])
 
         guard let writable = fields.lists["workspace.writable"] else {
             throw PacketFrontmatterError.malformed("workspace.writable is required")
@@ -41,6 +47,22 @@ public enum PacketFrontmatter {
                 temperature: try doubleValue(fields.scalars["sampling.temp"], "sampling.temp", default: 0)
             )
         )
+    }
+
+    /// `packet` is the schema version. Absent or unrecognized must fail
+    /// closed — a parser that guessed the schema for an unstated or unknown
+    /// version would be accepting fields it cannot actually promise to have
+    /// parsed correctly. This is enforced at parse time, not in
+    /// `HandoffPacketValidator`, because `HandoffPacket` itself carries no
+    /// version field: by the time a packet exists as a `HandoffPacket`, the
+    /// schema it was read under has already been decided.
+    private static func requireKnownPacketVersion(_ raw: String?) throws {
+        guard let raw else {
+            throw PacketFrontmatterError.malformed("packet: version is required")
+        }
+        guard let version = Int(raw), version == supportedPacketVersion else {
+            throw PacketFrontmatterError.malformed("packet: unsupported version \"\(raw)\"")
+        }
     }
 
     /// A present-but-unrecognized value is an error, never a silent default.
