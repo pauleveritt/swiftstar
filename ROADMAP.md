@@ -10,35 +10,23 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Phase P15 — Host-controlled action mode.** In progress; started 2026-08-25,
-mixed result so far. P12 (Reliable agency) and P13 (More models) are both
-**complete** — see [Prior work](#prior-work) — and P13's own verdict is what
-opens P15: Mellum 2.1 reliably fails SwiftStar's tool-call initiation gate
-under the tested harness (path presentation × nudge × seed, published
-sampler), a content-competent model that does not reliably *act*. P15 asks a
-narrower question than "is Mellum shippable" — **is Mellum harness-addressable
-(a host-side fix reaches it) or content-broken (it isn't)** — by removing
-tool-initiation from the loop entirely: the model emits `#path` headings plus
-fenced code blocks as plain text, the host (`LabeledBlockParser`) harvests and
-writes them, injects the harvested paths into `TurnOutcome.mutations` so the
-existing verdict machinery can produce a candidate, then validates and grades
-as usual. No engine work; the model stays in the agent loop with tools wired
-but is directed not to call them.
+**Between phases.** P15 (Host-controlled action mode) closed 2026-08-25 with its
+verdict — **Mellum is harness-addressable** — and P0–P13 and P15 are all
+complete; see [Prior work](#prior-work). P15 was a detour taken to answer P13's
+reopen condition, and its exit was always a verdict rather than a product, so
+closing it returns the roadmap to its own line of work.
 
-Measured 2026-08-25, live, on the `mellum-2.1` variant: the **repair** arm
-meets its bar — 4/4 runs reach 13/13 on the `plausible-wrong-fix` fixture,
-via a two-turn emission protocol (`RepairLoop`'s `emissionFollowUp`) that
-re-prompts the same pooled worker session when a turn reasons correctly but
-stops at eos exactly where it should start writing the file. The **build**
-arm does not yet meet its bar — 1 candidate-producing run out of 4, the rest
-either emitting headings with no fenced body or running to the token limit —
-and has no equivalent follow-up seam yet. Design:
-[`2026-08-25-host-controlled-action-mode-design.md`](docs/superpowers/specs/2026-08-25-host-controlled-action-mode-design.md).
-Plan:
-[`2026-08-25-host-controlled-action-mode.md`](docs/superpowers/plans/2026-08-25-host-controlled-action-mode.md).
+**The open choice.** P14 (A docs site) is the only numbered planned phase, and
+its precondition — "once there is a reader who isn't the author" — has not
+obviously arrived. The alternative is to promote one of P15's carry-forwards
+(see [Backlog](#backlog)), of which **phase-level repair** is the substantive
+one: the build arm's failures are now all content defects at a phase boundary,
+the repair loop already fixes that defect class 4/4, and the two are not
+connected. That is a harness capability, not a Mellum capability, which is why
+it belongs to a phase rather than to P15's tail.
 
-*P0–P13 are complete; their summaries live in [Prior work](#prior-work), not
-here, so this section stays a true "what's happening now."*
+*Nothing is in progress. The next phase is picked deliberately, not by
+momentum.*
 
 ## Concept budget
 
@@ -171,7 +159,7 @@ appear below.) Defined so far:
 | P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | complete (2026-08-25) |
 | P13 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; deferred behind P12 so there is a harness that can actually evaluate a variant | complete (2026-08-25) — verdict: blocked on Mellum's competence gate, not the harness |
 | P14 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
-| P15 | Host-controlled action mode | The model drafts as text (`#path` + fenced blocks), the host harvests, writes, and verifies — isolating "should I act" from content competence for Mellum-class models; exit is a verdict, not a product | **in progress** (2026-08-25) — repair arm 4/4, build arm 1/4 |
+| P15 | Host-controlled action mode | The model drafts as text (`#path` + fenced blocks), the host harvests, writes, and verifies — isolating "should I act" from content competence for Mellum-class models; exit is a verdict, not a product | complete (2026-08-25) — verdict: **harness-addressable**; repair 4/4 at 13/13, build 3/9 at 13/13 with 0 tool calls |
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
@@ -296,6 +284,48 @@ P15's plan is written:
 ## Backlog
 
 Deferred, each with the condition that reopens it.
+
+- **Phase-level repair (P15 carry-forward, the substantive one).** A build phase
+  that fails its import check aborts the run before `commitBack()`, so the
+  repair loop — which *is* wired after acceptance failure, on worker 2 — is
+  never reachable. This stopped 5 of the 6 failing build runs, and every one of
+  those was a one-line content defect (`from .models import …`;
+  `RedirectResponse` from the wrong module; a `StaticFiles` mount on a directory
+  outside the grant) — exactly the class the repair loop fixes 4/4. Not a wiring
+  change: (1) the abort is deliberate (finding C17 — it stops a broken tree
+  chaining into the next phase), so it must be *replaced* by repair, not
+  removed; (2) `repairPacket` builds from a `GradeResult` while a phase failure
+  yields a `ValidationResult`, so the evidence types need bridging — the
+  prerequisite, capturing validation output, landed in `05a4fcc`; and (3)
+  `RepairLoop`'s grade closure runs the full acceptance suite, which cannot pass
+  mid-roadmap, so a phase-level repair needs the *validation* command as its
+  success condition. *Reopens whenever the build arm's pass rate is the thing to
+  improve; it is a harness capability, not a model capability.*
+- **`RepairLoop` exits on every receipt, including `validationFailed`.** The
+  rationale holds as written — the receipt path discards the worktree and never
+  advances `head`/`lastGrade`, so a retry would replay a byte-identical dispatch
+  — but it means a repair that breaks an import gets no second attempt even
+  though its traceback is new evidence the model has not seen. *Reopens with
+  phase-level repair, which has the same shape.*
+- **The harvest gate requires `stopReason == .eos`.** A turn that runs to the
+  token wall is never harvested, so nothing is written and validation fails on
+  an empty tree — 1 of 9 build runs. The repeated-heading abort could recover
+  such a turn's first pass, but never sees it. Widening the gate touches session
+  -exhaustion semantics, which differ per arm (repair reuses the worker across
+  rounds; build handles exhaustion after phase finalization). *Reopens when
+  token-wall runs are a measurable share of failures.*
+- **Generation-time stopping control.** The engine's pool protocol has no cancel,
+  so a degenerate run pays to the token wall before the host can react; the
+  repeated-heading abort is harvest-time only. *Reopens only if engine-side work
+  is on the table — it is the one P15 item that is not host-addressable.*
+- **The lenient harvest blurs the failure taxonomy.** Without a fence there is no
+  delimiter, so prose under an allowlisted heading is written as file content,
+  and turns once classified `contractNotFollowed` can land as `validationFailed`
+  instead. A content-vs-prose discriminator is deliberately *not* wanted: it
+  would be a guard holding less information than the authoritative layer, the
+  same mistake as the removed contract-blind pre-edit guard. *Reopens if a
+  measurement needs to separate "ignored the contract" from "wrote buggy code" —
+  the honest fix is a stricter emission contract, not a smarter parser.*
 
 - **Workspace isolation** — a dispatched attempt runs in a disposable detached
   git worktree; the outcome is a reviewable candidate ref or a receipt naming
@@ -758,6 +788,39 @@ Completed phases move here when the roadmap outgrows the front page.
   [`2026-08-25-p13-mellum-variant-design.md`](docs/superpowers/specs/2026-08-25-p13-mellum-variant-design.md).
   Benchmark record:
   [`2026-08-25-p13-mellum-benchmark-record.md`](docs/superpowers/research/2026-08-25-p13-mellum-benchmark-record.md).
+
+- **P15 — Host-controlled action mode (2026-08-25).** Asked whether Mellum is
+  **harness-addressable** (a host-side fix reaches it) or content-broken, by
+  removing tool initiation from the loop: the model emits `#path` headings plus
+  file bodies as text, `LabeledBlockParser` harvests them, the host writes the
+  files and injects the paths into `TurnOutcome.mutations`, then validates and
+  grades as usual. **Verdict: harness-addressable.** Every failure mode the
+  phase found was host-side and each yielded to a host-side fix — a two-turn
+  emission protocol for turns that reason and then stop; a lenient harvest for
+  bodies emitted without fences; first-occurrence-wins plus a repeated-heading
+  abort for degenerate resampling; and captured validation output for failures
+  that previously recorded only an exit status. No engine work, no sampler
+  change, no different model.
+
+  Measured: repair **4/4 at 13/13**; build **3/9 at 13/13**, all three phases,
+  **0 tool calls**, 90–132s per passing run. All nine build runs harvested (0
+  `contractNotFollowed`, previously 3 of 4). The phase's own bar asks for a
+  host-verified candidate with content-bucketed failures and explicitly defers
+  any per-model pass-rate guarantee, so 3-of-9 is a recorded measurement rather
+  than a missed bar — and it is emphatically **not** a claim of reliability.
+
+  Two numbers were retracted inside the phase after re-reading primary evidence:
+  the build arm's "1/4" was a parser artifact, and an early "3/5" did not
+  survive a larger sample. All results carry the in-band `resultClass` label
+  **"drafting quality + host orchestration, not agency"** — 0 tool calls means
+  the model never acted and the host wrote every file. Design:
+  [`2026-08-25-host-controlled-action-mode-design.md`](docs/superpowers/specs/2026-08-25-host-controlled-action-mode-design.md).
+  Plan:
+  [`2026-08-25-host-controlled-action-mode.md`](docs/superpowers/plans/2026-08-25-host-controlled-action-mode.md).
+  Verdict record:
+  [`2026-08-25-p15-verdict-record.md`](docs/superpowers/research/2026-08-25-p15-verdict-record.md).
+  Review:
+  [`2026-08-25-p15-fable-review.md`](docs/superpowers/research/2026-08-25-p15-fable-review.md).
 
 ## Workflow
 
