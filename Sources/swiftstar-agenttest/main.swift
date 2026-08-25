@@ -83,6 +83,21 @@ let absolutePathStyle = env["AGENTTEST_PATH_STYLE"] == "absolute"
 // remains agentic (the forcing-gate experiment must run agentic too).
 let textContractBuild = env["AGENTTEST_TEXT_CONTRACT"] == "1"
 
+/// The temperature the engine actually samples at.
+///
+/// `AgentSettings` carries no temperature field and `PoolOrchestrator` records
+/// every turn's sampler as `"engine-defaults"` — the harness never transmits one,
+/// so the engine samples at its own family defaults, which for a resolved variant
+/// are exactly the values that variant declares. Meanwhile
+/// `SamplingPolicy.temperature` defaults to 0, so every stored packet claimed
+/// *greedy* decoding for runs that were not greedy: found 2026-08-25, when
+/// `run-config.json` said `temp 0.6` and `repair-packet-1.json` said
+/// `temperature: 0` for the same run. Same class of defect as the
+/// `AGENTTEST_REPAIR_THINK` note below — a packet must not assert a sampling mode
+/// the engine did not run under — so record what the engine really uses.
+let engineTemperature = resolvedVariant?.sampler?.temperature ?? 0
+
+
 /// Strings this run's spec is supposed to withhold, comma-separated
 /// (`AGENTTEST_REDACT="default_factory,fastapi.responses"`). An experiment cell
 /// that claims the worker must *diagnose* a fix declares the fix here, and the
@@ -179,15 +194,30 @@ func phasePacket(_ phaseText: String, absoluteRoot: String? = nil, textContract:
         redacts: redacts,
         // The packet records the sampling the run actually used, so a capture is
         // self-describing rather than needing the invocation to interpret it.
+        // `temperature` is the engine's, not the harness's — see engineTemperature.
         sampling: SamplingPolicy(
             think: env["AGENTTEST_THINK"] == "1" ? .bounded : .off,
-            maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192))
+            maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192,
+            temperature: engineTemperature))
 }
 
 /// Build the authored repair packet (D3/D6): the directive names the failure;
 /// the actual failure output + file contents are appended by `RepairLoop` as
 /// `MachineEvidence`. Role `.repair`, thinking off (or bounded via
 /// `AGENTTEST_REPAIR_THINK=1`), same contract/writableFiles/redacts as implement.
+/// Turn 2 of the two-turn emission protocol (see the seam in `RepairLoop`). Turn
+/// 1 is allowed to reason and reliably stops at eos the moment the file should
+/// begin; this is the short continuation that only has to emit. It names no new
+/// facts on purpose — everything it needs is the model's own prior assistant
+/// turn, still in the pooled worker's session.
+let repairEmissionFollowUp = ([
+    "Now emit it. Your entire response must be the heading line for the file you",
+    "just diagnosed, followed by one fenced code block containing that file's",
+    "complete corrected contents with the correction you just described already",
+    "applied. Nothing before the heading line and nothing after the closing fence.",
+    "Do not explain anything further and do not restate the diagnosis.",
+]).joined(separator: " ")
+
 func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
     let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
     let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
@@ -199,13 +229,33 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
         + "`--project` selects the Python environment only; it does not change the working directory. "
         + "So `import app` imports the `app.py` in this workspace, and `tests/test_app.py` is the file in this workspace.",
     ]
+    // The repair *ask*, not the parser, was the P15 repair blocker. Measured
+    // 2026-08-25 (capture 20260825-160310): Mellum diagnosed the 307/303 bug
+    // correctly, emitted a diff block and a snippet, then closed with "Now I'll
+    // create the exact file content with this change:" and stopped at eos with
+    // 510 of 8192 tokens used. It treated *explaining* the fix as the whole
+    // turn. Constraining the response to start at the heading fixed emission
+    // completely (capture 20260825-163139: two conforming turns, both harvested
+    // to candidates) but the file returned was a byte-identical re-emission of
+    // the broken original — the correct diagnosis the narrating run produced had
+    // vanished. The narration was carrying the reasoning, so this variant keeps
+    // the reasoning and moves the file to the END of the response rather than
+    // suppressing the prose. First-complete-block-wins makes "do not reproduce
+    // the current broken file" load-bearing: a quoted original under the same
+    // heading would be harvested in preference to the fix.
     let directive = ([
         "The acceptance suite failed against the code written by a prior phase. The",
         "failure output and the current file contents are appended below under",
         "\"Failure evidence (machine output)\".",
-        "Return the complete corrected contents of exactly the file that is wrong —",
-        "not an explanation of the failure, and do not describe what you will do.",
-        "Emit that file as the heading line and fenced code block described above.",
+        "Exactly one file is wrong. First, in a few sentences, work out what the",
+        "failure output tells you and what the corrected line must be. Then emit",
+        "the heading line for that file followed by one fenced code block holding",
+        "that file's complete corrected contents. The heading line and its fenced",
+        "block must be the LAST thing in your response — end with the closing",
+        "fence and write nothing after it.",
+        "Do not emit a diff or a partial snippet, and do not reproduce the current",
+        "broken file: emit the corrected file exactly once. The host applies the",
+        "file you return exactly as written and re-runs the suite itself.",
         "Do not rewrite working files and do not add new files or routes.",
     ]).joined(separator: " ")
     let writableNote = ([
@@ -214,11 +264,11 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
         "You may write or edit only these files:",
         renderedFiles,
     ] + pathRule + [
-        "You may run exactly these two commands (and no other shell command):",
-        "- \(vettedImport)   (does app.py import cleanly?)",
-        "- \(vettedPytest)   (do your own tests pass?)",
-        "Work in one concise pass: make the minimal edit that fixes the failure,",
-        "then run those commands at most once each.",
+        // A text-contract turn is told "Do not call tools" by TextContract.directive
+        // above; listing runnable commands here contradicted that in the same
+        // packet. The host owns execution in this mode, so it says so instead.
+        "Do not run any command. After you return the file, the host runs the",
+        "import check and the acceptance suite itself and re-grades the result.",
     ]).joined(separator: "\n")
     // The packet records the sampling the run actually used (same invariant as
     // phasePacket, above): thinking is a property of the whole pooled engine
@@ -246,7 +296,8 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
         facts: facts,
         redacts: redacts,
         sampling: SamplingPolicy(think: think,
-                                 maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192),
+                                 maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192,
+                                 temperature: engineTemperature),
         role: .repair)
 }
 
@@ -381,7 +432,8 @@ func runFixtureOnce(_ name: String) throws {
         runPhase: { pkt, wt, cap in try orch.runPhase(worker: WorkerId(1), packet: pkt, worktree: wt, capture: cap) },
         grade: { wt in try AcceptanceGrader.grade(worktree: wt, acceptanceSource: acceptanceSource, pyProject: pyProject) },
         capture: captureHandle,
-        captureDir: captureDir)
+        captureDir: captureDir,
+        emissionFollowUp: repairEmissionFollowUp)
 
     switch result {
     case .passed(_, let grade, let wt):
@@ -471,6 +523,10 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     // D3: make the capture self-describing. `wire.ndjson` carries no model name
     // and no config, so distinguishing two same-morning batches previously meant
     // reading engine memory-plan lines and guessing.
+    let seedEnv = UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0
+    let seedRecord = seedEnv > 0
+        ? String(seedEnv)
+        : "unseeded (--seed omitted; engine picks a time-derived seed — runs are not reproducible)"
     let runConfig: [String: String] = [
         "model": gguf,
         "spec": specName,
@@ -494,8 +550,20 @@ func runOnce(_ index: Int) throws -> RunOutcome {
             ? "engine-family-default"
             : (resolvedVariant?.sampler?.description ?? ""),
         "availableBytesGiB": String(format: "%.1f", Double(MemorySnapshot.availableBytes()) / 1_073_741_824),
-        "seed": env["AGENTTEST_SEED"] ?? "0",
+        // A seed of 0 does NOT mean "seeded with 0": `AgentCommand` omits --seed
+        // entirely when seed == 0, so the engine picks a time-derived seed and the
+        // run is not reproducible. Recording a bare "0" read as a pinned seed and
+        // made four runs that differed look like an unexplained nondeterminism
+        // (2026-08-25); say which it is instead.
+        "seed": seedRecord,
         "textContract": textContractBuild ? "on" : "off",
+        // D11 measurement hygiene: a text-contract run's files are written by the
+        // host from the model's prose, with zero tool calls. Every such capture
+        // says so in-band, so a later reader cannot mistake a passing grade for
+        // agency.
+        "resultClass": textContractBuild
+            ? "drafting quality + host orchestration, not agency"
+            : "native agent competence",
     ]
     if let cfg = try? JSONSerialization.data(withJSONObject: runConfig, options: [.prettyPrinted, .sortedKeys]) {
         try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))
@@ -660,7 +728,8 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                 grade: { wt in try AcceptanceGrader.grade(
                     worktree: wt, acceptanceSource: acceptanceSource, pyProject: pyProject) },
                 capture: captureHandle,
-                captureDir: captureDir)
+                captureDir: captureDir,
+                emissionFollowUp: repairEmissionFollowUp)
             switch repair {
             case .passed(let repairedRef, let g, let wt):
                 grade = g
