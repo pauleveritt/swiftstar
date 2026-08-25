@@ -159,6 +159,55 @@ struct RepairLoopTests {
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 
+    /// A `writableFiles` entry that no phase ever created must still show up in
+    /// the assembled evidence, explicitly marked as absent — not silently
+    /// omitted, which would be indistinguishable from "unchanged/fine" to the
+    /// model reading the rendered packet.
+    @Test func missingWritableFileGetsExplicitMarkerInEvidence() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let packetWithMissingFile = HandoffPacket(
+            taskText: "fix it", writableFiles: ["a.txt", "never_created.py"], validationCommand: nil,
+            baselines: [:], turnBudget: 1000, toolCallBudget: 8,
+            role: .repair, sampling: SamplingPolicy(think: .off))
+        let result = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            packetBuilder: { _ in packetWithMissingFile },
+            runPhase: { _, wt, _ in
+                // Only ever touches a.txt; never_created.py is never written.
+                try "fixed\n".write(to: wt.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+                return self.outcome(mutations: ["a.txt"])
+            },
+            grade: gradingScheme())
+        guard case .passed = result else { Issue.record("expected passed, got \(result)"); return }
+    }
+
+    @Test func missingWritableFileMarkerAppearsInCapturedPacket() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let cap = FileManager.default.temporaryDirectory.appendingPathComponent("repairloop-cap-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: cap, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: cap) }
+        let packetWithMissingFile = HandoffPacket(
+            taskText: "fix it", writableFiles: ["a.txt", "never_created.py"], validationCommand: nil,
+            baselines: [:], turnBudget: 1000, toolCallBudget: 8,
+            role: .repair, sampling: SamplingPolicy(think: .off))
+        let result = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            packetBuilder: { _ in packetWithMissingFile },
+            runPhase: { _, wt, _ in
+                try "fixed\n".write(to: wt.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+                return self.outcome(mutations: ["a.txt"])
+            },
+            grade: gradingScheme(), captureDir: cap)
+        guard case .passed = result else { Issue.record("expected passed, got \(result)"); return }
+        let packetFile = cap.appendingPathComponent("repair-packet-1.json")
+        let data = try Data(contentsOf: packetFile)
+        let packet = try JSONDecoder().decode(HandoffPacket.self, from: data)
+        #expect(packet.taskText.contains("=== never_created.py ==="))
+        #expect(packet.taskText.contains("(file does not exist in this worktree)"))
+    }
+
     @Test func writesPerRoundCapture() throws {
         let repo = try makeRepo()
         defer { try? FileManager.default.removeItem(at: repo) }

@@ -47,7 +47,7 @@ public enum RepairLoop {
         runPhase: (HandoffPacket, URL, FileHandle?) throws -> TurnOutcome,
         grade: (URL) throws -> GradeResult,
         capture: FileHandle? = nil, captureDir: URL? = nil,
-        maxCandidateRounds: Int = 2, outputCap: Int = 8192, fileCap: Int = 4096
+        maxCandidateRounds: Int = 2, outputCap: Int = 8192, fileCap: Int = 16384
     ) throws -> Outcome {
         var head = failedRef
         var lastGrade = initialGrade
@@ -78,6 +78,13 @@ public enum RepairLoop {
                     let (kept, note) = MachineEvidence.cappedContent(text, cap: fileCap)
                     contents[path] = kept
                     if let note { truncations.append(note) }
+                } else {
+                    // A writable path that doesn't exist (or can't be decoded) in
+                    // this worktree is a real, plausible live-run failure mode (an
+                    // earlier phase never wrote it). Silently omitting the key
+                    // makes it indistinguishable from "unchanged/fine" in the
+                    // rendered evidence, so mark it explicitly instead.
+                    contents[path] = "(file does not exist in this worktree)"
                 }
             }
             let (out, outNote) = MachineEvidence.cappedFailureOutput(lastGrade.output, cap: outputCap)

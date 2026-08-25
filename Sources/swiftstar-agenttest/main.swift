@@ -184,7 +184,11 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
     // reserved for a per-worker think override — not yet wired; see P12.6 — and
     // has no effect today, so deriving from it here would make the capture claim
     // a sampling mode the engine did not actually run under.
-    _ = env["AGENTTEST_REPAIR_THINK"]
+    if env["AGENTTEST_REPAIR_THINK"] != nil {
+        let warning = "[agenttest] note: AGENTTEST_REPAIR_THINK is currently inert (deferred to "
+            + "P12.6); repair think mode mirrors AGENTTEST_THINK\n"
+        FileHandle.standardError.write(Data(warning.utf8))
+    }
     let think: ThinkMode = env["AGENTTEST_THINK"] == "1" ? .bounded : .off
     return PhasePacketBuilder.build(
         phaseText: directive,

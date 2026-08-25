@@ -37,27 +37,65 @@ public struct MachineEvidence: Equatable, Sendable {
 
     /// Cap one file's content, noting the truncation.
     /// Caps on UTF-8 byte length, not Character count, to respect true payload size.
+    ///
+    /// Middle-truncates rather than head-truncates: a bug fix is as likely to
+    /// live near the end of a file as the start (e.g. a route handler at the
+    /// bottom of a small file), so keeping only the head can silently hide the
+    /// very code that needs fixing. Instead this keeps roughly the first half
+    /// of the cap and the last half, drops the middle, and marks the drop
+    /// inline (not just in the returned note) since the rendered evidence
+    /// otherwise concatenates head and tail with nothing to say a chunk of
+    /// code is missing between them.
     public static func cappedContent(_ content: String, cap: Int) -> (String, String?) {
         let byteCount = content.utf8.count
         guard byteCount > cap else { return (content, nil) }
 
-        // Keep the first `cap` bytes, but don't split a multi-byte Character.
-        // Walk forward from the start, accumulating byte count until we would exceed the cap.
-        var byteAccum = 0
-        var charIndex = content.startIndex
+        let headCap = cap / 2
+        let tailCap = cap - headCap
 
-        while charIndex < content.endIndex {
-            let char = content[charIndex]
+        // Keep the first `headCap` bytes, but don't split a multi-byte Character.
+        // Walk forward from the start, accumulating byte count until we would exceed the cap.
+        var headByteAccum = 0
+        var headEnd = content.startIndex
+        while headEnd < content.endIndex {
+            let char = content[headEnd]
             let charBytes = char.utf8.count
-            if byteAccum + charBytes > cap {
+            if headByteAccum + charBytes > headCap {
                 break
             }
-            byteAccum += charBytes
-            content.formIndex(after: &charIndex)
+            headByteAccum += charBytes
+            content.formIndex(after: &headEnd)
         }
 
-        let kept = String(content[..<charIndex])
-        return (kept, "file content truncated: \(byteCount) -> \(kept.utf8.count) bytes")
+        // Keep the last `tailCap` bytes, but don't split a multi-byte Character.
+        // Walk backward from the end, accumulating byte count until we would exceed the cap.
+        var tailByteAccum = 0
+        var tailStart = content.endIndex
+        while tailStart > content.startIndex {
+            let priorIndex = content.index(before: tailStart)
+            let char = content[priorIndex]
+            let charBytes = char.utf8.count
+            if tailByteAccum + charBytes > tailCap {
+                break
+            }
+            tailByteAccum += charBytes
+            tailStart = priorIndex
+        }
+
+        // For content only barely over the cap, the head and tail windows can
+        // overlap; clamp so we never re-emit the same bytes twice.
+        if tailStart < headEnd {
+            tailStart = headEnd
+        }
+
+        let head = String(content[..<headEnd])
+        let tail = String(content[tailStart...])
+        let droppedBytes = byteCount - head.utf8.count - tail.utf8.count
+        let marker = "\n\n<<< \(droppedBytes) bytes truncated from the middle of this file >>>\n\n"
+        let kept = head + marker + tail
+        let note = "file content middle truncated: kept first \(head.utf8.count) and last "
+            + "\(tail.utf8.count) of \(byteCount) total bytes"
+        return (kept, note)
     }
 
     /// Non-fatal redaction audit: which redacted strings are visible in the
