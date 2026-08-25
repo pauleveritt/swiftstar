@@ -9,11 +9,19 @@ import Foundation
 public struct ValidationResult: Equatable, Sendable {
     public let exit: Int32
     public let digest: String
+    /// The command's combined stdout+stderr. Uncapped here on purpose — this is
+    /// the capture, and renderers cap (`MachineEvidence.cappedFailureOutput`),
+    /// matching how `GradeResult.output` is handled. Without it a failing
+    /// validation reported an exit status and nothing about the cause: the
+    /// import tracebacks that stopped two build runs on 2026-08-25 went to
+    /// stderr, which was never captured at all.
+    public let output: String
     public var passed: Bool { exit == 0 }
 
-    public init(exit: Int32, digest: String) {
+    public init(exit: Int32, digest: String, output: String = "") {
         self.exit = exit
         self.digest = digest
+        self.output = output
     }
 }
 

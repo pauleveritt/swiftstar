@@ -152,10 +152,15 @@ public enum WorktreeDispatcher {
     public static func runValidation(_ command: String?, in worktree: URL) throws -> ValidationResult? {
         guard let command else { return nil }
         let r = try SubprocessRunner.run(command, in: worktree)
-        let digest = "sha256:" + SHA256.hash(data: Data(r.stdout.utf8))
+        // Combined, and digested over the same text `output` carries. Hashing
+        // stdout alone meant a Python traceback (stderr) produced the digest of
+        // the empty string — a field that looked like evidence and described
+        // nothing.
+        let combined = r.stdout + (r.stdout.isEmpty || r.stderr.isEmpty ? "" : "\n") + r.stderr
+        let digest = "sha256:" + SHA256.hash(data: Data(combined.utf8))
             .map { String(format: "%02x", $0) }.joined()
         let exit = r.timedOut ? Int32(124) : r.exit  // 124 = timeout, per `timeout(1)` convention
-        return ValidationResult(exit: exit, digest: digest)
+        return ValidationResult(exit: exit, digest: digest, output: combined)
     }
 
     /// Write one harvested file's content into the worktree, creating parent

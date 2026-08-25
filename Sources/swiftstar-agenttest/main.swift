@@ -670,7 +670,16 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // broken tree from being chained into the next phase.
         let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: wt.url)
         if let validation, !validation.passed {
+            // Print and persist the cause. This phase failure aborts the whole
+            // run below, so if the output is not surfaced here it is gone: the
+            // receipt carries only exit + digest.
             print("[agenttest]   phase \(i + 1): import check failed (exit \(validation.exit))")
+            if !validation.output.isEmpty {
+                print(validation.output)
+                try? "phase \(i + 1) validation exit=\(validation.exit)\n\n\(validation.output)"
+                    .write(to: captureDir.appendingPathComponent("validation-phase\(i + 1).txt"),
+                           atomically: true, encoding: .utf8)
+            }
         }
         let result = try txn.finalizePhase(wt, packet: packet, turnOutcome: outcome,
                                            validation: validation)

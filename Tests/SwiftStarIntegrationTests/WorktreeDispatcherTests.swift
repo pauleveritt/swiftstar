@@ -393,6 +393,45 @@ struct WorktreeDispatcherTests {
         #expect(!digest.isEmpty)
     }
 
+    // MARK: - validation: the failure output must survive
+
+    /// A failing import check is the build arm's most common phase failure, and
+    /// its traceback goes to **stderr**. `runValidation` used to hash stdout and
+    /// discard everything, so both failing runs on 2026-08-25 recorded
+    /// `digest: "sha256:e3b0c442…"` — the hash of the empty string — and nothing
+    /// about why. A receipt that carries no evidence is the same defect class as
+    /// a packet asserting a sampler the engine never ran under.
+    @Test func runValidationCapturesStderr() throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let r = try WorktreeDispatcher.runValidation(
+            ">&2 echo 'ImportError: attempted relative import'; exit 1", in: repo)
+        #expect(r?.exit == 1)
+        #expect(r?.output.contains("ImportError: attempted relative import") == true)
+    }
+
+    @Test func runValidationCapturesStdout() throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let r = try WorktreeDispatcher.runValidation("echo hello-from-stdout", in: repo)
+        #expect(r?.passed == true)
+        #expect(r?.output.contains("hello-from-stdout") == true)
+    }
+
+    /// The digest must describe the text `output` carries. Hashing only stdout
+    /// while the failure lives on stderr is what made the empty-string digest
+    /// look like a real value.
+    @Test func theDigestCoversTheSameTextAsOutput() throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let a = try WorktreeDispatcher.runValidation(">&2 echo boom; exit 1", in: repo)
+        let b = try WorktreeDispatcher.runValidation(">&2 echo different; exit 1", in: repo)
+        #expect(a?.digest != b?.digest)
+        // An empty-output command must not share a digest with a noisy one.
+        let quiet = try WorktreeDispatcher.runValidation("exit 1", in: repo)
+        #expect(quiet?.digest != a?.digest)
+    }
+
     @Test func validationPassedYieldsCandidate() throws {
         let repo = try makeFixtureRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
