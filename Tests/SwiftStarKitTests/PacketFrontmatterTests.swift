@@ -223,6 +223,41 @@ struct PacketFrontmatterTests {
         #expect(packet.validationCommand == "set -e\npytest -q")
     }
 
+    /// `|-` (strip chomping) and `|+` (keep chomping) are recognized as
+    /// block-scalar indicators but this parser only ever implements plain
+    /// `|` (clip) behavior for them — accepting-but-silently-mishandling an
+    /// indicator is exactly the kind of gap this schema exists to avoid.
+    /// Until strip/keep chomping is actually implemented, they must be
+    /// rejected outright rather than silently treated as clip.
+    @Test func stripChompingIndicatorThrows() {
+        let withStrip = Self.sample.replacingOccurrences(
+            of: "  command: \"pytest -q\"",
+            with: """
+              command: |-
+                set -e
+                pytest -q
+            """
+        )
+        #expect(throws: (any Error).self) {
+            try PacketFrontmatter.parse(withStrip)
+        }
+    }
+
+    /// See `stripChompingIndicatorThrows` — same reasoning for `|+` (keep).
+    @Test func keepChompingIndicatorThrows() {
+        let withKeep = Self.sample.replacingOccurrences(
+            of: "  command: \"pytest -q\"",
+            with: """
+              command: |+
+                set -e
+                pytest -q
+            """
+        )
+        #expect(throws: (any Error).self) {
+            try PacketFrontmatter.parse(withKeep)
+        }
+    }
+
     /// A block scalar content line indented less than the block's own
     /// established indent (per the first content line), but still more than
     /// the parent key's indent, is a YAML syntax error — real YAML would

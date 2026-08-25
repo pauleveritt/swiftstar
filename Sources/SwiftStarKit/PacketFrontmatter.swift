@@ -177,6 +177,11 @@ public enum PacketFrontmatter {
                 index = nextIndex
                 continue
             }
+            if isUnsupportedChompingIndicator(strippedValue) {
+                throw PacketFrontmatterError.malformed(
+                    "\(qualified): unsupported chomping indicator \"\(strippedValue)\" (only plain \"|\" is implemented)"
+                )
+            }
 
             let value = unquote(strippedValue)
 
@@ -194,13 +199,24 @@ public enum PacketFrontmatter {
         return (scalars, lists)
     }
 
-    /// `|` (and its chomping variants `|-`/`|+`) is YAML's literal block
-    /// scalar indicator — the natural way to author a multi-line value like a
-    /// shell command. Folded (`>`) style is out of scope for v1: nothing in
-    /// the schema needs it, and admitting only what is used keeps the parser
-    /// able to reject what it does not understand instead of guessing.
+    /// `|` is YAML's literal block scalar indicator — the natural way to
+    /// author a multi-line value like a shell command. Only plain `|`
+    /// (default "clip" chomping) is implemented. Folded (`>`) style is out
+    /// of scope for v1: nothing in the schema needs it, and admitting only
+    /// what is used keeps the parser able to reject what it does not
+    /// understand instead of guessing.
     private static func isBlockScalarIndicator(_ value: String) -> Bool {
-        value == "|" || value == "|-" || value == "|+"
+        value == "|"
+    }
+
+    /// `|-` (strip) and `|+` (keep) are recognized YAML chomping indicators,
+    /// but this parser does not implement distinct strip/keep behavior — only
+    /// plain `|`'s clip behavior exists. Accepting one of these and silently
+    /// running it through the clip codepath would be exactly the kind of
+    /// "accepts what it doesn't implement" gap this schema exists to avoid,
+    /// so any `|`-prefixed indicator other than bare `|` is rejected.
+    private static func isUnsupportedChompingIndicator(_ value: String) -> Bool {
+        value.hasPrefix("|") && value != "|"
     }
 
     /// Consumes every line more indented than `parentIndent` as the block
