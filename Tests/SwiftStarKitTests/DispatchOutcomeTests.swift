@@ -60,4 +60,21 @@ struct DispatchOutcomeTests {
         let receipt = DispatchOutcome.receipt(.noChanges)
         #expect(candidate != receipt)
     }
+
+    @Test func gradeResultPassedIsZeroExit() {
+        #expect(GradeResult(exit: 0, output: "").passed)
+        #expect(!GradeResult(exit: 1, output: "x").passed)
+    }
+
+    @Test func gradeResultRoundTripsJSON() throws {
+        let g = GradeResult(exit: 1, output: "assert 307 == 303")
+        let data = try JSONEncoder().encode(g)
+        let back = try JSONDecoder().decode(GradeResult.self, from: data)
+        #expect(back == g)
+    }
+
+    @Test func receiptRepairExhaustedHasNoPayload() {
+        #expect(Receipt.repairExhausted == .repairExhausted)
+        #expect(Receipt.repairExhausted != .noChanges)
+    }
 }

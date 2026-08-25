@@ -539,6 +539,7 @@ final class AgentController {
         case .budgetExceeded: return "budgetExceeded"
         case .validationFailed(let exit, _): return "validationFailed (exit \(exit))"
         case .noChanges: return "noChanges"
+        case .repairExhausted: return "repairExhausted"
         }
     }
 

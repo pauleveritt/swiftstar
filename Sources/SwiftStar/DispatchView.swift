@@ -149,6 +149,9 @@ struct DispatchView: View {
         case .noChanges:
             Text("No changes — the turn mutated nothing to commit.")
                 .foregroundStyle(.secondary).textSelection(.enabled)
+        case .repairExhausted:
+            Text("Repair exhausted — no candidate reached a passing grade.")
+                .foregroundStyle(.orange).textSelection(.enabled)
         }
     }
 

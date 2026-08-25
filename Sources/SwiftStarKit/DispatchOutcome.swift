@@ -17,13 +17,29 @@ public struct ValidationResult: Equatable, Sendable {
     }
 }
 
+/// One acceptance grading: the pytest exit status and its combined output.
+/// `passed` is `exit == 0`. Repair branches on this; the raw `output` becomes
+/// the repair evidence (D6).
+public struct GradeResult: Equatable, Sendable, Codable {
+    public let exit: Int32
+    public let output: String
+    public var passed: Bool { exit == 0 }
+
+    public init(exit: Int32, output: String) {
+        self.exit = exit
+        self.output = output
+    }
+}
+
 /// Why a dispatch was not a candidate (D3). The receipt names the reason so the
-/// caller can act on it without parsing prose. The four reasons are: a mutation
+/// caller can act on it without parsing prose. The five reasons are: a mutation
 /// outside `writableFiles` (`.refusedTool`, naming the offending path), the
 /// turn or tool-call budget exceeded (`.budgetExceeded`), the validation
 /// command ran and exited non-zero (`.validationFailed`, with exit + digest),
-/// or the turn ended cleanly but mutated nothing (`.noChanges`).
-public enum Receipt: Equatable, Sendable {
+/// the turn ended cleanly but mutated nothing (`.noChanges`), or repair
+/// produced candidates for every allowed round without reaching a passing
+/// grade (`.repairExhausted`).
+public enum Receipt: Equatable, Sendable, Codable {
     /// A mutation was outside `writableFiles`; the associated value names the
     /// offending path (the first one observed outside the contract).
     case refusedTool(String)
@@ -35,6 +51,9 @@ public enum Receipt: Equatable, Sendable {
     case validationFailed(exit: Int32, digest: String)
     /// The turn ended cleanly but mutated nothing — nothing to commit.
     case noChanges
+    /// Repair produced candidates for every allowed round without reaching a
+    /// passing grade (D4).
+    case repairExhausted
 }
 
 /// One dispatch's outcome (D3/D4): either a candidate ref carrying the P9
