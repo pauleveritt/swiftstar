@@ -208,6 +208,43 @@ struct RepairLoopTests {
         #expect(packet.taskText.contains("(file does not exist in this worktree)"))
     }
 
+    /// A `writableFiles` entry that contains binary data (not valid UTF-8) must
+    /// show up in the assembled evidence with a marker indicating it exists but
+    /// cannot be decoded — not the "does not exist" marker which would be wrong.
+    @Test func undecodableFileGetsExplicitMarkerInEvidence() throws {
+        // Create a repo with an existing binary file in the base commit.
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        // Add invalid UTF-8 binary file to the repo.
+        let invalidUTF8 = Data([0xFF, 0xFE, 0xFD])
+        try invalidUTF8.write(to: repo.appendingPathComponent("binary.bin"))
+        _ = try git(repo, ["add", "binary.bin"])
+        _ = try git(repo, ["commit", "-m", "add binary file"])
+
+        let cap = FileManager.default.temporaryDirectory.appendingPathComponent("repairloop-cap-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: cap, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: cap) }
+        let packetWithUndecodableFile = HandoffPacket(
+            taskText: "fix it", writableFiles: ["a.txt", "binary.bin"], validationCommand: nil,
+            baselines: [:], turnBudget: 1000, toolCallBudget: 8,
+            role: .repair, sampling: SamplingPolicy(think: .off))
+        let result = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            packetBuilder: { _ in packetWithUndecodableFile },
+            runPhase: { _, wt, _ in
+                // Fix a.txt so the grade passes.
+                try "fixed\n".write(to: wt.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+                return self.outcome(mutations: ["a.txt"])
+            },
+            grade: gradingScheme(), captureDir: cap)
+        guard case .passed = result else { Issue.record("expected passed, got \(result)"); return }
+        let packetFile = cap.appendingPathComponent("repair-packet-1.json")
+        let data = try Data(contentsOf: packetFile)
+        let packet = try JSONDecoder().decode(HandoffPacket.self, from: data)
+        #expect(packet.taskText.contains("=== binary.bin ==="))
+        #expect(packet.taskText.contains("(file exists but is not valid UTF-8 — cannot be shown as text)"))
+    }
+
     @Test func writesPerRoundCapture() throws {
         let repo = try makeRepo()
         defer { try? FileManager.default.removeItem(at: repo) }

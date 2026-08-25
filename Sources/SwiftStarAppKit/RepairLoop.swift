@@ -73,17 +73,21 @@ public enum RepairLoop {
             var truncations: [String] = []
             for path in authored.writableFiles {
                 let url = fileURL(path, in: wt.url)
-                if let data = FileManager.default.contents(atPath: url.path),
-                   let text = String(data: data, encoding: .utf8) {
-                    let (kept, note) = MachineEvidence.cappedContent(text, cap: fileCap)
-                    contents[path] = kept
-                    if let note { truncations.append(note) }
+                if let data = FileManager.default.contents(atPath: url.path) {
+                    if let text = String(data: data, encoding: .utf8) {
+                        let (kept, note) = MachineEvidence.cappedContent(text, cap: fileCap)
+                        contents[path] = kept
+                        if let note { truncations.append(note) }
+                    } else {
+                        // File exists but contains binary data that isn't valid UTF-8.
+                        contents[path] = "(file exists but is not valid UTF-8 — cannot be shown as text)"
+                    }
                 } else {
-                    // A writable path that doesn't exist (or can't be decoded) in
-                    // this worktree is a real, plausible live-run failure mode (an
-                    // earlier phase never wrote it). Silently omitting the key
-                    // makes it indistinguishable from "unchanged/fine" in the
-                    // rendered evidence, so mark it explicitly instead.
+                    // A writable path that doesn't exist in this worktree is a
+                    // real, plausible live-run failure mode (an earlier phase never
+                    // wrote it). Silently omitting the key makes it indistinguishable
+                    // from "unchanged/fine" in the rendered evidence, so mark it
+                    // explicitly instead.
                     contents[path] = "(file does not exist in this worktree)"
                 }
             }
