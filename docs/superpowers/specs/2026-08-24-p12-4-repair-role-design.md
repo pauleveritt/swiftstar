@@ -1,7 +1,10 @@
 # SwiftStar P12.4 design: The repair role
 
 **Date:** 2026-08-24
-**Status:** accepted (brainstormed; each decision approved in-session).
+**Status:** accepted (brainstormed; each decision approved in-session; adversarially
+reviewed by Fable —
+[`2026-08-24-p12-4-repair-role-fable-review.md`](../research/2026-08-24-p12-4-repair-role-fable-review.md);
+findings F1–F11 folded in).
 **Phase:** P12 — Reliable agency, step P12.4.
 
 This spec is the authority on *how* P12.4 is done. The P12 plan
@@ -67,51 +70,83 @@ loop that consumes that evidence's plumbing rather than `repair.py`'s.
   cannot occur by construction. The fixtures measure whether the model edits the
   right file when shown everything and a failure that surfaces elsewhere — and,
   because a wrong edit re-fails grading, whether a wrong repair is detected as
-  wrong.
+  wrong. `writableFiles` in this harness is one constant shared by every phase
+  packet, so the repair surface is identical to every implement phase's — no
+  per-phase narrowing exists to reconcile.
 
 - **D3 — Repair reuses `HandoffPacket`, unchanged.** No repair-specific packet
   type. The repair packet is built with `role: .repair`, `sampling: .off` by
   default (overridable via `AGENTTEST_REPAIR_THINK=1` → `.bounded` for the
   deferred bounded-thinking question), and task text composed as: pinned facts →
-  repair directive (the pytest failure output + all file contents) → contract
-  (`preamble` + `sharedContext`, redacted) → writable note. Same
-  `validationCommand` (`import app`), same `selfTestCommand` (vetted pytest),
-  same `writableFiles`, same `redacts`. One contract, two consumers.
+  repair directive (which names the failure and points at the evidence appended
+  at the end, per D6) → contract (`preamble` + `sharedContext`, redacted) →
+  writable note. Same `validationCommand` (`import app`), same `selfTestCommand`
+  (vetted pytest), same `writableFiles`, same `redacts`. One contract, two
+  consumers.
 
-- **D4 — Two rounds, then `.repairExhausted`.** Repair is bounded: up to 2
-  rounds, each re-graded after a candidate. A wrong fix is detected by re-grading
-  and becomes the next round's evidence. A round that yields a receipt
-  (`noChanges` / `validationFailed` / `budgetExceeded` / `refusedTool`) is a
-  failed round, counted against the bound. After the bound, the loop returns
-  `.exhausted` carrying a new `Receipt.repairExhausted` case, so the run records
-  *why* it stopped rather than silently reporting the last failed grade.
+- **D4 — Two candidate rounds, then `.repairExhausted`; a receipt ends the loop
+  immediately.** Repair is bounded: up to 2 *candidate-producing* rounds, each
+  re-graded. A wrong fix is detected by re-grading and becomes the next round's
+  evidence. A round that yields a receipt (`noChanges` / `validationFailed` /
+  `budgetExceeded` / `refusedTool`) produces no new candidate and no new
+  evidence, so retrying it would replay the same dispatch — it terminates the
+  loop immediately with `.exhausted(lastGrade, receipt)`. After two candidate
+  rounds, the loop returns `.exhausted(lastGrade, .repairExhausted)`, so the run
+  records *why* it stopped rather than silently reporting the last failed grade.
 
-- **D5 — Fresh worktree per round, branched from the failed candidate ref.** Round
-  N prepares a disposable worktree from `head` (the failed candidate ref, then the
-  prior round's candidate ref) via `WorktreeDispatcher.prepare`, runs the turn,
-  runs the import check, and `finalize`s to a new candidate ref. Each round is a
-  clean, reverting, re-gradable step; no reuse of the graded worktree (which has
-  `test_acceptance.py` dropped into it and is not a clean checkout).
+- **D5 — Fresh worktree per round, branched from the failed candidate ref.** The
+  authored packet is built *first* (it is worktree-independent), then round N
+  prepares a disposable worktree from `head` (the failed candidate ref, then the
+  prior round's candidate ref) via `WorktreeDispatcher.prepare` — which needs the
+  packet's `writableFiles` to read baselines, so this order is mandatory — then
+  runs the turn, runs the import check, and `finalize`s to a new candidate ref.
+  Each round is a clean, reverting, re-gradable step; no reuse of the graded
+  worktree (which has `test_acceptance.py` dropped into it and is not a clean
+  checkout).
 
-- **D6 — Redaction gates authored content; machine evidence is exempt.** The
-  validator's redaction check (e.g. `AGENTTEST_REDACT=303`) applies to authored
-  content — spec, facts, notes, commands, paths — *not* to the pytest failure
-  output or the file contents injected at repair time. The failure
-  `assert 307 == 303` legitimately states 303; it is the L1 signal, not a leak.
-  Therefore: validate the authored repair packet for redaction **first**, then
-  append the failure output + file contents to `taskText`. The "check the
-  assembled packet" doctrine still holds for authored content (that is where
-  contamination lived); machine evidence is a distinct category, injected
-  post-validation.
+- **D6 — Redaction gates authored content; machine evidence is a typed, exempt,
+  bounded channel.** The validator's redaction check (e.g. `AGENTTEST_REDACT=303`)
+  applies to authored content — spec, facts, notes, commands, paths — *not* to
+  the pytest failure output or the file contents injected at repair time. The
+  failure `assert 307 == 303` legitimately states 303; it is the L1 signal, not a
+  leak. Therefore: validate the authored repair packet for redaction **first**,
+  then append the failure output + file contents to `taskText` at the end, under
+  a "Failure evidence (machine output)" header. The boundary is typed, not
+  conventional: a `MachineEvidence` value is constructible **only** from a
+  `GradeResult` plus worktree file reads (never from `packetBuilder` inputs), and
+  the validator runs a **non-fatal audit** over the evidence for redact-hits,
+  logging (not enforcing) — so "the fixture's answer is present in the failure
+  output" is always visible rather than silently exempt. Evidence is **bounded**:
+  pytest output is tail-capped to the last ~8 KB (the failure summary lives at the
+  end; a failure assert can embed the full HTML response body), and each file's
+  content is capped at a fixed per-file byte limit; both caps are recorded in the
+  round record. The "check the assembled packet" doctrine still holds for
+  authored content (that is where contamination lived); machine evidence is a
+  distinct category, injected post-validation.
 
 - **D7 — Acceptance-test isolation.** `test_acceptance.py` is written into the
   worktree only at grade time, after the repair turn ends — so the model never
-  sees or runs it during a turn (it is not in `writableFiles` and not present).
-  Same rule as the implement flow today.
+  sees the file or runs the suite during a turn (it is not in `writableFiles` and
+  not present). The failure output injected as evidence may quote the acceptance
+  test's assertion lines; that is legitimate machine evidence, not a leak — the
+  suite is non-gameable (not writable, not present in the worktree). The model's
+  one in-loop verification path is the writable `tests/test_app.py`: it can write
+  a regression test reproducing the failure and run it via the vetted self-test
+  command. Host-side re-grade remains the only authority (doctrine). Same rule as
+  the implement flow today.
 
-- **D8 — Session-exhaustion guard carries into repair.** A repair turn ending
-  `limit` / `contextFull` leaves the pooled worker session unusable; stop the
-  whole run (no round 2), as `main.swift` already does for implement phases.
+- **D8 — Repair runs on a fresh worker session.** Implement phases accumulate on
+  worker 1 (a phase-3 run has died at `ctx_pos=23301/32768`); full-surface repair
+  on that same session would near-certainly exhaust it, and the old
+  "stop on `limit`/`contextFull`" guard would only record the death. So the
+  harness spawns `--subagent-pool 3` and dispatches repair rounds on worker 2
+  (never used by implement): repair always starts from a clean session, and the
+  fixture and live tiers then share the same session regime. Repair needs nothing
+  from the implement session — evidence is re-injected per round by design. One
+  extra session ≈ 8 GB (128 GB dev machine; the 55 GiB deployable figure was
+  computed at ctx=100k, a separate concern). Both repair rounds share worker 2
+  (round 2 starts ~10–12k, fits 32k). The `limit`/`contextFull` stop remains as a
+  backstop: a repair turn that ends there leaves worker 2 unusable; stop the run.
 
 - **D9 — Placement: `RepairLoop` in SwiftStarAppKit, grading extracted.** Two new
   types, one extraction:
@@ -122,34 +157,56 @@ loop that consumes that evidence's plumbing rather than `repair.py`'s.
     worktree, return `GradeResult`. Shared by `main.swift` and `RepairLoop`.
   - `RepairLoop` (SwiftStarAppKit): the bounded orchestrator. Inputs: repo URL,
     failed candidate ref, failing `GradeResult`, acceptance-test source +
-    pyProject, a `packetBuilder` closure, a `runPhase` closure. Returns
-    `.passed(ref, grade)` or `.exhausted(lastGrade, .repairExhausted)`.
+    pyProject, a `packetBuilder` closure, a `runPhase` closure, a capture dir.
+    Returns `.passed(ref, grade, worktree)` or `.exhausted(lastGrade:
+    GradeResult?, receipt: Receipt)` — where `receipt` is the terminating round's
+    receipt (D4) or `.repairExhausted` after two candidate rounds.
   - `Receipt.repairExhausted` (new case in SwiftStarKit).
   Division of labor: `packetBuilder` returns the **authored** packet (`role`,
   `sampling`, facts, directive, contract, writable note, `redacts`); `RepairLoop`
   validates that packet for redaction, reads the worktree's file contents, and
-  appends [failure output + file contents] to `taskText` before dispatch (D6).
-  `runPhase` is the pooled orchestrator's `orch.runPhase`. `RepairLoop` owns only
-  the round/re-grade/bound/evidence-injection logic; everything model- and
-  contract-specific stays harness-owned. This makes `RepairLoop` testable
-  without a model load.
+  appends the bounded `MachineEvidence` to `taskText` before dispatch (D6).
+  `runPhase` is the pooled orchestrator's `orch.runPhase(worker: 2, ...)`.
+  `RepairLoop` owns only the round/re-grade/bound/evidence-injection logic;
+  everything model- and contract-specific stays harness-owned. **Per-round
+  capture:** each round writes `repair-packet-N.json` (the assembled packet,
+  evidence included), its verdict/receipt, the candidate ref, the grade
+  exit + digest, and timings to the capture dir; run-config gains the repair
+  fields (`repairThink`, round count). `.passed` retains the passing round's
+  worktree as `finalWorktree` so `main.swift`'s code dump + DeepSeek grader run
+  against the repaired tree. This makes `RepairLoop` testable without a model
+  load.
 
 - **D10 — A fixture mode for deterministic verification.** `swiftstar-agenttest
   --fixture <misleading-locus|plausible-wrong-fix>` overlays `reference/*` +
-  the fixture's buggy `app.py` into a fresh repo, skips the implement phases,
+  the fixture's buggy `app.py` into a fresh repo, **commits the overlay as the
+  failed candidate ref** (there is no implement phase to `commitBack()`, so the
+  seed commit is what seeds repair's `head`), skips the implement phases,
   grades (guaranteed 12/13), runs the *same* `RepairLoop`, and asserts 13/13.
-  This is the primary test that the loop localizes and fixes; the live roadmap
-  run (implement → grade → repair on failure) is the end-to-end 13/13 gate.
+  What each fixture measures, stated precisely: `misleading-locus` measures
+  localization — the repair must edit `app.py` (the handler), not
+  `templates/complaints.html` (innocent), from a failure that surfaces at
+  rendering. `plausible-wrong-fix` with `AGENTTEST_REDACT=303` measures
+  *evidence-following over convention-recall*: the model must land 303 (read from
+  the failure evidence) rather than pattern-match "redirect" to 302 — it does
+  **not** claim diagnosis-from-a-redacted-contract, because the assert itself
+  states the expected value. Because repair always runs on a fresh worker (D8),
+  the fixture tier's session regime matches the live path; the one residual
+  divergence is that live failures can be multi-test with large output (C16 run 3:
+  7 failed), where fixtures are single-test — the D6 size cap covers that. The
+  live roadmap run (implement → grade → repair on failure) is the end-to-end
+  13/13 gate.
 
 ## Components
 
-**SwiftStarKit** (pure): `GradeResult`; the `Receipt.repairExhausted` case. No
-I/O, no git.
+**SwiftStarKit** (pure): `GradeResult`; the `MachineEvidence` value type; the
+`Receipt.repairExhausted` case. No I/O, no git.
 
 **SwiftStarAppKit** (IO/Process, no SwiftUI): `AcceptanceGrader` (the extracted
 pytest run); `RepairLoop` (the bounded round/re-grade loop over
 `WorktreeDispatcher.prepare`/`runValidation`/`finalize`/`discard`, driven through
-the `packetBuilder`/`runPhase` closures).
+the `packetBuilder`/`runPhase` closures, with per-round capture); the pool spawn
+widens to `--subagent-pool 3` (worker 2 reserved for repair).
 
 **swiftstar-agenttest** (`main.swift`): the `packetBuilder` (which owns the
 *authored* repair task-text composition — `writableFiles`, `facts`, `redacts`,
@@ -163,15 +220,19 @@ recording (pass vs `.repairExhausted`).
    Pass → done (13/13). Fail → `RepairLoop.run(...)` with the candidate ref and
    the failing `GradeResult`.
 2. Round N (`head` = failed ref, then prior candidate ref):
-   - `WorktreeDispatcher.prepare(packet, baseRef: head)`.
-   - Read every `writableFiles` entry's current content from the worktree.
-   - Build the repair packet via `packetBuilder`; validate the *authored* packet
-     (redaction, structure); append failure output + file contents to `taskText`.
-   - `runPhase(packet, worktree)`; `runValidation(import app)`; `finalize`.
-   - Candidate → `AcceptanceGrader.grade(worktree)`: pass ⇒ `.passed(ref, grade)`;
-     fail ⇒ head = new ref, evidence = new output, discard, next round.
-   - Receipt ⇒ failed round, next round.
-3. After the bound: `.exhausted(lastGrade, .repairExhausted)`.
+   - Build the authored repair packet via `packetBuilder` (worktree-independent).
+   - `WorktreeDispatcher.prepare(authoredPacket, baseRef: head)` (reads
+     `writableFiles` baselines from the worktree).
+   - Validate the authored packet (redaction, structure); read every
+     `writableFiles` entry's current content from the worktree; build the bounded
+     `MachineEvidence` and append it to `taskText` (D6); write
+     `repair-packet-N.json`.
+   - `runPhase(packet, worktree)` on worker 2; `runValidation(import app)`;
+     `finalize`.
+   - Candidate → `AcceptanceGrader.grade(worktree)`: pass ⇒ `.passed(ref, grade,
+     worktree)`; fail ⇒ head = new ref, evidence = new output, discard, next round.
+   - Receipt ⇒ `.exhausted(lastGrade, receipt)` immediately (D4).
+3. After two candidate rounds: `.exhausted(lastGrade, .repairExhausted)`.
 
 ## Testing
 
@@ -181,7 +242,10 @@ recording (pass vs `.repairExhausted`).
   a model load. `GradeResult`/`AcceptanceGrader` against a real fixture tree.
 - **Fixture tier** (`--fixture`): `misleading-locus` ⇒ must edit `app.py`, not
   `templates/complaints.html`; `plausible-wrong-fix` with `AGENTTEST_REDACT=303`
-  ⇒ must land 303, not 302. Both must reach 13/13 through the loop.
+  ⇒ must land 303, not 302 (evidence-following over convention-recall — D10).
+  Both must reach 13/13 through the loop. Because repair runs on a fresh worker
+  (D8), this tier exercises the same session regime as live; the residual
+  difference (single-test vs multi-test failure output) is noted in D10.
 - **Live tier** (`just capture`, never CI): the roadmap spec end-to-end —
   implement → grade → repair → 13/13 from packets.
 
@@ -198,4 +262,10 @@ repair role (deferred to P12.6 — the `AGENTTEST_REPAIR_THINK` override exists 
 it needs no code change later); harvesting-from-thinking as a repair safety net
 (the model never sees the failure it must react to); any `repair.py`-style
 bypass of the sandbox (the point is to run repair through the vetted
-bash/worktree-dispatch machinery that already exists).
+bash/worktree-dispatch machinery that already exists). **Open-loop operation is
+an evidence caveat, not a settled capability:** the 3/3 repair result ran with
+unsandboxed bash, so whether the model can fix without reproducing the failure
+in-loop is unexamined — P12.4 measures it rather than assuming it. A vetted
+repro command is deliberately not added in v1 (it would either leak the oracle
+or grow new machinery); the writable self-test (D7) is the model's only in-loop
+verification.
