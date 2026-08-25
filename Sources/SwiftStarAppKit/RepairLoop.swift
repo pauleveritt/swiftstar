@@ -68,6 +68,20 @@ public enum RepairLoop {
             var shouldDiscardWorktree = true
             defer { if shouldDiscardWorktree { WorktreeDispatcher.discard(wt, in: repo) } }
 
+            // Text-contract repair re-emits a *complete* file; evidence truncated
+            // to `fileCap` would be re-emitted truncated and overwrite a good copy.
+            // Refuse the round instead of silently shipping a partial view.
+            if authored.textContract {
+                for path in authored.writableFiles {
+                    let url = fileURL(path, in: wt.url)
+                    if let data = FileManager.default.contents(atPath: url.path),
+                       data.count > fileCap {
+                        write(record: RoundRecord(round: round, candidateRef: nil, receipt: .contractNotFollowed, grade: nil, elapsed: Int(Date().timeIntervalSince(start))), to: captureDir)
+                        return .exhausted(lastGrade: lastGrade, receipt: .contractNotFollowed)
+                    }
+                }
+            }
+
             // Assemble machine evidence from the worktree + the failing grade.
             var contents: [String: String] = [:]
             var truncations: [String] = []
@@ -119,9 +133,24 @@ public enum RepairLoop {
             // written alongside `repair-round-N.json` below.
             writePacketCapture(packet: packet, round: round, to: captureDir)
 
-            let turn = try runPhase(packet, wt.url, capture)
+            var turn = try runPhase(packet, wt.url, capture)
             if turn.stopReason == .limit || turn.stopReason == .contextFull {
                 throw RepairLoopError.sessionExhausted(turn.stopReason)
+            }
+            // Text-contract harvest seam: a text-only turn (no tool calls, eos)
+            // under a `textContract` packet is a candidate the host extracts via
+            // the labeled-block parser and writes itself — the model never touched
+            // the write tool, so the host materializes its declared mutations.
+            if packet.textContract, turn.toolCalls.isEmpty, turn.stopReason == .eos {
+                let harvest = LabeledBlockParser.parse(turn.text, writableFiles: packet.writableFiles)
+                if harvest.files.isEmpty {
+                    write(record: RoundRecord(round: round, candidateRef: nil, receipt: .contractNotFollowed, grade: nil, elapsed: Int(Date().timeIntervalSince(start))), to: captureDir)
+                    return .exhausted(lastGrade: lastGrade, receipt: .contractNotFollowed)
+                }
+                for (path, content) in harvest.files {
+                    try WorktreeDispatcher.writeFile(content, to: path, in: wt.url)
+                }
+                turn.mutations = harvest.files.map(\.path)
             }
             let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: wt.url)
             let dispatchOutcome = try WorktreeDispatcher.finalize(

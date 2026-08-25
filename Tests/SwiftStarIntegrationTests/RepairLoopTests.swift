@@ -245,6 +245,38 @@ struct RepairLoopTests {
         #expect(packet.taskText.contains("(file exists but is not valid UTF-8 — cannot be shown as text)"))
     }
 
+    /// A text-contract packet whose writable file already exceeds `fileCap`
+    /// in the worktree must short-circuit to `.exhausted(... .contractNotFollowed)`
+    /// WITHOUT invoking `runPhase` — the cap guard refuses to ship a truncated
+    /// view that a text-only repair would re-emit truncated and overwrite a
+    /// good copy. `runPhase` throwing if called proves the guard short-circuits.
+    private struct PhaseMustNotRunError: Error {}
+
+    @Test func textContractCapGuardShortCircuitsBeforeRunPhase() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        // a.txt is seeded with "seed\n" (5 bytes); a `fileCap` below that
+        // trips the cap guard before any phase runs.
+        let textContractPacket = HandoffPacket(
+            taskText: "fix it", writableFiles: ["a.txt"], validationCommand: "true",
+            baselines: [:], turnBudget: 1000, toolCallBudget: 8,
+            textContract: true, role: .repair, sampling: SamplingPolicy(think: .off))
+        let result = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            packetBuilder: { _ in textContractPacket },
+            runPhase: { _, _, _ in
+                // The cap guard must short-circuit before dispatch; reaching
+                // here means it did not.
+                throw PhaseMustNotRunError()
+            },
+            grade: gradingScheme(),
+            fileCap: 4)
+        guard case .exhausted(_, let receipt) = result else {
+            Issue.record("expected exhausted, got \(result)"); return
+        }
+        #expect(receipt == .contractNotFollowed)
+    }
+
     @Test func writesPerRoundCapture() throws {
         let repo = try makeRepo()
         defer { try? FileManager.default.removeItem(at: repo) }

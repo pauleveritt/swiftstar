@@ -198,6 +198,8 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
         "and do not add new files or routes.",
     ]).joined(separator: " ")
     let writableNote = ([
+        TextContract.directive,
+        "",
         "You may write or edit only these files:",
         renderedFiles,
     ] + pathRule + [
@@ -229,6 +231,7 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
         validationCommand: vettedImport,
         selfTestCommand: vettedPytest,
         toolCallBudget: Int(env["AGENTTEST_TOOL_BUDGET"] ?? "30") ?? 30,
+        textContract: true,
         facts: facts,
         redacts: redacts,
         sampling: SamplingPolicy(think: think,
