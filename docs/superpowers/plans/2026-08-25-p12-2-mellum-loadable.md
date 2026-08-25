@@ -141,15 +141,16 @@ int ds4_test_mellum_decode_contract_admission(void) {
         failures++;
     }
 
-    down->type = 9; /* GGUF Q5_0: what official mixed artifacts use for down */
-    if (ds4_engine_bind_mellum_decode_contract(&e, 0, 0)) {
-        fprintf(stderr, "mellum admission: Q5_0 down unexpectedly accepted\n");
-        failures++;
-    }
-
+    /* MXFP4 first: it is the one type the un-fixed binder silently accepts. */
     down->type = DS4_TENSOR_MXFP4;
     if (ds4_engine_bind_mellum_decode_contract(&e, 0, 0)) {
         fprintf(stderr, "mellum admission: MXFP4 down unexpectedly accepted\n");
+        failures++;
+    }
+
+    down->type = 6; /* GGUF Q5_0: what official mixed artifacts use for down */
+    if (ds4_engine_bind_mellum_decode_contract(&e, 0, 0)) {
+        fprintf(stderr, "mellum admission: Q5_0 down unexpectedly accepted\n");
         failures++;
     }
 
@@ -209,7 +210,7 @@ tests/test_mellum_admission: tests/test_mellum_admission.o ds4_cpu_test_hooks.o 
 make tests/test_mellum_admission && ./tests/test_mellum_admission
 ```
 
-Expected: FAIL — `Q5_0 down unexpectedly accepted` and `MXFP4 down unexpectedly accepted` (and possibly a `ds4_die` on Q4_K), nonzero exit.
+Expected: FAIL (red) — pre-fix the binder returns true for MXFP4 down (prints `MXFP4 down unexpectedly accepted`), then the Q5_0 case `ds4_die`s ("unsupported routed expert tensor type"), so the process exits nonzero. The die is the bug manifesting; the fix turns both into clean `return false`.
 
 - [ ] **Step 6: Apply the one-line fix**
 
@@ -269,7 +270,7 @@ VERSION = 3
 ALIGN = 32
 
 UINT8, INT8, UINT16, INT16, UINT32, INT32, FLOAT32, BOOL, STRING, ARRAY, UINT64, INT64, FLOAT64 = range(13)
-F32, Q8_0, Q5_0 = 0, 8, 9
+F32, Q8_0, Q5_0 = 0, 8, 6
 
 
 def s(b):
@@ -350,9 +351,9 @@ def main():
     dir_end = len(header) + len(body)
     data_pos = (dir_end + ALIGN - 1) // ALIGN * ALIGN
 
-    # Largest tensor byte span (gate/up/down, 2304*896*64 elements) at Q8_0's
-    # 34-bytes-per-32-elements is ~140 MiB; over-cover with 2x to stay safe
-    # (sparse, so disk cost is negligible).
+    # Largest tensor byte span (gate/up/down, 2304*896*64 elements). Q8_0 packs
+    # 32 elements per 34 bytes → ~134 MiB; Q5_0 packs 32 per 22 bytes → ~87 MiB.
+    # Over-cover with 2x (sparse, so disk cost is negligible).
     max_bytes = 2304 * 896 * 64 * 2
     total = data_pos + max_bytes
 
@@ -529,4 +530,4 @@ git push -u origin p12-2-mellum-loadable
 - D1 → Task 1; D2 → Task 2 Step 6; D3 → Task 2; D4 → Task 3; D5 → Task 5.
 - No placeholders: every code step has full code; every command has its expected output.
 - Type consistency: the test hook returns `int` (failure count); the test file and Makefile both call `ds4_test_mellum_decode_contract_admission()` declared in `ds4.h`; the driver links `ds4_cpu.o` (public `ds4_engine_open`/`ds4_engine_close`, both declared in `ds4.h`).
-- Risks to watch during execution: (a) the merge may surface conflicts in `ds4.c`/agent files — resolve per the Task 1 rules; (b) `ds4_backend_uses_graph(DS4_BACKEND_CPU)` must be false so `model_open` takes the CPU non-prefetch path — if `inspect_only` still prefetches, the sparse payload would be read and the driver would still pass because holes read as zeros, but the admission path itself is unaffected; (c) `tensor_nbytes` treats GGUF type 9 (Q5_0) as unsupported (logs a warning, leaves `bytes=0`), which is fine — the validator's explicit down-type check fires before any byte math.
+- Risks to watch during execution: (a) the merge may surface conflicts in `ds4.c`/agent files — resolve per the Task 1 rules; (b) `ds4_backend_uses_graph(DS4_BACKEND_CPU)` must be false so `model_open` takes the CPU non-prefetch path — if `inspect_only` still prefetches, the sparse payload would be read and the driver would still pass because holes read as zeros, but the admission path itself is unaffected; (c) GGUF type 6 (Q5_0) is a known type (`gguf_types[6] = {"q5_0", 32, 22}`); `tensor_nbytes` computes its bytes (90,832,896 for the down tensor), well under the generator's 264 MiB cover. Refusal comes from `weights_validate_mellum_layout`'s explicit down-type check, not from byte math.

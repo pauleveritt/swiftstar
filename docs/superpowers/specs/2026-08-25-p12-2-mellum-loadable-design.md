@@ -34,23 +34,30 @@ without first passing the validator reopens the bug silently.
   lineages fetched; the submodule checkout at `external/ds4` has only the pin.
   The similarly-named `swiftstar-integration` branches (local `0b3f0c7`, remote
   `4bd9a3d`) are 12 commits behind the same lineage; `mellum-repair-pipeline`
-  (`9e21c05`) branches directly from `cde6438`. So the merge is a clean two-way
-  merge from `8784fe6`, not a rebase.
+  (`9e21c05`) branches directly from `cde6438`. The think-budget side is a
+  single commit (`1f9a4c5`, parent `8784fe6`) touching four files (`ds4.c`,
+  `ds4.h`, `ds4_agent.c`, `ds4_help.c`), so the conflict surface is confined to
+  those four files. The merge is a clean two-way merge from `8784fe6`, not a
+  rebase.
 
 - **Remotes.** `origin` = `antirez/ds4` (not writable by us); `pauleveritt` =
   `pauleveritt/ds4` (the push target).
 
-- **The bug's three failure classes.** With `down = ffn_down_exps->type`, the
-  current binder (which never reads `down`):
-  - `Q4_0`/`Q5_0` (type 2/9, the types official mixed artifacts use for down):
-    32-block, dim 896 block-aligned → `routed_expert_row_bytes` returns a byte
-    count, `gate_expert_bytes == up_expert_bytes` still holds, and the binder
+- **The bug's failure classes.** With `down = ffn_down_exps->type`, the current
+  binder (which never reads `down`) never cleanly rejects a non-Q8_0 down — it
+  does one of three things:
+  - `MXFP4` (type 39): a routed-expert type in `routed_expert_block_bytes`
+    (32-block, dim 896 block-aligned) → the binder computes a byte count and
     **returns true** — a silently-wrong decode descriptor for a kernel that only
-    executes Q8_0 down.
-  - `MXFP4` (type 39): also a routed-expert type, 32-block, aligned → **returns
-    true** — same silent bug.
-  - K-quants (`Q4_K`=12 etc.): 256-block, 896 % 256 = 128 → `ds4_die("routed
-    expert row is not quant block aligned")` — a hard exit, not a clean reject.
+    executes Q8_0 down. This is the one genuinely *silent* case.
+  - `Q4_0` (2) / `Q5_0` (6) / `Q8_1` (9) — the types official mixed artifacts
+    reach for as down: 32-block and aligned, so `routed_expert_row_bytes`
+    passes, but `routed_expert_block_bytes` has no case for them and
+    `ds4_die("unsupported routed expert tensor type")`s.
+  - K-quants (`Q4_K`=12 etc.): 256-block, 896 % 256 = 128 →
+    `ds4_die("routed expert row is not quant block aligned")`.
+  So the fix's value is uniform: it converts the silent MXFP4 acceptance and the
+  dies into one clean `return false`.
 
 - **The fix must precede the byte math.** The down-type check must run before
   `layer_gate_down_expert_bytes` so that even K-quant downs become a clean
@@ -90,19 +97,19 @@ without first passing the validator reopens the bug silently.
   `ds4_engine_bind_mellum_decode_contract`, immediately after
   `weights_mellum_layer_has_required(src)` returns true, add:
   `if (src->ffn_down_exps->type != DS4_TENSOR_Q8_0) return false;`.
-  This is the entire fix. It converts all three failure classes (Q4_0/Q5_0,
-  MXFP4, K-quants) into a clean rejection, independent of whether the validator
-  ran first. Down-only: the validator already owns gate/up type agreement, and
-  YAGNI says don't duplicate it here.
+  This is the entire fix. It converts every non-Q8_0 down — the silent MXFP4
+  case and the die cases (Q4_0/Q5_0/Q8_1/K-quants) — into a clean rejection,
+  independent of whether the validator ran first. Down-only: the validator
+  already owns gate/up type agreement, and YAGNI says don't duplicate it here.
 
 - **D3 — Unit test via `DS4_TEST_HOOKS` proves the fix.** Add a
   `DS4_TEST_HOOKS`-gated function `ds4_test_mellum_decode_contract_admission()`
   to `ds4.c` that sets `g_ds4_shape = DS4_SHAPE_MELLUM2`, builds a fake
   layer-0 weights struct (all twelve pointers non-NULL; gate/up/down with real
-  dims), and asserts the binder accepts `Q8_0` down and rejects `Q5_0` (9),
+  dims), and asserts the binder accepts `Q8_0` down and rejects `Q5_0` (6),
   `MXFP4` (39), and `Q4_K` (12). A new `tests/test_mellum_admission.c` links
-  `ds4_cpu_test_hooks.o` and calls it. Pre-fix this test fails (Q5_0/MXFP4 are
-  accepted; Q4_K dies); post-fix it passes.
+  `ds4_cpu_test_hooks.o` and calls it. Pre-fix this test fails (MXFP4 is
+  accepted; Q5_0 and Q4_K die); post-fix it passes.
 
 - **D4 — Loader test with a real, committed, crafted artifact.** Commit a Python
   generator `tests/gen_mellum_admission_gguf.py` that emits a sparse,
@@ -170,7 +177,7 @@ Layer-1 tensors (name, GGUF type id, dims):
 | `blk.1.ffn_gate_inp.weight` | F32 (0) | `[2304, 64]` |
 | `blk.1.ffn_gate_exps.weight` | Q8_0 (8) | `[2304, 896, 64]` |
 | `blk.1.ffn_up_exps.weight` | Q8_0 (8) | `[2304, 896, 64]` |
-| `blk.1.ffn_down_exps.weight` | **Q8_0 (8) good / Q5_0 (9) bad** | `[896, 2304, 64]` |
+| `blk.1.ffn_down_exps.weight` | **Q8_0 (8) good / Q5_0 (6) bad** | `[896, 2304, 64]` |
 
 GGUF v3 wire format (little-endian): `magic u32 = 0x46554747`, `version u32 =
 3`, `n_tensors u64`, `n_kv u64`; each metadata entry = string key (u64 len +
