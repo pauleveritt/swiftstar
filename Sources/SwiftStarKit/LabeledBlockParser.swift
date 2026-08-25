@@ -4,9 +4,15 @@ import Foundation
 /// "use your write tool" note (spec Section 1).
 public enum TextContract {
     public static let directive = """
-    Do not call tools. For each file, emit a heading line `### \u{0060}<path>\u{0060}` (path relative \
-    to the workspace root), immediately followed by one fenced code block containing the complete \
-    file contents. A fenced block with no preceding heading is ignored.
+    Do not call tools. For each file you change, emit one heading line, then one fenced code block.
+
+    A heading line is exactly: three hash signs, one space, one backtick, the file path (relative to the \
+    workspace root), one backtick. Example heading for the app.py file: ### `app.py`
+
+    Immediately after the heading line, emit a fenced code block: three backticks on their own line, the \
+    complete file contents, then three backticks on their own line.
+
+    A fenced code block with no preceding heading line is ignored.
     """
 }
 
