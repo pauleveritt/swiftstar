@@ -158,6 +158,16 @@ public enum WorktreeDispatcher {
         return ValidationResult(exit: exit, digest: digest)
     }
 
+    /// Write one harvested file's content into the worktree, creating parent
+    /// directories as needed (text-contract harvest). The path is a worktree-
+    /// relative writable path (may contain `/` separators).
+    public static func writeFile(_ content: String, to path: String, in worktree: URL) throws {
+        let url = file(path, in: worktree)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     // MARK: - internals
 
     /// Commit the worktree's diff to the throwaway branch, staging only the

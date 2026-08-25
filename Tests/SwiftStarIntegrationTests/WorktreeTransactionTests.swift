@@ -85,6 +85,15 @@ struct WorktreeTransactionTests {
         #expect(!FileManager.default.fileExists(atPath: gradeWT.url.path))
     }
 
+    @Test func writeFileCreatesParentDirs() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wt-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try WorktreeDispatcher.writeFile("x = 1", to: "templates/base.html", in: dir)
+        let url = dir.appendingPathComponent("templates/base.html")
+        #expect(try String(contentsOf: url, encoding: .utf8) == "x = 1")
+    }
+
     @Test func receiptStopsTheTransaction() throws {
         let repo = try makeFixtureRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
