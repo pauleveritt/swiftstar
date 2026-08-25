@@ -562,6 +562,7 @@ final class AgentController {
         case .validationFailed(let exit, _): return "validationFailed (exit \(exit))"
         case .noChanges: return "noChanges"
         case .repairExhausted: return "repairExhausted"
+        case .contractNotFollowed: return "the worker produced no labeled files (text contract not followed)"
         }
     }
 

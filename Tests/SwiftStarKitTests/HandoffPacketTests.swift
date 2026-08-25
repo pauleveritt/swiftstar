@@ -85,4 +85,20 @@ struct HandoffPacketTests {
         #expect(decoded.mode == 0o755)
         #expect(decoded.mode == 493)
     }
+
+    @Test func textContractDecodesWhenPresent() throws {
+        let json = """
+        {"taskText":"t","writableFiles":["app.py"],"validationCommand":"uv run x","baselines":{},"turnBudget":100,"toolCallBudget":5,"textContract":true}
+        """
+        let pkt = try JSONDecoder().decode(HandoffPacket.self, from: Data(json.utf8))
+        #expect(pkt.textContract == true)
+    }
+
+    @Test func textContractDefaultsFalseWhenAbsent() throws {
+        let json = """
+        {"taskText":"t","writableFiles":["app.py"],"validationCommand":"uv run x","baselines":{},"turnBudget":100,"toolCallBudget":5}
+        """
+        let pkt = try JSONDecoder().decode(HandoffPacket.self, from: Data(json.utf8))
+        #expect(pkt.textContract == false)
+    }
 }

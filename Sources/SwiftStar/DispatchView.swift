@@ -152,6 +152,9 @@ struct DispatchView: View {
         case .repairExhausted:
             Text("Repair exhausted — no candidate reached a passing grade.")
                 .foregroundStyle(.orange).textSelection(.enabled)
+        case .contractNotFollowed:
+            Text("the worker produced no labeled files (text contract not followed)")
+                .foregroundStyle(.orange).textSelection(.enabled)
         }
     }
 

@@ -75,6 +75,7 @@ public struct HandoffPacket: Codable, Equatable, Sendable {
     public var baselines: [String: FileBaseline]
     public let turnBudget: Int
     public let toolCallBudget: Int
+    public let textContract: Bool
     /// Pinned decisions the worker must not re-derive. Ambiguity converts
     /// directly into deliberation for some models, so an unstated contract is a
     /// cost, not a neutral omission.
@@ -91,6 +92,7 @@ public struct HandoffPacket: Codable, Equatable, Sendable {
     public init(taskText: String, writableFiles: [String], validationCommand: String?,
                 selfTestCommand: String? = nil,
                 baselines: [String: FileBaseline], turnBudget: Int, toolCallBudget: Int,
+                textContract: Bool = false,
                 facts: [String] = [],
                 redacts: [String] = [],
                 role: PacketRole = .implement,
@@ -105,6 +107,7 @@ public struct HandoffPacket: Codable, Equatable, Sendable {
         self.baselines = baselines
         self.turnBudget = turnBudget
         self.toolCallBudget = toolCallBudget
+        self.textContract = textContract
         self.redacts = redacts
     }
 
@@ -121,6 +124,7 @@ public struct HandoffPacket: Codable, Equatable, Sendable {
         baselines = try container.decode([String: FileBaseline].self, forKey: .baselines)
         turnBudget = try container.decode(Int.self, forKey: .turnBudget)
         toolCallBudget = try container.decode(Int.self, forKey: .toolCallBudget)
+        textContract = try container.decodeIfPresent(Bool.self, forKey: .textContract) ?? false
         facts = try container.decodeIfPresent([String].self, forKey: .facts) ?? []
         redacts = try container.decodeIfPresent([String].self, forKey: .redacts) ?? []
         role = try container.decodeIfPresent(PacketRole.self, forKey: .role) ?? .implement

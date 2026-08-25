@@ -54,6 +54,10 @@ public enum Receipt: Equatable, Sendable, Codable {
     /// Repair produced candidates for every allowed round without reaching a
     /// passing grade (D4).
     case repairExhausted
+    /// The text-contract turn produced no usable labeled blocks (initiation
+    /// failure). Distinct from `.noChanges` so the existing `noChanges+eos ->
+    /// continue` branch cannot swallow it.
+    case contractNotFollowed
 }
 
 /// One dispatch's outcome (D3/D4): either a candidate ref carrying the P9
