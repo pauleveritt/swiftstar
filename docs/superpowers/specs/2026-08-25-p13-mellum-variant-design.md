@@ -1,7 +1,7 @@
 # SwiftStar P13 design: Mellum 2.1 as a first-class variant
 
 **Date:** 2026-08-25
-**Status:** accepted (brainstormed; decisions D1–D9 approved in-session; reviewed by GLM 5.2 — findings C1–C3, I1–I7, M1–M6 folded in)
+**Status:** implemented (decisions D1–D9 approved in-session; reviewed by GLM 5.2 — findings C1–C3, I1–I7, M1–M6 folded in; **benchmark run 2026-08-25 — variant machinery verified, competence floor (D9) NOT met**, see [`../research/2026-08-25-p13-mellum-benchmark-record.md`](../research/2026-08-25-p13-mellum-benchmark-record.md))
 **Phase:** P13 — More models, Mellum arm.
 
 This spec is the authority on *how* P13's Mellum arm is done. Scope is strict:
