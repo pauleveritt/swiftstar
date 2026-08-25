@@ -284,3 +284,47 @@ in-loop is unexamined — P12.4 measures it rather than assuming it. A vetted
 repro command is deliberately not added in v1 (it would either leak the oracle
 or grow new machinery); the writable self-test (D7) is the model's only in-loop
 verification.
+
+## As-built deviations (added post-implementation, post-Fable-review)
+
+Two places where the shipped code diverges from this spec's literal text —
+both ruled correct during implementation review, neither previously written
+back here:
+
+- **D3's `AGENTTEST_REPAIR_THINK` override is inert, not deferred-but-neutral.**
+  This spec originally claimed the override "exists so it needs no code
+  change later" (P12.6). In practice, nothing at dispatch time reads
+  `packet.sampling` — thinking is set once at engine-spawn time from
+  `AGENTTEST_THINK`, a property of the whole pooled engine process, not
+  per-dispatch. A final-review pass found that the repair packet's `think`
+  field recorded `.bounded` under `AGENTTEST_REPAIR_THINK=1` while the
+  engine actually ran `--nothink` — a capture-integrity lie, not a harmless
+  no-op. The fix: `repairPacket`'s `think` now mirrors `AGENTTEST_THINK`
+  (the same source the engine actually reads), same as `phasePacket`; the
+  harness now warns on stderr if `AGENTTEST_REPAIR_THINK` is set, since it
+  has zero effect. Full per-worker think override remains P12.6 scope — it
+  needs new machinery (per-worker engine control, or a second engine),
+  not just a code change to an existing field.
+- **Repair cannot honor `AGENTTEST_PATH_STYLE=absolute`, and D5 forecloses it
+  structurally.** D5 mandates the repair packet is built *before*
+  `WorktreeDispatcher.prepare`, so no worktree URL exists yet to render an
+  absolute root from — `repairPacket` always renders relative paths. An
+  `AGENTTEST_PATH_STYLE=absolute` live run therefore implements with
+  absolute paths and repairs with relative ones: an uncontrolled variable
+  flip between the two phases of the same run. Not fixed — fixing it would
+  mean relaxing D5's build-before-prepare ordering, which is out of scope
+  for this note. Flagged here as a known limitation: don't combine
+  `AGENTTEST_PATH_STYLE=absolute` with a repair-eligible run without
+  accounting for this.
+
+Separately, a post-smoke-test Fable review found the evidence-capping
+approach (D6) needed hardening before the overnight run: `cappedContent`
+was head-truncation only (a file over the cap silently lost its tail, where
+live defects have historically concentrated) and a `writableFiles` entry
+absent from the worktree was silently omitted from evidence with no marker.
+Both fixed post-smoke-test: `cappedContent` now does middle-truncation
+(keep head+tail, drop the middle, cap raised 4096→16384 bytes); a missing
+file gets an explicit "(file does not exist in this worktree)" marker
+instead of silent omission. `cappedFailureOutput` (pytest output) is
+unchanged — tail-only truncation at 8192 bytes remains correct, since the
+failure summary is at the end of pytest output.
