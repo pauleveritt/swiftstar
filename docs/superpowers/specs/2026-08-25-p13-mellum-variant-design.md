@@ -70,9 +70,10 @@ sampler-flag wiring into argv; gating custom/raw file paths (they are declared
   0–21, Q8_0 elsewhere). The engine's P12.2 admission refuses non-Q8_0 down at
   load. The Swift verifier checks the same rule at selection (before load).
 - **Sampler defaults are family-level in the engine** (`--temp/--top-k/--top-p/
-  --min-p` exist; help documents GLM and Laguna defaults but **not** Mellum's).
-  So Mellum's sampler defaults are engine-determined and undocumented; P13
-  declares them optional and records the source in the capture (D6).
+  --min-p` exist; help documents GLM and Laguna but not Mellum — though Mellum's
+  default *is* in source, `ds4_engine_sampling_defaults` ds4.c:63358: **temp
+  0.6, top-k 20, top-p 0.95, min-p 0.0**, JetBrains' published sampling). P13
+  declares these on the `Variant` (D6) but does not wire them to argv.
 - **Memory:** the shipping artifact is 9.33 GiB weights; KV is 0.26 / 0.48 /
   0.59 GiB at 16k / 32k / 40k context (overnight consolidation B1); scratch
   ~0.4 GiB (KV + scratch ≈ 0.9–1.0 GiB at 40k, A1). Total ≈ 10.3 GiB at 40k.
@@ -228,9 +229,10 @@ cross the `@MainActor` app boundary and the nonisolated `swiftstar-agenttest`
   the raw/custom case.)
 - **D5** — `VariantGate.admit` is the single admission entry point for app and
   harness; verify-then-memory order; `.unreadableFile` is gate-synthesized.
-- **D6** — sampler defaults are `optional` and **not wired to argv** this phase
-  (Mellum's family default is undocumented). The capture records `samplerSource`
-  so a future engine-default change is detectable. Wiring is a deferred one-liner.
+- **D6** — sampler defaults are **declared** on the `Variant` (Mellum: temp 0.6,
+  top-k 20, top-p 0.95, min-p 0.0 — JetBrains' published values, ds4.c:63358)
+  and **not wired to argv** this phase. The capture records the sampler so a
+  future engine-default change is detectable. Wiring is a deferred one-liner.
 - **D7** — the app gains `selectedVariantID` + a Picker; a shared
   `VariantResolver` resolves the model file for **both** controllers, each of
   which admits via `VariantGate` before spawn. Custom/raw paths are **declared

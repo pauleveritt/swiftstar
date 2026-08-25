@@ -13,7 +13,11 @@ struct VariantRegistryTests {
         #expect(variant.contract.quantLayout.downType == .q8_0)
         #expect(variant.contract.quantLayout.layerCount == 28)
         #expect(variant.contract.quantLayout.downTensorName(layer: 3) == "blk.3.ffn_down_exps.weight")
-        #expect(variant.sampler == nil)
+        // JetBrains' published Mellum sampling (ds4.c:63358).
+        #expect(variant.sampler?.temperature == 0.6)
+        #expect(variant.sampler?.topK == 20)
+        #expect(variant.sampler?.topP == 0.95)
+        #expect(variant.sampler?.minP == 0.0)
     }
 
     @Test func unknownIDIsNil() {

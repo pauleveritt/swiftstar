@@ -20,6 +20,17 @@ public struct SamplerDefaults: Equatable, Sendable {
         self.topP = topP
         self.minP = minP
     }
+
+    /// A compact, self-describing rendering for capture metadata, e.g.
+    /// `temp 0.6 top-k 20 top-p 0.95 min-p 0.0`. Empty when nothing is set.
+    public var description: String {
+        var parts: [String] = []
+        if let t = temperature { parts.append("temp \(t)") }
+        if let k = topK { parts.append("top-k \(k)") }
+        if let p = topP { parts.append("top-p \(p)") }
+        if let m = minP { parts.append("min-p \(m)") }
+        return parts.joined(separator: " ")
+    }
 }
 
 /// The rope configuration a variant's runtime must honor. The two load-bearing

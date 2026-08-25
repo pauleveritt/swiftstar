@@ -474,7 +474,9 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // P13: record the variant + sampler source + available memory so the
         // capture is self-describing (I2/I7).
         "variant": resolvedVariant?.id ?? "custom-unverified",
-        "samplerSource": resolvedVariant != nil ? "engine-family-default (undocumented)" : "custom-unverified",
+        "sampler": (resolvedVariant?.sampler?.description ?? "").isEmpty
+            ? "engine-family-default"
+            : (resolvedVariant?.sampler?.description ?? ""),
         "availableBytesGiB": String(format: "%.1f", Double(MemorySnapshot.availableBytes()) / 1_073_741_824),
     ]
     if let cfg = try? JSONSerialization.data(withJSONObject: runConfig, options: [.prettyPrinted, .sortedKeys]) {

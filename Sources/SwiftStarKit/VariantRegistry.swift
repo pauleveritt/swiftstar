@@ -19,7 +19,10 @@ public enum VariantRegistry {
             displayName: "Mellum 2.1",
             modelFile: URL(fileURLWithPath: path),
             family: .mellum,
-            sampler: nil,  // engine family default (undocumented for Mellum) — D6
+            // JetBrains' published sampling (ds4_engine_sampling_defaults,
+            // ds4.c:63358): temp 0.6, top-k 20, top-p 0.95, min-p 0.0. Declared
+            // for the record (D6); not wired to argv this phase.
+            sampler: SamplerDefaults(temperature: 0.6, topK: 20, topP: 0.95, minP: 0.0),
             contract: RuntimeContract(
                 architecture: "mellum",
                 rope: RopeContract(scalingType: "yarn", freqBase: 500_000.0),

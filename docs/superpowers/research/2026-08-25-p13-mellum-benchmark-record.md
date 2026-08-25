@@ -1,8 +1,9 @@
 # P13 Mellum benchmark — live-model verification record
 
 **Date:** 2026-08-25
-**What ran:** `swiftstar-agenttest --variant mellum-2.1 --spec roadmap`, two arms:
-relative-path (default) and `AGENTTEST_PATH_STYLE=absolute`.
+**What ran:** `swiftstar-agenttest --variant mellum-2.1 --spec roadmap`, three
+arms: relative-path (default), absolute-path (`AGENTTEST_PATH_STYLE=absolute`),
+and absolute-path + nudge (`DS4_AGENT_TOOL_NUDGE=2 AGENTTEST_PATH_STYLE=absolute`).
 **Model:** Mellum 2.1, the 9.33 GiB shipping artifact
 (`~/models/mellum-thinking-TARGET.gguf`).
 
@@ -27,34 +28,49 @@ relative-path (default) and `AGENTTEST_PATH_STYLE=absolute`.
 |-----|-----------|-------------|---------------|------|
 | relative (default) | 348 | **0** | 0 | eos |
 | absolute | 899 | **0** | 0 | eos |
+| absolute + nudge=2 | ~736 chars | **0** | 0 | eos |
 
-Both arms ended in `validationFailed` on an **empty candidate tree** (the
+Every arm ended in `validationFailed` on an **empty candidate tree** (the
 `sha256:e3b0c44…` digest is the empty tree): Mellum narrated a complete,
 correct-in-content solution — including the exact `uv run … pytest` commands —
-and stopped without ever emitting a tool call or writing a file. The
-absolute-path arm only produced *more* narration (899 vs 348 tokens), not
-initiation.
+and stopped without ever emitting a tool call or writing a file. Absolute paths
+produced only *more* narration (899 vs 348 tokens), not initiation; the nudge
+arm re-narrated ("…Let me write these files:") and still emitted nothing.
 
-## Why this contradicts B8
+## Why this contradicts B8 — and the nudge is not the missing piece either
 
 B8's optimistic cell (absolute paths → 6 tool calls, 4/4 files) **did not
-replicate** in the current harness. Two material differences, both noted in B8's
-own caveats:
+replicate**, and neither did its implied lever. The 2×2 (path × nudge) in the
+current harness:
 
-1. B8 ran with `DS4_AGENT_TOOL_NUDGE=2`; the pool harness has no nudge (A1
-   recorded the nudge failing in the pool path, and P12 dropped it).
-2. B8's prompt was the pre-P12.1 shape; the current `PhasePacketBuilder` packet
-   is the engineered path-presentation form.
+| | nudge=0 | nudge=2 |
+|---|---|---|
+| relative | 0 calls | (B8: 0 calls) |
+| absolute | 0 calls | **0 calls** (this run) |
 
-Either way, the A1 core finding — *protocol compliance is solved; agent
-competence is not* — now reproduces cleanly through the variant harness, in
-both path arms. The 0-call failure is not, in the current harness, a
-path-presentation artifact.
+B8 held `DS4_AGENT_TOOL_NUDGE=2` and varied path (relative→0, absolute→6); the
+current harness holds nudge=0 and varies path (0→0), and now nudge=2 + absolute
+gives 0. So the nudge is neither sufficient nor, in this harness, the trigger.
+The A1 finding — *protocol compliance is solved; agent competence is not* —
+reproduces cleanly through the variant harness in every tested configuration.
+
+## Sampling ruled out (not hostile)
+
+GLM 5.2's next-step review flagged the undocumented sampler as an open
+confound. Checking the source closed it: Mellum's engine default is
+`ds4_engine_sampling_defaults` (ds4.c:63358) — **temp 0.6, top-k 20, top-p
+0.95, min-p 0.0**, JetBrains' published tool-call setting, explicitly chosen
+over the generic 1.0/1.0 because that "is a poor setting for a model expected
+to emit well-formed JSON tool calls." The 0-call behavior is therefore **not**
+a sampling artifact. The `Variant` now declares these values and the capture
+records them.
 
 ## Verdict
 
 Per D9's failure policy (no initiation ⇒ Mellum is not shipped as a preset and
 P13-Mellum blocks), **the competence gate fails.** The variant plumbing is
-complete and correct; the model does not clear the initiation floor. Further
-progress is the out-of-phase harness work (the P9/P10 host-controlled action
-mode, harvesting, or a different prompt strategy) — not P13 scope.
+complete and correct; the model does not clear the initiation floor under any
+of path presentation × nudge, at the published tool-call sampler. The durable
+lever is the out-of-phase harness work (the P9/P10 host-controlled action mode
+— declared objectives, host-reported state, never-trust-claimed-test-results) —
+not P13 scope.
