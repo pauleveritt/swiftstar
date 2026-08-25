@@ -5,7 +5,7 @@ import CryptoKit
 
 /// The headless orchestrator (P11 addendum D7): the loop that was inside
 /// `AgentController`, extracted so the harness can drive a pooled engine without
-/// SwiftUI. Spawns `ds4-agent --subagent-pool 2` (one worker slot, v1) and runs
+/// SwiftUI. Spawns `ds4-agent --subagent-pool 3` (workers 1 and 2, v1) and runs
 /// one phase at a time in a worktree.
 public final class PoolOrchestrator {
     private let process: Process
@@ -24,7 +24,7 @@ public final class PoolOrchestrator {
         let binary = AgentCommand.binaryPath(settings: settings)
         let process = Process()
         process.executableURL = binary
-        process.arguments = PoolEngine.argv(settings: settings, workers: 2)
+        process.arguments = PoolEngine.argv(settings: settings, workers: 3)
         process.currentDirectoryURL = settings.engineDir
         process.environment = ProcessInfo.processInfo.environment
         let stdinPipe = Pipe()

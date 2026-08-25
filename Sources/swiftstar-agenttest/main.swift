@@ -144,6 +144,55 @@ func phasePacket(_ phaseText: String, absoluteRoot: String? = nil) -> HandoffPac
             maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192))
 }
 
+/// Build the authored repair packet (D3/D6): the directive names the failure;
+/// the actual failure output + file contents are appended by `RepairLoop` as
+/// `MachineEvidence`. Role `.repair`, thinking off (or bounded via
+/// `AGENTTEST_REPAIR_THINK=1`), same contract/writableFiles/redacts as implement.
+func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
+    let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
+    let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
+    let renderedFiles = writableFiles.map { "- \($0)" }.joined(separator: "\n")
+    let pathRule = ["All tool paths are relative to the workspace root (e.g. `app.py`,",
+                    "`templates/base.html`) — never absolute paths."]
+    let facts = [
+        "The vetted commands run with the working directory set to the workspace root. "
+        + "`--project` selects the Python environment only; it does not change the working directory. "
+        + "So `import app` imports the `app.py` in this workspace, and `tests/test_app.py` is the file in this workspace.",
+    ]
+    let directive = ([
+        "The acceptance suite failed against the code written by a prior phase.",
+        "Diagnose the defect from the failure output and the current file contents",
+        "appended below under \"Failure evidence (machine output)\", then fix exactly",
+        "the file(s) that are wrong. Edit the code — do not rewrite working files,",
+        "and do not add new files or routes.",
+    ]).joined(separator: " ")
+    let writableNote = ([
+        "You may write or edit only these files:",
+        renderedFiles,
+    ] + pathRule + [
+        "You may run exactly these two commands (and no other shell command):",
+        "- \(vettedImport)   (does app.py import cleanly?)",
+        "- \(vettedPytest)   (do your own tests pass?)",
+        "Work in one concise pass: make the minimal edit that fixes the failure,",
+        "then run those commands at most once each.",
+    ]).joined(separator: "\n")
+    let think: ThinkMode = env["AGENTTEST_REPAIR_THINK"] == "1" ? .bounded : .off
+    return PhasePacketBuilder.build(
+        phaseText: directive,
+        writableNote: writableNote,
+        preamble: preamble,
+        sharedContext: sharedContext,
+        writableFiles: writableFiles,
+        validationCommand: vettedImport,
+        selfTestCommand: vettedPytest,
+        toolCallBudget: Int(env["AGENTTEST_TOOL_BUDGET"] ?? "30") ?? 30,
+        facts: facts,
+        redacts: redacts,
+        sampling: SamplingPolicy(think: think,
+                                 maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192),
+        role: .repair)
+}
+
 // Validate every phase packet up front — before the model loads. The packets are
 // worktree-independent, so a malformed one (an absolute path, an empty manifest,
 // or a withheld fix leaked through the appended shared context) is caught in
