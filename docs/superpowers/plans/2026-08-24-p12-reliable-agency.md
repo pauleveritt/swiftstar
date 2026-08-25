@@ -192,6 +192,56 @@ surprise despite every part being individually replicated.
 **Done when:** three phases, files written, 13/13 — from packets, not a
 hand-driven harness.
 
+**Status (2026-08-25): implementation done, in-harness repair now exists and
+is smoke-verified; the "done when" line above is not yet met at scale.**
+
+- Design ([`2026-08-24-p12-4-repair-role-design.md`](../specs/2026-08-24-p12-4-repair-role-design.md),
+  D1-D10) and plan ([`2026-08-24-p12-4-repair-role.md`](../plans/2026-08-24-p12-4-repair-role.md))
+  are accepted, twice Fable-reviewed at the design stage.
+- All 7 implementation tasks landed on `p11-subagent-pool`
+  (`GradeResult`/`Receipt.repairExhausted` → `MachineEvidence` → `AcceptanceGrader`
+  → `RepairLoop` → 3-worker pool + `repairPacket` → wired into `runOnce` →
+  `--fixture` mode), each task-reviewed, plus a final whole-branch review and
+  two rounds of fixes, plus a Fable review of the actual code + smoke results
+  and one more fix round. Full record, every finding and ruling, in
+  [`.superpowers/sdd/2026-08-24-p12-4-repair-role/progress.md`](../../../.superpowers/sdd/2026-08-24-p12-4-repair-role/progress.md)
+  (git-ignored — lives only in this working tree, read it before resuming).
+- **Fixture tier confirmed working against the real model**: `--fixture
+  misleading-locus` and `--fixture plausible-wrong-fix` both 3/3 (all
+  round-1 passes) against Laguna S 2.1 Q2_K. This proves the repair loop's
+  plumbing and both D6/D10 measurements (localization; evidence-following
+  over convention-recall) — it does **not** prove repair works at live
+  difficulty (single-failing-test fixtures on a 6-file, ~4.5KB surface).
+- **The "done when" line (three phases, 13/13, from packets) has never been
+  exercised end-to-end with a real implement failure feeding real repair.**
+  One single confirmation run (`--spec roadmap-user-story`, nothink,
+  no `--batch`) was in flight as of this note — check
+  `captures/agenttest/` for the most recent `roadmap-user-story` capture to
+  see how it landed before doing anything else.
+- **The planned overnight validation (n=15-20/arm: nothink-implement+repair,
+  and think-budget-implement+repair replicating C15/C17/C18's exact config
+  — `AGENTTEST_THINK=1 AGENTTEST_THINK_BUDGET=2048 AGENTTEST_PATH_STYLE=absolute`
+  — both on `roadmap-user-story`) was started, then stopped early per
+  explicit user request** (it was launched at a time that stopped being
+  "overnight" partway through) **and has not run.** This is the next real
+  gate on P12.4 — see the ledger's "Overnight live-tier run" section for the
+  exact configs and the chunking rationale (5×`--batch 3` per arm, not one
+  `--batch 15`, so a broken run can be caught before it burns hours).
+- Known, deliberately-not-fixed limitations (documented in the design spec's
+  new "As-built deviations" section): `AGENTTEST_REPAIR_THINK` is inert
+  (warns on stderr); repair cannot honor `AGENTTEST_PATH_STYLE=absolute`
+  (D5 forces relative paths) — so Arm B's repair rounds render relative
+  paths even though its implement phases use absolute ones. Not a bug to
+  fix; a known confound to interpret around.
+- A **second, independently-built implementation of this same plan** exists
+  in a sibling worktree (`.worktrees/p12-4-repair-role`, branch
+  `p12-4-repair-role`) — branched before this design's second review round
+  landed, has its own review history, and independently arrived at a better
+  evidence-capping approach (middle-truncation, 16KB cap) that this branch
+  adopted after a Fable review flagged the same gap. User explicitly chose
+  to continue on `p11-subagent-pool`; the sibling worktree was left
+  untouched, not reconciled or merged.
+
 ### P12.5 — Model-authored packets
 
 The one untested link. Decompose → schema validation (microseconds, fails
