@@ -1,0 +1,259 @@
+# Goal ledger — P16 (repair harness validity)
+
+> **Goal: ≥10 valid Mellum cells** — pipeline runs whose outcome is
+> attributable to the model under every validity invariant below — spanning
+> ≥2 seeds and both path styles, with the model's pass/fail recorded either
+> way. The goal is a count of valid measurements, not passes: a clean run
+> where Mellum fails everything is progress; a "pass" that violates an
+> invariant is zero progress.
+
+Full context: [`2026-08-26-overnight-80-cell-verdict.md`](2026-08-26-overnight-80-cell-verdict.md).
+Driven by [`.claude/commands/goal.md`](../../../.claude/commands/goal.md) via
+`/loop /goal`. Frozen validity invariants (do not widen/narrow mid-goal):
+
+- **V1** — a `.validationFailed` round's write must survive into the next round
+- **V2** — no round's evidence may be a bare pytest collection error
+- **V3** — the repair directive must not assert "exactly one file is wrong"
+  while ≥2 writable files are missing/failing in the same packet
+- **V4** — every `verdict.json` reason must trace to text some packet actually
+  dispatched
+- **V5** — every packet must have been deliverable (no context overflow, no
+  `turnDidNotEnd`, no `limit`/`contextFull` stop)
+
+---
+
+## 1 — 2026-08-26 — audit
+
+**did:** Classified all 80 existing 2026-08-25→26 captures against V1–V5,
+mechanically (grep/JSON checks over the captures, not judgment from the
+verdict record's prose).
+
+**cells:** Mellum: valid=**1** blocked={V1:19, V2:20, V3:39, V5:1} of 40.
+Laguna (context, not the goal): valid=38 blocked={V3:1, V5:1} of 40.
+
+**model:** 0/1 among Mellum's valid cells (NOT the goal) — the one valid cell
+(`20260826-065840`, abs/on seed 9) died on `turnDidNotEnd` in phase 2, which
+V5 does not catch because that death has no `stop_reason` line at all (it's
+an uncovered failure mode noted in the verdict record's Defect 4, not yet a
+frozen invariant — flagging, not adding a V6 mid-goal).
+
+**evidence:**
+
+```
+$ python3 audit_v1_5.py
+=== laguna: 38 valid / 40 total ===
+    blocked breakdown: {'V3': 1, 'V5': 1}
+    valid cells span seeds=[1..10] path_styles=['absolute', 'relative']
+=== mellum: 1 valid / 40 total ===
+    blocked breakdown: {'V1': 19, 'V3': 39, 'V2': 20, 'V5': 1}
+    valid cells span seeds=[9] path_styles=['absolute']
+```
+
+V1's check required a correction mid-iteration: the first implementation
+compared packet[k] vs packet[k+1] directly (both are pre-turn snapshots, so
+they're never different — packet generation happens *before* each round's
+turn runs). Verified the bug by hand against `20260826-050316`'s known-bad
+round 1→2 pair before trusting the script, then gated the comparison on round
+k's *receipt* actually being `.validationFailed` (proof a turn fired) before
+comparing missing-sets — 19 cells match the "≥1 validationFailed round"
+count independently established in the verdict record.
+
+**New, not in the prior verdict record:** V3 fires on **39/40** Mellum cells
+— more than V1 (19) or V2 (20) — because the directive's self-contradiction
+is present from round 1 in nearly every cell (build wrote nothing, so 6 of 6
+writable files are already missing the moment repair starts). V3 also fires
+on **1 Laguna cell** (`20260826-015344`, phase-1 repair with 2 files
+missing) — the directive defect is not Mellum-specific, it just never gates
+Laguna's outcome because Laguna's single round usually resolves it anyway.
+
+**next:** **fix** — V3 blocks the most cells (39) and, per the verdict
+record's serial-not-parallel warning, fixing V1 alone would just reroute
+those 19 cells into V2/V3 territory, not out of it. Land recommendation 2
+(make `repairPacket`'s directive conditional on missing-file count) with a
+red-then-green test, matching ROADMAP's P16 fix ordering (#2 before #1 is a
+deliberate deviation from the doc's ranking — #2 is the cheapest to fix and
+unblocks the audit's dominant blocker; #1 is still required next since V3
+alone won't fix V1's 19 cells).
+
+## 2 — 2026-08-26 — fix (V3)
+
+**did:** Landed recommendation 2 — `RepairContext` now carries
+`missingWritableFiles: [String]`, computed by `RepairLoop.run` directly
+against the repo's object store (`git cat-file -e <head>:<path>`, no worktree
+needed) *before* `packetBuilder` runs each round, since packet evidence is
+otherwise only known after the worktree exists. `repairPacket` in
+`main.swift` now branches on `ctx.missingWritableFiles.count`: ≥2 emits a
+new "N files are missing or wrong — not one … emit each that needs to
+change" directive and drops "do not add new files"; ≤1 keeps the original
+"exactly one file is wrong" text verbatim. `writableFiles: []` defaults kept
+every other `RepairLoop.run` call site and test compiling unchanged — only
+the 3 real call sites (fixture, phase-scoped, acceptance) and `PhaseRepair`
+(which already had `packet.writableFiles` in scope) needed a one-line addition.
+
+**cells:** unchanged this iteration (0 new captures) — carried forward:
+Mellum valid=1 blocked={V1:19, V2:20, V3:39, V5:1} of 40.
+
+**model:** n/a — no new model output this iteration.
+
+**evidence:**
+
+```
+$ SWIFTSTAR_INTEGRATION=1 swift test --filter repairContextCarriesMissingWritableFilesAtHead
+✔ Test repairContextCarriesMissingWritableFilesAtHead() passed after 0.252 seconds.
+```
+(Red first: the same test failed to compile — "extra argument 'writableFiles'
+in call" / "value of type 'RepairContext' has no member 'missingWritableFiles'"
+— against the pre-fix API, confirming the test exercises the new seam.)
+
+```
+$ swift test                      # 537 tests, 74 suites — passed
+$ SWIFTSTAR_INTEGRATION=1 swift test   # 537 tests, 74 suites — passed
+```
+
+**next:** **confirm** — verify the fix doesn't regress the untouched
+single-file branch live, at fixture tier, before touching V1 or spending
+pipeline time.
+
+## 3 — 2026-08-26 — confirm
+
+**did:** Ran one live fixture-tier repair (`plausible-wrong-fix`, mellum,
+seed 1) to confirm the V3 refactor didn't change behavior on the branch it
+left alone (`missingWritableFiles.count <= 1`, the well-calibrated case).
+Checked the engine lock informally first (`ps aux` for
+`llama|agenttest|caffeinate` — empty, confirmed idle) since there is no
+formal cross-process lockfile in this codebase, only the practical rule of
+not running two model loads at once.
+
+**cells:** n/a (fixture tier, not counted toward the Mellum-pipeline goal).
+
+**model:** 1/1 — `20260826-085251-fixture-plausible-wrong-fix`: baseline
+exit=1, repaired, **13/13 exit=0**.
+
+**evidence:**
+
+```
+$ DS4_DIR=.../external/ds4 SWIFTSTAR_MODEL=.../mellum-thinking-TARGET.gguf \
+  AGENTTEST_SEED=1 swift run swiftstar-agenttest --fixture plausible-wrong-fix
+[agenttest] fixture plausible-wrong-fix: baseline exit=1
+[agenttest] fixture plausible-wrong-fix: repaired — exit=0
+[agenttest] fixture plausible-wrong-fix: 13/13 ✓
+```
+
+Dispatched packet text checked directly against the capture — byte-identical
+to the pre-fix directive:
+
+```
+$ python3 -c "import json; t=json.load(open('captures/agenttest/20260826-085251-fixture-plausible-wrong-fix/repair-packet-1.json'))['taskText']; print('Exactly one file is wrong' in t)"
+True
+```
+
+**next:** **measure** — the latest audit (entry 1) already shows the harness
+is nowhere near zero-blocked, so per the action-priority order this is not
+yet a "measure" in the strict sense (audit still shows harness-blocked
+cells among *existing* captures) — but V3 is now fixed in code and this
+confirm run is clean, so the next iteration should dispatch a small *fresh*
+Mellum pipeline batch (≤5 cells) specifically to see whether V3's fix
+changes the shape of failures (does round 1 now write more than one file
+when build wrote nothing?), then audit those new captures before writing
+any pass/fail number down. V1 (the discard defect) is not yet fixed, so
+these cells are expected to still fail — the goal is to observe whether V3's
+fix changes *what* gets built, not to expect a pass yet.
+
+## 4 — 2026-08-26 — fix (V1)
+
+**did:** Landed recommendation 1 — the `.validationFailed` path in
+`RepairLoop.run` now advances `head` via
+`WorktreeDispatcher.commitForRepair(wt, packet:in:)` before `continue`ing,
+so round N's write survives into round N+1's worktree. `finalize` only
+commits on the `.candidate` path, so previously the receipt path left `head`
+at the same base and the `defer` tore the worktree down — making "N rounds"
+N independent single-shot attempts. `commitForRepair` already existed for
+exactly this shape (P12.8 uses it to seed the *first* `failedRef`); this
+reuses it every round. Degenerate case needs no guard: a round that wrote
+nothing has nothing staged, and `commitDiff` returns the parent SHA, so
+`head` correctly stays put.
+
+**cells:** unchanged this iteration (0 new captures at fix time).
+
+**model:** n/a.
+
+**evidence:** red-then-green proven by temporarily reverting only the new
+`head =` line:
+
+```
+# with the line reverted:
+✘ Suite RepairLoopTests failed after 0.479 seconds with 1 issue.
+# with the fix restored:
+✔ Test validationFailedRoundWorkSurvivesIntoNextRound() passed after 0.547 seconds.
+✔ Test validationFailedReceiptRetriesWithFreshEvidence() passed after 0.528 seconds.
+✔ Test nonValidationFailedReceiptStillEndsLoopImmediately() passed after 0.260 seconds.
+$ swift test                          # 538 tests, 74 suites — passed
+$ SWIFTSTAR_INTEGRATION=1 swift test  # 538 tests, 74 suites — passed
+```
+
+The permanent regression test is `validationFailedRoundWorkSurvivesIntoNextRound`
+(round 2 writes ONLY `b.txt`, so it cannot pass by re-doing round 1's `a.txt`
+— the blind spot that let the existing neighbouring test stay green through
+the whole defect).
+
+**next:** **measure** — both dominant blockers (V3: 39 cells, V1: 19 cells)
+are now fixed and green. Dispatch one fresh Mellum pipeline cell and audit it.
+
+## 5 — 2026-08-26 — measure (n=1)
+
+**did:** Ran one fresh Mellum pipeline cell (abs/on/seed 1, the same
+configuration as the overnight matrix) and audited the resulting capture
+`20260826-085813-roadmap` against V1–V5.
+
+**cells:** valid=**1** blocked={} of 1 new. **First valid Mellum pipeline
+cell in the project's history** — cumulative valid Mellum cells now 2
+(this one, plus `20260826-065840` from the matrix, which was valid only by
+accident of dying in an uncovered way).
+
+**model:** 0/1 among valid cells (NOT the goal) — acceptance exit=2,
+verdict `bad`, 10 reasons. But the *shape* changed completely, which is what
+this iteration was for.
+
+**evidence:**
+
+```
+$ python3 audit_v1_5.py  (single-cell)
+VALID
+```
+
+Directive now matches its own evidence, verified per packet:
+
+```
+repair-phase1/repair-packet-1.json | multi-file directive: "6 of the files you may edit are missing or wrong" | one-file: False | actually missing: 6
+repair-packet-1.json               | multi-file directive: None | one-file: True | actually missing: 0
+repair-packet-2.json               | multi-file directive: None | one-file: True | actually missing: 0
+```
+
+Mellum acted on it — 6 labeled blocks across the run, 5 distinct files
+(`app.py`×2, `models.py`, `templates/home.html`, `templates/complaints.html`,
+`tests/test_app.py`), where every overnight cell emitted exactly one file per
+round and quoted the old directive to justify doing so.
+
+Grade progression, and the headline change:
+
+```
+phase-1 repair round 1: candidate, validation exit=0   (matrix: 18/40 burned BOTH rounds here on validationFailed)
+acceptance repair round 1: exit 1 — "7 failed, 6 passed, 13 warnings"
+acceptance repair round 2: exit 1 — "7 failed, 6 passed, 13 warnings"
+```
+
+**6 of 13 tests passing, and a repair round saw real failing assertions for
+the first time.** In the entire 80-cell overnight matrix, no Mellum repair
+round was ever shown a failing assertion — every one got a bare collection
+error. V2 (the collection gate) still fires on the *initial* acceptance grade
+(exit=2, `AttributeError: module 'models' has no attribute 'complaints'`),
+which is why the run still ends `bad`: repair spends its rounds getting the
+suite to collect at all, then exhausts.
+
+**next:** **fix** — V2 is now the binding constraint, exactly as the verdict
+record's serial-not-parallel warning predicted. Note rounds 1 and 2 produced
+*identical* grades (7 failed / 6 passed both times), meaning round 2 added
+nothing: worth checking whether that is the model repeating itself or a
+second, subtler discard. Fix V2 (surface more than one pytest error per
+round) **with** the whole-packet budget the verdict record requires, since
+the one cell that ever got a rich failure surface died on context overflow.

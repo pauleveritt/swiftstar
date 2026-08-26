@@ -252,24 +252,40 @@ func repairPacket(_ ctx: RepairContext, phaseScoped: Bool = false) -> HandoffPac
     // suppressing the prose. First-complete-block-wins makes "do not reproduce
     // the current broken file" load-bearing: a quoted original under the same
     // heading would be harvested in preference to the fix.
-    let directive = (phaseScoped ? [
-        "The import check failed against the code written by this phase. The",
-        "failure output and the current file contents are appended below under",
-        "\"Failure evidence (machine output)\".",
-        "Exactly one file is wrong. First, in a few sentences, work out what the",
-        "failure output tells you and what the corrected line must be. Then emit",
-        "the heading line for that file followed by one fenced code block holding",
-        "that file's complete corrected contents. The heading line and its fenced",
-        "block must be the LAST thing in your response — end with the closing",
-        "fence and write nothing after it.",
-        "Do not emit a diff or a partial snippet, and do not reproduce the current",
-        "broken file: emit the corrected file exactly once. The host applies the",
-        "file you return exactly as written and re-runs the import check itself.",
-        "Do not rewrite working files and do not add new files or routes.",
+    // Which flavor of "how many files are wrong" to assert depends on what the
+    // evidence RepairLoop is about to append actually shows (D-fix, 2026-08-26):
+    // the fixed "exactly one file is wrong" text below is well-calibrated for
+    // a build phase that wrote most of the app and left one real bug (P12.4's
+    // original design target, and still true whenever count <= 1) but was
+    // false, unconditionally, whenever 2+ writable files are missing or wrong
+    // -- the overnight matrix's dominant Mellum defect (39/40 cells): the
+    // model derived the correct multi-file fix and then cited this exact text
+    // back three times to justify not making it (verbatim in
+    // captures/agenttest/20260826-060458-roadmap's worker-2 transcript).
+    let missingCount = ctx.missingWritableFiles.count
+    let scope = phaseScoped
+        ? "The import check failed against the code written by this phase."
+        : "The acceptance suite failed against the code written by a prior phase."
+    let reRun = phaseScoped ? "re-runs the import check itself" : "re-runs the suite itself"
+    let directive = (missingCount >= 2 ? [
+        scope,
+        "The failure output and the current file contents are appended below",
+        "under \"Failure evidence (machine output)\".",
+        "\(missingCount) of the files you may edit are missing or wrong — not",
+        "one. First, in a few sentences, work out from the failure output and",
+        "the current file contents which of them need to change. Then, for",
+        "each file that needs to change, emit its heading line followed by one",
+        "fenced code block holding that file's complete corrected contents —",
+        "one heading-plus-block pair per file, in any order. Nothing before",
+        "the first heading line and nothing after the last closing fence.",
+        "Do not emit a diff or a partial snippet for any file, and do not",
+        "reproduce a file that is already correct. The host applies every",
+        "file you return exactly as written and \(reRun).",
+        "Do not rewrite files not listed above and do not add new routes.",
     ] : [
-        "The acceptance suite failed against the code written by a prior phase. The",
-        "failure output and the current file contents are appended below under",
-        "\"Failure evidence (machine output)\".",
+        scope,
+        "The failure output and the current file contents are appended below",
+        "under \"Failure evidence (machine output)\".",
         "Exactly one file is wrong. First, in a few sentences, work out what the",
         "failure output tells you and what the corrected line must be. Then emit",
         "the heading line for that file followed by one fenced code block holding",
@@ -278,7 +294,7 @@ func repairPacket(_ ctx: RepairContext, phaseScoped: Bool = false) -> HandoffPac
         "fence and write nothing after it.",
         "Do not emit a diff or a partial snippet, and do not reproduce the current",
         "broken file: emit the corrected file exactly once. The host applies the",
-        "file you return exactly as written and re-runs the suite itself.",
+        "file you return exactly as written and \(reRun).",
         "Do not rewrite working files and do not add new files or routes.",
     ]).joined(separator: " ")
     let writableNote = ([
@@ -475,6 +491,7 @@ func runFixtureOnce(_ name: String) throws {
 
     let result = try RepairLoop.run(
         repo: repo, failedRef: failedRef, initialGrade: initial,
+        writableFiles: writableFiles,
         packetBuilder: { repairPacket($0) },
         runPhase: { pkt, wt, cap in try orch.runPhase(worker: WorkerId(1), packet: pkt, worktree: wt, capture: cap) },
         grade: { wt in try AcceptanceGrader.grade(worktree: wt, acceptanceSource: acceptanceSource, pyProject: pyProject) },
@@ -940,6 +957,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                 repo: repoURL,
                 failedRef: ref,          // txn.candidateRef (the failed implement chain)
                 initialGrade: grade,
+                writableFiles: writableFiles,
                 packetBuilder: { repairPacket($0) },
                 runPhase: { pkt, wt, cap in
                     try orch.runPhase(worker: WorkerId(2), packet: pkt, worktree: wt, capture: cap)

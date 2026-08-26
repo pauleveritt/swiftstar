@@ -52,6 +52,34 @@ struct RepairLoopTests {
         }
     }
 
+    /// V3 fix seam: `RepairContext` must carry which of the run's writable
+    /// files are missing at `head`, computed BEFORE `packetBuilder` runs (not
+    /// derived from the packet it returns) -- packet evidence is generated
+    /// before that round's own turn, so the directive text needs this signal
+    /// independently to avoid asserting "exactly one file is wrong" when it
+    /// is not (2026-08-26 overnight-matrix Defect: repairPacket's directive
+    /// self-contradicted its own evidence in 39/40 Mellum cells).
+    @Test func repairContextCarriesMissingWritableFilesAtHead() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        // makeRepo() seeds a.txt at HEAD; b.txt and c.txt were never written.
+        var seenMissing: [[String]] = []
+        _ = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            writableFiles: ["a.txt", "b.txt", "c.txt"],
+            packetBuilder: { ctx in
+                seenMissing.append(ctx.missingWritableFiles.sorted())
+                return HandoffPacket(taskText: "fix it", writableFiles: ["a.txt", "b.txt", "c.txt"],
+                                      validationCommand: "true", baselines: [:], turnBudget: 1000,
+                                      toolCallBudget: 8, role: .repair, sampling: SamplingPolicy(think: .off))
+            },
+            runPhase: { _, _, _ in self.outcome(mutations: []) },
+            grade: { _ in GradeResult(exit: 1, output: "still failing") },
+            maxCandidateRounds: 1)
+        #expect(seenMissing == [["b.txt", "c.txt"]],
+                "expected only b.txt/c.txt missing at head (a.txt was seeded); got \(seenMissing)")
+    }
+
     @Test func passesOnFirstCandidate() throws {
         let repo = try makeRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
@@ -280,6 +308,48 @@ struct RepairLoopTests {
     /// A `.validationFailed` receipt carries real new evidence (the round's own
     /// candidate broke the import check) even though it produced no committed
     /// candidate ref. Unlike other receipts, it must NOT end the loop
+    /// The regression this codebase actually shipped (2026-08-26 overnight
+    /// matrix, 18/40 Mellum cells): a `.validationFailed` round's write must
+    /// survive into the NEXT round's worktree. The existing test above
+    /// (`validationFailedReceiptRetriesWithFreshEvidence`) cannot catch this --
+    /// its round 2 happens to rewrite round 1's file (`a.txt`) as part of
+    /// fixing it, so overwriting a discarded file looks identical to building
+    /// on a kept one. This test's round 2 writes ONLY `b.txt`, isolating
+    /// survival from re-doing: if round 1's `a.txt` write did not survive,
+    /// round 2 will see the pre-round-1 seed content, not what round 1 wrote.
+    @Test func validationFailedRoundWorkSurvivesIntoNextRound() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let calls = LockedCounter()
+        var seenInRound2: String?
+        let packet = HandoffPacket(
+            taskText: "fix it", writableFiles: ["a.txt", "b.txt"],
+            validationCommand: "test -f a.txt && test -f b.txt",
+            baselines: [:], turnBudget: 1000, toolCallBudget: 8,
+            role: .repair, sampling: SamplingPolicy(think: .off))
+        _ = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            packetBuilder: { _ in packet },
+            runPhase: { _, wt, _ in
+                calls.increment()
+                if calls.value == 1 {
+                    try "round1-wrote-this\n".write(to: wt.appendingPathComponent("a.txt"),
+                                                   atomically: true, encoding: .utf8)
+                    return self.outcome(mutations: ["a.txt"])
+                } else {
+                    seenInRound2 = try? String(contentsOf: wt.appendingPathComponent("a.txt"),
+                                                encoding: .utf8)
+                    try "round2-wrote-this\n".write(to: wt.appendingPathComponent("b.txt"),
+                                                   atomically: true, encoding: .utf8)
+                    return self.outcome(mutations: ["b.txt"])
+                }
+            },
+            grade: { _ in GradeResult(exit: 1, output: "still failing") })
+        #expect(calls.value == 2)
+        #expect(seenInRound2 == "round1-wrote-this\n",
+                "round 2 saw a.txt = \(seenInRound2 ?? "<<MISSING>>") — round 1's write did not survive")
+    }
+
     /// immediately — it should refresh `lastGrade` from the real validation
     /// output and let the existing round budget continue.
     @Test func validationFailedReceiptRetriesWithFreshEvidence() throws {

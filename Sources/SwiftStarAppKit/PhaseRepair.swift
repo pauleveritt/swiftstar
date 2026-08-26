@@ -30,6 +30,7 @@ public enum PhaseRepair {
             repo: repo,
             failedRef: failedRef,
             initialGrade: GradeResult(exit: validation.exit, output: validation.output),
+            writableFiles: packet.writableFiles,
             packetBuilder: packetBuilder,
             runPhase: runPhase,
             grade: { _ in GradeResult(exit: 0, output: "") },

@@ -8,10 +8,18 @@ public struct RepairContext: Sendable {
     public let failedRef: String
     public let grade: GradeResult
     public let round: Int
-    public init(failedRef: String, grade: GradeResult, round: Int) {
+    /// Which of the run's writable files do not exist at `failedRef`, computed
+    /// by `RepairLoop` from the repo directly (D-fix, 2026-08-26): a packet
+    /// builder that unconditionally asserts "exactly one file is wrong" while
+    /// this list holds 2+ paths is asserting something its own evidence will
+    /// then contradict -- the overnight matrix's dominant harness defect
+    /// (39/40 Mellum cells). Defaults to `[]` for callers that don't need it.
+    public let missingWritableFiles: [String]
+    public init(failedRef: String, grade: GradeResult, round: Int, missingWritableFiles: [String] = []) {
         self.failedRef = failedRef
         self.grade = grade
         self.round = round
+        self.missingWritableFiles = missingWritableFiles
     }
 }
 
@@ -43,6 +51,7 @@ public enum RepairLoop {
 
     public static func run(
         repo: URL, failedRef: String, initialGrade: GradeResult,
+        writableFiles: [String] = [],
         packetBuilder: (RepairContext) throws -> HandoffPacket,
         runPhase: (HandoffPacket, URL, FileHandle?) throws -> TurnOutcome,
         grade: (URL) throws -> GradeResult,
@@ -55,7 +64,13 @@ public enum RepairLoop {
 
         for round in 1...maxCandidateRounds {
             let start = Date()
-            let ctx = RepairContext(failedRef: head, grade: lastGrade, round: round)
+            // Checked against the repo's object store directly, via `head` --
+            // no worktree exists yet this round, and creating one just to ask
+            // "does this path exist" would be strictly more expensive than the
+            // git plumbing below for what is otherwise a no-op until a builder
+            // reads `missingWritableFiles`.
+            let missing = try missingFiles(writableFiles, at: head, in: repo)
+            let ctx = RepairContext(failedRef: head, grade: lastGrade, round: round, missingWritableFiles: missing)
             let authored = try packetBuilder(ctx)
             if case .invalid(let reasons) = HandoffPacketValidator.validate(authored) {
                 throw RepairLoopError.packetInvalid(reasons)
@@ -200,8 +215,25 @@ public enum RepairLoop {
                     // exit+digest (dropped at the pure WorktreeDispatch.verdict boundary),
                     // but the real ValidationResult -- with its full output -- is still
                     // in scope right here. Refresh lastGrade from it and let the existing
-                    // round budget continue; head stays unchanged since no candidate was
-                    // produced to advance to.
+                    // round budget continue.
+                    //
+                    // `head` MUST advance to include this round's write (D-fix,
+                    // 2026-08-26): `finalize` never commits on the `.receipt` path
+                    // (only `.candidate` does), so leaving `head` unchanged meant the
+                    // next round's worktree was re-prepared from the SAME base --
+                    // discarding this round's file the instant its own worktree is
+                    // torn down below. "N rounds" collapsed into N independent
+                    // single-shot attempts against the same starting point (2026-08-26
+                    // overnight matrix, 18/40 Mellum cells; two files -- app.py then
+                    // models.py -- verified to import cleanly TOGETHER but never
+                    // survived to be applied together). `commitForRepair` already
+                    // exists for exactly this: P12.8 uses it to seed RepairLoop's
+                    // first `failedRef` from a phase that failed validation; this
+                    // reuses it every subsequent round instead of only the first. When
+                    // the round wrote nothing, `commitForRepair` -> `commitDiff` finds
+                    // no staged changes and returns the parent SHA unchanged -- head
+                    // correctly stays put in that degenerate case, no extra check needed.
+                    head = try WorktreeDispatcher.commitForRepair(wt, packet: packet, in: repo)
                     lastGrade = GradeResult(exit: validation.exit, output: validation.output)
                     continue
                 }
@@ -209,6 +241,26 @@ public enum RepairLoop {
             }
         }
         return .exhausted(lastGrade: lastGrade, receipt: .repairExhausted)
+    }
+
+    /// Which of `files` are absent at `ref` in `repo`, checked directly
+    /// against the object store (`git cat-file -e`) rather than a worktree,
+    /// since none exists yet for the round this is called from.
+    private static func missingFiles(_ files: [String], at ref: String, in repo: URL) throws -> [String] {
+        var missing: [String] = []
+        for path in files {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            p.arguments = ["-C", repo.path, "cat-file", "-e", "\(ref):\(path)"]
+            p.standardOutput = Pipe()
+            p.standardError = Pipe()
+            try p.run()
+            p.waitUntilExit()
+            if p.terminationStatus != 0 {
+                missing.append(path)
+            }
+        }
+        return missing
     }
 
     private static func fileURL(_ path: String, in worktree: URL) -> URL {
