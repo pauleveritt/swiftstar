@@ -361,3 +361,80 @@ above. Once decided, the fix is small and belongs with a red-then-green test
 asserting `code.md`/`verdict` reflect repair's last candidate. V2 (the
 collection gate, plus the whole-packet budget it requires) remains the next
 fix after that.
+
+## 7 — 2026-08-26 — audit (correction) — **retracts the headline of entries 5 and 6**
+
+**did:** Fable review of the whole P16 loop. Two of the five invariant checks
+were broken; one of them had certified the loop's headline result. Rewrote the
+auditor, proved every check against a known-bad *and* a known-good cell, and
+re-ran. The auditor now lives in the repo at
+[`Tools/audit-goal-invariants.py`](../../../Tools/audit-goal-invariants.py)
+rather than a session scratchpad, so these numbers stay reproducible.
+
+**RETRACTED — "the first valid Mellum pipeline cell."** `20260826-085813` is
+**blocked by V2**, the invariant it was reported as satisfying. V2 reads: *"no
+round's **evidence** may contain `Interrupted:` with `error during
+collection`."* The evidence is the packet the model was dispatched. The old
+`check_v2` grepped `repair-round-N.json` — the grade recorded *after* each
+round — which is off-by-one in both directions: it never inspects round 1's
+dispatched evidence, and it does inspect a final-round grade shown to nobody.
+The cell's actual round-1 packet:
+
+```
+$ python3 -c "import json; t=json.load(open('captures/agenttest/20260826-085813-roadmap/repair-packet-1.json'))['taskText']; print('Interrupted:' in t and 'error during collection' in t)"
+True
+```
+
+Entry 5 even wrote the contradiction in prose — "V2 (the collection gate)
+still fires on the initial acceptance grade" — in the same entry that recorded
+`blocked={}`. The number and the sentence disagreed and the number won.
+
+**This was predictable, not unlucky.** With V2 unfixed, *any* cell reaching
+acceptance repair was guaranteed a collection-error round-1 evidence block. The
+measure iteration could not have produced a valid cell. GPU was spent measuring
+the harness, and the result was written down as a model result — the exact
+failure this goal exists to prevent, now twice in one session.
+
+**V4 is UNAUDITABLE, not passing.** `check_v4` could never fire under any
+input: it passed if *any* packet contained `## Phase`, and `packet.json` always
+does. Worse, `main.swift:716` captures only `phases[0]`, so phase 2/3 briefs are
+never in the capture at all — V4 as written cannot be executed against these
+runs either way. It now reports UNAUDITABLE, which is not a pass.
+
+**Corrected cell counts** (`Tools/audit-goal-invariants.py`, self-test passing):
+
+```
+=== laguna: 38 valid / 40 total ===
+    blocked:     {'V3': 1, 'V5': 1}
+    unauditable: {'V4': 40}   (NOT passes)
+=== mellum: 1 valid / 40 total ===
+    blocked:     {'V1': 19, 'V3': 39, 'V2': 21, 'V5': 1}
+    unauditable: {'V4': 40}   (NOT passes)
+
+=== 20260826-085813-roadmap: BLOCKED ===
+    V2: acceptance: repair-packet-1.json: dispatched evidence is a bare collection error
+```
+
+**Cumulative valid Mellum cells: 1** (not 2) — `20260826-065840`, valid only by
+accident of dying in a way V5 does not catch. **Progress toward the goal of 10
+is 1, and none of it was earned this session.**
+
+**What still stands from entries 2–6,** re-verified: the V1 and V3 code fixes
+are mechanically correct and live-confirmed (round 1's write visible in round
+2's dispatched evidence; the multi-file directive dispatched and Mellum emitted
+5 distinct files). The grading-tree escalation is exact — mechanism at
+`main.swift:981–983`, scope exactly 21 cells, no pass/fail flips by
+construction. Both suites pass, 538 tests. `check_v1`'s 19 reproduces from
+receipts — though entry 1's claim that 19 "matches the verdict record" is wrong
+on provenance: that record says 18 (a first-defect-to-fire partition); 19
+appears nowhere in it.
+
+**Commit `db7c914`'s message overclaims** and cannot be rewritten (already
+committed): "the whole 80-cell overnight matrix produced 0 valid cells" is false
+(Laguna 38, Mellum 1), and "first valid Mellum pipeline cell in the project's
+history" is false twice over — it contradicts entry 1, and the cell is not
+valid. This entry is the correction of record.
+
+**next:** **replan** — the contract let a broken check certify a headline, and
+had no rule that would have caught it. `.claude/commands/goal.md` is being
+rewritten before any further iteration.
