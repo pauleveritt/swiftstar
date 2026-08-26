@@ -696,6 +696,8 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                     .write(to: captureDir.appendingPathComponent("validation-phase\(i + 1).txt"),
                            atomically: true, encoding: .utf8)
             }
+            let repairCaptureDir = captureDir.appendingPathComponent("repair-phase\(i + 1)")
+            try? FileManager.default.createDirectory(at: repairCaptureDir, withIntermediateDirectories: true)
             do {
                 let repair = try PhaseRepair.run(
                     repo: repoURL,
@@ -707,7 +709,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                         try orch.runPhase(worker: WorkerId(2), packet: pkt, worktree: tree, capture: cap)
                     },
                     capture: captureHandle,
-                    captureDir: captureDir,
+                    captureDir: repairCaptureDir,
                     emissionFollowUp: repairEmissionFollowUp)
                 switch repair {
                 case .repaired(let repairedRef, let repairedWT):
