@@ -630,3 +630,81 @@ full 13-assertion failure surface is exactly the shape that overflowed at
 37,180 tokens against a 32,768 ceiling (`20260826-055741`). Fixing V2 without
 the budget converts V2 blocks into V5 blocks. The contract's measure gate
 already forbids measuring until it lands.
+
+## 11 — 2026-08-26 — fix (V5)
+
+**did:** Fixed V5 — and it was **not** the missing whole-packet budget the
+prior entries, the verdict record, and Fable's review all assumed. Measuring
+the overflowing packet's composition before writing any code showed the
+assumption was backwards:
+
+```
+total taskText bytes: 85421
+  directive+spec :  3534
+  failure output : 80807
+  file contents  :  1080     <- six files, ~1 KB total
+```
+
+The overflow was almost entirely *failure output* — which `outputCap` was
+supposed to bound at 8192. The packet's own truncation note gave it away:
+
+```
+- failure output truncated: 88919 -> 80727 bytes
+```
+
+`MachineEvidence.cappedFailureOutput` kept **`byteCount - cap`** bytes instead
+of `cap`. It walked backward decrementing the *remaining* count until that fell
+under the cap, then kept everything it had walked past. Wrong in both
+directions: it under-keeps below 2× cap (9018 bytes at cap 8192 kept 816) and
+over-keeps above it (88919 kept 79826).
+
+**Why three prior analyses missed it, including two of mine.** The existing
+tests assert only `out.utf8.count <= cap` — which an under-sized result
+satisfies — and every input they used was under 2× cap, where `byteCount - cap`
+is itself under cap. The bug was invisible until a real 88 KB pytest run.
+
+Effect on the cell that died (`20260826-055741`), same packet recomputed:
+
+```
+was 85421 bytes  ->  now <= 12844 bytes  (15.0% of the size that overflowed)
+```
+
+Comfortably inside the 32768 context. **No whole-packet budget is needed** —
+the residual worst case is bounded by the existing text-contract guard, which
+already refuses a round when any single writable file exceeds `fileCap`.
+
+**cells:** no new captures this iteration.
+
+**model:** (omitted — fix iteration, per contract.)
+
+**evidence:** red-then-green, both halves of the bug pinned separately:
+
+```
+# before:
+✘ (out.utf8.count → 79826) <= 8192   ↳ kept 79826 bytes for cap 8192 — the cap is inverted
+✘ (out.utf8.count → 816) > 8128      ↳ kept only 816 of a possible 8192 bytes
+# after:
+✔ MachineEvidenceTests — 11 tests passed (including all 9 pre-existing)
+
+$ swift test                          # 542 tests, 74 suites — passed
+$ SWIFTSTAR_INTEGRATION=1 swift test  # 542 tests, 74 suites — passed
+$ python3 Tools/audit-goal-invariants.py --self-test   # PASS
+```
+
+**One honest caveat:** the first integration run after this change reported
+`✘ Test run with 542 tests ... failed with 1 issue` without naming the test,
+and did **not** reproduce in four subsequent runs (three of them dedicated
+attempts). Recorded as an unreproduced flake rather than a clean sweep. Not
+escalating — the contract's trigger is a *default-tier* failure surviving a fix
+attempt, and this was integration-tier and did not survive. Worth watching.
+
+**next:** **measure** — and this is now legitimate under the contract's gate
+for the first time. Naming the invariants a fresh cell will traverse and why
+each is fixed: **V1** cumulative rounds (`head` advances via `commitForRepair`,
+fixture-confirmed 13/13); **V2** the precondition manifest replaces collection
+aborts (fixture-confirmed against the real suite, 4 gates named at once);
+**V3** the directive branches on missing-file count (live-confirmed, Mellum
+emitted 5 distinct files); **V5** the cap is no longer inverted (measured: the
+packet that overflowed is now 15% of its former size). **V4 remains
+UNAUDITABLE** — phase 2/3 packets are still uncaptured — so any cell it would
+have judged must be reported as unauditable, never as passing.

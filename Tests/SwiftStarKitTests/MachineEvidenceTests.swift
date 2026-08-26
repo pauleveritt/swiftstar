@@ -3,6 +3,39 @@ import Foundation
 @testable import SwiftStarKit
 
 struct MachineEvidenceTests {
+    /// `cappedFailureOutput` must keep the last `cap` bytes. It used to keep
+    /// `byteCount - cap` bytes -- the loop walked back until the *remaining*
+    /// count fell under the cap and then kept everything it had walked past.
+    ///
+    /// That is wrong in both directions and the existing tests could not see
+    /// it, because they only assert `<= cap` and every input they use is under
+    /// 2x cap, where `byteCount - cap` is itself under cap. The real failure
+    /// needed an 88 KB pytest run: 88919 bytes with cap 8192 kept **80727**,
+    /// which is what pushed a repair packet to 37180 tokens against a 32768
+    /// context and killed the one cell all night that had a rich failure
+    /// surface to show (2026-08-26, capture 20260826-055741).
+    @Test func cappedFailureOutputKeepsCapBytesNotTheRemainder() {
+        let body = String(repeating: "x", count: 88_000) + "FAILING ASSERTION\n"
+        let (out, note) = MachineEvidence.cappedFailureOutput(body, cap: 8192)
+        #expect(out.utf8.count <= 8192,
+                "kept \(out.utf8.count) bytes for cap 8192 — the cap is inverted")
+        // ... and must not under-keep either: a cap is a target, not a ceiling
+        // to undershoot. Anything much below `cap` means the same inverted walk.
+        #expect(out.utf8.count > 8192 - 64,
+                "kept only \(out.utf8.count) of a possible 8192 bytes")
+        #expect(out.hasSuffix("FAILING ASSERTION\n"))
+        #expect(note != nil)
+    }
+
+    /// The under-keeping half of the same bug, at a size the old tests used:
+    /// 9018 bytes with cap 8192 kept 826.
+    @Test func cappedFailureOutputJustOverCapKeepsNearlyEverything() {
+        let body = String(repeating: "a", count: 9000) + "FAILING\n"
+        let (out, _) = MachineEvidence.cappedFailureOutput(body, cap: 8192)
+        #expect(out.utf8.count > 8192 - 64,
+                "kept only \(out.utf8.count) of a possible 8192 bytes")
+    }
+
     @Test func cappedFailureOutputKeepsTail() {
         let body = String(repeating: "a", count: 9000) + "FAILING ASSERTION\n"
         let (out, note) = MachineEvidence.cappedFailureOutput(body, cap: 8192)

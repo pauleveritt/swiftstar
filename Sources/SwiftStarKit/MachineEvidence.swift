@@ -21,14 +21,28 @@ public struct MachineEvidence: Equatable, Sendable {
         guard byteCount > cap else { return (output, nil) }
 
         // Keep the last `cap` bytes, but don't split a multi-byte Character.
-        // Walk backward from the end, accumulating byte count until we exceed the cap.
-        var byteIndex = byteCount
+        // Walk backward from the end accumulating what we are KEEPING, and stop
+        // before the next character would push us over the cap.
+        //
+        // The earlier version walked backward decrementing the *remaining*
+        // count until it fell under the cap, then kept everything it had
+        // walked past -- i.e. it kept `byteCount - cap` bytes rather than
+        // `cap`. That is wrong in both directions: it under-keeps below 2x cap
+        // (9018 bytes at cap 8192 kept 816) and over-keeps above it (88919
+        // kept 79826, which pushed a repair packet to 37180 tokens against a
+        // 32768 context and killed the one 2026-08-26 cell that had a full
+        // 13-assertion failure surface to show). The old tests could not catch
+        // either: they assert only `<= cap`, which an under-sized result
+        // satisfies, and every input they used was below 2x cap.
+        var keptBytes = 0
         var charIndex = output.endIndex
 
-        while byteIndex > cap && charIndex > output.startIndex {
-            output.formIndex(before: &charIndex)
-            let char = output[charIndex]
-            byteIndex -= char.utf8.count
+        while charIndex > output.startIndex {
+            let previous = output.index(before: charIndex)
+            let size = output[previous].utf8.count
+            if keptBytes + size > cap { break }
+            keptBytes += size
+            charIndex = previous
         }
 
         let kept = String(output[charIndex...])
