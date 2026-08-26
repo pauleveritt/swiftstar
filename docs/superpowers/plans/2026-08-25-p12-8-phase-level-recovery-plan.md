@@ -1,5 +1,20 @@
 # P12.8 — Phase-level Recovery Implementation Plan
 
+> **Status (2026-08-25): all four tasks implemented and committed** —
+> `6ac5df7` (`commitForRepair`), `84b9fa1` (`adoptRepairedPhase`), `a438634`
+> (`PhaseRepair`), `de46f4f` (build-loop wiring), `cca02f2` (capture-namespace
+> review fix). Every step below is ticked to match; they were left unchecked
+> after the work landed and were corrected in a later audit pass.
+>
+> **Still owed: the live confirmation run** described under "Post-plan
+> verification" at the end of this file. It is not a checkbox and is *not*
+> satisfied. One attempt was made
+> (`captures/agenttest/20260825-203706-roadmap-user-story`): phase 1 failed
+> validation, the repair attempt itself returned `validationFailed`, and
+> `RepairLoop` exited on that receipt by design (D4), so the run never reached
+> acceptance. Lifting that receipt-exit limitation is filed in ROADMAP's
+> Backlog and is the likely prerequisite for a confirming run.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Repair a build phase that fails its `validationCommand` (vetted import check) with one `RepairLoop` attempt instead of aborting the run before `commitBack()`.
@@ -33,7 +48,7 @@
 - Consumes: existing private `commitDiff(in:writableFiles:)` (`WorktreeDispatcher.swift:181-210`).
 - Produces: `public static func commitForRepair(_ worktree: Worktree, packet: HandoffPacket, in repo: URL) throws -> String` — returns the commit SHA (or the parent SHA when nothing is staged). Later tasks call it to produce a `failedRef`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `WorktreeDispatcherTests` (inside the existing struct, which already has `makeFixtureRepo()` and `git(_:_:)` helpers):
 
@@ -74,12 +89,12 @@ Append to `WorktreeDispatcherTests` (inside the existing struct, which already h
     }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `SWIFTSTAR_INTEGRATION=1 swift test --filter WorktreeDispatcherTests`
 Expected: both new tests FAIL — `value of type 'WorktreeDispatcher' has no member 'commitForRepair'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `WorktreeDispatcher`, after `finalize` (before `discard`), add:
 
@@ -95,12 +110,12 @@ In `WorktreeDispatcher`, after `finalize` (before `discard`), add:
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `SWIFTSTAR_INTEGRATION=1 swift test --filter WorktreeDispatcherTests`
 Expected: PASS (both new tests, plus the existing `WorktreeDispatcherTests`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/SwiftStarAppKit/WorktreeDispatcher.swift Tests/SwiftStarIntegrationTests/WorktreeDispatcherTests.swift
@@ -119,7 +134,7 @@ git commit -m "P12.8: add WorktreeDispatcher.commitForRepair (commit failed phas
 - Consumes: `WorktreeDispatcher.resolve(ref:in:)`, `WorktreeDispatcher.discard(_:in:)` (both existing).
 - Produces: `public func adoptRepairedPhase(failedWorktree: WorktreeDispatcher.Worktree, repairedWorktree: WorktreeDispatcher.Worktree, repairedRef: String) throws` — discards the failed worktree, tracks the repaired worktree, and advances `head`/`candidateRef`/`finalWorktree`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `WorktreeTransactionTests` (struct already has `makeFixtureRepo()`, `git(_:_:)`, `packet(_:task:)`, `outcome(mutations:)`):
 
@@ -175,12 +190,12 @@ Append to `WorktreeTransactionTests` (struct already has `makeFixtureRepo()`, `g
     }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `SWIFTSTAR_INTEGRATION=1 swift test --filter WorktreeTransactionTests`
 Expected: the new test FAILS — `value of type 'WorktreeTransaction' has no member 'adoptRepairedPhase'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `WorktreeTransaction`, after `finalizePhase` (before `commitBack`), add:
 
@@ -203,12 +218,12 @@ In `WorktreeTransaction`, after `finalizePhase` (before `commitBack`), add:
     }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `SWIFTSTAR_INTEGRATION=1 swift test --filter WorktreeTransactionTests`
 Expected: PASS (new test plus the existing three `WorktreeTransactionTests`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/SwiftStarAppKit/WorktreeTransaction.swift Tests/SwiftStarIntegrationTests/WorktreeTransactionTests.swift
@@ -227,7 +242,7 @@ git commit -m "P12.8: add WorktreeTransaction.adoptRepairedPhase (fold repaired 
 - Consumes: `WorktreeDispatcher.commitForRepair` (Task 1), `RepairLoop.run` (existing), `GradeResult`, `ValidationResult`, `Receipt`, `RepairContext`, `HandoffPacket`.
 - Produces: `enum PhaseRepair` with `Outcome` (`.repaired(ref:worktree:)` / `.exhausted(receipt:)`) and `static func run(repo:failedWorktree:packet:validation:packetBuilder:runPhase:capture:captureDir:emissionFollowUp:) throws -> Outcome`. Task 4 calls it; it throws `RepairLoopError.sessionExhausted` upward.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `Tests/SwiftStarIntegrationTests/PhaseRepairTests.swift`:
 
@@ -329,12 +344,12 @@ struct PhaseRepairTests {
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `SWIFTSTAR_INTEGRATION=1 swift test --filter PhaseRepairTests`
 Expected: both FAIL — `cannot find 'PhaseRepair' in scope`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `Sources/SwiftStarAppKit/PhaseRepair.swift`:
 
@@ -387,12 +402,12 @@ public enum PhaseRepair {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `SWIFTSTAR_INTEGRATION=1 swift test --filter PhaseRepairTests`
 Expected: PASS (both).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/SwiftStarAppKit/PhaseRepair.swift Tests/SwiftStarIntegrationTests/PhaseRepairTests.swift
@@ -410,7 +425,7 @@ git commit -m "P12.8: add PhaseRepair (commit failed phase + one RepairLoop atte
 - Consumes: `PhaseRepair.run` (Task 3), `WorktreeTransaction.adoptRepairedPhase` (Task 2), `WorkerId(2)`, `orch.runPhase`, `repairEmissionFollowUp` (all existing in `main.swift`).
 - Produces: `repairPacket(_:phaseScoped:)` and the phase-loop routing; no new types.
 
-- [ ] **Step 1: Parameterize `repairPacket`**
+- [x] **Step 1: Parameterize `repairPacket`**
 
 In `main.swift`, change the signature and directive of `repairPacket`:
 
@@ -478,7 +493,7 @@ becomes:
                 packetBuilder: { repairPacket($0) },
 ```
 
-- [ ] **Step 2: Wire the phase loop**
+- [x] **Step 2: Wire the phase loop**
 
 In the build phase loop, replace the validation-failure block (the `if let validation, !validation.passed { ... }` that prints and persists, around the `runValidation` call before `txn.finalizePhase`) with:
 
@@ -529,17 +544,17 @@ In the build phase loop, replace the validation-failure block (the `if let valid
 
 The `txn.finalizePhase(...)` call and its `switch` remain untouched immediately after this block (they now only run when validation passed or is nil).
 
-- [ ] **Step 3: Build**
+- [x] **Step 3: Build**
 
 Run: `swift build` (in the worktree; first run is a cold build)
 Expected: SUCCESS. (This compiles the executable wiring; the routing logic itself is proven by Task 3's fake-tier test, and the end-to-end path by the live confirmation.)
 
-- [ ] **Step 4: Run the full integration tier**
+- [x] **Step 4: Run the full integration tier**
 
 Run: `SWIFTSTAR_INTEGRATION=1 swift test`
 Expected: PASS — all suites, including the three new ones from Tasks 1–3, plus the existing `RepairLoopSeamTests`/`WorktreeTransactionTests`/`WorktreeDispatcherTests`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/swiftstar-agenttest/main.swift

@@ -329,16 +329,33 @@ Five pieces:
      architecture would have paid for again that this architecture didn't.
      Structurally undefined for a stateless system (no persistent session
      to diff against) — reports as N/A in that column, not zero.
-   2a. **Fix a real bug while wiring this: `generated` is last-value-wins,
-   not accumulated.** `TurnOutcomeBuilder` (`Sources/SwiftStarKit/TurnOutcome.swift`)
-   overwrites `self.generated` on every `.ready` event
-   (`if let generated { self.generated = generated }`) rather than summing
-   across rounds. If `.ready` fires once per tool-calling round with a
-   per-round count, a multi-round phase's reported `generatedTokens` is
-   only its last round's generation, not the phase's total — silently
-   undercounting every "generated tokens" figure this harness has ever
-   reported, not just the ones in this comparison. Fix: accumulate across
-   rounds, not overwrite.
+   2a. ~~**Fix a real bug while wiring this: `generated` is last-value-wins,
+   not accumulated.**~~ **RETRACTED 2026-08-25 — there is no bug here; this
+   item was wrong and the code is correct as written.** The claim assumed
+   `.ready` fires once per tool-calling round carrying a per-round count, so
+   that `TurnOutcomeBuilder`'s `self.generated = generated` would keep only
+   the last round. Checked against evidence before changing anything, and the
+   premise is false on both sides:
+   - **Wire:** in `captures/agenttest/20260824-171135-roadmap-user-story-run3/wire.ndjson`,
+     worker 1 emits dozens of tool blocks before its *first* `ready`. The other
+     `ready` events in that file belong to separate `runPhase` calls (context
+     resets between them), i.e. separate turns and separate builders — not
+     extra rounds of one turn.
+   - **Engine:** `external/ds4/ds4_agent.c` writes `w->last_turn_generated`
+     only on a turn-ending return (interrupt/EOS/limit/context-full), never
+     when the tool-round loop continues. Its own doc comment notes that a
+     later `ready` *repeats* the last turn's outcome for reconnect recovery —
+     so `+=` would double-count on replay. Last-value-wins is required, and is
+     symmetric with `ctxUsed`.
+   - **Consumers agree:** `PoolOrchestrator` breaks its read loop on the first
+     `.ready`; `AgentTestAnalyzer` closes its phase accumulator there.
+
+   Recorded rather than silently deleted because the false claim reached a
+   commit message (`1400171`) and a session's analysis before being caught.
+   *Left open by this retraction:* whether the engine's own
+   `last_turn_generated` represents a whole turn or only its final tool round
+   is a separate question this check did not settle — worth one look if
+   per-turn token figures ever become load-bearing.
 3. **`DumbImplementer`** — a naive, flag-gated packet-builder mode that
    sends a minimal "here's the spec, build it" packet instead of
    `phasePacket`'s engineered prompt (no pinned facts, no "don't re-explore"
@@ -378,9 +395,10 @@ result, until the trace capture actually lands.
 not exist. An earlier ROADMAP entry credited P12.7 with having "corrected the
 cross-system metric definitions the measurement gate reports against" — true
 only of the definitions *in this document*, not of anything the harness
-measures; that claim has been corrected. Item 2a's `TurnOutcomeBuilder`
-accumulation bug is tracked separately and must land before any of these
-metrics are trusted.
+measures; that claim has been corrected. Item 2a's alleged
+`TurnOutcomeBuilder` accumulation bug has been **retracted** — it was checked
+against the wire and the engine source and the existing code is correct; see
+that item.
 
 ### P12.8 — Phase-level recovery
 
