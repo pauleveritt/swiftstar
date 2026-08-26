@@ -202,3 +202,100 @@ a candidate, not a decision.
 **next:** **STOP — escalate.** V6's implementation stands and is proven; the
 invariant it encodes is too narrow to reach done-when (a). Needs a ruling
 before any further fix or GPU work.
+
+## 2 — 2026-08-26 — fix (V6) — **ESCALATION**
+
+**did:** Adopted the human's candidate rule — *prose between a heading and its
+fence does not beat the fence* — red-then-green in `LabeledBlockParser`, and
+widened `check_v6` to audit it. **Did NOT implement the earlier zero-fence
+ruling: three frozen fixtures refute it.**
+
+**cells:** valid=5 blocked={V6:3, V5:1, V1:1} unauditable={V4:9} of 9
+*(104551 is blocked by both V5 and V6; four distinct cells are blocked.)*
+`20260826-104811` moves from VALID to BLOCKED, as iteration 1 predicted.
+
+**done-when: a=no b=no c=no d=no**
+
+**model:** (omitted — fix iteration.)
+
+**evidence:** red-then-green, both halves pinned separately:
+
+```
+# before
+✘ proseBetweenHeadingAndFenceDoesNotBeatTheFence
+  ↳ expected the fenced code, got: The failure output shows a ModuleNotFoundError. Let me create the file:
+✘ aFenceAfterTheNextHeadingDoesNotBackfillThePreviousOne
+  ↳ (models?.content → "commentary") == "MODELS = 1"
+
+# after
+✔ LabeledBlockParserTests   — 24 tests passed
+✔ HarvestCaptureReplayTests —  4 tests passed   (all three zero-fence captures still harvest)
+$ swift test                          # 545 tests, 74 suites — passed
+$ SWIFTSTAR_INTEGRATION=1 swift test  # 545 tests, 74 suites — passed
+$ python3 Tools/audit-goal-invariants.py --self-test   # PASS
+```
+
+Re-audit under the widened check:
+
+```
+065840 VALID   104551 BLOCKED(V5 limit, V6 x1)   104811 BLOCKED(V6 x6)
+105213 VALID   105529 VALID                      112121 BLOCKED(V1, known false positive)
+112536 BLOCKED(V6 zero-fence)   112907 VALID     113440 VALID
+```
+
+`check_v6` gained a fixture for the widened clause — `104811`, the cell the
+zero-fence detector alone passed. That is done-when (d) working as intended: a
+check that only ever fired on the defect it was written for would have shipped
+believing itself complete.
+
+---
+
+### The claim I was about to make and did not **[v3 rule]**
+
+I was about to implement both halves of the standing harvest ruling. Checking
+the existing tests first showed the fence-count of every frozen harvest fixture:
+
+```
+fixtures/agenttest/harvest/fenced.txt       fences=20
+fixtures/agenttest/harvest/repeated.txt     fences=0
+fixtures/agenttest/harvest/unfenced-a.txt   fences=0
+fixtures/agenttest/harvest/unfenced-b.txt   fences=0
+```
+
+`unfenced-a.txt` begins `#app.py` followed immediately by
+`from fastapi import FastAPI, Request` — **real code, zero fences.** These are
+P15's captures, and they are correct harvests.
+
+### Escalation — the zero-fence ruling is refuted by evidence that predates it
+
+**"An emission with zero fences is a plan, not code" is false.** Three of the
+four frozen fixtures are zero-fence emissions carrying real code, and
+implementing the ruling would break `unfencedCaptureAHarvestsEveryFile`,
+`unfencedCaptureBHarvestsEveryFileWithCommentsIntact` and
+`repeatedCaptureHarvestsTheFirstDraftAndFlagsRepetition`. I did not implement
+it. The candidate rule is independent of it and is implemented.
+
+**This also means V6's frozen text is wrong in the same way.** V6 reads "no
+file content may originate in an emission containing zero fenced blocks."
+Against a P15-shaped emission that clause marks a *correct* harvest invalid.
+It happens not to misfire on the nine cells audited here — `112536`'s
+zero-fence bodies really are prose — but the check cannot tell prose from code,
+so it is a false positive waiting for the first P15-shaped Mellum cell.
+
+The real distinguisher between `unfenced-a` (good) and `112536` (bad) is
+whether the body is code or commentary — and filtering harvested bodies by
+whether they parse is the option the human explicitly rejected, for a reason
+that still holds: it would suppress the broken code we are trying to measure.
+Note the two are not the same thing — *commentary* and *broken code* are
+different categories — but separating them programmatically is close to a parse
+attempt, which is why this is not the loop's call.
+
+**Options, offered as candidates and not decided:** withdraw V6's zero-fence
+clause and keep only the discarded-fence clause; or keep it and accept known
+false positives on P15-shaped emissions; or distinguish commentary from code by
+some means the loop is not authorised to choose.
+
+**next:** **STOP — escalate.** The discarded-fence half is landed and proven.
+The zero-fence half needs a ruling before V6 can be trusted, and V6 is required
+by done-when (a) and (b). The V1 check false positive (`112121`) is the
+obvious next fix once V6's text is settled.

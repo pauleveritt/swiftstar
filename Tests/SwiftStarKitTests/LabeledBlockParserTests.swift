@@ -123,6 +123,60 @@ struct LabeledBlockParserTests {
         #expect(r.files[0].content == "some prose")
     }
 
+    // MARK: - Commentary between a heading and its fence (2026-08-26)
+
+    /// The defect that invalidated capture `20260826-104811`: the model wrote
+    /// `#app.py`, a paragraph of commentary, and THEN the real fenced code.
+    /// The lenient body loop stopped at the fence, so the prose was harvested
+    /// as the file and the outer loop then skipped the fence as "a fence with
+    /// no accepted heading" -- discarding the model's actual code. All six of
+    /// that capture's headings went this way; `app.py` became English and every
+    /// later repair round was fixing the model's own commentary.
+    ///
+    /// The fence is the content; prose between heading and fence is not.
+    @Test func proseBetweenHeadingAndFenceDoesNotBeatTheFence() {
+        let text = """
+        #app.py
+
+        The failure output shows a ModuleNotFoundError. Let me create the file:
+
+        ```python
+        from fastapi import FastAPI
+        app = FastAPI()
+        ```
+        """
+        let r = LabeledBlockParser.parse(text, writableFiles: allowlist)
+        #expect(r.files.count == 1)
+        #expect(r.files[0].path == "app.py")
+        #expect(r.files[0].content == "from fastapi import FastAPI\napp = FastAPI()",
+                "expected the fenced code, got: \(r.files.first?.content ?? "<none>")")
+    }
+
+    /// The fence must still only win inside its OWN heading's span -- a fence
+    /// appearing after the next allowlisted heading belongs to that heading,
+    /// not this one, so this one keeps the lenient bare body.
+    @Test func aFenceAfterTheNextHeadingDoesNotBackfillThePreviousOne() {
+        let text = """
+        #app.py
+        bare body for app
+
+        #models.py
+
+        commentary
+
+        ```python
+        MODELS = 1
+        ```
+        """
+        let r = LabeledBlockParser.parse(text, writableFiles: allowlist)
+        #expect(r.files.count == 2)
+        #expect(r.files[0] == (path: "app.py", content: "bare body for app")
+                || r.files[0].content == "bare body for app")
+        let models = r.files.first { $0.path == "models.py" }
+        #expect(models?.content == "MODELS = 1",
+                "models.py should take its own fence, got: \(models?.content ?? "<none>")")
+    }
+
     // MARK: - Lenient harvest (unfenced blocks)
 
     @Test func bareBodyIsHarvestedToEndOfText() {

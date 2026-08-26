@@ -77,6 +77,21 @@ def missing_paths(t):
     return out
 
 
+WRITABLE = {'app.py', 'models.py', 'templates/base.html', 'templates/home.html',
+            'templates/complaints.html', 'tests/test_app.py'}
+
+
+def _heading(line):
+    """The path a heading line names, or None. Mirrors LabeledBlockParser."""
+    t = line.strip()
+    if not t.startswith('#'):
+        return None
+    r = t.lstrip('#').strip()
+    if r.startswith('`') and r.endswith('`') and len(r) >= 2:
+        r = r[1:-1]
+    return r or None
+
+
 def turns(cell):
     """Model emissions, segmented by the engine's `ready` events.
 
@@ -210,8 +225,43 @@ def check_v5(cell, loop=None):
     return PASS, None
 
 
+def _discarded_fences(cell):
+    """Headings whose fenced code the lenient path discarded in favour of prose.
+
+    The 20260826-104811 shape: heading, blank line, commentary, THEN the real
+    fenced block. The lenient body loop stopped at the fence, so the prose was
+    harvested and the fence was skipped as "no accepted heading". Reported per
+    (turn, path) so a cell can say how much of the model's code it lost.
+    """
+    ts = turns(cell)
+    if ts is None:
+        return None
+    out = []
+    for ti, t in enumerate(ts):
+        lines = t.split('\n')
+        for i, ln in enumerate(lines):
+            h = _heading(ln)
+            if not h or h not in WRITABLE:
+                continue
+            j = i + 1
+            if j < len(lines) and not lines[j].strip():
+                j += 1
+            if j < len(lines) and lines[j].strip().startswith('```'):
+                continue                      # correct form: fence follows the heading
+            k = j
+            while k < len(lines):
+                if lines[k].strip().startswith('```'):
+                    out.append((ti, h))       # a fence was there and was discarded
+                    break
+                nh = _heading(lines[k])
+                if nh and nh in WRITABLE:
+                    break                     # next heading's span; not this one's
+                k += 1
+    return out
+
+
 def check_v6(cell, loop=None):
-    """No file content may originate in an emission containing zero fences.
+    """No file content may be harvested in place of code the model fenced.
 
     v2 (2026-08-26) wrote the model's own prose into six source files: Mellum
     emitted six headings, prose under each, and NOT ONE fenced block, ending
@@ -227,9 +277,14 @@ def check_v6(cell, loop=None):
     Bodies under 40 bytes are skipped -- a short body can coincide with prose
     by accident, and every real instance of this defect is a paragraph.
     """
-    ts = turns(cell)
-    if ts is None:
+    discarded = _discarded_fences(cell)
+    if discarded is None:
         return UNAUDITABLE, 'no wire.ndjson'
+    if discarded:
+        paths = sorted({p for _, p in discarded})
+        return FAIL, (f'{len(discarded)} heading(s) had fenced code discarded in favour of '
+                      f'commentary: {paths}')
+    ts = turns(cell)
     unfenced = [t for t in ts if t.strip() and '```' not in t]
     if not unfenced:
         return PASS, None
@@ -287,6 +342,9 @@ FIXTURES = [
      'known-good: one-file-wrong asserted with 0 missing (correctly calibrated)'),
     ('V5', '20260826-055741-roadmap', None, FAIL, 'known-bad: context overflow'),
     ('V5', '20260826-060458-roadmap', None, PASS, 'known-good: clean wire'),
+    ('V6', '20260826-104811-roadmap', None, FAIL,
+     'known-bad (widened clause): all 6 headings had their fenced code discarded '
+     'in favour of commentary -- zero-fence detection alone passed this cell'),
     ('V6', '20260826-112536-roadmap', None, FAIL,
      'known-bad: round-1 emission had 6 headings, prose under each, zero fences; '
      'the prose became app.py/models.py/tests/test_app.py'),

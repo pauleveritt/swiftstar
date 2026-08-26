@@ -109,20 +109,56 @@ public enum LabeledBlockParser {
                     i = k + 1
                     continue
                 }
-                // Lenient harvest: no fence, so the body runs to the next
-                // *allowlisted* heading, a fence, or end of text. Only an
-                // allowlisted heading may close it — a bare `#`-prefixed line is
-                // far more often a comment in the file being written (`# In-memory
-                // storage`, `#uvicorn.run(...)` in capture 20260825-171258) than a
-                // new block, and treating those as headings truncates the file.
+                // Lenient harvest: no fence *immediately* after the heading, so
+                // the body runs to the next *allowlisted* heading, a fence, or
+                // end of text. Only an allowlisted heading may close it — a bare
+                // `#`-prefixed line is far more often a comment in the file being
+                // written (`# In-memory storage`, `#uvicorn.run(...)` in capture
+                // 20260825-171258) than a new block, and treating those as
+                // headings truncates the file.
                 var body: [String] = []
                 var k = j
+                var fenceAt: Int?
                 while k < lines.count {
-                    if isFence(lines[k]) { break }
+                    if isFence(lines[k]) { fenceAt = k; break }
                     if let next = headingPath(lines[k]), allowlist.contains(normalize(next)) { break }
                     body.append(lines[k])
                     k += 1
                 }
+
+                // The model wrote commentary between the heading and its fence.
+                // The fence is the content; the prose is not (2026-08-26).
+                //
+                // Before this, the loop above stopped at the fence, the prose
+                // was harvested as the file, and the outer loop then skipped the
+                // fence as "a fence with no accepted heading" — so the model's
+                // real code was DISCARDED and its commentary written in its
+                // place. In capture 20260826-104811 all six headings went this
+                // way: `app.py` became English and every later repair round was
+                // fixing the model's own prose. The fence only wins inside its
+                // own heading's span — the scan above stops at the next
+                // allowlisted heading, so a later heading's fence cannot
+                // backfill this one.
+                if let f = fenceAt {
+                    var fenced: [String] = []
+                    var m = f + 1
+                    var closed = false
+                    while m < lines.count {
+                        if isFence(lines[m]) { closed = true; break }
+                        fenced.append(lines[m])
+                        m += 1
+                    }
+                    // An unterminated fence is dropped, exactly as in the
+                    // immediately-fenced path above.
+                    if closed {
+                        if !accept(path, fenced) { break }
+                        i = m + 1
+                    } else {
+                        i = lines.count
+                    }
+                    continue
+                }
+
                 while let last = body.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
                     body.removeLast()
                 }
