@@ -651,6 +651,11 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         "toolBudget": env["AGENTTEST_TOOL_BUDGET"] ?? "30",
         "pathStyle": absolutePathStyle ? "absolute" : "relative",
         "redacts": redacts.joined(separator: ","),
+        // P12.5 (D4): the two arms are otherwise distinguishable only by the
+        // presence of decompose-output.txt in the capture dir — say so
+        // in-band instead of leaving it to be inferred from a file's absence.
+        "modelDecompose": modelDecompose ? "on" : "off",
+        "poolWorkers": modelDecompose ? "4" : "3",
         // D9: run-config gains the repair fields too. repairThink mirrors what
         // repairPacket's think mode actually derives from (AGENTTEST_THINK, per
         // the fix above) rather than the unwired AGENTTEST_REPAIR_THINK, so the
