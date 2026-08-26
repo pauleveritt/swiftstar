@@ -711,6 +711,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // made four runs that differed look like an unexplained nondeterminism
         // (2026-08-25); say which it is instead.
         "seed": seedRecord,
+        "phases": String(phases.count),
         "textContract": textContractBuild ? "on" : "off",
         // D11 measurement hygiene: a text-contract run's files are written by the
         // host from the model's prose, with zero tool calls. Every such capture
@@ -723,6 +724,12 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     if let cfg = try? JSONSerialization.data(withJSONObject: runConfig, options: [.prettyPrinted, .sortedKeys]) {
         try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))
     }
+    // packet.json is phase 1's packet as built BEFORE dispatch, and under
+    // `AGENTTEST_PATH_STYLE=absolute` it is not what was dispatched (the
+    // dispatched one carries `absoluteRoot: wt.url.path`, unknowable here).
+    // Kept for compatibility with existing captures and tooling. **V4 must read
+    // `phase-packet-N.json`, written at dispatch inside the phase loop** — see
+    // the 2026-08-26 fix that made V4 auditable at all.
     if let pkt = try? JSONEncoder().encode(phasePacket(phases[0], textContract: textContractBuild)) {
         try? pkt.write(to: captureDir.appendingPathComponent("packet.json"))
     }
@@ -776,6 +783,15 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                 ("[agenttest] dispatched packet rejected for phase \(i + 1):\n"
                  + reasons.map { "  - \($0)" }.joined(separator: "\n") + "\n").utf8))
             exit(2)
+        }
+        // V4: capture what was ACTUALLY dispatched, for every phase. Before
+        // this only `phases[0]` reached the capture, so no reason in
+        // verdict.json could be traced to a phase 2/3 brief and V4 reported
+        // UNAUDITABLE for the whole of v1-v3. Written before the turn runs, so
+        // a crash mid-phase still leaves the evidence behind.
+        if let dispatched = try? JSONEncoder().encode(packet) {
+            try? dispatched.write(
+                to: captureDir.appendingPathComponent("phase-packet-\(i + 1).json"))
         }
         var outcome: TurnOutcome
         do {

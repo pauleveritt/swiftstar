@@ -1,0 +1,1 @@
+{"reasons": ["Missing proper redirect in `POST /complaints` (should use `RedirectResponse` with status 303)"], "verdict": "bad"}

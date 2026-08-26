@@ -646,3 +646,75 @@ when the console summary omits it.
 `phases[0]`). It is the last invariant that cannot be evaluated at all, it is
 required by done-when (b), and it needs no GPU. V7's remaining source and V5's
 `limit` clause both await the human.
+
+## 8 — 2026-08-26 — fix (V4) — the invariant that had never once been evaluated
+
+**did:** Made V4 auditable. Captured the **actually dispatched** packet for
+every phase (`phase-packet-N.json`), recorded the phase count in run-config,
+implemented `check_v4`, proved it fires both ways, and confirmed the artifact on
+a live run. **V4 had reported UNAUDITABLE for the whole of v1, v2 and v3 — it
+has now evaluated real captures for the first time.**
+
+**cells:** valid=8 blocked={V6:2, V5:1} unauditable={V4:2} of 10
+*(the tenth is this iteration's confirm run, `20260826-123639`.)*
+
+**done-when: a=no b=no c=no d=no**
+
+**evidence:**
+
+```
+$ python3 Tools/audit-goal-invariants.py --self-test
+  13 fixture checks [ok]      self-test: PASS
+
+live confirm run, AGENTTEST_SEED=1 --spec roadmap --batch 1 --variant mellum-2.1:
+  captures/agenttest/20260826-123639-roadmap/
+    packet.json  phase-packet-1.json  repair-phase1  run-config.json ...
+  run-config: phases = 3 | seed = 1
+  audit: === 20260826-123639-roadmap: VALID ===     (nothing unauditable)
+```
+
+**Two defects, not one.** `main.swift` captured only `phases[0]` — and captured
+it *before* dispatch, so under `AGENTTEST_PATH_STYLE=absolute` it was not even
+the packet that was sent (the dispatched one carries `absoluteRoot: wt.url.path`,
+unknowable at that point). Comparing verdict reasons against a packet that was
+never dispatched is worse than not comparing at all. `phase-packet-N.json` is
+now written inside the phase loop, from the dispatched value, before the turn
+runs — so a crash mid-phase still leaves the evidence. `packet.json` is kept for
+compatibility and its docstring now says plainly what it is.
+
+**How V4 traces a reason.** Verdict reasons cite identifiers — backticked
+tokens and quoted strings (`base.html`, `RedirectResponse`, 'Scope creep never
+ends.'). At least one citation per reason must appear in some dispatched packet,
+or the model was faulted for something it was never shown. Reasons citing
+nothing concrete are skipped rather than guessed at.
+
+**The unauditable surface shrank honestly, and for a reason I got wrong first.**
+My initial ordering gated on phase-packet completeness *before* checking whether
+a verdict existed, so runs that stopped in phase 1 — which never produce a
+verdict at all — were reported UNAUDITABLE. That overstates how much of the
+apparatus is unevaluated. Caught on the confirm run itself, which reported
+`only 1 of 3 dispatched phase packets captured` for a run that legitimately had
+nothing to grade. With the ordering fixed, V4 is UNAUDITABLE on **2 of 10**
+cells (those with real verdicts predating the capture fix) rather than 9 of 9.
+
+**Fixtures are synthetic, and the self-test says so out loud.** No real capture
+carried `phase-packet-N.json` until this iteration, so V4's known-bad and
+known-good are two minimal cells in `fixtures/agenttest/goal-audit/` — one whose
+reason cites `WebSocketMiddleware` that no packet mentions (must FAIL), one
+citing `RedirectResponse` that the packet contains (must PASS). Their README
+says they do not satisfy done-when (d) and should not outlive the first real
+batch that supplies a genuine known-bad.
+
+Also fixed: `self_test` unconditionally prefixed `captures/agenttest/`, so a
+fixture path resolved to a non-existent directory and silently returned
+UNAUDITABLE — a fixture that cannot load is a check that has never fired.
+
+**Why done-when (b) is still `no`:** **V7 has no check at all.** Every other
+invariant now evaluates; V7 is a paired-run property and the auditor is
+per-cell, so it needs a different shape. That is the remaining (b) work.
+
+**next:** **fix** — give V7 a check (compare dispatched packets across two
+captures at the same seed). It is the last invariant with no implementation, and
+it can be written and proven against the three determinism-probe captures
+already on disk. The engine-level half of V7, and V5's `limit` clause, both
+still await the human.

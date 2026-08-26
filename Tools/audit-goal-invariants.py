@@ -231,14 +231,77 @@ def check_v3(cell, loop):
     return PASS, None
 
 
-def check_v4(cell, loop=None):
-    """Every verdict reason must trace to text in some dispatched packet.
+def dispatched_texts(cell):
+    """taskText of every packet this run actually dispatched.
 
-    UNAUDITABLE by construction: `main.swift` captures only `phases[0]`'s
-    packet, so phase 2/3 briefs are never written to the capture and a reason
-    tracing to later-phase content cannot be checked either way.
+    Phase briefs come from `phase-packet-N.json`, written at dispatch inside the
+    phase loop. NOT `packet.json`: that is phase 1's packet as built *before*
+    dispatch, and under absolute path style it is not the one that was sent.
     """
-    return UNAUDITABLE, 'only phases[0] packet is captured (main.swift:716); phase 2/3 briefs absent'
+    out = []
+    for pf in sorted(glob.glob(os.path.join(cell, 'phase-packet-*.json')), key=_n):
+        out.append(task_text(pf))
+    for label, d in repair_loops(cell):
+        for pf in packets(d):
+            out.append(task_text(pf))
+    return out
+
+
+CITATION = re.compile(r'`([^`]+)`|\'([^\']{4,})\'|"([^"]{4,})"')
+
+
+def check_v4(cell, loop=None):
+    """Every verdict.json reason must trace to text some packet dispatched.
+
+    A reason faulting the model for something it was never shown is a grading
+    defect, not a model failure. Mechanically: a reason cites identifiers --
+    backticked tokens and quoted strings (`base.html`, 'Scope creep never
+    ends.', `RedirectResponse`). At least one citation per reason must appear in
+    some dispatched packet, or the reason is untraceable.
+
+    UNAUDITABLE unless every phase brief is present: run-config records how many
+    phases ran, and a missing one could be exactly the brief a reason traces to.
+    Through v1-v3 this was ALWAYS the case -- `main.swift` captured only
+    phases[0] -- so V4 has never actually been evaluated.
+    """
+    # No verdict means no grading happened, so there is nothing for V4 to
+    # violate -- a run that stopped in phase 1 passes vacuously. This ordering
+    # matters: gating on phase-packet completeness first reported UNAUDITABLE
+    # for runs that never reached a verdict, which overstates how much of the
+    # apparatus is unevaluated (caught on the 20260826-123639 confirm run).
+    vp = os.path.join(cell, 'verdict.json')
+    if not os.path.exists(vp):
+        return PASS, None
+    reasons = json.load(open(vp)).get('reasons') or []
+    if not reasons:
+        return PASS, None
+
+    cfgp = os.path.join(cell, 'run-config.json')
+    if not os.path.exists(cfgp):
+        return UNAUDITABLE, 'no run-config.json: cannot tell how many phases ran'
+    cfg = json.load(open(cfgp))
+    if 'phases' not in cfg:
+        return UNAUDITABLE, ('capture predates the V4 fix: run-config records no phase count '
+                             'and only phases[0] was captured (main.swift)')
+    want = int(cfg['phases'])
+    have = len(glob.glob(os.path.join(cell, 'phase-packet-*.json')))
+    if have < want:
+        return UNAUDITABLE, f'only {have} of {want} dispatched phase packets captured'
+
+    texts = dispatched_texts(cell)
+    if not texts:
+        return UNAUDITABLE, 'no dispatched packets captured'
+    untraceable = []
+    for r in reasons:
+        cites = [g for m in CITATION.finditer(r) for g in m.groups() if g]
+        if not cites:
+            continue                      # nothing concrete to trace; not a finding
+        if not any(any(c in t for t in texts) for c in cites):
+            untraceable.append(r)
+    if untraceable:
+        return FAIL, (f'{len(untraceable)} verdict reason(s) cite nothing any dispatched packet '
+                      f'contains, e.g. "{untraceable[0][:90]}"')
+    return PASS, None
 
 
 def check_v5(cell, loop=None):
@@ -368,6 +431,12 @@ FIXTURES = [
      'known-bad: one-file-wrong asserted with 6 missing'),
     ('V3', '20260826-085813-roadmap', 'acceptance', PASS,
      'known-good: one-file-wrong asserted with 0 missing (correctly calibrated)'),
+    ('V4', 'fixtures/agenttest/goal-audit/v4-untraceable', None, FAIL,
+     'known-bad (synthetic): the reason cites `WebSocketMiddleware`, which no '
+     'dispatched packet mentions -- the model faulted for what it was never shown'),
+    ('V4', 'fixtures/agenttest/goal-audit/v4-traceable', None, PASS,
+     'known-good (synthetic): the reason cites `RedirectResponse`, which the '
+     'dispatched packet contains'),
     ('V5', '20260826-055741-roadmap', None, FAIL, 'known-bad: context overflow'),
     ('V5', '20260826-060458-roadmap', None, PASS, 'known-good: clean wire'),
     ('V6', '20260826-104811-roadmap', None, FAIL,
@@ -381,7 +450,9 @@ FIXTURES = [
 def self_test():
     ok = True
     for name, cell, label, expected, why in FIXTURES:
-        c = resolve(os.path.join('captures/agenttest', cell))
+        # resolve() already prefixes captures/agenttest for a bare cell name and
+        # leaves an existing directory alone, so a fixture path works too.
+        c = resolve(cell)
         if name in PER_CELL:
             got, detail = PER_CELL[name](c)
         else:
@@ -394,7 +465,8 @@ def self_test():
         if not good and detail:
             print(f"        detail: {detail}")
     print(f"\nself-test: {'PASS' if ok else 'FAIL'}")
-    print("V4 has no fixtures: it is UNAUDITABLE by construction, not a check that can fire.")
+    print("V4's fixtures are SYNTHETIC (fixtures/agenttest/goal-audit): no real capture\n"
+          "carries phase-packet-N.json yet. done-when (d) still needs a batch known-bad.")
     return 0 if ok else 1
 
 
