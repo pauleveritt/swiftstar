@@ -228,7 +228,7 @@ let buildEmissionFollowUp = ([
     "the last closing fence. Do not explain anything and do not restate the plan.",
 ]).joined(separator: " ")
 
-func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
+func repairPacket(_ ctx: RepairContext, phaseScoped: Bool = false) -> HandoffPacket {
     let vettedImport = "uv run --project \(pyProject) python -c 'import app'"
     let vettedPytest = "uv run --project \(pyProject) python -m pytest tests/test_app.py -q"
     let renderedFiles = writableFiles.map { "- \($0)" }.joined(separator: "\n")
@@ -253,7 +253,21 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
     // suppressing the prose. First-complete-block-wins makes "do not reproduce
     // the current broken file" load-bearing: a quoted original under the same
     // heading would be harvested in preference to the fix.
-    let directive = ([
+    let directive = (phaseScoped ? [
+        "The import check failed against the code written by this phase. The",
+        "failure output and the current file contents are appended below under",
+        "\"Failure evidence (machine output)\".",
+        "Exactly one file is wrong. First, in a few sentences, work out what the",
+        "failure output tells you and what the corrected line must be. Then emit",
+        "the heading line for that file followed by one fenced code block holding",
+        "that file's complete corrected contents. The heading line and its fenced",
+        "block must be the LAST thing in your response — end with the closing",
+        "fence and write nothing after it.",
+        "Do not emit a diff or a partial snippet, and do not reproduce the current",
+        "broken file: emit the corrected file exactly once. The host applies the",
+        "file you return exactly as written and re-runs the import check itself.",
+        "Do not rewrite working files and do not add new files or routes.",
+    ] : [
         "The acceptance suite failed against the code written by a prior phase. The",
         "failure output and the current file contents are appended below under",
         "\"Failure evidence (machine output)\".",
@@ -278,7 +292,9 @@ func repairPacket(_ ctx: RepairContext) -> HandoffPacket {
         // above; listing runnable commands here contradicted that in the same
         // packet. The host owns execution in this mode, so it says so instead.
         "Do not run any command. After you return the file, the host runs the",
-        "import check and the acceptance suite itself and re-grades the result.",
+        phaseScoped
+            ? "import check itself and re-validates the result."
+            : "import check and the acceptance suite itself and re-grades the result.",
     ]).joined(separator: "\n")
     // The packet records the sampling the run actually used (same invariant as
     // phasePacket, above): thinking is a property of the whole pooled engine
@@ -438,7 +454,7 @@ func runFixtureOnce(_ name: String) throws {
 
     let result = try RepairLoop.run(
         repo: repo, failedRef: failedRef, initialGrade: initial,
-        packetBuilder: repairPacket,
+        packetBuilder: { repairPacket($0) },
         runPhase: { pkt, wt, cap in try orch.runPhase(worker: WorkerId(1), packet: pkt, worktree: wt, capture: cap) },
         grade: { wt in try AcceptanceGrader.grade(worktree: wt, acceptanceSource: acceptanceSource, pyProject: pyProject) },
         capture: captureHandle,
@@ -670,15 +686,47 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // broken tree from being chained into the next phase.
         let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: wt.url)
         if let validation, !validation.passed {
-            // Print and persist the cause. This phase failure aborts the whole
-            // run below, so if the output is not surfaced here it is gone: the
-            // receipt carries only exit + digest.
-            print("[agenttest]   phase \(i + 1): import check failed (exit \(validation.exit))")
+            // P12.8 (D4): repair the phase instead of aborting. Surface the cause
+            // first — the repair's evidence is this same output, but the capture
+            // stays even if repair is exhausted.
+            print("[agenttest]   phase \(i + 1): import check failed (exit \(validation.exit)) — repairing")
             if !validation.output.isEmpty {
                 print(validation.output)
                 try? "phase \(i + 1) validation exit=\(validation.exit)\n\n\(validation.output)"
                     .write(to: captureDir.appendingPathComponent("validation-phase\(i + 1).txt"),
                            atomically: true, encoding: .utf8)
+            }
+            do {
+                let repair = try PhaseRepair.run(
+                    repo: repoURL,
+                    failedWorktree: wt,
+                    packet: packet,
+                    validation: validation,
+                    packetBuilder: { repairPacket($0, phaseScoped: true) },
+                    runPhase: { pkt, tree, cap in
+                        try orch.runPhase(worker: WorkerId(2), packet: pkt, worktree: tree, capture: cap)
+                    },
+                    capture: captureHandle,
+                    captureDir: captureDir,
+                    emissionFollowUp: repairEmissionFollowUp)
+                switch repair {
+                case .repaired(let repairedRef, let repairedWT):
+                    try txn.adoptRepairedPhase(failedWorktree: wt,
+                                               repairedWorktree: repairedWT,
+                                               repairedRef: repairedRef)
+                    print("[agenttest]   phase \(i + 1): repaired \(repairedRef)")
+                    continue
+                case .exhausted(let receipt):
+                    return RunOutcome(finish: .stopped,
+                                      note: "phase \(i + 1) repair exhausted (\(receipt))",
+                                      acceptanceExit: nil, verdict: nil, report: nil,
+                                      elapsed: Int(Date().timeIntervalSince(runStart)))
+                }
+            } catch RepairLoopError.sessionExhausted(let reason) {
+                return RunOutcome(finish: .stopped,
+                                  note: "phase \(i + 1) repair session exhausted (\(reason.rawValue))",
+                                  acceptanceExit: nil, verdict: nil, report: nil,
+                                  elapsed: Int(Date().timeIntervalSince(runStart)))
             }
         }
         let result = try txn.finalizePhase(wt, packet: packet, turnOutcome: outcome,
@@ -756,7 +804,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                 repo: repoURL,
                 failedRef: ref,          // txn.candidateRef (the failed implement chain)
                 initialGrade: grade,
-                packetBuilder: repairPacket,
+                packetBuilder: { repairPacket($0) },
                 runPhase: { pkt, wt, cap in
                     try orch.runPhase(worker: WorkerId(2), packet: pkt, worktree: wt, capture: cap)
                 },
