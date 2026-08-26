@@ -427,6 +427,50 @@ func gitOutput(_ dir: URL, _ a: [String]) throws -> String {
     return String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 }
 
+/// Overlay a fixture tree onto an already-populated repo, replacing files that
+/// already exist. `copyTree` cannot do this — `copyItem` throws on an existing
+/// path — which is why the single-file fixture tier used to delete `app.py` by
+/// hand before writing the buggy one. Multi-file fixtures (2026-08-26) need the
+/// general form: every file under the fixture dir lands at the same relative
+/// path in the workspace.
+///
+/// A fixture may also carry a `.delete` manifest — one workspace-relative path
+/// per line — for defects that consist of a file being ABSENT. That is a
+/// different failure shape from a broken file: a missing module aborts pytest
+/// collection, so the model is shown a precondition manifest instead of failing
+/// assertions.
+func overlayTree(_ from: URL, into to: URL) throws {
+    let items = try FileManager.default.contentsOfDirectory(at: from, includingPropertiesForKeys: nil)
+    for src in items {
+        if src.lastPathComponent == ".delete" || src.lastPathComponent == "README.md" { continue }
+        let dst = to.appendingPathComponent(src.lastPathComponent)
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: src.path, isDirectory: &isDir), isDir.boolValue {
+            try FileManager.default.createDirectory(at: dst, withIntermediateDirectories: true)
+            try overlayTree(src, into: dst)
+        } else {
+            if FileManager.default.fileExists(atPath: dst.path) {
+                try FileManager.default.removeItem(at: dst)
+            }
+            try FileManager.default.copyItem(at: src, to: dst)
+        }
+    }
+}
+
+/// Apply a fixture's `.delete` manifest, if it has one.
+func applyDeletions(_ fixtureRoot: URL, in repo: URL) throws {
+    let manifest = fixtureRoot.appendingPathComponent(".delete")
+    guard let text = try? String(contentsOf: manifest, encoding: .utf8) else { return }
+    for line in text.split(separator: "\n") {
+        let path = line.trimmingCharacters(in: .whitespaces)
+        guard !path.isEmpty, !path.hasPrefix("#") else { continue }
+        let target = repo.appendingPathComponent(path)
+        if FileManager.default.fileExists(atPath: target.path) {
+            try FileManager.default.removeItem(at: target)
+        }
+    }
+}
+
 func copyTree(_ from: URL, into to: URL) throws {
     let items = try FileManager.default.contentsOfDirectory(at: from, includingPropertiesForKeys: nil)
     for src in items {
@@ -444,7 +488,7 @@ func copyTree(_ from: URL, into to: URL) throws {
 /// D10: seed a repo with `reference/*` + a fixture's buggy `app.py`, commit it
 /// as the failed candidate ref, grade (12/13), run RepairLoop, and assert 13/13.
 func runFixtureOnce(_ name: String) throws {
-    let fixtureBug = fixtureDir.appendingPathComponent("repair/\(name)/app.py")
+    let fixtureRoot = fixtureDir.appendingPathComponent("repair/\(name)")
     let referenceRoot = fixtureDir.appendingPathComponent("reference")
     let acceptanceSource = try String(
         contentsOf: fixtureDir.appendingPathComponent("acceptance/test_acceptance.py"),
@@ -458,11 +502,11 @@ func runFixtureOnce(_ name: String) throws {
     git(repo, ["config", "user.email", "agenttest@local"])
     git(repo, ["config", "user.name", "AgentTest"])
 
-    // Overlay reference/* then the fixture's buggy app.py.
+    // Overlay reference/* then every file the fixture carries, then its
+    // deletions. A single-file fixture is just the one-file case of this.
     try copyTree(referenceRoot, into: repo)
-    try FileManager.default.removeItem(at: repo.appendingPathComponent("app.py"))
-    try String(contentsOf: fixtureBug, encoding: .utf8)
-        .write(to: repo.appendingPathComponent("app.py"), atomically: true, encoding: .utf8)
+    try overlayTree(fixtureRoot, into: repo)
+    try applyDeletions(fixtureRoot, in: repo)
     git(repo, ["add", "-A"])
     git(repo, ["commit", "-q", "-m", "fixture baseline"])
 

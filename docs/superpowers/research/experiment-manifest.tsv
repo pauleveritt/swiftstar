@@ -1,0 +1,28 @@
+# Pre-registered experiment manifest — P17 fixture-tier repair experiment.
+# Written BEFORE the first run. 4 fixtures x 2 budgets x 3 seeds = 24 cells.
+# Adding rows after runs begin invalidates the pre-registration.
+fixture	rounds	seed
+plausible-wrong-fix	2	1
+plausible-wrong-fix	2	2
+plausible-wrong-fix	2	3
+plausible-wrong-fix	5	1
+plausible-wrong-fix	5	2
+plausible-wrong-fix	5	3
+depth-2	2	1
+depth-2	2	2
+depth-2	2	3
+depth-2	5	1
+depth-2	5	2
+depth-2	5	3
+depth-3	2	1
+depth-3	2	2
+depth-3	2	3
+depth-3	5	1
+depth-3	5	2
+depth-3	5	3
+framing-2	2	1
+framing-2	2	2
+framing-2	2	3
+framing-2	5	1
+framing-2	5	2
+framing-2	5	3
