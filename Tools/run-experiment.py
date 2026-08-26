@@ -15,8 +15,12 @@ Outcome per cell:
 import csv, glob, json, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MANIFEST = os.path.join(ROOT, 'docs/superpowers/research/experiment-manifest.tsv')
-RESULTS = os.path.join(ROOT, 'docs/superpowers/research/experiment-results.tsv')
+# Overridable so a follow-up pre-registration runs against its own manifest and
+# its own results file, without touching a completed and closed one.
+MANIFEST = os.environ.get('EXP_MANIFEST',
+                          os.path.join(ROOT, 'docs/superpowers/research/experiment-manifest.tsv'))
+RESULTS = os.environ.get('EXP_RESULTS',
+                         os.path.join(ROOT, 'docs/superpowers/research/experiment-results.tsv'))
 BIN = os.path.join(ROOT, '.build/arm64-apple-macosx/debug/swiftstar-agenttest')
 
 sys.path.insert(0, os.path.join(ROOT, 'Tools'))

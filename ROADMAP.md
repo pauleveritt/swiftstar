@@ -27,10 +27,12 @@ it while the decisive 90-minute fixture experiment sat unbuilt. If pipeline
 measurement is resumed it should compete on its merits — ecological validity is
 the only argument for it — rather than stand as the default direction.
 
-**Next, if this line is continued:** a clean framing fixture that holds the
-defects fixed and varies only whether the suite collects, which would separate
-the three things `framing-2` currently confounds (see
-[`questions.md`](docs/superpowers/research/questions.md) item 3).
+**The clean framing arm has since run** (`framing-2-edit`, 6 cells): **5/6**
+against `depth-2`'s **4/5**. Holding files-to-fix and task type constant,
+evidence shape has no measurable effect — confirming that the residual limit is
+authoring a file from an implied contract, not presentation. The 80-cell
+verdict's blame on collection aborts was **cured, not refuted**: it measured raw
+aborts, and the precondition manifest that replaced them costs nothing.
 
 ## Concept budget
 

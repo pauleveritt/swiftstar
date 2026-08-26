@@ -1,0 +1,7 @@
+fixture	rounds	seed	outcome	detail	capture
+framing-2-edit	2	1	pass	13/13	20260826-150150-fixture-framing-2-edit
+framing-2-edit	2	2	fail	1 of 9 preconditions unmet.	20260826-150257-fixture-framing-2-edit
+framing-2-edit	2	3	pass	13/13	20260826-150432-fixture-framing-2-edit
+framing-2-edit	5	1	pass	13/13	20260826-150653-fixture-framing-2-edit
+framing-2-edit	5	2	pass	13/13	20260826-150903-fixture-framing-2-edit
+framing-2-edit	5	3	pass	13/13	20260826-151111-fixture-framing-2-edit

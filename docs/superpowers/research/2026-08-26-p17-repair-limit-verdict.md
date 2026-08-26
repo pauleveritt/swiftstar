@@ -129,3 +129,62 @@ The pattern worth keeping: **every substantive correction in this project came
 from re-measuring, never from re-reading.** Four review passes over the same
 prose left the errors intact; one ordering anomaly in a results table exposed the
 directive defect that had been distorting every Mellum number for a month.
+
+---
+
+# Addendum — the clean framing arm (2026-08-26, same day)
+
+The verdict above declined to call the residual limit "framing" because
+`framing-2` confounded evidence shape with author-vs-edit.
+`framing-2-edit` separates them: same two-file **edit**, nothing deleted, but
+the suite aborts collection so the model sees a precondition manifest instead
+of failing assertions. Pre-registered as 6 cells; `depth-2` is the comparator
+and was not re-run.
+
+## Result: evidence shape is not the limit. Authoring is.
+
+| fixture | files | task | evidence | rounds=2 | rounds=5 | pooled |
+|---|---|---|---|---|---|---|
+| `depth-2` | 2 | edit | failing assertions | 2/2 valid | 2/3 | **4/5** |
+| `framing-2-edit` | 2 | **edit** | **precondition manifest** | 2/3 | 3/3 | **5/6** |
+| `framing-2` | 2 | **author + edit** | precondition manifest | 0/3 | 1/3 | **1/6** |
+
+Holding files-to-fix and task type constant and varying **only** the evidence
+shape moves the pass rate from 4/5 to 5/6 — no effect. Holding the evidence
+shape constant and varying **only** author-vs-edit moves it from 5/6 to 1/6.
+
+**The P17 verdict's careful reading is confirmed.** The surviving difficulty is
+being asked to author a file whose required contents are only implied by the
+tests, not how the failure surface is presented.
+
+## What this says about the 80-cell verdict's original blame
+
+That document blamed pytest collection aborts for burning the repair budget —
+20 of 40 Mellum cells. **That blame was correct about the raw abort and has been
+cured, not refuted.** A raw abort shows one opaque `ModuleNotFoundError`; the V2
+fix replaces it with an enumerated manifest naming every unmet requirement:
+
+```
+  [MET]   from models import Complaint
+  [UNMET] models.complaints -- AttributeError: module 'models' has no attribute 'complaints'
+1 of 9 preconditions unmet.
+```
+
+`framing-2-edit` measures the *cured* state, and in that state a collection
+abort costs nothing. **This experiment cannot compare against the raw abort** —
+the manifest is unconditional in the current harness — so it is evidence that
+the fix worked, not evidence that the original diagnosis was wrong.
+
+## The one failure, and what it looks like
+
+`framing-2-edit/2/2` emitted `models.py` twice and **never emitted `app.py`**:
+
+```
+turn 2: headings=['models.py']     round 1: validationFailed
+turn 4: headings=['models.py']     round 2: exit 2, 1 of 9 preconditions unmet
+```
+
+Renaming the symbol in `models.py` without repairing the import in `app.py`
+breaks the import, so round 1 fails validation and round 2 is back at the gate.
+A half-done two-file fix — the whack-a-mole shape the brief described — but now
+1 case in 6 rather than the norm.

@@ -22,6 +22,11 @@ unlabelled fences, so nothing was harvested.
 
 ## 3 — Should `framing-2` be replaced by a clean framing fixture?
 
+**ANSWERED 2026-08-26** — `framing-2-edit` scored **5/6** against `depth-2`'s
+**4/5**: with files-to-fix and task type held constant, evidence shape has no
+measurable effect. The residual limit is authoring, as the verdict said. See the
+verdict addendum. Original note follows.
+
 **ADDRESSED 2026-08-26** — `fixtures/agenttest/repair/framing-2-edit` holds
 files-to-fix (2) and task type (edit, no authoring) fixed against `depth-2` and
 varies only the evidence shape. Pre-registered as 6 cells in
