@@ -214,6 +214,15 @@ accident of dying in an uncovered way).
 verdict `bad`, 10 reasons. But the *shape* changed completely, which is what
 this iteration was for.
 
+> **CORRECTED by iteration 6.** Both numbers above are harness artifacts, not
+> model results. `acceptanceExit=2` is the *pre-repair* grade; repair actually
+> reached **exit=1, 7 failed / 6 passed**. The `verdict: bad` and its 10
+> reasons were computed against a tree that excludes every repair round. The
+> honest line is "repair reached 6/13 passing; the recorded verdict grades a
+> tree that predates it." Recording a harness-distorted number as a model
+> result is exactly what this goal exists to prevent, and it happened here on
+> the first measure iteration.
+
 **evidence:**
 
 ```
@@ -257,3 +266,98 @@ nothing: worth checking whether that is the model repeating itself or a
 second, subtler discard. Fix V2 (surface more than one pytest error per
 round) **with** the whole-packet budget the verdict record requires, since
 the one cell that ever got a rich failure surface died on context overflow.
+
+## 6 — 2026-08-26 — audit (investigation) — **ESCALATION**
+
+**did:** Investigated iteration 5's identical-grades anomaly (rounds 1 and 2
+both `7 failed, 6 passed`). The anomaly itself is benign and fully explained.
+The investigation uncovered a **separate, previously unnamed harness defect**
+that no frozen invariant covers — escalating rather than adding a V6.
+
+**The anomaly: explained, not a bug.** Round 2 made a real, correct change
+that was simply test-neutral:
+
+- round 1 emitted `models.py` adding `complaints: List[Complaint] = []`,
+  clearing the collection gate (exit 2 → exit 1, 6 tests passing)
+- round 2 emitted `app.py` switching `from models import Complaint` to
+  `from models import Complaint, complaints` and dropping app's duplicate
+  local list — **the exact holistic cross-file fix Mellum reasoned its way to
+  and then abandoned in the overnight matrix**, now actually made
+- both lists were empty, so no test outcome changed
+
+Grade outputs differ only in object memory addresses and timing (verified by
+normalized diff), i.e. semantically identical. The remaining 7 failures are
+all *content* requirements (seed-complaint text and count, nav links, add
+form, tagline, UTC timestamp), which no amount of refactoring reaches.
+
+Also checked and cleared: the 6-file multi-file harvest parsed correctly, no
+heading text leaked into any file body.
+
+**The defect: the final verdict grades a tree that excludes all repair work.**
+In `main.swift`, the acceptance-repair `.exhausted` branch sets only
+`repairNote` — it never updates `gradeWorktree`, which still points at
+`failedWT`, the pre-repair implement-chain tree. Everything downstream is
+then computed from that stale tree: `code.md`, the DeepSeek `verdict.json`,
+and `acceptance.txt`. The `.passed` branch is correct (it sets
+`gradeWorktree = wt`); only exhaustion is affected.
+
+**evidence:**
+
+This run (`20260826-085813`) — round 1 added `complaints` to `models.py`, and
+`code.md` does not have it:
+
+```
+=== code.md models.py ===          | === what round 1 wrote (packet-2 evidence) ===
+from dataclasses import dataclass  | from dataclasses import dataclass
+from datetime import datetime      | from datetime import datetime
+                                   | from typing import List
+@dataclass                         | @dataclass
+class Complaint:                   | class Complaint:
+    agent_name: str                |     agent_name: str
+    text: str                      |     text: str
+    timestamp: datetime            |     timestamp: datetime
+                                   | complaints: List[Complaint] = []   <-- absent from code.md
+```
+
+Predates today's fixes — matrix cell `20260826-060458`, where repair *created*
+`models.py` from nothing across two rounds:
+
+```
+$ grep -o '^=== .* ===' captures/agenttest/20260826-060458-roadmap/code.md
+=== app.py ===
+
+$ verdict.json reasons mentioning models.py:
+  - Missing seed complaints in models.py
+```
+
+The grader was handed a tree containing only `app.py`, then faulted the run
+for what was missing from a `models.py` that repair had already written.
+
+**Scope.** Every Mellum cell that reached acceptance repair and exhausted —
+21 of 40 in the overnight matrix, and 0 of those passed, so all 21 — carries a
+`verdict.json` and a reported `acceptanceExit` computed against a pre-repair
+tree. The qualitative verdict data in
+[`2026-08-26-overnight-80-cell-verdict.md`](2026-08-26-overnight-80-cell-verdict.md)
+systematically understates what repair produced. The exit-code totals
+(Laguna 39/40, Mellum 0/40) are unaffected: no run's *pass/fail* flips,
+because a run that exhausted repair did not pass either way.
+
+**cells:** no new captures. Iteration 5's cell stays valid=1; its recorded
+model numbers are corrected in place above.
+
+**Why this is an escalation, not a V6.** `/goal` freezes the invariant list
+specifically so a run cannot be re-scored against rules invented after seeing
+its data. V1 covers round-to-round survival; nothing covers "the verdict is
+computed on a tree that excludes repair." Adding V6 mid-goal is the exact
+move the rule forbids. It also needs a human decision that is not mine to
+make: on exhaustion, should the verdict grade **the best tree repair reached**
+(most informative about the model, and what `RepairLoop`'s `head` already
+points at) or **the tree the run delivered** (defensible as "the run failed —
+score what it shipped")? The current behavior is neither by design; it is an
+un-updated variable.
+
+**next:** **stopped, pending human decision** on the grading-tree question
+above. Once decided, the fix is small and belongs with a red-then-green test
+asserting `code.md`/`verdict` reflect repair's last candidate. V2 (the
+collection gate, plus the whole-packet budget it requires) remains the next
+fix after that.
