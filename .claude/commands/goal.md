@@ -26,11 +26,12 @@ first. Verified in the captures — emissions byte-identical across rounds:
 141608-depth-3     turns 5,6    both 82c6d4ddc8
 ```
 
-All four of v4's failures were stalls of this shape. So **"extra rounds don't
-help" was guaranteed by construction, not measured** — v4's budget null is
-partly an artefact, and its ledger's reading of it as task structure was wrong.
-A multi-round repair loop whose rounds cannot differ is not a repair loop; it is
-one attempt billed several times.
+**[corrected at iteration 1, before optimising against it]** Measurement showed
+this framing was too strong. Rounds 1–3 *do* differ — the model changes the
+tree, so the evidence and prompt change. Stalls are a **late** phenomenon: 0/6
+at rounds=3, 8/26 at rounds=5, and never at round 2. The defect is therefore
+not "rounds cannot differ" but **"the loop converges to a wrong fixed point
+after ~3 rounds"** — still worth attacking, since `pass@3` on dev is 3/6.
 
 ## The goal
 
@@ -38,8 +39,10 @@ one attempt billed several times.
 >
 > **Primary — marginal round gain:** `pass@3rounds − pass@1round` on the
 > **held-out** fixture set. Baseline today ≈ 0.
-> **Secondary — stall rate:** fraction of rounds whose emission is byte-identical
-> to the previous round's. Baseline today: 4 of 4 failures were stalls.
+> **Secondary — stall rate:** fraction of rounds whose *dispatched packet* is
+> byte-identical to the previous round's. **Measured at rounds=5**, where the
+> phenomenon exists: 8/26 = 31%. At rounds=3 it is 0/6 — stalls are a late
+> phenomenon and never occur at round 2, so measuring them at 3 has no headroom.
 >
 > **Done when EITHER:**
 > - a **held-out confirmation at n=5** shows marginal gain **≥ +0.25** with

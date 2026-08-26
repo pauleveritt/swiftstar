@@ -101,3 +101,75 @@ for candidates that survive the screen stays inside the 6-hour ceiling.
 
 **next:** unchanged — **intervene** with item 1 (now the control), once the
 baseline `pass@1`/`pass@3` measurement completes.
+
+## 1 — 2026-08-26 — baseline (dev, rounds ∈ {1,3}) — **premise corrected**
+
+**did:** Measured `pass@1` and `pass@3` on dev — numbers that had never been
+taken; P17 only ran rounds 2 and 5. Then found my stall metric was wrong, fixed
+it, and the corrected figure **refutes this goal's founding claim.**
+
+**intervention:** none — baseline.
+
+**dev:** pass@1 **2/6** · pass@3 **3/6** · gain **+0.17** (+1 cell) · stall **0%**
+
+```
+depth-2/1   pass pass fail        depth-2/3   pass pass pass
+framing-2/1 fail fail fail        framing-2/3 fail fail fail
+```
+
+### The metric was broken, and I nearly reported 0% as a finding
+
+First version compared consecutive **wire turns**. Each round emits **two**
+turns — the answer plus an `emissionFollowUp` — so it was comparing answers to
+follow-ups. In `20260826-161902` turns 2 and 6 share a hash while no adjacent
+pair does; the counter read 19 "transitions" across 12 cells where only 6 round
+boundaries exist.
+
+Rewritten against `repair-packet-N.json`, which maps 1:1 to rounds. **Round N+1
+is a stall iff its dispatched packet is byte-identical to round N's** — the
+packet is a deterministic function of the previous tree and grade, and the
+engine re-seeds identically per prompt, so an identical packet *guarantees* an
+identical emission. That is the fixed point, stated as something checkable.
+
+### The correction: stalls are a LATE phenomenon, not a structural one
+
+```
+dev at rounds=3 :  0/6  = 0%
+P17 at rounds=5 :  8/26 = 31%   — and every stalled round is round 3, 4 or 5
+                                  depth-2/5/3 rounds 3,4,5
+                                  depth-3/5/2 rounds 4,5
+                                  framing-2/5/1 round 5 · framing-2/5/2 round 4
+```
+
+**No stall ever occurs at round 2.** This contract opened by asserting that the
+loop feeds round N+1 the same prompt as round N and therefore "rounds cannot
+differ". **That is wrong.** Rounds 1–3 genuinely differ — the model changes the
+tree, the evidence changes, the prompt changes. The loop *converges*, and only
+then replays. So v4's budget null was not guaranteed by construction after all;
+the +1 cell from rounds 1→3 here is real (if small, and inside the ≥2-cell noise
+floor I set for promotion).
+
+**Consequences, applied rather than noted:**
+
+1. **The problem is not "rounds cannot differ", it is "the loop converges to a
+   WRONG fixed point after ~3 rounds."** Still worth attacking, and the primary
+   metric is unaffected: `pass@3` is 3/6, so half the dev cells fail with three
+   rounds to work in.
+2. **Stall rate must be measured at rounds=5, not rounds=3** — at 3 there are no
+   stalls to improve on, so the secondary metric had no headroom and would have
+   read "already at target" for the rest of the run.
+3. Search-space item 4 (stall detection) is now aimed at a real, quantified
+   target: 31% of rounds at budget 5.
+
+### The claim I was about to make and did not **[v5 rule]**
+
+"Stall rate 0% — the loop already has no fixed points." That was a broken
+metric measured at a budget where the phenomenon does not occur. Twice now in
+this goal's short life the premise has needed correcting before any GPU was
+spent on optimising against it — which is the loop working, not failing.
+
+**next:** **intervene** with search-space item **2** (acceptance-suite source in
+the evidence), not item 1. `framing-2` is 0/6 across both budgets and its
+failures are provably guesses at a contract no packet contains; item 2 targets
+that directly. The control (item 1) is only needed to attribute a win, so it
+runs *after* a win, not before one.

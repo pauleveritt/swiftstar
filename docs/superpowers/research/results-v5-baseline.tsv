@@ -3,3 +3,11 @@ depth-2	1	1	pass	13/13	20260826-160136-fixture-depth-2
 depth-2	1	2	pass	13/13	20260826-160239-fixture-depth-2
 depth-2	1	3	fail	2 failed, 11 passed, 3 warnings in 0.16s	20260826-160347-fixture-depth-2
 depth-2	3	1	pass	13/13	20260826-160455-fixture-depth-2
+depth-2	3	2	pass	13/13	20260826-160621-fixture-depth-2
+depth-2	3	3	pass	13/13	20260826-160755-fixture-depth-2
+framing-2	1	1	fail	1 of 9 preconditions unmet.	20260826-160927-fixture-framing-2
+framing-2	1	2	fail	1 of 9 preconditions unmet.	20260826-161037-fixture-framing-2
+framing-2	1	3	fail	1 of 9 preconditions unmet.	20260826-161146-fixture-framing-2
+framing-2	3	1	fail	1 failed, 12 passed, 3 warnings in 0.15s	20260826-161308-fixture-framing-2
+framing-2	3	2	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260826-161548-fixture-framing-2
+framing-2	3	3	fail	1 of 9 preconditions unmet.	20260826-161902-fixture-framing-2
