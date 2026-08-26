@@ -850,6 +850,9 @@ Completed phases move here when the roadmap outgrows the front page.
   reopen condition (which became P15). An earlier version of this entry
   claimed P12.0 and P12.7 shipped; both claims were false and were corrected
   2026-08-25 after an audit.
+  Verdict: [`2026-08-25-p12-verdict-record.md`](docs/superpowers/research/2026-08-25-p12-verdict-record.md).
+  P12.0's deliverable, landed late and at reduced scope:
+  [`2026-08-25-local-model-agency.md`](docs/superpowers/research/2026-08-25-local-model-agency.md).
   Plan: [`2026-08-24-p12-reliable-agency.md`](docs/superpowers/plans/2026-08-24-p12-reliable-agency.md).
 
 - **P13 — More models (2026-08-25).** Mellum 2.1 wired as a first-class
