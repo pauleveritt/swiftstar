@@ -96,11 +96,6 @@ let modelDecompose = env["AGENTTEST_MODEL_DECOMPOSE"] == "1"
 // just unlocked). Recorded in run-config.json so a capture stays self-describing.
 let repairMaxRounds = max(1, Int(env["AGENTTEST_REPAIR_ROUNDS"] ?? "2") ?? 2)
 
-// /goal v5 intervention 2 (2026-08-26): include the acceptance suite's source in
-// repair evidence. Off by default so the intervention is revertible by env alone.
-let showSpec = env["AGENTTEST_SHOW_SPEC"] == "1"
-// /goal v5 intervention 3: tell round N+1 what round N wrote and what still fails.
-let feedDelta = env["AGENTTEST_FEED_DELTA"] == "1"
 
 /// The temperature the engine actually samples at.
 ///
@@ -591,8 +586,6 @@ func runFixtureOnce(_ name: String) throws {
         capture: captureHandle,
         captureDir: captureDir,
         maxCandidateRounds: repairMaxRounds,
-        specSource: showSpec ? acceptanceSource : nil,
-        feedDelta: feedDelta,
         emissionFollowUp: repairEmissionFollowUp)
 
     switch result {

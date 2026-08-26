@@ -10,29 +10,67 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**P17 answered the repair-limit question; the harness question is retired.**
-See [`2026-08-26-p17-repair-limit-verdict.md`](docs/superpowers/research/2026-08-26-p17-repair-limit-verdict.md).
+**P18: build `mellum-fixture` — a small, one-shot benchmark. Not another
+repair loop.**
 
+P17 answered the original repair-limit question — see
+[`2026-08-26-p17-repair-limit-verdict.md`](docs/superpowers/research/2026-08-26-p17-repair-limit-verdict.md).
 Mellum's multi-file repair failure was **predominantly a harness defect**: the
 repair directive asserted "Exactly one file is wrong" on every cell, including
 cells where three were. With it removed, repair depth stops predicting failure
-(1/2/3-file editing tasks: 6/6, 4/5, 5/6 pooled) and the round budget has no
-measurable effect on editing. The surviving difficulty is **authoring a file
-from scratch whose contract is only implied by the tests** (1/6), not depth,
-budget, or evidence shape.
+(1/2/3-file editing tasks: 6/6, 4/5, 5/6 pooled; the clean framing arm
+`framing-2-edit` scored 5/6 against `depth-2`'s 4/5, so evidence shape is not
+the limit either) and the round budget has no measurable effect on editing.
+**Mellum on 15/17 editing cells is a genuine result: a bounded, reliable
+single/multi-file editor.** The surviving difficulty is **authoring a file from
+scratch whose contract is only implied by the tests** (1/6) — a different
+capability, not a deeper case of the same one.
 
-P16's ">=10 valid Mellum pipeline cells" is **demoted, deliberately**. It was a
-proxy for this question, and 21 loop iterations across two ledgers never reached
-it while the decisive 90-minute fixture experiment sat unbuilt. If pipeline
-measurement is resumed it should compete on its merits — ecological validity is
-the only argument for it — rather than stand as the default direction.
+**Why not a second attempt at optimising the repair loop (`/goal` v5,
+retired):** it tried to measure whether extra rounds or targeted feedback
+improve editing, using the same pipeline/fixture apparatus. Its dev screen
+could not resolve an effect from engine sampling noise at the sample size
+tried — a byte-identical prompt at a fixed seed swung outcome 2/3 → 0/3 between
+runs — and continuous regrading of its three result sets (not just binary
+pass/fail) showed no arm moving against another outside that noise
+(95.2% / 92.3% / 94.9% on the 20 of 36 cells with a scoreable grade). Retired,
+not concluded: see
+[`goal-ledger-v5.md`](docs/superpowers/research/superseded/goal-ledger-v5.md)'s
+closing entry. **Give up on tuning Mellum's multi-round loop with this
+apparatus, not on Mellum as an editor.**
 
-**The clean framing arm has since run** (`framing-2-edit`, 6 cells): **5/6**
-against `depth-2`'s **4/5**. Holding files-to-fix and task type constant,
-evidence shape has no measurable effect — confirming that the residual limit is
-authoring a file from an implied contract, not presentation. The 80-cell
-verdict's blame on collection aborts was **cured, not refuted**: it measured raw
-aborts, and the precondition manifest that replaced them costs nothing.
+**P16's ">=10 valid Mellum pipeline cells" stays demoted.** It was a proxy for
+the repair-limit question, already answered more cheaply at fixture tier.
+
+**P18's shape, deliberately boring:**
+
+1. **Fixture-only, one task family per run.** Start with "repair visible
+   files" (editing). Keep "author a missing file from implied tests" as a
+   *separate* benchmark — P17 shows it is a different capability, not a harder
+   version of the first.
+2. **One attempt, no repair rounds, no prompt interventions.** A pinned broken
+   tree, the writable files, an explicit task/acceptance contract. Capture
+   output, apply it, grade it. Nothing self-modifying.
+3. **A flat oracle**, not a collection-gated pytest run: 13 independently
+   evaluable requirements, each pass/fail, even when imports fail. Pre-register
+   both the primary metric (all 13 pass) and the secondary (count passed) —
+   partial scores real from the start, not retrofitted after a binary metric
+   turns out to have no resolution (as v5's did).
+4. **Freeze the prompt and fixture manifest before sampling.** ~10–20
+   fresh-process trials per fixture, shuffled across fixtures. Raw packet,
+   engine argv, output, resulting tree, and requirement vector are the record.
+   Never overwrite or rerun a recorded cell.
+5. **Only then, as a separate bounded comparison**, test rounds: if one-shot
+   results are stable, compare exactly one predeclared feedback policy (e.g.
+   1 vs 3 rounds) on the same fixtures and oracle. No prompt tuning between
+   arms.
+
+**A new, standalone `mellum-fixture` runner, not an extension of
+`swiftstar-agenttest`.** Near-zero policy: construct fixture → call Mellum →
+apply output → independently score → save artifacts. It answers one narrow
+question — what can this Mellum configuration do on explicit, pinned repair
+tasks — and does not diagnose the pipeline, repair its own methodology, or turn
+every surprising result into another feature.
 
 ## Concept budget
 
@@ -166,7 +204,9 @@ appear below.) Defined so far:
 | P13 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; deferred behind P12 so there is a harness that can actually evaluate a variant | complete (2026-08-25) — verdict: blocked on Mellum's competence gate, not the harness |
 | P14 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
 | P15 | Host-controlled action mode | The model drafts as text (`#path` + fenced blocks), the host harvests, writes, and verifies — isolating "should I act" from content competence for Mellum-class models; exit is a verdict, not a product | complete (2026-08-25) — verdict: **harness-addressable**; repair 4/4 at 13/13, build 3/9 at 13/13 with 0 tool calls |
-| P16 | Repair harness validity | Fix the four defects (round-discard, collection gate, packet budget, withheld phase brief) blocking any real measurement of Mellum's repair competence, driven by a validity-gated `/goal` loop | **in progress** — [`2026-08-26-overnight-80-cell-verdict.md`](docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md) |
+| P16 | Repair harness validity | Fix the four defects (round-discard, collection gate, packet budget, withheld phase brief) blocking any real measurement of Mellum's repair competence, driven by a validity-gated `/goal` loop | **demoted, not resumed** — superseded by P17's cheaper fixture-tier answer; `/goal` v1-v3 closed without meeting their goals, see [`goal-ledger.md`](docs/superpowers/research/goal-ledger.md) and [`goal-ledger-v3.md`](docs/superpowers/research/goal-ledger-v3.md) |
+| P17 | Repair-limit fixture experiment | Pre-registered fixture-tier experiment answering whether Mellum's multi-file repair failure is a budget, framing, or depth limit; then a follow-on attempt to optimise the repair loop itself | **complete (2026-08-26)** — verdict: predominantly a harness defect (a false "exactly one file" directive), not the model; Mellum 15/17 on editing tasks; the follow-on optimisation attempt (`/goal` v5) retired without a resolvable result — see [`2026-08-26-p17-repair-limit-verdict.md`](docs/superpowers/research/2026-08-26-p17-repair-limit-verdict.md) and [`goal-ledger-v5.md`](docs/superpowers/research/superseded/goal-ledger-v5.md) |
+| P18 | `mellum-fixture` benchmark | A small, one-shot fixture benchmark for Mellum: one attempt, a flat 13-requirement oracle, frozen pre-registered manifest, no repair rounds, no self-modifying loop — separate from `swiftstar-agenttest` | **in progress** |
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.

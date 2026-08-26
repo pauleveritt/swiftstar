@@ -393,3 +393,59 @@ score and re-run the three existing configurations from their kept captures
 where possible, (ii) raise `n` to 7+ and accept ~45 min per screen, or
 (iii) take the negative verdict now on the grounds that no listed intervention
 has moved `pass@3` off 3/6 in three runs. Failure count: **1 of 3.**
+
+---
+
+## RETIRED — 2026-08-26
+
+**Not a finding that "Mellum cannot repair."** Retired because the instrument
+built to answer this goal's question turned out to be invalid, and because
+ROADMAP's `## Now` had already moved past the question this loop was serving —
+which is v5's own stop condition 4 ("ROADMAP stops naming this goal"), silently
+missed while the loop was mid-run on an escalation.
+
+**Why the screen is invalid, verified independently of the ledger's own
+entries:** regrading the three existing result sets on a continuous score
+(`passed`/13, not binary pass/fail) rather than resolves the ambiguity —
+it sharpens it. Only 20 of 36 recorded cells expose a `passed/N` figure at all;
+13 stop before any test runs (precondition-gated collection aborts) and 3 have
+no grade whatsoever (`contractNotFollowed`, or no capture). On the 20 that
+remain:
+
+```
+baseline  8 scoreable   99/104  = 95.2%
+int2      6 scoreable   72/78   = 92.3%
+int3      6 scoreable   74/78   = 94.9%
+```
+
+No arm moves against another outside plausible noise on n≈6-8. Combined with
+iteration 3's own finding — byte-identical rounds-1 packets swinging 2/3 → 0/3
+under baseline vs int3, from engine non-determinism alone — the dev screen
+cannot distinguish a real effect from noise at any resolution tried. Raising
+`n` or continuous-scoring both help the resolution problem; neither fixes that
+the project's direction had already moved on.
+
+**What stands, independent of this loop and not retracted:**
+
+- The corrected repair directive (lower-bound file-count claim, `main.swift`
+  ~line 283) and its runner assertion. Real, proven, unrelated to the search.
+- **Mellum on 15/17 editing cells (P17, pooled)** — a genuine result: a bounded
+  single/multi-file **editor**, not an unreliable model. The claim retired here
+  is narrower: that *this apparatus*, on *this question* (does round budget or
+  targeted feedback improve it), could produce a trustworthy answer. It could
+  not, at the resolution tried.
+- The engine non-determinism finding (v3 iteration 6, confirmed again here) —
+  real, and the reason any future round-comparison work needs either far larger
+  `n` or a different oracle than binary pass/fail.
+
+**What is discarded, not carried forward:** `specSource` and `feedDelta` (both
+env-gated interventions, removed from `RepairLoop.swift`/`main.swift`); the
+policy-specific reclassification branches in the runner (`stalled-runaway`,
+the `contractNotFollowed` branch referencing an undefined `cell_dir` — an
+unexercised bug, since that branch was only ever exercised via one-off
+reclassification scripts, never through a live run); `Tools/stall-rate.py`.
+
+**Direction:** see `ROADMAP.md` `## Now` — a new, deliberately narrow
+one-shot benchmark (`mellum-fixture`), separate from `swiftstar-agenttest`,
+answering "what can this Mellum configuration do on explicit, pinned repair
+tasks" without a self-modifying optimisation loop attached to it.

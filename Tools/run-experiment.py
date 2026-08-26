@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
-"""Run rows of the pre-registered manifest and record one outcome per cell.
+"""Run rows of a fixture-tier manifest and record one outcome per cell.
 
-Reads docs/superpowers/research/experiment-manifest.tsv, runs the rows selected
-by --fixture/--rounds/--seed, and appends to experiment-results.tsv. A row that
-already has a result is NEVER re-run -- the contract forbids re-running a
-recorded cell.
+Generic instrument, deliberately small: construct a cell from a manifest row,
+run it, classify it by the two surviving validity checks plus the final graded
+round, append the row. No experiment-specific policy lives here — that belongs
+in the ledger that reads these results, not in the runner that produces them.
+
+Reads a TSV of `fixture<TAB>rounds<TAB>seed` rows (override paths with
+EXP_MANIFEST / EXP_RESULTS). A row that already has a result is NEVER re-run.
 
 Outcome per cell:
   pass         final graded round exit == 0 (13/13)
-  fail         final graded round exit != 0
+  fail         final graded round exit != 0, OR the round ended in a state with
+               no grade at all (e.g. contractNotFollowed) — the harness could
+               not use the model's output, which is a failure, not a void
   harness-void one of the two surviving validity checks failed (V5 delivered,
                V6 harvest-faithful); the cause is recorded with it
+
+2026-08-26: reverted to this shape after /goal v5's policy-specific branches
+(a `stalled-runaway` reclassification, a `contractNotFollowed` reclassification
+referencing an undefined `cell_dir`) were retired along with v5. See
+docs/superpowers/research/goal-ledger-v5.md entry (closure) for why.
 """
 import csv, glob, json, os, re, subprocess, sys
 
@@ -56,6 +66,22 @@ def last_grade(cell):
     return None
 
 
+def classify(cell):
+    v5, why5 = check_v5(cell)
+    if v5 == 'fail':
+        return 'harness-void', f'V5 {why5}'
+    v6, why6 = check_v6(cell)
+    if v6 == 'fail':
+        return 'harness-void', f'V6 {why6}'
+    g = last_grade(cell)
+    if g is None:
+        return 'fail', 'no graded round recorded (e.g. contractNotFollowed)'
+    if g['exit'] == 0:
+        return 'pass', '13/13'
+    tail = [l for l in g['output'].strip().splitlines() if l.strip()]
+    return 'fail', (tail[-1].strip()[:70] if tail else f"exit={g['exit']}")
+
+
 def main():
     sel = dict(a.split('=') for a in sys.argv[1:] if '=' in a)
     have = done()
@@ -77,48 +103,8 @@ def main():
         out = p.stdout + p.stderr
         m = re.search(r'capture=(\S+)', out)
         cell = m.group(1) if m else ''
-        outcome, detail = 'harness-void', 'no capture produced'
-        if cell and os.path.isdir(cell):
-            v5, why5 = check_v5(cell)
-            v6, why6 = check_v6(cell)
-            # The v5 policy table: a runaway / `limit` stop is recorded as
-            # `stalled-runaway` and COUNTS AS A FAILURE, not a void -- it is model
-            # behaviour, and under this goal a stall variant, which is the thing
-            # being measured. The runner previously called it a void, disagreeing
-            # with the contract it implements (same bug class as the
-            # contractNotFollowed mismatch fixed in iteration 2a).
-            if v5 == 'fail' and 'stop_reason=limit' in (why5 or ''):
-                outcome, detail = 'fail', 'stalled-runaway (limit stop)'
-            elif v5 == 'fail':
-                outcome, detail = 'harness-void', f'V5 {why5}'
-            elif v6 == 'fail':
-                outcome, detail = 'harness-void', f'V6 {why6}'
-            else:
-                g = last_grade(cell)
-                if g is None:
-                    # The v5 policy table: ambiguous model-vs-harness attribution
-                    # defaults to MODEL with a `disputed` flag. A round ending
-                    # `contractNotFollowed` produced output the harvester could
-                    # not use -- model or parser, genuinely unclear -- so it is a
-                    # failure, not a void. The runner used to call it a void,
-                    # which disagreed with the contract it implements.
-                    receipts = []
-                    for rf in sorted(glob.glob(os.path.join(cell_dir(cell), 'repair-round-*.json'))):
-                        try:
-                            r = json.load(open(rf)).get('receipt')
-                        except Exception:
-                            continue
-                        if isinstance(r, dict):
-                            receipts += list(r.keys())
-                    if 'contractNotFollowed' in receipts:
-                        outcome, detail = 'fail', 'contractNotFollowed (disputed: model per policy)'
-                    else:
-                        outcome, detail = 'harness-void', 'no graded round recorded'
-                elif g['exit'] == 0:
-                    outcome, detail = 'pass', '13/13'
-                else:
-                    tail = [l for l in g['output'].strip().splitlines() if l.strip()]
-                    outcome, detail = 'fail', (tail[-1].strip()[:70] if tail else f"exit={g['exit']}")
+        outcome, detail = ('harness-void', 'no capture produced') if not (cell and os.path.isdir(cell)) \
+            else classify(cell)
         with open(RESULTS, 'a') as fh:
             fh.write(f'{fixture}\t{rnd}\t{seed}\t{outcome}\t{detail}\t{os.path.basename(cell)}\n')
         print(f'[done] {fixture}/{rnd}/{seed} -> {outcome}: {detail}', flush=True)
