@@ -1,0 +1,60 @@
+diff --git a/Tests/SwiftStarIntegrationTests/RepairLoopTests.swift b/Tests/SwiftStarIntegrationTests/RepairLoopTests.swift
+index b3a11e6..cc7f6ad 100644
+--- a/Tests/SwiftStarIntegrationTests/RepairLoopTests.swift
++++ b/Tests/SwiftStarIntegrationTests/RepairLoopTests.swift
+@@ -333,6 +333,44 @@ struct RepairLoopTests {
+         #expect(round2.candidateRef != nil)
+     }
+ 
++    /// PROBE (2026-08-26): does a `.validationFailed` round's work survive into
++    /// the next round's worktree? `RepairLoop` leaves `head` unchanged on that
++    /// path, so round 2 is prepared from the same baseRef and round 1's file is
++    /// gone. Round 2 here writes ONLY `b.txt` — it does not redo round 1's
++    /// `a.txt` — so the assertion isolates survival from re-doing.
++    @Test func validationFailedRoundWorkSurvivesIntoNextRound() throws {
++        let repo = try makeRepo()
++        defer { try? FileManager.default.removeItem(at: repo) }
++        let calls = LockedCounter()
++        let seenInRound2 = LockedBox()
++        let packet = HandoffPacket(
++            taskText: "fix it", writableFiles: ["a.txt", "b.txt"],
++            validationCommand: "test -f a.txt && test -f b.txt",
++            baselines: [:], turnBudget: 1000, toolCallBudget: 8,
++            role: .repair, sampling: SamplingPolicy(think: .off))
++        _ = try RepairLoop.run(
++            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
++            packetBuilder: { _ in packet },
++            runPhase: { _, wt, _ in
++                calls.increment()
++                if calls.value == 1 {
++                    try "round1-wrote-this\n".write(to: wt.appendingPathComponent("a.txt"),
++                                                   atomically: true, encoding: .utf8)
++                    return self.outcome(mutations: ["a.txt"])
++                } else {
++                    seenInRound2.set((try? String(contentsOf: wt.appendingPathComponent("a.txt"),
++                                                  encoding: .utf8)) ?? "<<MISSING>>")
++                    try "round2-wrote-this\n".write(to: wt.appendingPathComponent("b.txt"),
++                                                   atomically: true, encoding: .utf8)
++                    return self.outcome(mutations: ["b.txt"])
++                }
++            },
++            grade: { _ in GradeResult(exit: 1, output: "still failing") })
++        #expect(calls.value == 2)
++        #expect(seenInRound2.value == "round1-wrote-this\n",
++                "round 2 saw a.txt = \(seenInRound2.value ?? "nil") — round 1's write did not survive")
++    }
++
+     /// A non-`validationFailed` receipt (e.g. `.noChanges`, from an empty
+     /// `mutations` array) must still exit immediately with exactly one
+     /// `runPhase` call — this fix must not change behavior for other receipt
+@@ -385,3 +423,10 @@ final class LockedCounter: @unchecked Sendable {
+     func increment() { lock.lock(); n += 1; lock.unlock() }
+     var value: Int { lock.lock(); defer { lock.unlock() }; return n }
+ }
++
++final class LockedBox: @unchecked Sendable {
++    private let lock = NSLock()
++    private var _v: String?
++    var value: String? { lock.lock(); defer { lock.unlock() }; return _v }
++    func set(_ s: String) { lock.lock(); _v = s; lock.unlock() }
++}

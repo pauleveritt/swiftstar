@@ -22,43 +22,88 @@ roles (decompose, implement, repair) evidenced at least once each — see
 [P12 verdict record](docs/superpowers/research/2026-08-25-p12-verdict-record.md)
 for the full, small-n-honest accounting.
 
-**P12.8's retry-on-receipt limitation is fixed; its live phase-boundary
-confirmation still isn't observed.** The one live confirmation run that did
-fail (`captures/agenttest/20260825-203706-roadmap-user-story`) exposed a real
-gap — `RepairLoop` exited on any receipt, including `validationFailed`,
-instead of retrying with fresh evidence. Fixed `953d05a`, reviewed by Fable,
-within the existing round budget. Three follow-up live attempts the same
-night (`roadmap-user-story`, unmodified) all passed 13/13 on the first try —
-phase-level repair has not fired again since the fix landed, not because it
-doesn't work, but because no phase has failed validation in any attempt
-since. Still open, not blocking anything.
+**P12.8's retry-on-receipt fix landed, but it only fixed half the defect —
+repair still isn't cumulative.** `953d05a` made `RepairLoop` retry on a
+`.validationFailed` receipt with fresh evidence instead of exiting
+immediately. It did not make repair cumulative: on that path `head` stays
+unchanged (`Sources/SwiftStarAppKit/RepairLoop.swift:193-207`), so round
+N+1's worktree is re-prepared from the same base and round N's written file
+is discarded. "N rounds" is really N independent single-shot attempts. This
+is worst in `PhaseRepair`, whose own doc comment
+(`Sources/SwiftStarAppKit/PhaseRepair.swift:6-9`) establishes
+`.validationFailed` as phase repair's *only* possible failure mode — so
+every failing phase-repair round takes the discard path. Proven by a red
+probe test
+([`2026-08-26-probe-validationfailed-discards-work.patch`](docs/superpowers/research/2026-08-26-probe-validationfailed-discards-work.patch),
+reverted from the tree) that isolates survival from re-doing — a
+distinction the existing `Tests/SwiftStarIntegrationTests/RepairLoopTests.swift:285`
+cannot make, because its round 2 happens to rewrite round 1's file.
 
-**Correction, 23:25: a separate overnight process is genuinely armed and
-will very likely fire tonight.** Two untracked scripts for a P12.3 Mellum
-ablation exist on disk (`Tools/overnight-chain.sh` /
-`overnight-idle-launch.sh`, mtime 22:08–22:10, not authored by this
-session) — a laguna/mellum × path × think × seed matrix, 80 cells at the
-script's default `NSEEDS=10`. An earlier version of this note (23:00-ish)
-said the launcher's process was dead; that was wrong — checked again at
-23:24 and `pid 29024` (`caffeinate -i -s bash Tools/overnight-idle-
-launch.sh`) has been running continuously since 22:18:04, currently inside
-its initial 3.5h sleep (wakes ~01:48), after which it polls for 10
-continuous idle minutes and ≥60 GiB free before launching the chain — very
-plausible if the machine sits untouched overnight, per this session's own
-understanding that no one is watching it. **This session stopped its own
-live model runs once this was confirmed, specifically to avoid colliding
-with it** — both use the same engine/lock mechanism, and 80 sequential
-cells at ~5-10 min each could hold the model for 6-13 hours. If it fires,
-its results directly address "P12.3's Mellum arm never ran" below; check
-`/tmp/overnight-manifest.tsv` and `/tmp/overnight-chain.log` (both absent
-as of 23:24, before it fires) rather than re-deriving that work.
+An earlier version of this note said phase-level repair "has not fired
+again since the fix landed, not because it doesn't work, but because no
+phase has failed validation in any attempt since." That was true the night
+it was written and is false now: the overnight matrix below fired
+phase-level repair in **38 of 38** Mellum cells. 19 had at least one
+`.validationFailed` round; 18 had two, exhausting the round budget and
+stopping the run before the acceptance suite ever ran.
 
-**Open choices:** P12.7 is now 2/5 pieces in (trace capture and
-Σprompt/Σcached/Σsuffix shipped and live-confirmed the same night;
-`DumbImplementer`, stateful tokens, warm-started timing, and the write-up
-remain — none started); more live n for P12.4 (n=2) or P12.5 (n=1); or P14
-(A docs site), whose precondition — "once there is a reader who isn't the
-author" — has not obviously arrived.
+**The overnight P12.3 Mellum ablation fired and completed; the result is
+harness-blocked, not model-measured.** `Tools/overnight-chain.sh` ran a
+80-cell laguna/mellum × path × think × seed matrix the night of
+2026-08-25→26. Laguna: **39/40 verdict `good`**. Mellum: **0/40** — but that
+number measures the harness, not the model. No Mellum repair round in the
+entire matrix ever saw a failing assertion: 18 cells died on the
+`RepairLoop` discard defect above (round N's fix undone before round N+1
+starts); 20 died on the acceptance suite's module-level import
+chain, which makes pytest abort collection after exactly one error — two
+gates against `maxCandidateRounds = 2` spends the whole budget at the
+moment the suite first becomes able to report a failure at all. Laguna never
+hits either defect, because its build phase clears the gates itself — the
+matrix compared one model that avoids two harness bugs against one that hits
+both every time, not two models' repair competence. The last two cells died
+on two further harness defects the matrix exposed only once each: a repair
+packet carrying 13 real failing assertions that **overflowed the 32,768-token
+context** and was never delivered (`20260826-055741`), and a `turnDidNotEnd`
+with no capture record (`20260826-065840`). On tool calls: Mellum made 0 real
+tool calls in **39 of 40** cells — but `20260826-065840` made 13 (12 `write`,
+1 nonexistent `google_search`), so P13's standing finding is **rare, not
+never**. Laguna: 969 over 40.
+
+**P12.3's Mellum arm ran, and still isn't measured.** It ran — resolving the
+open question this note used to carry — and produced no valid measurement of
+Mellum's repair competence, for the reasons above. The matrix must be
+re-run after the harness fixes land before P12.3's Mellum arm can be called
+measured. Full accounting, including the directive text that talked Mellum
+out of a fix it had already derived and the phase brief repair is never
+shown:
+[`2026-08-26-overnight-80-cell-verdict.md`](docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md).
+
+**Open choices:** four harness fixes are needed before Mellum can be measured
+at all — the first three are small, the fourth is not optional. The partition
+above is serial, not parallel: fixing (1) reroutes those 18 cells into the
+collection gates, so (1)-(3) alone do **not** unblock measurement. Ranked by the
+findings doc as its highest-leverage next work — (1) make repair rounds cumulative on the `.validationFailed` path
+(finishes P12.8: commit the round's tree and advance `head` instead of
+leaving it unchanged; land the probe test with it); (2) make
+`repairPacket`'s directive (`Sources/swiftstar-agenttest/main.swift:255-283`)
+conditional on the count of missing writable files, which `RepairLoop`
+already computes — today it unconditionally asserts "exactly one file is
+wrong" and "do not add new files," which is false whenever 2+ files are
+missing, and Mellum quoted it back three times to talk itself out of the
+fix it had already derived; (3) give repair the `## Phase N` brief instead
+of only `sharedContext`'s Mission/Tech Stack boilerplate — `phaseText:
+directive` at `main.swift:312` currently replaces it, so repair is graded on
+requirements (seed complaints, a favicon, a hero tagline) it was never
+shown. A next-run choice, not yet acted on: `AGENTTEST_TEXT_CONTRACT=1`
+exists (`main.swift:84`) but `Tools/overnight-chain.sh` never sets it — the
+80-cell matrix varied seed, path style, and thinking while holding Mellum's
+build phase plain-agentic throughout, leaving off the one dial P15 already
+proved matters for Mellum. Otherwise unchanged: P12.7 is still 2/5 pieces in
+(trace capture and Σprompt/Σcached/Σsuffix shipped and live-confirmed the
+same night; `DumbImplementer`, stateful tokens, warm-started timing, and the
+write-up remain — none started); more live n for P12.4 (n=2) or P12.5 (n=1);
+or P14 (A docs site), whose precondition — "once there is a reader who isn't
+the author" — has not obviously arrived.
 
 *The next phase is picked deliberately, not by momentum.*
 
@@ -319,32 +364,45 @@ P15's plan is written:
 
 Deferred, each with the condition that reopens it.
 
-- **~~Phase-level recovery~~ — LANDED as P12.8 (2026-08-25), live confirmation
-  still owed.** The wiring shipped (`commitForRepair`, `adoptRepairedPhase`,
-  `PhaseRepair`, build-loop integration; deterministic tier green). What remains
-  is evidence, not code: the one live attempt
-  (`captures/agenttest/20260825-203706-roadmap-user-story`) failed phase 1
-  validation, the repair returned `validationFailed`, `RepairLoop` exited on
-  that receipt by design, and the run never reached acceptance — so
-  "phase N: repaired → continues to acceptance" has never been observed. No
-  verdict record written. *Reopens as: land one confirming run and write the
-  record. Best done together with the receipt-exit item directly below, which
-  is what blocked this specific attempt.*
+- **~~Phase-level recovery~~ — LANDED as P12.8 (2026-08-25); live confirmation
+  arrived 2026-08-26, and it is bad news, not good.** The wiring shipped
+  (`commitForRepair`, `adoptRepairedPhase`, `PhaseRepair`, build-loop
+  integration; deterministic tier green). The overnight Mellum matrix fired
+  phase-level repair in 38 of 38 cells, but "phase N: repaired → continues to
+  acceptance" still has not been observed: the retry-on-receipt fix below
+  (`953d05a`) does not make repair cumulative, so 17 of those 38 cells
+  exhausted the two-round budget with `head` discarded each round and never
+  reached acceptance. See
+  [`2026-08-26-overnight-80-cell-verdict.md`](docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md).
+  No verdict record written. *Reopens as: land recommendation 1 from that
+  findings doc (cumulative rounds) and re-attempt.*
 - **~~`RepairLoop` exits on every receipt, including `validationFailed`~~ —
   FIXED (2026-08-25, `953d05a`).** `.validationFailed` now refreshes `lastGrade`
   from the real `ValidationResult` and retries within the existing
   `maxCandidateRounds` budget (no new parameter); every other receipt keeps the
   immediate-exit behavior. Fable-reviewed, approved, two non-blocking notes
   filed below. Shared machinery — applies to all three `RepairLoop` callers
-  (P12.4, P12.8, P15), not just the P12.8 case that surfaced it.
-- **Retry-round evidence coherence.** A `.validationFailed` retry shows the
-  model round-1's traceback (`lastGrade.output`) alongside file contents read
-  from a worktree re-prepared at the *unchanged* base — round 1's own edits are
-  discarded along with its worktree, so the traceback can reference lines that
-  no longer match what's shown. Strictly better than exiting (per the Fable
-  review that found it), but a live run producing confused chase-the-line-number
-  behavior would be this mechanism, not a new failure mode. *Reopens if a
-  retry round is observed reasoning about the wrong file state.*
+  (P12.4, P12.8, P15), not just the P12.8 case that surfaced it. **Half-fixed,
+  corrected 2026-08-26:** the retry itself works, but the round is not
+  cumulative — see the escalated entry directly below, no longer a
+  hypothetical.
+- **Retry-round evidence coherence — confirmed 2026-08-26, and worse than
+  filed.** This entry's own reopen condition ("a retry round is observed
+  reasoning about the wrong file state") has fired: `RepairLoop.swift:193-207`
+  leaves `head` unchanged on `.validationFailed`, so round N+1's worktree is
+  re-prepared from the same base and round N's written file is gone, not
+  merely its traceback stale. In `captures/agenttest/20260826-050316-roadmap`,
+  Mellum wrote `app.py` in round 1 and `models.py` in round 2 — individually
+  correct, jointly sufficient, and never applied together, because round 2
+  started from a tree with no `app.py`. Confirmed by a red probe test
+  ([`2026-08-26-probe-validationfailed-discards-work.patch`](docs/superpowers/research/2026-08-26-probe-validationfailed-discards-work.patch))
+  that the existing `RepairLoopTests.swift:285` cannot catch, because its
+  round 2 happens to rewrite round 1's file rather than write a second one.
+  This is not a coherence-of-evidence problem; it is the reason "N rounds" of
+  repair does not mean N rounds. *Reopens as: recommendation 1 in
+  [`2026-08-26-overnight-80-cell-verdict.md`](docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md)
+  — make `.validationFailed` commit its tree and advance `head`, landing the
+  probe test with it.*
 - **`validationFailedReceiptRetriesWithFreshEvidence` proves the retry
   happened, not that fresh evidence reached round 2.** The fixture's
   validation command (`test -f marker.txt`) produces no distinguishing output,
