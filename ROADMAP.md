@@ -10,86 +10,27 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**P16: fix the harness so Mellum's repair competence can actually be measured.**
-Committed direction, not one option among several — the prior "between phases"
-framing is retired. P0–P13 and P15 are complete (all three P12 roles evidenced
-live at least once; see [Prior work](#prior-work) and the
-[P12 verdict record](docs/superpowers/research/2026-08-25-p12-verdict-record.md)).
+**P17 answered the repair-limit question; the harness question is retired.**
+See [`2026-08-26-p17-repair-limit-verdict.md`](docs/superpowers/research/2026-08-26-p17-repair-limit-verdict.md).
 
-**Why now, in one paragraph.** The overnight 2026-08-25→26 ablation ran all 80
-cells of a laguna/mellum × path × think × seed matrix against the real
-acceptance suite. Laguna: 39/40 verdict `good`. Mellum: 0/40 — but that number
-measures the harness, not the model. No Mellum repair round in the matrix ever
-reached a state where its competence was observable: `RepairLoop` discards a
-round's work on the `.validationFailed` path (18 cells), the acceptance suite's
-module-level import chain burns the 2-round budget before a single assertion is
-ever shown (20 cells), one packet carrying the one rich failure surface the
-harness produced all night overflowed the context window (1), and one run died
-on an unrecorded `turnDidNotEnd` (1). Full accounting, including the
-`RepairLoop.swift`/`PhaseRepair.swift` code, the receipts, a red probe test, and
-what P12.8's `953d05a` fixed and didn't:
-[`2026-08-26-overnight-80-cell-verdict.md`](docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md).
-This is the third time this project has measured its harness and read the
-result as a fact about the model (P15's parser/model confusion was the first);
-P16 exists to make it the last.
+Mellum's multi-file repair failure was **predominantly a harness defect**: the
+repair directive asserted "Exactly one file is wrong" on every cell, including
+cells where three were. With it removed, repair depth stops predicting failure
+(1/2/3-file editing tasks: 6/6, 4/5, 5/6 pooled) and the round budget has no
+measurable effect on editing. The surviving difficulty is **authoring a file
+from scratch whose contract is only implied by the tests** (1/6), not depth,
+budget, or evidence shape.
 
-**Done-when:** ≥10 valid Mellum pipeline cells — runs whose outcome is
-attributable to the model under every validity invariant in
-[`.claude/commands/goal.md`](.claude/commands/goal.md) — spanning ≥2 seeds and
-both path styles, with the model's pass/fail recorded either way (the goal is
-the *measurement*, not a pass rate). That requires, in order, because the
-defects above are serial, not parallel — fixing the first alone reroutes cells
-into the second, not around it:
+P16's ">=10 valid Mellum pipeline cells" is **demoted, deliberately**. It was a
+proxy for this question, and 21 loop iterations across two ledgers never reached
+it while the decisive 90-minute fixture experiment sat unbuilt. If pipeline
+measurement is resumed it should compete on its merits — ecological validity is
+the only argument for it — rather than stand as the default direction.
 
-1. Make repair rounds cumulative on the `.validationFailed` path (finishes
-   P12.8: commit the round's tree and advance `head` instead of leaving it
-   unchanged — `RepairLoop.swift:193-207`; land the probe test with it).
-2. Make `repairPacket`'s directive (`main.swift:255-283`) conditional on the
-   count of missing writable files, which `RepairLoop` already computes but
-   the packet builder does not yet see (`RepairContext` is deliberately
-   worktree-independent — a seam change, not a text edit). Today it
-   unconditionally asserts "exactly one file is wrong" and "do not add new
-   files," which is false whenever 2+ files are missing, and Mellum quoted it
-   back three times to talk itself out of a fix it had already derived.
-3. Give repair the `## Phase N` brief instead of only `sharedContext`'s
-   Mission/Tech Stack boilerplate (`phaseText: directive` at `main.swift:312`
-   currently replaces it) — repair is otherwise graded on requirements (seed
-   complaints, a favicon, a hero tagline) it was never shown.
-4. Break the collection gate (surface more than one pytest error per round)
-   **and** cap the assembled packet at the same time — the context-overflow
-   cell shows a single round can already clear multiple gates, and surfacing
-   more without a whole-packet budget converts that failure mode into more
-   overflows rather than fewer stalls.
-
-Also worth doing before the re-run, not blocking it: record a `blockedBy:
-harness | model` field per run, derived from direct wire/receipt greps, never
-from digests (a model emitting two different broken files must not be
-misclassified harness-blocked); fix the `hello`-caps tool-call counting bug in
-the analyzer path (a naive grep over-counts by exactly 1/run); flip
-`AGENTTEST_TEXT_CONTRACT=1` for Mellum's build phase, which the 80-cell matrix
-never tried even though P15 already showed it is the one dial that matters for
-Mellum.
-
-**Driven by `/goal`** (`.claude/commands/goal.md`, meant for `/loop /goal` with
-no interval): one self-pacing iteration at a time — audit existing captures,
-fix one invariant, confirm at fixture tier, then measure a small live batch —
-appending to `docs/superpowers/research/goal-ledger.md` each time, refusing to
-record a model result from a run that failed a validity check. It escalates
-(stops and asks) rather than guessing past its own contract: a fix that didn't
-fix, two flat measure iterations in a row, a failure mode no invariant covers,
-a 12-entry ceiling, or a test regression surviving one attempt.
-
-**Explicitly deferred while P16 is open** (do not start; `/goal` checks this
-section and stops if it no longer names P16): P12.7's remaining pieces (2/5 in
-— trace capture and Σprompt/Σcached/Σsuffix shipped; `DumbImplementer`,
-stateful tokens, warm-started timing, and the write-up untouched); more live n
-for P12.4 (n=2) or P12.5 (n=1); P14 (a docs site), whose precondition — "once
-there is a reader who isn't the author" — has not obviously arrived; and the
-Laguna residual think-loop→`limit` mode (1/20 thinking runs in the same
-matrix), which is real but does not block Mellum measurement.
-
-*The next phase is picked deliberately, not by momentum — and this one now has
-a mechanical way to tell when it is done.*
+**Next, if this line is continued:** a clean framing fixture that holds the
+defects fixed and varies only whether the suite collects, which would separate
+the three things `framing-2` currently confounds (see
+[`questions.md`](docs/superpowers/research/questions.md) item 3).
 
 ## Concept budget
 

@@ -242,3 +242,55 @@ policy table this is also a model-behaviour observation, recorded on the row.
 **next:** **run** — the rounds=5 half (12 cells). It separates budget from the
 other two explanations for framing-2 and tests whether depth-3's 3/3 is
 budget-independent.
+
+## 3 — 2026-08-26 — run (rounds=5) + verdict — **GOAL MET**
+
+**did:** Ran the rounds=5 half. **Manifest complete: 24/24 recorded, 1
+harness-void (quota 4), 0 disputed.** Wrote the verdict, updated ROADMAP,
+opened the question queue.
+
+**cells:** 24/24 recorded, 1 harness-void, 0 disputed — **all three done-when
+conditions satisfied.**
+
+**rows:**
+
+```
+plausible-wrong-fix/5/1 pass  /5/2 pass  /5/3 pass
+depth-2/5/1 pass  /5/2 pass  /5/3 fail 2 failed, 11 passed
+depth-3/5/1 pass  /5/2 fail 2 failed, 11 passed  /5/3 pass
+framing-2/5/1 fail 1 of 9 preconditions unmet.
+framing-2/5/2 fail 1 of 9 preconditions unmet.
+framing-2/5/3 pass 13/13
+```
+
+**Pooled (both budgets):** 1 file **6/6** · 2 files **4/5** · 3 files **5/6** ·
+author+edit **1/6**. Editing across depths 1→3: **15/17**.
+
+**Budget:** editing 8/8 valid at rounds=2 vs 7/9 at rounds=5 — no effect, if
+anything worse, inside noise at n=3. It mattered only where a precondition gate
+had to be cleared first, and `framing-2`'s only pass shows the arc a 2-round
+budget cannot express:
+
+```
+round 1 exit 2 | 1 of 9 preconditions unmet.
+round 2 exit 1 | 2 failed, 11 passed
+round 3 exit 0 | 13 passed          <- needed the third round
+```
+
+Its two failures never cleared the gate at all — `exit 2, 1 of 9 preconditions
+unmet` on all five rounds. That is the stall the whack-a-mole brief described,
+and it is specific to **authoring a deleted file**, not to depth or budget.
+
+**Verdict:** [`2026-08-26-p17-repair-limit-verdict.md`](2026-08-26-p17-repair-limit-verdict.md).
+Answer: predominantly a harness defect (the false directive); depth is not a
+limit; budget has no measurable effect on editing; the residual difficulty is
+authoring from an implied contract — stated with its confound rather than
+claimed as "framing".
+
+**The claim I was about to make and did not:** "budget doesn't matter." It
+doesn't for editing, and it decided the single `framing-2` pass. The honest form
+is conditional, and it is the form in the verdict.
+
+**next:** **stop — goal met.** The loop ran 3 iterations, escalated zero times,
+and answered the question. Remaining judgement calls are in
+[`questions.md`](questions.md), answerable from kept captures at zero GPU cost.
