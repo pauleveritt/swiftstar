@@ -40,7 +40,11 @@ public enum PhaseRepair {
         switch result {
         case .passed(let ref, _, let wt):
             return .repaired(ref: ref, worktree: wt)
-        case .exhausted(_, let receipt):
+        case .exhausted(_, let receipt, let best):
+            // Phase-repair exhaustion stops the whole run before any verdict is
+            // computed, so the best tree has no consumer here -- but RepairLoop
+            // hands it over live, so it must be discarded rather than leaked.
+            if let best { WorktreeDispatcher.discard(best.worktree, in: repo) }
             return .exhausted(receipt: receipt)
         }
     }

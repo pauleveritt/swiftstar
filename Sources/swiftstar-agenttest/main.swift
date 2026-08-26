@@ -506,7 +506,8 @@ func runFixtureOnce(_ name: String) throws {
         if grade.exit == 0 { print("[agenttest] fixture \(name): 13/13 ✓"); return }
         print("[agenttest] fixture \(name): repaired but still failing — \(grade.exit)")
         exit(1)
-    case .exhausted(_, let receipt):
+    case .exhausted(_, let receipt, let best):
+        if let best { WorktreeDispatcher.discard(best.worktree, in: repo) }
         print("[agenttest] fixture \(name): repair exhausted — \(receipt)")
         exit(1)
     }
@@ -978,9 +979,33 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                 try? "exit=\(g.exit)\n\n\(g.output)\n\nrepaired: \(repairedRef)"
                     .write(to: captureDir.appendingPathComponent("acceptance.txt"),
                            atomically: true, encoding: .utf8)
-            case .exhausted(_, let receipt):
+            case .exhausted(_, let receipt, let best):
                 repairNote = "repair exhausted (\(receipt))"
                 print("[agenttest] repair: exhausted — \(receipt)")
+                // Grade the best tree repair reached, not the tree that entered
+                // repair (decision 2026-08-26). Rounds are cumulative, so the
+                // last candidate holds every round's work. Previously this
+                // branch updated nothing, leaving `gradeWorktree` on the
+                // pre-repair tree -- so `code.md`, the qualitative verdict and
+                // the reported acceptance exit all described a tree that
+                // predated every repair round. Measured across the 2026-08-26
+                // matrix: 21 of 21 cells that exhausted acceptance repair were
+                // graded that way, one of them faulted for what was missing
+                // from a `models.py` repair had itself written. The run still
+                // *fails* either way -- `g.passed` short-circuits to `.passed`,
+                // so an exhausted repair never carries a passing grade -- but
+                // what gets reported is now what the model actually produced.
+                if let best {
+                    grade = best.grade
+                    acceptanceExit = best.grade.exit
+                    gradeWorktree = best.worktree
+                    gradeWorktreeOwnedByTxn = false
+                    repairNote = "repair exhausted (\(receipt)); graded best reached \(best.ref)"
+                    print("[agenttest] repair: grading best tree reached — \(best.ref) (exit \(best.grade.exit))")
+                    try? "exit=\(best.grade.exit)\n\n\(best.grade.output)\n\nbest reached: \(best.ref) (repair exhausted)"
+                        .write(to: captureDir.appendingPathComponent("acceptance.txt"),
+                               atomically: true, encoding: .utf8)
+                }
             }
         } catch RepairLoopError.sessionExhausted(let reason) {
             txn.discardFinal()

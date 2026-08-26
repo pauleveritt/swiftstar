@@ -438,3 +438,60 @@ valid. This entry is the correction of record.
 **next:** **replan** — the contract let a broken check certify a headline, and
 had no rule that would have caught it. `.claude/commands/goal.md` is being
 rewritten before any further iteration.
+
+## 8 — 2026-08-26 — fix (grading tree)
+
+**did:** Resolved iteration 6's escalation with the human's decision: **on
+repair exhaustion, grade the best tree repair reached.** `RepairLoop.Outcome`
+gained `BestReached(ref:grade:worktree:)` on the `.exhausted` case — the API
+change Fable correctly flagged as necessary, since `.exhausted` previously
+carried no candidate at all and the ledger's "one-line `gradeWorktree` update"
+was wrong.
+
+"Best" is implemented as **the last candidate**, and that is a claim, not a
+shortcut: since the V1 fix, rounds are cumulative, so the final candidate
+contains every prior round's work and is strictly the most complete tree repair
+produced. Deliberately *not* implemented as a scored comparison across rounds —
+there is no principled metric for it (pytest exit 1 vs 2 is not an ordering,
+and "7 failed" vs "3 failed" is not in the exit code), and inventing one would
+be exactly the kind of unfalsifiable judgment these invariants exist to keep
+out.
+
+The loop keeps the best candidate's worktree alive between rounds, discarding a
+superseded one the moment a newer candidate replaces it, and hands it over live
+on the same ownership contract as `.passed`. Both non-consuming callers
+(`PhaseRepair`, whose exhaustion stops the run before any verdict; and the
+fixture tier) now discard it explicitly rather than leaking it.
+
+`main.swift`'s acceptance branch now sets `grade`, `acceptanceExit`,
+`gradeWorktree`, and rewrites `acceptance.txt` from the best tree — so
+`code.md` and the qualitative verdict finally describe what the model produced.
+The run's pass/fail is unchanged by construction: `g.passed` short-circuits to
+`.passed`, so an exhausted repair never carries a passing grade.
+
+**cells:** no new captures this iteration.
+
+**model:** (omitted — fix iteration, per contract.)
+
+**evidence:** red-then-green, by temporarily reverting only the three lines
+that record `best`:
+
+```
+# reverted:
+✘ Test exhaustionReturnsTheBestTreeReached() recorded an issue at RepairLoopTests.swift:115:25
+  ↳ exhaustion dropped the best tree reached
+# restored:
+✔ Test exhaustionReturnsTheBestTreeReached() passed after 0.525 seconds.
+
+$ swift test                          # 539 tests, 74 suites — passed
+$ SWIFTSTAR_INTEGRATION=1 swift test  # 539 tests, 74 suites — passed
+```
+
+The test writes `a.txt` in round 1 and `b.txt` in round 2 and never passes, so
+the returned worktree must contain **both** files — it cannot be satisfied by
+the base tree or by either round alone.
+
+**next:** **probe** — a fresh pipeline cell to confirm the fix end-to-end in
+the live path. Explicitly a probe and not a measure: V2 is still unfixed and
+still predicted to fire on any cell reaching acceptance repair, so no model
+numbers may be recorded from it.

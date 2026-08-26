@@ -80,6 +80,48 @@ struct RepairLoopTests {
                 "expected only b.txt/c.txt missing at head (a.txt was seeded); got \(seenMissing)")
     }
 
+    /// Exhaustion must surface the best tree repair reached, not silently drop
+    /// it (decision 2026-08-26). Before this, `.exhausted` carried no candidate,
+    /// so `swiftstar-agenttest` kept grading the pre-repair tree: `code.md`,
+    /// the qualitative verdict and the reported acceptance exit all described a
+    /// tree that predated every repair round (21 of 21 affected cells in the
+    /// 2026-08-26 matrix). Round 2 here writes `b.txt` on top of round 1's
+    /// `a.txt` and never passes, so the returned worktree must show BOTH files
+    /// -- proving it is the accumulated last candidate and not the base tree.
+    @Test func exhaustionReturnsTheBestTreeReached() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let calls = LockedCounter()
+        let packet = HandoffPacket(
+            taskText: "fix it", writableFiles: ["a.txt", "b.txt"], validationCommand: "true",
+            baselines: [:], turnBudget: 1000, toolCallBudget: 8,
+            role: .repair, sampling: SamplingPolicy(think: .off))
+        let result = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            packetBuilder: { _ in packet },
+            runPhase: { _, wt, _ in
+                calls.increment()
+                let name = calls.value == 1 ? "a.txt" : "b.txt"
+                try "round\(calls.value)\n".write(to: wt.appendingPathComponent(name),
+                                                  atomically: true, encoding: .utf8)
+                return self.outcome(mutations: [name])
+            },
+            grade: { _ in GradeResult(exit: 1, output: "still failing") })
+        guard case .exhausted(_, let receipt, let best) = result else {
+            Issue.record("expected exhausted, got \(result)"); return
+        }
+        #expect(receipt == .repairExhausted)
+        guard let best else {
+            Issue.record("exhaustion dropped the best tree reached"); return
+        }
+        defer { WorktreeDispatcher.discard(best.worktree, in: repo) }
+        #expect(!best.ref.isEmpty)
+        let a = try? String(contentsOf: best.worktree.url.appendingPathComponent("a.txt"), encoding: .utf8)
+        let b = try? String(contentsOf: best.worktree.url.appendingPathComponent("b.txt"), encoding: .utf8)
+        #expect(a == "round1\n", "round 1's write missing from the best tree — got \(a ?? "<<nil>>")")
+        #expect(b == "round2\n", "round 2's write missing from the best tree — got \(b ?? "<<nil>>")")
+    }
+
     @Test func passesOnFirstCandidate() throws {
         let repo = try makeRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
@@ -127,7 +169,7 @@ struct RepairLoopTests {
                 return self.outcome(mutations: ["a.txt"])
             },
             grade: gradingScheme())
-        guard case .exhausted(let lastGrade, let receipt) = result else {
+        guard case .exhausted(let lastGrade, let receipt, _) = result else {
             Issue.record("expected exhausted"); return
         }
         #expect(receipt == .repairExhausted)
@@ -146,7 +188,7 @@ struct RepairLoopTests {
                 return self.outcome(mutations: [])   // noChanges
             },
             grade: gradingScheme())
-        guard case .exhausted(_, let receipt) = result else { Issue.record("expected exhausted"); return }
+        guard case .exhausted(_, let receipt, _) = result else { Issue.record("expected exhausted"); return }
         #expect(receipt == .noChanges)
         #expect(calls.value == 1)
     }
@@ -299,7 +341,7 @@ struct RepairLoopTests {
             },
             grade: gradingScheme(),
             fileCap: 4)
-        guard case .exhausted(_, let receipt) = result else {
+        guard case .exhausted(_, let receipt, _) = result else {
             Issue.record("expected exhausted, got \(result)"); return
         }
         #expect(receipt == .contractNotFollowed)
@@ -420,7 +462,7 @@ struct RepairLoopTests {
                 return self.outcome(mutations: [])   // noChanges
             },
             grade: gradingScheme())
-        guard case .exhausted(_, let receipt) = result else { Issue.record("expected exhausted"); return }
+        guard case .exhausted(_, let receipt, _) = result else { Issue.record("expected exhausted"); return }
         #expect(receipt == .noChanges)
         #expect(calls.value == 1)
     }

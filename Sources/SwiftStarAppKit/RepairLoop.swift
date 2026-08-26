@@ -44,9 +44,33 @@ public enum RepairLoop {
         }
     }
 
+    /// The furthest repair actually got before running out of budget: its last
+    /// committed candidate, that candidate's grade, and a live worktree checked
+    /// out at it. Rounds are cumulative (see the `.validationFailed` path
+    /// below), so the last candidate contains every prior round's work and is
+    /// the most complete tree repair produced.
+    ///
+    /// Exists because exhaustion previously threw this away: the caller kept
+    /// grading the *pre-repair* tree, so `code.md`, the qualitative verdict and
+    /// the reported acceptance exit all described a tree that predated every
+    /// repair round -- in one measured case faulting the run for what was
+    /// missing from a `models.py` repair had itself written (2026-08-26,
+    /// 21 of 21 affected cells). The worktree is handed over live on the same
+    /// ownership contract as `.passed`: the caller discards it.
+    public struct BestReached: Sendable {
+        public let ref: String
+        public let grade: GradeResult
+        public let worktree: WorktreeDispatcher.Worktree
+        public init(ref: String, grade: GradeResult, worktree: WorktreeDispatcher.Worktree) {
+            self.ref = ref
+            self.grade = grade
+            self.worktree = worktree
+        }
+    }
+
     public enum Outcome: Sendable {
         case passed(ref: String, grade: GradeResult, worktree: WorktreeDispatcher.Worktree)
-        case exhausted(lastGrade: GradeResult?, receipt: Receipt)
+        case exhausted(lastGrade: GradeResult?, receipt: Receipt, best: BestReached?)
     }
 
     public static func run(
@@ -61,6 +85,11 @@ public enum RepairLoop {
     ) throws -> Outcome {
         var head = failedRef
         var lastGrade = initialGrade
+        // The furthest repair has got so far. Its worktree is deliberately kept
+        // alive between rounds (a superseded one is discarded the moment a newer
+        // candidate replaces it), so exhaustion can hand the caller the most
+        // complete tree repair produced instead of silently dropping it.
+        var best: BestReached?
 
         for round in 1...maxCandidateRounds {
             let start = Date()
@@ -93,7 +122,7 @@ public enum RepairLoop {
                     if let data = FileManager.default.contents(atPath: url.path),
                        data.count > fileCap {
                         write(record: RoundRecord(round: round, candidateRef: nil, receipt: .contractNotFollowed, grade: nil, elapsed: Int(Date().timeIntervalSince(start))), to: captureDir)
-                        return .exhausted(lastGrade: lastGrade, receipt: .contractNotFollowed)
+                        return .exhausted(lastGrade: lastGrade, receipt: .contractNotFollowed, best: best)
                     }
                 }
             }
@@ -182,7 +211,7 @@ public enum RepairLoop {
                 if harvest.files.isEmpty {
                     FileHandle.standardError.write(Data("[repair] harvest: 0 labeled blocks from text:\n\(turn.text)\n".utf8))
                     write(record: RoundRecord(round: round, candidateRef: nil, receipt: .contractNotFollowed, grade: nil, elapsed: Int(Date().timeIntervalSince(start))), to: captureDir)
-                    return .exhausted(lastGrade: lastGrade, receipt: .contractNotFollowed)
+                    return .exhausted(lastGrade: lastGrade, receipt: .contractNotFollowed, best: best)
                 }
                 for (path, content) in harvest.files {
                     try WorktreeDispatcher.writeFile(content, to: path, in: wt.url)
@@ -201,8 +230,12 @@ public enum RepairLoop {
                       to: captureDir)
                 if g.passed {
                     shouldDiscardWorktree = false
+                    if let previous = best { WorktreeDispatcher.discard(previous.worktree, in: repo) }
                     return .passed(ref: ref, grade: g, worktree: wt)
                 }
+                if let previous = best { WorktreeDispatcher.discard(previous.worktree, in: repo) }
+                shouldDiscardWorktree = false
+                best = BestReached(ref: ref, grade: g, worktree: wt)
                 head = ref
                 lastGrade = g
             case .receipt(let receipt):
@@ -237,10 +270,10 @@ public enum RepairLoop {
                     lastGrade = GradeResult(exit: validation.exit, output: validation.output)
                     continue
                 }
-                return .exhausted(lastGrade: lastGrade, receipt: receipt)
+                return .exhausted(lastGrade: lastGrade, receipt: receipt, best: best)
             }
         }
-        return .exhausted(lastGrade: lastGrade, receipt: .repairExhausted)
+        return .exhausted(lastGrade: lastGrade, receipt: .repairExhausted, best: best)
     }
 
     /// Which of `files` are absent at `ref` in `repo`, checked directly
