@@ -110,4 +110,54 @@ struct WorktreeTransactionTests {
         _ = txn.commitBack()  // discards the failed phase's worktree
         #expect(!FileManager.default.fileExists(atPath: wt1.url.path))
     }
+
+    @Test func adoptRepairedPhaseAdvancesHeadAndDiscardsFailedWorktree() throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let txn = WorktreeTransaction(repo: repo)
+
+        // Phase 1 candidate.
+        let p1 = packet(["a.txt"], task: "phase 1")
+        let wt1 = try txn.preparePhase(packet: p1)
+        try "one\n".write(to: wt1.url.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try txn.finalizePhase(wt1, packet: p1, turnOutcome: outcome(mutations: ["a.txt"]), validation: nil)
+
+        // Phase 2 fails validation; its work is committed for repair.
+        let p2 = packet(["b.txt"], task: "phase 2")
+        let wt2 = try txn.preparePhase(packet: p2)
+        try "broken\n".write(to: wt2.url.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+        let failedRef = try WorktreeDispatcher.commitForRepair(wt2, packet: p2, in: repo)
+
+        // A repair worktree branched from the failed phase's commit.
+        let repairedWT = try WorktreeDispatcher.prepare(packet: p2, in: repo, baseRef: failedRef)
+        try "fixed\n".write(to: repairedWT.url.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+        guard case .candidate(let repairedRef, _, _) = try WorktreeDispatcher.finalize(
+            repairedWT, packet: p2, turnOutcome: outcome(mutations: ["b.txt"]), validation: nil, in: repo) else {
+            Issue.record("repair must finalize to a candidate"); return
+        }
+
+        try txn.adoptRepairedPhase(failedWorktree: wt2, repairedWorktree: repairedWT, repairedRef: repairedRef)
+
+        #expect(txn.candidateRef == repairedRef)
+        #expect(txn.head == (try git(repo, ["rev-parse", repairedRef])
+            .trimmingCharacters(in: .whitespacesAndNewlines)))
+        #expect(txn.finalWorktree?.url == repairedWT.url)
+        #expect(!FileManager.default.fileExists(atPath: wt2.url.path),
+                "the failed worktree must be discarded by adoptRepairedPhase")
+
+        // Phase 3 branches from the repaired head and must see the repaired file.
+        let p3 = packet(["c.txt"], task: "phase 3")
+        let wt3 = try txn.preparePhase(packet: p3)
+        #expect(try String(contentsOf: wt3.url.appendingPathComponent("b.txt"), encoding: .utf8) == "fixed\n",
+                "phase 3's checkout must contain the repaired phase 2 work")
+        _ = try txn.finalizePhase(wt3, packet: p3, turnOutcome: outcome(mutations: ["c.txt"]), validation: nil)
+
+        guard let finalRef = txn.commitBack() else { Issue.record("commitBack must return the final ref"); return }
+        #expect(finalRef.hasPrefix("refs/swiftstar/candidates/"))
+        // The repaired worktree, superseded by phase 3, must not leak.
+        #expect(!FileManager.default.fileExists(atPath: repairedWT.url.path),
+                "the repaired worktree must be discarded once superseded")
+
+        txn.discardFinal()
+    }
 }

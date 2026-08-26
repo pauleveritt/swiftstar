@@ -45,6 +45,23 @@ public final class WorktreeTransaction {
         return outcome
     }
 
+    /// P12.8 (D4): fold a repaired phase back into the transaction. The failed
+    /// phase's worktree is discarded; the repaired worktree is tracked so
+    /// `commitBack` discards it when a later phase supersedes it (it must never
+    /// leak as a finalWorktree that is not in `worktrees`).
+    public func adoptRepairedPhase(
+        failedWorktree: WorktreeDispatcher.Worktree,
+        repairedWorktree: WorktreeDispatcher.Worktree,
+        repairedRef: String
+    ) throws {
+        worktrees.removeAll { $0.url == failedWorktree.url }
+        WorktreeDispatcher.discard(failedWorktree, in: repo)
+        worktrees.append(repairedWorktree)
+        head = try WorktreeDispatcher.resolve(ref: repairedRef, in: repo)
+        candidateRef = repairedRef
+        finalWorktree = repairedWorktree
+    }
+
     /// Return the final candidate ref, discarding every intermediate worktree but
     /// KEEPING `finalWorktree` for grading (the caller grades there, then calls
     /// `discardFinal`). Returns nil when no phase produced a candidate.
