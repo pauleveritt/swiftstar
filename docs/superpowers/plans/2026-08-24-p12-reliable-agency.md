@@ -410,11 +410,24 @@ alongside the persistent-session-vs-stateless-API finding that motivated
 this phase, stated as a hypothesis pending that real measurement, not a
 result, until the trace capture actually lands.
 
-**Status (2026-08-25): NOT STARTED — plan text only.** Both P12.7 commits
-(`082329d`, `1400171`) touch this file and nothing else. There is no
-`DumbImplementer` in `Sources/`, no trace-channel capture, no
-Σprompt/Σcached/Σsuffix, no warm-started timing, and `docs/cool_things/` does
-not exist. An earlier ROADMAP entry credited P12.7 with having "corrected the
+**Status (2026-08-25, second update): pieces 1-2 of 5 shipped, live-confirmed
+same night.** `swiftstar-agenttest` now wires `--trace` into every capture dir
+(`wire.trace`, unconditional, matching `wire.ndjson`) and reports
+Σprompt/Σcached/Σsuffix — summed from the trace's own `prefill sync done`
+lines across the whole run, not derived — both as a stdout line and as three
+new `run-config.json` fields. Implemented `eef1e9f`, completeness-fixed
+`c3bda1d` (the read/write now runs in a `defer` so early-stop paths get it
+too, not just the happy path — an Opus checkpoint review caught the original
+placement silently skipping ~10 early-return cases). Live-confirmed:
+`captures/agenttest/20260825-232102-roadmap` reports
+Σprompt=38014/Σcached=33828/Σsuffix=4186, a real, nonzero, sensible split
+(89% cache-hit) — not the all-zero fallback. **Still not started: pieces
+3-5** — no `DumbImplementer`, no "stateful tokens" (Σprompt − final
+ctx_used; deliberately deferred, since a pooled multi-worker run has no
+single obvious "final ctx_used" to diff against — a real open design
+question, not a mechanical gap), no warm-started timing, no
+`docs/cool_things/` write-up, and the Claude Code L3 comparison has not been
+redone. An earlier ROADMAP entry credited P12.7 with having "corrected the
 cross-system metric definitions the measurement gate reports against" — true
 only of the definitions *in this document*, not of anything the harness
 measures; that claim has been corrected. Item 2a's alleged

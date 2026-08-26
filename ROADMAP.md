@@ -45,11 +45,12 @@ survive. Treat P12.3's Mellum arm as still not run; the scripts are evidence
 someone (possibly a prior session) intended to run it, not evidence that it
 did or will.
 
-**Open choices, none started:** P12.7 (the cross-system metrics phase — trace
-capture, `DumbImplementer`, Σprompt/Σcached/Σsuffix, warm-started timing;
-plan text only so far, real build work); more live n for P12.4 (n=2) or
-P12.5 (n=1); or P14 (A docs site), whose precondition — "once there is a
-reader who isn't the author" — has not obviously arrived.
+**Open choices:** P12.7 is now 2/5 pieces in (trace capture and
+Σprompt/Σcached/Σsuffix shipped and live-confirmed the same night;
+`DumbImplementer`, stateful tokens, warm-started timing, and the write-up
+remain — none started); more live n for P12.4 (n=2) or P12.5 (n=1); or P14
+(A docs site), whose precondition — "once there is a reader who isn't the
+author" — has not obviously arrived.
 
 *The next phase is picked deliberately, not by momentum.*
 
@@ -862,15 +863,19 @@ Completed phases move here when the roadmap outgrows the front page.
   phase count, orphaned nothing, passed validation, and drove the run to
   the same final result, n=1; P12.6 met the second half of its own
   disjunctive criterion by naming and classifying the next failure mode
-  (*completes-and-is-wrong*, not shallow exploration); P12.8 wired
-  phase-level recovery, plus a same-night fix (`953d05a`) so a failed
-  repair now retries with fresh evidence instead of exiting immediately.
+  (*completes-and-is-wrong*, not shallow exploration); P12.7 shipped its
+  first 2 of 5 pieces the same night — trace-channel capture and
+  Σprompt/Σcached/Σsuffix, live-confirmed; P12.8 wired phase-level recovery,
+  plus a same-night fix (`953d05a`) so a failed repair now retries with
+  fresh evidence instead of exiting immediately.
   What did **not** ship, and is not claimed: **P12.0's source-of-truth
   document was never written** and no superseded-doc banners were applied —
   `2026-08-24-overnight-consolidation.md` still stands as unmerged staging;
-  **P12.7 shipped plan text only** — no `DumbImplementer`, no
-  trace-channel capture, no Σprompt/Σcached/Σsuffix metrics, no
-  `docs/cool_things/` write-up; P12.3's Mellum arm never ran; P12.4's live
+  **P12.7 shipped 2 of 5 pieces the same night** — trace-channel capture
+  and Σprompt/Σcached/Σsuffix, live-confirmed (`20260825-232102-roadmap`:
+  38014/33828/4186); no `DumbImplementer`, no stateful tokens (deliberately
+  deferred), no warm-started timing, no `docs/cool_things/` write-up;
+  P12.3's Mellum arm never ran; P12.4's live
   end-to-end tier (three phases → 13/13 from packets, at any real n) was
   started and stopped, so beyond those two n=2 instances the evidence is
   fixture-tier only; P12.8's own live phase-boundary confirmation

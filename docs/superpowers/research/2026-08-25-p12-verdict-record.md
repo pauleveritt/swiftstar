@@ -133,9 +133,13 @@ What the batch-to-batch spread actually looks like on an unchanged config:
   text-contract on, 11/13→13/13). That is n=2, not a rate — two different
   configs, two different failure contents, both repaired in one round. The
   planned n=15–20/arm run is still not done.
-- **P12.7 shipped plan text only** — no `DumbImplementer`, no trace-channel
-  capture, no Σprompt/Σcached/Σsuffix metrics, no warm-started timing, no
-  `docs/cool_things/` write-up.
+- **P12.7: 2 of 5 pieces shipped the same night** (trace-channel capture,
+  Σprompt/Σcached/Σsuffix — live-confirmed, `captures/agenttest/20260825-
+  232102-roadmap`: 38014/33828/4186, a real nonzero split). Still missing:
+  `DumbImplementer`, stateful tokens (deliberately deferred — no single
+  "final ctx_used" obviously exists across a pooled multi-worker run),
+  warm-started timing, the `docs/cool_things/` write-up, and the redone
+  Claude Code L3 comparison.
 - **P12.8's live confirmation was attempted and not achieved.** See below.
 
 ## The P12.8 confirmation attempt
@@ -196,7 +200,7 @@ P12's own criteria, honestly scored:
 | P12.4 | Partial — fixture tier fully met; the "three phases, 13/13, from packets" line has now been exercised end-to-end with a real implement failure feeding repair **twice** (2026-08-25, live, unseeded, n=2), as byproducts of other work rather than a dedicated validation batch. Still no rate. |
 | P12.5 | **Yes**, on the structural disjunct (2026-08-25, live, n=1). Acceptance-equivalence deliberately left uncharacterized — see the design doc's "Result." |
 | P12.6 | Second disjunct only. No run has shown a role completing *with* bounded thinking; every self-describing capture records `think=nothink`. |
-| P12.7 | Not started (plan text only). |
+| P12.7 | Partial — pieces 1-2 of 5 shipped and live-confirmed (2026-08-25); `DumbImplementer`, stateful tokens, warm-started timing, and the write-up remain. |
 | P12.8 | Deterministic tier yes; live confirmation no. |
 
 ## Known limitations — carried forward, not fixed here
