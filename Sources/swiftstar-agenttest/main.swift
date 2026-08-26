@@ -583,9 +583,14 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     // shared spec context every packet gets stays host-computed.
     var phases = phases
     if modelDecompose {
+        // Same rule as every other packet (comment at phasePacket's own
+        // `sampling:` argument): the packet records the sampling the run
+        // actually used, so a capture is self-describing. `SamplingPolicy()`'s
+        // bare default is `.bounded`, which would misdescribe a nothink run.
+        let decomposeThink: ThinkMode = env["AGENTTEST_THINK"] == "1" ? .bounded : .off
         print("[agenttest] decompose: dispatching model-authored decompose packet on worker 3 …")
         let firstOutcome = try orch.runPhase(
-            worker: WorkerId(3), packet: DecomposePacket.build(specText: specText),
+            worker: WorkerId(3), packet: DecomposePacket.build(specText: specText, think: decomposeThink),
             worktree: repoURL, capture: captureHandle)
         var finalText = firstOutcome.text
         var decision = DecomposeDispatch.decide(
@@ -596,7 +601,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         if case .needsFollowUp = decision {
             print("[agenttest] decompose: 0 phases parsed, turn reasoned without emitting — sending emission follow-up")
             let followUpOutcome = try orch.runPhase(
-                worker: WorkerId(3), packet: DecomposePacket.followUp(),
+                worker: WorkerId(3), packet: DecomposePacket.followUp(think: decomposeThink),
                 worktree: repoURL, capture: captureHandle)
             finalText = followUpOutcome.text
             decision = DecomposeDispatch.decide(

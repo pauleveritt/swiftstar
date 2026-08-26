@@ -111,7 +111,14 @@ public enum DecomposePacket {
     /// instead of copying the implement packet's budget verbatim — a
     /// judgment call, since the design doc left the exact numbers to the
     /// implementer ("match... or a smaller sensible default — your call").
-    public static func build(specText: String) -> HandoffPacket {
+    /// `think` is threaded in by the caller (mirroring `phasePacket`'s
+    /// `env["AGENTTEST_THINK"] == "1" ? .bounded : .off`) rather than defaulted
+    /// here, so the packet records the sampling the run actually used — every
+    /// other packet in this harness follows the same rule so a capture is
+    /// self-describing rather than needing the invocation to interpret it;
+    /// defaulting to `SamplingPolicy()`'s bare `.bounded` here would silently
+    /// misdescribe a run made with the (default) nothink setting.
+    public static func build(specText: String, think: ThinkMode = .off) -> HandoffPacket {
         let directive = ([
             "You are the decompose role. Read the specification text below in",
             "full, then re-emit it as one or more phase blocks. Each phase block",
@@ -138,7 +145,7 @@ public enum DecomposePacket {
             facts: [],
             redacts: [],
             role: .decompose,
-            sampling: SamplingPolicy())
+            sampling: SamplingPolicy(think: think))
     }
 
     /// Turn 2 of decompose's own two-turn emission protocol (D3) — mirrors
@@ -148,7 +155,7 @@ public enum DecomposePacket {
     public static let emissionFollowUpText =
         "Stop reasoning. Emit the phase headings now, in the exact format requested, nothing else."
 
-    public static func followUp() -> HandoffPacket {
+    public static func followUp(think: ThinkMode = .off) -> HandoffPacket {
         HandoffPacket(
             taskText: emissionFollowUpText,
             writableFiles: [],
@@ -161,6 +168,6 @@ public enum DecomposePacket {
             facts: [],
             redacts: [],
             role: .decompose,
-            sampling: SamplingPolicy())
+            sampling: SamplingPolicy(think: think))
     }
 }

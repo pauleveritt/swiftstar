@@ -38,9 +38,18 @@ struct DecomposePacketTests {
         #expect(packet.textContract == false)
     }
 
-    @Test func samplingIsTheProjectDefault() {
+    @Test func samplingDefaultsToNothinkLikeEveryOtherPacket() {
+        // Matches phasePacket's own rule (main.swift): the packet records the
+        // sampling the run actually used, so a capture is self-describing.
+        // `SamplingPolicy()`'s bare default is `.bounded`, which would
+        // misdescribe a nothink run — `think` must be threaded in explicitly.
         let packet = DecomposePacket.build(specText: "spec text")
-        #expect(packet.sampling == SamplingPolicy())
+        #expect(packet.sampling == SamplingPolicy(think: .off))
+    }
+
+    @Test func samplingThreadsThroughAnExplicitThinkValue() {
+        let packet = DecomposePacket.build(specText: "spec text", think: .bounded)
+        #expect(packet.sampling.think == .bounded)
     }
 
     @Test func taskTextEmbedsTheFullSpecText() {
