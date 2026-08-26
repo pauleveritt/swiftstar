@@ -284,19 +284,10 @@ def check_v6(cell, loop=None):
         paths = sorted({p for _, p in discarded})
         return FAIL, (f'{len(discarded)} heading(s) had fenced code discarded in favour of '
                       f'commentary: {paths}')
-    ts = turns(cell)
-    unfenced = [t for t in ts if t.strip() and '```' not in t]
-    if not unfenced:
-        return PASS, None
-    for label, d in repair_loops(cell):
-        for pf in packets(d):
-            for path, body in evidence_files(task_text(pf)):
-                b = body.strip()
-                if len(b.encode()) < 40 or 'does not exist in this worktree' in b[:80]:
-                    continue
-                if any(b in t for t in unfenced):
-                    return FAIL, (f'{label}/{os.path.basename(pf)}: {path} contents originate in '
-                                  f'an emission containing zero fenced blocks')
+    # The zero-fence clause was WITHDRAWN (v3 iteration 3, human ruling). It
+    # marked P15's correct zero-fence harvests invalid: three of the four frozen
+    # fixtures are zero-fence emissions carrying real code, and the check could
+    # not tell commentary from code. Any V6 count that clause produced is void.
     return PASS, None
 
 
@@ -345,9 +336,6 @@ FIXTURES = [
     ('V6', '20260826-104811-roadmap', None, FAIL,
      'known-bad (widened clause): all 6 headings had their fenced code discarded '
      'in favour of commentary -- zero-fence detection alone passed this cell'),
-    ('V6', '20260826-112536-roadmap', None, FAIL,
-     'known-bad: round-1 emission had 6 headings, prose under each, zero fences; '
-     'the prose became app.py/models.py/tests/test_app.py'),
     ('V6', '20260826-105529-roadmap', None, PASS,
      'known-good: every harvested file came from a fenced block'),
 ]

@@ -46,13 +46,24 @@ loop follows the roadmap's one-direction rule; it does not pick directions.
 These were escalated in v2 and decided by the human. They are settled; do not
 re-litigate them, and do not silently extend them either.
 
-1. **Harvest.** `LabeledBlockParser`'s lenient path (a heading with no fenced
-   block takes its body to the next allowlisted heading) applies **only when
-   the emission contains at least one fenced block anywhere.** An emission with
-   **zero** fences is a plan, not code: harvest nothing and return
-   `contractNotFollowed` — a receipt type that already exists and is already
-   handled in `RepairLoop`. This routes a misclassified emission to the class
-   it belonged in rather than adding machinery.
+1. **Harvest.** **Prose between a heading and its fence does not beat the
+   fence.** When a heading is followed by anything other than a fence, and a
+   fence appears before the next allowlisted heading, the fenced block is the
+   content and the commentary is not. Landed v3 iteration 2.
+
+   **The zero-fence clause is WITHDRAWN** (v3 iteration 3). It was ruled first
+   and then refuted: three of the four frozen harvest fixtures
+   (`repeated.txt`, `unfenced-a.txt`, `unfenced-b.txt`) are zero-fence
+   emissions carrying real code, and `unfenced-a.txt` opens `#app.py` followed
+   immediately by `from fastapi import FastAPI`. "Zero fences means a plan, not
+   code" is false. **Lenient harvest of an unfenced body stays.**
+
+   Consequence to hold in view, not to fix silently: a model that emits
+   headings and a *plan* under each (capture `20260826-112536`) still has its
+   prose harvested as file content. Under this ruling that is the model failing
+   the contract, not the harness misreading it — but the run records it as
+   `validationFailed` rather than `contractNotFollowed`, which mislabels the
+   failure class. Reclassifying it is measurement semantics; do not.
 
    **Explicitly rejected:** filtering harvested bodies by whether they parse as
    the target language. Refusing to harvest Python that does not compile would
@@ -112,11 +123,16 @@ two of five checks read an adjacent artifact and both misfired.
   a runaway 8192-token generation with two-thirds of the context unused. Whether
   that is a harness bound or a model property is a measurement-semantics
   question and therefore escalates.
-- **V6 — nothing was harvested from an unfenced emission. [v3]** Read:
-  `wire.ndjson` turn text plus the resulting packet evidence. No file content
-  may originate in an emission containing zero fenced blocks. v2 wrote the
-  model's own prose into six source files across 3 of 8 cells; `app.py` became
-  English and every later round repaired the model's commentary.
+- **V6 — no file content was harvested in place of code the model fenced.
+  [v3, amended iteration 3]** Read: `wire.ndjson` turn text plus the resulting
+  packet evidence. No heading may have had a fenced block discarded in favour
+  of commentary. In capture `20260826-104811` all six headings went that way —
+  the model emitted correct fenced code six times, the harness kept its prose
+  and skipped the fences, `app.py` became English, and every later round
+  repaired the model's own commentary.
+  **The original zero-fence clause is withdrawn** — see standing ruling 1. It
+  would have marked P15's correct zero-fence harvests invalid, and the check
+  could not tell commentary from code.
 - **V7 — the run was reproducible. [v3]** Read: dispatched packets of two runs
   at the same seed. They must be byte-identical. v2's packets embedded the
   per-round temp-worktree UUID inside tracebacks, so a fixed seed produced a

@@ -299,3 +299,45 @@ some means the loop is not authorised to choose.
 The zero-fence half needs a ruling before V6 can be trusted, and V6 is required
 by done-when (a) and (b). The V1 check false positive (`112121`) is the
 obvious next fix once V6's text is settled.
+
+## 3 — 2026-08-26 — audit (correction) — retracts V6's zero-fence clause
+
+**did:** On the human's ruling, withdrew V6's zero-fence clause from both the
+contract and `check_v6`, and re-audited. **Every V6 count that clause produced
+is void** — it is retracted, not merely disabled.
+
+**cells:** valid=6 blocked={V6:2, V5:1, V1:1} unauditable={V4:9} of 9
+*(104551 is blocked by both V5 and V6; three distinct cells are blocked.)*
+
+**done-when: a=no b=no c=no d=no**
+
+**evidence:**
+
+```
+$ python3 Tools/audit-goal-invariants.py --self-test
+  [ok] V6 20260826-104811-roadmap/-: expected fail, got fail  (widened clause)
+  [ok] V6 20260826-105529-roadmap/-: expected pass, got pass
+self-test: PASS
+
+065840 VALID   104551 BLOCKED(V5 limit, V6 x1)   104811 BLOCKED(V6 x6)
+105213 VALID   105529 VALID                      112121 BLOCKED(V1)
+112536 VALID   112907 VALID                      113440 VALID
+```
+
+**What moved and why:** `20260826-112536` goes BLOCKED → VALID. It is the
+zero-fence "plan" cell — six headings, prose under each, no code. Under the
+amended ruling the harness did what lenient harvest is for; the model failed
+the contract. That is a model failure and the cell is attributable.
+
+**The thing that is now true and uncomfortable, recorded rather than fixed:**
+that run is recorded as `validationFailed`, not `contractNotFollowed`, so the
+capture mislabels *how* the model failed. The cell counts as valid and the
+label is wrong. Reclassifying it is measurement semantics and is not the
+loop's call; it is written into standing ruling 1 so it cannot be forgotten.
+
+The retired fixture (`112536` as a V6 known-bad) was removed rather than
+re-pointed, so no check claims a known-bad it no longer detects.
+
+**next:** **fix** — `check_v1`'s false positive on `112121`, the only remaining
+block whose cause is a known-broken check rather than a real defect. V1's
+frozen text already carries the correction it needs.
