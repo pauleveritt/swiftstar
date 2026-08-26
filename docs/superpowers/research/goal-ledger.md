@@ -708,3 +708,116 @@ emitted 5 distinct files); **V5** the cap is no longer inverted (measured: the
 packet that overflowed is now 15% of its former size). **V4 remains
 UNAUDITABLE** — phase 2/3 packets are still uncaptured — so any cell it would
 have judged must be reported as unauditable, never as passing.
+
+---
+
+## 12 — 2026-08-26 — measure (n=4) — **ESCALATION**
+
+**did:** Ran the first measure batch whose gate was legitimately open — mellum
+only, 2 seeds × 2 path styles, think off, 4 cells, binary at `410cf86`
+(rebuilt, 8s newer than the newest fixed source). Audited before recording any
+number. **Three of four cells are valid; the model failed all three.** Stopping
+the loop: three separate escalation triggers fired.
+
+**cells:** valid=3 blocked={V5:1} unauditable={V4:4} of 4
+**Cumulative valid Mellum cells: 4 of 10** (3 new + `20260826-065840`,
+re-audited VALID under the current auditor). Spread among the three new valid
+cells: seeds {1,2}, paths {relative, absolute} — the goal's required spread is
+met; only the count is short.
+
+**model:** **0/3** among valid cells (NOT the goal). Computed from
+`repair-round-N.json` grade records — the last graded round — never from
+`acceptanceExit` or `verdict.json`.
+
+**evidence:**
+
+```
+$ GOAL_MANIFEST=/tmp/measure-manifest.tsv python3 Tools/audit-goal-invariants.py
+=== mellum: 3 valid / 4 total ===
+    blocked:     {'V5': 1}
+    unauditable: {'V4': 4}   (NOT passes)
+
+$ python3 Tools/audit-goal-invariants.py --self-test
+self-test: PASS          # 8/8 fixtures, re-run after making MANIFEST env-overridable
+
+model: line, from round records only
+  mellum/relative/seed1  20260826-104551  -> (blocked, excluded)
+  mellum/absolute/seed1  20260826-104811  -> fail  (repair-round-2.json grade.exit=1)
+  mellum/relative/seed2  20260826-105213  -> fail  (repair-round-2.json grade.exit=2)
+  mellum/absolute/seed2  20260826-105529  -> fail  (repair-round-2.json grade.exit=1)
+```
+
+**The fixes are confirmed working in the pipeline, not just in fixtures.**
+
+*V2 (precondition manifest).* Every acceptance packet dispatched in this batch
+carried either the enumerated manifest or a real running-test surface. Zero
+carried `error during collection`:
+
+```
+20260826-104811  repair-packet-1  7073B [manifest]   repair-packet-2  6770B [manifest]
+20260826-105213  repair-packet-1  8582B [manifest]   repair-packet-2  8582B [manifest]
+20260826-105529  repair-packet-1  5915B [manifest]   repair-packet-2 13590B [assertions]
+```
+
+A live manifest, naming the single unmet gate precisely instead of one opaque
+`ModuleNotFoundError`:
+
+```
+  [MET]   from app import app
+  [MET]   import models
+  [MET]   from models import Complaint
+  [UNMET] models.complaints -- AttributeError: module 'models' has no attribute 'complaints'
+1 of 9 preconditions unmet.
+```
+
+*V5 (tail cap).* `20260826-105529`'s round-2 packet kept **8194 bytes** for a
+cap of 8192 (one character boundary), and what it kept is the part that
+matters — the pytest summary naming all 13 failing tests:
+
+```
+FAILED test_acceptance.py::test_complaint_model_contract_is_preserved - Asser...
+FAILED test_acceptance.py::test_seed_complaint_count_is_preserved - assert 3 ...
+13 failed, 13 warnings in 1.91s
+```
+
+Across the three valid cells, every turn ended `eos`; max `ctx_used` was 16878
+of 32768. No context pressure anywhere.
+
+**A corrected claim, before it was written down.** I was about to record
+"105529 is the first dispatched packet in the project's history to carry a real
+assertion surface." Scanning all 146 dispatched packets showed 14 qualify —
+most of them Laguna. The accurate statement is narrower: **among Mellum cells,
+one prior packet (`20260826-055741` round 2) carried an assertion surface and
+was never delivered — it is the context-overflow cell V5 was fixed for — so
+`105529` is the first *valid* Mellum cell in which a delivered packet named all
+13 failing assertions and the model's answer to it was graded.** Mellum's
+answer: `13 failed` → `13 failed`. No improvement.
+
+**What the three valid cells actually show Mellum doing:**
+
+- `104811` — round 1 stuck on the precondition; round 2 cleared it and the
+  suite ran (`12 failed, 1 passed`). It reached the assertion surface exactly
+  as the 2-round budget expired, so **it was never shown the assertions.**
+- `105213` — shown one precisely-named unmet gate (`models.complaints`), it
+  edited the *wrong file*: it put `complaints` in `app.py`. Both rounds'
+  emissions are byte-identical (`1eb1ed6e4ccb`), and the emitted `app.py` is
+  byte-identical to the `app.py` the packet had just shown it as current —
+  a verbatim re-emission, which the directive explicitly forbids
+  ("do not reproduce the current broken file").
+- `105529` — dispatched the full 13-assertion summary, produced no improvement.
+
+**On the identical packets in `105213`:** `repair-packet-1` and
+`repair-packet-2` are byte-identical (`b264bde613fe`). This is *not* the V1
+discard defect and the auditor's V1 pass is correct: V1's gate is a
+`validationFailed` receipt, and both rounds produced candidates. The packets
+match because the model re-emitted the current file verbatim, so the tree
+content did not change. Whether `head` advanced is unobservable here — the
+content is identical either way — and I am not claiming it was proven.
+
+**Structural observation, recorded as an observation and NOT as a new rule:**
+the harness minted a candidate ref for a byte-identical re-emission and spent a
+round on it, twice. There may be a missing no-op check. That is a fix proposal
+for the human, not something this iteration may adopt.
+
+**next:** **STOP — escalate.** Three triggers, listed in the message to the
+human. The loop does not choose here.

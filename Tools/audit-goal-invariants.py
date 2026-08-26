@@ -27,7 +27,9 @@ blocked" for a defect that was never looked for.
 """
 import csv, json, glob, os, re, sys
 
-MANIFEST = '/tmp/overnight-manifest.tsv'
+# Overridable so a /goal measure batch can be audited from its own manifest
+# without editing this file. Plumbing only -- no check reads this.
+MANIFEST = os.environ.get('GOAL_MANIFEST', '/tmp/overnight-manifest.tsv')
 
 PASS, FAIL, UNAUDITABLE = 'pass', 'fail', 'unauditable'
 
