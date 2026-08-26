@@ -19,12 +19,18 @@ public final class PoolOrchestrator {
     /// parent's validation command and, in the agent test, the worker's self-test).
     private var vettedCommands: [String] = []
 
-    public init(settings: AgentSettings) throws {
+    /// `workers` (P12.5): the pool size passed to `--subagent-pool`. Defaults
+    /// to 3 (orchestrator + workers 1/2 — implement/repair), preserving every
+    /// existing call site's behavior unchanged. A caller that needs an extra
+    /// independent KV-cache session (e.g. a decompose dispatch on its own
+    /// worker id, so it cannot collide with another role's session) passes a
+    /// larger value.
+    public init(settings: AgentSettings, workers: Int = 3) throws {
         self.model = settings.modelPath.lastPathComponent
         let binary = AgentCommand.binaryPath(settings: settings)
         let process = Process()
         process.executableURL = binary
-        process.arguments = PoolEngine.argv(settings: settings, workers: 3)
+        process.arguments = PoolEngine.argv(settings: settings, workers: workers)
         process.currentDirectoryURL = settings.engineDir
         process.environment = ProcessInfo.processInfo.environment
         let stdinPipe = Pipe()

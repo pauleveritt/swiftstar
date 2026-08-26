@@ -82,6 +82,11 @@ let absolutePathStyle = env["AGENTTEST_PATH_STYLE"] == "absolute"
 // D11: the text-contract build is gated behind an env flag so the default
 // remains agentic (the forcing-gate experiment must run agentic too).
 let textContractBuild = env["AGENTTEST_TEXT_CONTRACT"] == "1"
+// P12.5: dispatch one model-authored decompose packet on its own pool worker
+// before the phase loop, instead of the naive host string split. Off by
+// default, matching every other P12.1-era lever. See
+// docs/superpowers/specs/2026-08-25-p12-5-model-authored-packets-design.md.
+let modelDecompose = env["AGENTTEST_MODEL_DECOMPOSE"] == "1"
 
 /// The temperature the engine actually samples at.
 ///
@@ -108,16 +113,10 @@ let redacts = (env["AGENTTEST_REDACT"] ?? "")
     .map { $0.trimmingCharacters(in: .whitespaces) }
     .filter { !$0.isEmpty }
 
-/// Split a spec on `## Phase` headers. The text before the first phase (the
-/// title, intro, and any shared "data model" section) is returned as the
-/// `preamble`, and is prepended to every packet so shared contract facts reach
-/// the worker even though they are not phase text.
-func decompose(_ text: String) -> (preamble: String, phases: [String]) {
-    let parts = text.components(separatedBy: "\n## Phase ")
-    let preamble = parts.first ?? ""
-    let phases = parts.dropFirst().map { "## Phase " + $0 }
-    return (preamble, phases)
-}
+// `decompose(_:)` (the host's naive `## Phase` splitter) moved to
+// SwiftStarKit/Decompose.swift (P12.5, D2) so it is unit-testable on its own
+// and reusable for both the host split (here) and a model's decompose reply
+// (inside runOnce, gated behind AGENTTEST_MODEL_DECOMPOSE — see below).
 let (preamble, phases) = decompose(specText)
 guard !phases.isEmpty else {
     FileHandle.standardError.write(Data("swiftstar-agenttest: no phases found in \(specName).md\n".utf8))
@@ -327,6 +326,14 @@ func repairPacket(_ ctx: RepairContext, phaseScoped: Bool = false) -> HandoffPac
         role: .repair)
 }
 
+// P12.5 (D1): the `role: .decompose` packet itself — `DecomposePacket.build`/
+// `.followUp()` — lives in SwiftStarKit (Sources/SwiftStarKit/Decompose.swift)
+// rather than here alongside `repairPacket`, specifically so its shape
+// (`writableFiles: []`, no validation command, `role: .decompose`) is
+// unit-testable from `SwiftStarKitTests` — this file's top-level `main.swift`
+// code cannot be `@testable import`ed. See that file's doc comments for why
+// it is exempt from `HandoffPacketValidator.validate` by construction.
+
 // Validate every phase packet up front — before the model loads. The packets are
 // worktree-independent, so a malformed one (an absolute path, an empty manifest,
 // or a withheld fix leaked through the appended shared context) is caught in
@@ -335,7 +342,21 @@ func repairPacket(_ ctx: RepairContext, phaseScoped: Bool = false) -> HandoffPac
 // pre-seeded fixture and drives `repairPacket` directly — so this loop is
 // skipped entirely when `--fixture` is active; guarding it here rather than
 // deferring `phases`/`decompose` themselves keeps the non-fixture path unchanged.
-if fixtureName == nil {
+//
+// P12.5 (D1): the model-decompose arm skips this gate too, and deliberately
+// so, not by accident. The packets it would validate here are built from the
+// HOST's split of the spec text — but in that arm those phase texts are never
+// what gets dispatched; `runOnce` replaces `phases` with the model's own
+// decompose output before the dispatch loop runs, and the model hasn't been
+// asked yet at this point in the program (no engine has even spawned). There
+// is no way to validate "the phases that will actually be dispatched" this
+// early in that arm — decomposition itself needs a loaded model. Skipping
+// this gate does not silently validate a stale/empty `phases` against nothing
+// downstream cares about; it is skipped outright. The real gate for that arm
+// is the per-phase check inside the dispatch loop (~line 613 in the original
+// layout), which validates every phase's packet — host-split or
+// model-authored — right before it is dispatched, unchanged by this design.
+if fixtureName == nil, !modelDecompose {
     for (i, phaseText) in phases.enumerated() {
         if case .invalid(let reasons) = HandoffPacketValidator.validate(phasePacket(phaseText, textContract: textContractBuild)) {
             FileHandle.standardError.write(Data(
@@ -528,7 +549,12 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // context; a ceiling well under the total cap is the point.
         thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0,
         seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0)
-    let orch = try PoolOrchestrator(settings: settings)
+    // P12.5 (D1): the model-decompose arm bumps the pool from 3 to 4 so
+    // decompose gets its own independent KV-cache session (WorkerId(3)) that
+    // cannot collide with the engine's untagged startup handshake (which
+    // parses to WorkerId.orchestrator / id 0 by the wire parser's
+    // absent-field default) or with the implement/repair sessions (1/2).
+    let orch = try PoolOrchestrator(settings: settings, workers: modelDecompose ? 4 : 3)
     defer { orch.stop() }
     let txn = WorktreeTransaction(repo: repoURL)
     defer { txn.abort() }
@@ -543,6 +569,64 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     let wireFile = captureDir.appendingPathComponent("wire.ndjson")
     FileManager.default.createFile(atPath: wireFile.path, contents: nil)
     let captureHandle = FileHandle(forWritingAtPath: wireFile.path)
+
+    // P12.5 (D1): dispatch one model-authored decompose packet, before the
+    // phase loop, on WorkerId(3) — a fresh fourth pool session, never
+    // WorkerId.orchestrator/WorkerId(0) (collides with the engine's untagged
+    // startup handshake — round 2 of the design's review) and never
+    // WorkerId(1)/WorkerId(2) (implement/repair — dispatching decompose there
+    // would pollute those sessions and confound the very build-vs-repair
+    // comparison this project measures). `phases` is shadowed as a local
+    // `var` here so the model's output can replace it for this run only; the
+    // global `let (preamble, phases)` computed from the host split above is
+    // untouched, and `preamble` is never replaced regardless of arm (D1) — the
+    // shared spec context every packet gets stays host-computed.
+    var phases = phases
+    if modelDecompose {
+        print("[agenttest] decompose: dispatching model-authored decompose packet on worker 3 …")
+        let firstOutcome = try orch.runPhase(
+            worker: WorkerId(3), packet: DecomposePacket.build(specText: specText),
+            worktree: repoURL, capture: captureHandle)
+        var finalText = firstOutcome.text
+        var decision = DecomposeDispatch.decide(
+            text: firstOutcome.text, stopReason: firstOutcome.stopReason, isFollowUp: false)
+        // D3: one emission follow-up, on the same worker/session, before
+        // calling it model failure #1 — the same reason-then-stop protection
+        // P15 needed for repair/build, scaled to decompose's prose shape.
+        if case .needsFollowUp = decision {
+            print("[agenttest] decompose: 0 phases parsed, turn reasoned without emitting — sending emission follow-up")
+            let followUpOutcome = try orch.runPhase(
+                worker: WorkerId(3), packet: DecomposePacket.followUp(),
+                worktree: repoURL, capture: captureHandle)
+            finalText = followUpOutcome.text
+            decision = DecomposeDispatch.decide(
+                text: followUpOutcome.text, stopReason: followUpOutcome.stopReason, isFollowUp: true)
+        }
+        // D4: persist the raw decompose text (the turn that was actually
+        // parsed — the follow-up's if one ran) so the parse is independently
+        // reproducible later — "no number without its capture."
+        try? finalText.write(to: captureDir.appendingPathComponent("decompose-output.txt"),
+                              atomically: true, encoding: .utf8)
+        switch decision {
+        case .parsed(let modelPhases):
+            print("[agenttest] decompose: model produced \(modelPhases.count) phase(s)")
+            phases = modelPhases
+        case .needsFollowUp, .failedClosed:
+            // `.needsFollowUp` cannot actually recur here (`decide(isFollowUp:
+            // true)` never returns it) but the switch must stay exhaustive;
+            // both arms of this case mean the same thing at this point in the
+            // control flow — zero phases parsed, nothing left to try. D2: no
+            // fallback to the host split — that would silently substitute the
+            // untested path for the tested one and defeat the point of P12.5.
+            FileHandle.standardError.write(Data(
+                ("swiftstar-agenttest: model decompose failed closed — 0 phases parsed even "
+                 + "after the emission follow-up; not falling back to the host split\n").utf8))
+            return RunOutcome(finish: .stopped,
+                              note: "model decompose failed closed (0 phases parsed)",
+                              acceptanceExit: nil, verdict: nil, report: nil,
+                              elapsed: Int(Date().timeIntervalSince(runStart)))
+        }
+    }
 
     print("[agenttest] spec=\(specName) run=\(index + 1)/\(batchCount) phases=\(phases.count) capture=\(captureDir.path)")
 
@@ -599,8 +683,13 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     }
 
     for (i, phaseText) in phases.enumerated() {
-        // Same builder the up-front validation gate ran against, so what was
-        // validated is exactly what is dispatched.
+        // Same builder the up-front validation gate ran against (host-split
+        // arm), so what was validated is exactly what is dispatched. The
+        // model-decompose arm has no up-front equivalent to have run against
+        // (that gate is skipped for it — see the comment at its `if` above),
+        // so this is the *first* validation these phase packets see; either
+        // way, this per-phase gate — unchanged by P12.5 — is what actually
+        // gates every dispatched phase, either arm.
         let seedPacket = phasePacket(phaseText, textContract: textContractBuild)
         print("[agenttest] phase \(i + 1)/\(phases.count) …")
         let wt = try txn.preparePhase(packet: seedPacket)
