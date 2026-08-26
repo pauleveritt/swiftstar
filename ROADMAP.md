@@ -16,19 +16,30 @@ complete; see [Prior work](#prior-work). P15 was a detour taken to answer P13's
 reopen condition, and its exit was always a verdict rather than a product, so
 closing it returns the roadmap to its own line of work.
 
-**The open choice.** P14 (A docs site) is the only numbered planned phase, and
-its precondition — "once there is a reader who isn't the author" — has not
-obviously arrived. The alternative is **reopening P12** for phase-level repair
-(see [Backlog](#backlog)) — not new phase work: P12's own charter was "the host
-owning phase boundaries, budgets, permissions, validation, **and recovery**,"
-and P12.4 wired recovery only at the end-of-run acceptance boundary. Phase-level
-recovery was P12's stated scope from the start; it is unfinished, not superseded.
-The build arm's failures are now all content defects at a phase boundary
-(P15's verdict record), the repair loop already fixes that defect class 4/4, and
-the two are not connected — closing that gap is P12.8.
+**P12.8 landed; its live confirmation did not.** The phase-level recovery gap
+named above was closed as P12.8 — `commitForRepair`, `adoptRepairedPhase`,
+`PhaseRepair`, and the build-loop wiring are all committed, and the
+deterministic tier passes. But the one live confirmation run
+(`captures/agenttest/20260825-203706-roadmap-user-story`) did **not** reach
+acceptance: phase 1 failed validation on a trivially repairable content defect
+(`StaticFiles.__init__() got an unexpected keyword argument`), the repair
+attempt itself returned `validationFailed`, and `RepairLoop` exited on that
+receipt by design (D4 — any receipt ends the loop), so no second attempt ran
+with the new traceback. No verdict record has been written.
 
-*Nothing is in progress. The next phase is picked deliberately, not by
-momentum.*
+**A 2026-08-25 audit found the record had drifted from the tree** in both
+directions — two sub-phases were credited with deliverables that do not exist,
+and the P12 plan header still asserted work that had since landed. The Prior
+work entry for P12 has been corrected; see it for what shipped and what did not.
+
+**The open choice.** Three candidates, none started: finish P12.8 (lift the
+receipt-exit limitation so a failed repair gets a second attempt with the new
+traceback, then land the live confirmation and a verdict record); **P12.5**,
+P12's own named reopen condition and the untested third role; or P14 (A docs
+site), whose precondition — "once there is a reader who isn't the author" — has
+not obviously arrived.
+
+*The next phase is picked deliberately, not by momentum.*
 
 ## Concept budget
 
@@ -158,7 +169,7 @@ appear below.) Defined so far:
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | complete (2026-08-22) |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | complete (2026-08-22) |
 | P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | complete (2026-08-23) |
-| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | complete (2026-08-25) — **reopen candidate: P12.8, phase-level recovery** |
+| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | **closed at a waypoint (2026-08-25)** — two of three roles tested; **reopen condition: P12.5 (model-authored packets)**. P12.8 landed but its live confirmation did not; P12.0 and P12.7 never shipped |
 | P13 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; deferred behind P12 so there is a harness that can actually evaluate a variant | complete (2026-08-25) — verdict: blocked on Mellum's competence gate, not the harness |
 | P14 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
 | P15 | Host-controlled action mode | The model drafts as text (`#path` + fenced blocks), the host harvests, writes, and verifies — isolating "should I act" from content competence for Mellum-class models; exit is a verdict, not a product | complete (2026-08-25) — verdict: **harness-addressable**; repair 4/4 at 13/13, build 3/9 at 13/13 with 0 tool calls |
@@ -287,30 +298,76 @@ P15's plan is written:
 
 Deferred, each with the condition that reopens it.
 
-- **Phase-level recovery (reopens P12 as P12.8 — not new phase work).** P12's
-  own charter was host-owned "budgets, permissions, validation, **and
-  recovery**"; P12.4 wired recovery only at the end-of-run acceptance boundary,
-  leaving phase-boundary recovery unfinished rather than out of scope. A build
-  phase that fails its import check aborts the run before `commitBack()`, so
-  the repair loop — wired after acceptance failure, on worker 2 — is never
-  reachable. This stopped 5 of 6 failing P15 build runs, every one a one-line
-  content defect (`from .models import …`; `RedirectResponse` from the wrong
-  module; a `StaticFiles` mount on a directory outside the grant) — exactly the
-  class the repair loop fixes 4/4. Not a wiring change: (1) the abort is
-  deliberate (finding C17 — it stops a broken tree chaining into the next
-  phase), so it must be *replaced* by repair, not removed; (2) `repairPacket`
-  builds from a `GradeResult` while a phase failure yields a `ValidationResult`,
-  so the evidence types need bridging — the prerequisite, capturing validation
-  output, landed in `05a4fcc`; and (3) `RepairLoop`'s grade closure runs the
-  full acceptance suite, which cannot pass mid-roadmap, so a phase-level repair
-  needs the *validation* command as its success condition. *Reopens whenever
-  the build arm's pass rate is the thing to improve.*
+- **~~Phase-level recovery~~ — LANDED as P12.8 (2026-08-25), live confirmation
+  still owed.** The wiring shipped (`commitForRepair`, `adoptRepairedPhase`,
+  `PhaseRepair`, build-loop integration; deterministic tier green). What remains
+  is evidence, not code: the one live attempt
+  (`captures/agenttest/20260825-203706-roadmap-user-story`) failed phase 1
+  validation, the repair returned `validationFailed`, `RepairLoop` exited on
+  that receipt by design, and the run never reached acceptance — so
+  "phase N: repaired → continues to acceptance" has never been observed. No
+  verdict record written. *Reopens as: land one confirming run and write the
+  record. Best done together with the receipt-exit item directly below, which
+  is what blocked this specific attempt.*
 - **`RepairLoop` exits on every receipt, including `validationFailed`.** The
   rationale holds as written — the receipt path discards the worktree and never
   advances `head`/`lastGrade`, so a retry would replay a byte-identical dispatch
   — but it means a repair that breaks an import gets no second attempt even
-  though its traceback is new evidence the model has not seen. *Reopens with
-  phase-level repair, which has the same shape.*
+  though its traceback is new evidence the model has not seen. **Now observed
+  live**: it is exactly what ended the 20260825-203706 P12.8 confirmation run.
+  The fix is cheaper than when this was first filed: `ValidationResult` already
+  carries `output` (`05a4fcc`), so threading it into `lastGrade` at the
+  `finalize` call site is local to `RepairLoop` — no P10-era surface touched.
+  A general form would widen `Receipt.validationFailed` to carry the output.
+  *Reopens with P12.8's live confirmation, which it currently blocks.*
+- **Worker-2 session-context ceiling across multiple phase repairs.** D8 sized
+  worker 2 for two rounds of *one* repair (~10–12k, fits ctx=32768). P12.8
+  changes the shape: up to three phase failures per run, each dispatching to the
+  same worker-2 session with full-surface evidence (six writable files + a
+  traceback). Three sequential repairs plausibly approach the ceiling, and the
+  failure mode is the one D8 already calls fatal — a repair turn ending at
+  `limit`/`contextFull` leaves worker 2 unusable and the run must stop. Options:
+  reset worker 2 between phase repairs (`agent_worker_reset_to_sysprompt` exists
+  engine-side), widen the pool and rotate, or accept it with the existing stop
+  guard and record the ceiling. Needs engine + pool-wire work — "its own small
+  phase." *Reopens when a multi-phase-repair run is actually attempted at scale.*
+- **`AGENTTEST_REPAIR_THINK` is inert, and bounded thinking for the repair role
+  is unvalidated.** Nothing at dispatch time reads `packet.sampling`; thinking is
+  set once at engine-spawn from `AGENTTEST_THINK`, a whole-process property. The
+  packet used to record `.bounded` while the engine ran `--nothink` — a
+  capture-integrity lie, fixed by making the packet mirror what the engine
+  actually runs, with a stderr warning when the inert var is set. Real per-worker
+  think control needs new machinery (per-worker engine control, or a second
+  engine). *Reopens with bounded-thinking validation for the repair role
+  (originally P12.6's second half, never run).*
+- **Repair cannot honor `AGENTTEST_PATH_STYLE=absolute`.** D5 mandates building
+  the repair packet *before* `WorktreeDispatcher.prepare`, so no worktree URL
+  exists yet to render an absolute root from — `repairPacket` always renders
+  relative paths. An `AGENTTEST_PATH_STYLE=absolute` run therefore implements
+  with absolute paths and repairs with relative ones: an uncontrolled variable
+  flip inside one run, in the arm where path presentation is a *known* lever
+  (C13/B8). Not fixed — fixing it means relaxing D5's ordering. *Reopens if an
+  absolute-path arm is ever run with repair enabled; until then, don't combine
+  them without accounting for the flip.*
+- **Two P15 harvest limitations never filed** (its others were). (1) The
+  repeated-heading abort can drop a file that first appears *after* the first
+  repeat — not observed, structurally possible. (2) First-occurrence-wins
+  discards a self-corrected re-emission: if the model writes a file, notices an
+  error, and re-emits it correctly, the harvest keeps the first (broken) copy.
+  Real, with the tradeoff consciously recorded at the time. *Reopens if a run is
+  ever traced to either.*
+- **P15's design "Deferred" list, unfiled in full**: a packet `mode` enum
+  (`agentic|textContract`) instead of the current implicit selection; tightening
+  the emission protocol's Section 1; a tool-free engine mode / sampler `</think>`
+  handling; a steering profile (P13-deferred); and a per-model pass-rate
+  guarantee. Source:
+  [`host-controlled-action-mode-design.md`](docs/superpowers/specs/2026-08-25-host-controlled-action-mode-design.md).
+  *Reopens with any further text-contract work.*
+- **P6 has no verification record**, unlike P1–P5 and P7–P11. Not a defect in
+  the phase — the analyzer and its fixtures are committed and tested — but the
+  house convention is a record per closed phase, and P6's absence was only
+  noticed during the 2026-08-25 P12 audit. *Reopens if the diagnostics tier is
+  ever revisited, or as cheap cleanup alongside another docs pass.*
 - **The harvest gate requires `stopReason == .eos`.** A turn that runs to the
   token wall is never harvested, so nothing is written and validation fails on
   an empty tree — 1 of 9 build runs. The repeated-heading abort could recover
@@ -770,12 +827,29 @@ Completed phases move here when the roadmap outgrows the front page.
   prompt shape more often than to the model. One model runs a
   role-differentiated pipeline — decompose, implement, repair — with the host
   owning phase boundaries, budgets, permissions, validation, and recovery.
-  Sub-phases: P12.0 consolidated three overlapping overnight research records
-  into one source of truth; P12.1 hardened the packet validator/parser
-  (schema version, CRLF, block-scalar, comment-stripping fixes) and wired
-  `thinkBudget` and path presentation as a real lever; P12.2 made the Mellum
-  Q5_0 quant loadable; P12.4 added the repair role; P12.7 corrected the
-  cross-system metric definitions the measurement gate reports against.
+  **Closed at a waypoint, not complete — two of three roles tested.** What
+  shipped: P12.1 hardened the packet validator/parser (schema version, CRLF,
+  block-scalar, comment-stripping fixes) and wired `thinkBudget` and path
+  presentation as a real lever; P12.2 made the Mellum Q5_0 quant loadable;
+  P12.3 ran the prompt-shape ablation for Laguna (absolute paths a real
+  lever, n=3, real grading); P12.4 added the repair role (fixture tier 3/3
+  ×2); P12.6 met the second half of its own disjunctive criterion by naming
+  and classifying the next failure mode (*completes-and-is-wrong*, not
+  shallow exploration); P12.8 wired phase-level recovery.
+  What did **not** ship, and is not claimed: **P12.0's source-of-truth
+  document was never written** and no superseded-doc banners were applied —
+  `2026-08-24-overnight-consolidation.md` still stands as unmerged staging;
+  **P12.5 (model-authored packets) never ran at all** — the decompose role
+  is an unexercised enum case, so the "three roles" charter was tested for
+  two; **P12.7 shipped plan text only** — no `DumbImplementer`, no
+  trace-channel capture, no Σprompt/Σcached/Σsuffix metrics, no
+  `docs/cool_things/` write-up; P12.3's Mellum arm never ran; P12.4's live
+  end-to-end tier (three phases → 13/13 from packets) was started and
+  stopped, so the evidence is fixture-tier only.
+  **Reopen condition: P12.5.** Same pattern as P13's verdict naming its own
+  reopen condition (which became P15). An earlier version of this entry
+  claimed P12.0 and P12.7 shipped; both claims were false and were corrected
+  2026-08-25 after an audit.
   Plan: [`2026-08-24-p12-reliable-agency.md`](docs/superpowers/plans/2026-08-24-p12-reliable-agency.md).
 
 - **P13 — More models (2026-08-25).** Mellum 2.1 wired as a first-class
