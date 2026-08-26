@@ -1,4 +1,13 @@
-# Goal ledger — P16 (repair harness validity)
+# Goal ledger — P16 (repair harness validity) — **CLOSED, superseded by v3**
+
+> **Closed 2026-08-26 after 13 iterations.** Five real harness fixes landed;
+> four valid cells reached against a goal of ten. Closed because every batch
+> surfaced a new blocking defect at a rate that never declined, two cells failed
+> in ways no invariant covered, and one audit check was found to disagree with
+> the invariant it enforced — so the cell count was measuring an unknown.
+> Continued in [`goal-ledger-v3.md`](goal-ledger-v3.md) under a goal about the
+> apparatus rather than the count. **Entries 7, 12 and 13 are required reading
+> before touching `Tools/audit-goal-invariants.py`.**
 
 > **Goal: ≥10 valid Mellum cells** — pipeline runs whose outcome is
 > attributable to the model under every validity invariant below — spanning
