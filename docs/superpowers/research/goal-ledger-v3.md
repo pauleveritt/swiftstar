@@ -489,3 +489,86 @@ engine" from "kernels are non-deterministic" without touching the pipeline.
 **next:** **STOP — escalate.** V7 needs a ruling. If the answer is the
 determinism probe, that is a confirm-tier run and the loop can execute it once
 told which way to resolve the outcome.
+
+## 6 — 2026-08-26 — probe (determinism) — **ESCALATION**
+
+**did:** Dispatched one identical fixture prompt three times at seed 1 and
+diffed the emissions. **The seed reaches the engine and the runs still differ.**
+Found a third packet-instability source in the process. No model numbers are
+recorded — this is a probe.
+
+**cells:** unchanged (valid=7 blocked={V6:2, V5:1} unauditable={V4:9} of 9);
+the three fixture captures are not pipeline cells and count toward nothing.
+
+**done-when: a=no b=no c=no d=no**
+
+**evidence:**
+
+```
+runs A/B, --fixture misleading-locus --variant mellum-2.1, AGENTTEST_SEED=1
+  prompt sha A: 4a6452bbeaa4   prompt sha B: 4a6452bbeaa4   identical=True
+  turn 0: SAME    (engine handshake)
+  turn 1: DIFFER  (1784 vs 2223 chars)   worker=1 both, generated 473 vs 586
+  turn 2: SAME    (935 chars, identical hash, generated 271 both)
+```
+
+**The seed IS forwarded.** Engine argv captured live from `ps -ww` during a run:
+
+```
+ds4-agent -m .../mellum-thinking-TARGET.gguf -c 32768 --metal --non-interactive
+  --json-events --workspace ... --shell off --host-tools -n 8192 --nothink
+  --seed 1 --subagent-pool 3
+```
+
+and `ds4-agent --help sampling` documents `--seed N — Sampling seed for
+reproducible non-greedy runs`.
+
+**It is not worker assignment.** Both runs were served by `worker=1`, and both
+prefilled identically: `4596 − 473 = 4123` and `4709 − 586 = 4123` tokens.
+Identical prefill, identical seed, same worker, different sampled output.
+
+**Turn 2 being byte-identical does not discriminate** between the remaining
+causes, and I nearly wrote that it did. A peaked continuation produces the same
+tokens whether the seed works or is ignored entirely, so it is evidence that
+determinism is *achievable on low-entropy turns*, nothing more.
+
+### Eliminated, and what is left
+
+| candidate | verdict |
+|---|---|
+| seed not forwarded to the engine | **eliminated** — argv shows `--seed 1` |
+| pool worker assignment varies | **eliminated** — `worker=1` in both runs |
+| prompt differed | **eliminated** — identical sha, identical prefill length |
+| engine ignores/mishandles the seed | **open** |
+| non-deterministic Metal kernels perturb logits | **open** |
+
+Separating the last two needs a greedy (`--temp 0`) run. The harness never
+transmits a temperature — `engineTemperature` is read from the variant and the
+engine samples at its own family defaults (`temp 0.6 top-k 20 top-p 0.95`) —
+so that needs a code change AND it changes what the model does. That is the
+escalated V7 decision, not a probe step.
+
+### A third instability source, found by accident
+
+The third run's packet sha differed from A and B. The whole diff:
+
+```
+-1 failed, 12 passed, 3 warnings in 0.20s
++1 failed, 12 passed, 3 warnings in 0.16s
+```
+
+**pytest's wall-clock duration is embedded in the failure evidence.** A and B
+matched only because both happened to run in 0.20s. So V7 has at least three
+sources, of which one is now fixed:
+
+1. worktree UUID paths — **fixed** (iteration 5)
+2. pytest timing lines — **open**, and fixable in the harness, same class as (1)
+3. engine sampling non-determinism — **not fixable in the harness**
+
+Source 2 matters beyond V7: a timing that changes every run also breaks
+prompt-prefix caching for everything after it in the packet.
+
+**next:** **fix** — normalise pytest timings out of the evidence (source 2).
+It is in the same authorised class as the worktree-path fix under standing
+ruling 3, needs no GPU, and is worth landing whichever way V7 is ruled. Source
+3 still needs the human's ruling and no amount of harness work removes it.
