@@ -77,6 +77,40 @@ def missing_paths(t):
     return out
 
 
+def turns(cell):
+    """Model emissions, segmented by the engine's `ready` events.
+
+    Returns None when there is no wire to read, so callers can report
+    UNAUDITABLE rather than silently passing.
+    """
+    w = os.path.join(cell, 'wire.ndjson')
+    if not os.path.exists(w):
+        return None
+    out, cur = [], []
+    for line in open(w, errors='replace'):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            d = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if d.get('t') == 'text':
+            cur.append(d.get('s', ''))
+        elif d.get('t') == 'ready':
+            out.append(''.join(cur))
+            cur = []
+    if cur:
+        out.append(''.join(cur))
+    return out
+
+
+def evidence_files(t):
+    """(path, body) for each file the packet shows as current contents."""
+    return [(m.group(1), m.group(2))
+            for m in re.finditer(r'=== (\S+) ===\n(.*?)(?=\n=== |\Z)', evidence_block(t), re.S)]
+
+
 # --- invariants -------------------------------------------------------------
 
 def check_v1(cell, loop):
@@ -176,8 +210,43 @@ def check_v5(cell, loop=None):
     return PASS, None
 
 
+def check_v6(cell, loop=None):
+    """No file content may originate in an emission containing zero fences.
+
+    v2 (2026-08-26) wrote the model's own prose into six source files: Mellum
+    emitted six headings, prose under each, and NOT ONE fenced block, ending
+    "Now I'll create all the missing files with the appropriate content:".
+    `LabeledBlockParser`'s lenient path took each heading's prose as that
+    file's contents, so `app.py` became English and every later round repaired
+    the model's commentary. 3 of 8 cells across the two n=4 batches.
+
+    Evidence, not inference: a packet's shown file body is matched back
+    verbatim against the text of a zero-fence turn. If it is found there, that
+    content demonstrably came from an unfenced emission.
+
+    Bodies under 40 bytes are skipped -- a short body can coincide with prose
+    by accident, and every real instance of this defect is a paragraph.
+    """
+    ts = turns(cell)
+    if ts is None:
+        return UNAUDITABLE, 'no wire.ndjson'
+    unfenced = [t for t in ts if t.strip() and '```' not in t]
+    if not unfenced:
+        return PASS, None
+    for label, d in repair_loops(cell):
+        for pf in packets(d):
+            for path, body in evidence_files(task_text(pf)):
+                b = body.strip()
+                if len(b.encode()) < 40 or 'does not exist in this worktree' in b[:80]:
+                    continue
+                if any(b in t for t in unfenced):
+                    return FAIL, (f'{label}/{os.path.basename(pf)}: {path} contents originate in '
+                                  f'an emission containing zero fenced blocks')
+    return PASS, None
+
+
 PER_LOOP = {'V1': check_v1, 'V2': check_v2, 'V3': check_v3}
-PER_CELL = {'V4': check_v4, 'V5': check_v5}
+PER_CELL = {'V4': check_v4, 'V5': check_v5, 'V6': check_v6}
 
 
 def audit(cell_dir):
@@ -218,6 +287,11 @@ FIXTURES = [
      'known-good: one-file-wrong asserted with 0 missing (correctly calibrated)'),
     ('V5', '20260826-055741-roadmap', None, FAIL, 'known-bad: context overflow'),
     ('V5', '20260826-060458-roadmap', None, PASS, 'known-good: clean wire'),
+    ('V6', '20260826-112536-roadmap', None, FAIL,
+     'known-bad: round-1 emission had 6 headings, prose under each, zero fences; '
+     'the prose became app.py/models.py/tests/test_app.py'),
+    ('V6', '20260826-105529-roadmap', None, PASS,
+     'known-good: every harvested file came from a fenced block'),
 ]
 
 
