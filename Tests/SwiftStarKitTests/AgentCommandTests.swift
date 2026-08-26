@@ -111,6 +111,24 @@ struct AgentCommandTests {
         #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--think-budget"))
     }
 
+    /// P12.7 piece 1: `--trace <path>` is appended only when `tracePath` is
+    /// set — every existing call site that doesn't set it (the default `nil`)
+    /// must produce byte-identical argv to before this field existed.
+    @Test func argvOmitsTraceWhenNotSet() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        let argv = AgentCommand.argv(settings: makeSettings(workspace: ws))
+        #expect(!argv.contains("--trace"))
+    }
+
+    @Test func argvAppendsTraceWhenSet() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        var settings = makeSettings(workspace: ws)
+        settings.tracePath = URL(fileURLWithPath: "/tmp/captures/run1/wire.trace")
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(argv.contains("--trace"))
+        #expect(argv[argv.firstIndex(of: "--trace")! + 1] == "/tmp/captures/run1/wire.trace")
+    }
+
     @Test func binaryPathIsDs4Agent() {
         let settings = makeSettings(workspace: URL(fileURLWithPath: "/tmp/ws"))
         #expect(AgentCommand.binaryPath(settings: settings) == URL(fileURLWithPath: "/tmp/fake-engine/ds4-agent"))

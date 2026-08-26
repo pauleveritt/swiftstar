@@ -34,6 +34,14 @@ public struct AgentSettings: Equatable, Sendable {
     /// The system prompt (D1): passed inline as `-sys <text>` after `--shell`.
     /// nil omits the flag. The app passes the Superpowers bootstrap (P8).
     public var systemPrompt: String?
+    /// `--trace <path>`: the engine's diagnostic trace side-channel (compaction
+    /// events, prefill-sync token accounting — see `TraceParser`). The engine
+    /// writes to this path directly, independent of stdin/stdout/stderr; it is
+    /// read from disk after the run, not streamed. nil omits the flag (P12.7
+    /// piece 1). Optional so every existing caller that doesn't set it is
+    /// unaffected — `swiftstar-drive` sets its own `tracePath` independently of
+    /// this struct and is untouched by this field.
+    public var tracePath: URL?
 
     public init(
         engineDir: URL,
@@ -45,7 +53,8 @@ public struct AgentSettings: Equatable, Sendable {
         noThink: Bool = false,
         thinkBudget: Int = 0,
         seed: UInt64 = 0,
-        systemPrompt: String? = nil
+        systemPrompt: String? = nil,
+        tracePath: URL? = nil
     ) {
         self.engineDir = engineDir
         self.modelPath = modelPath
@@ -57,6 +66,7 @@ public struct AgentSettings: Equatable, Sendable {
         self.thinkBudget = thinkBudget
         self.seed = seed
         self.systemPrompt = systemPrompt
+        self.tracePath = tracePath
     }
 }
 
@@ -91,6 +101,9 @@ public enum AgentCommand {
         }
         if let systemPrompt = settings.systemPrompt {
             argv.append(contentsOf: ["-sys", systemPrompt])
+        }
+        if let tracePath = settings.tracePath {
+            argv.append(contentsOf: ["--trace", tracePath.path])
         }
         return argv
     }

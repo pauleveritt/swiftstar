@@ -534,6 +534,24 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     git(repoURL, ["add", ".gitkeep"])
     git(repoURL, ["commit", "-q", "-m", "seed"])
 
+    // Capture the raw wire to a committed artifact so the analyzer can re-derive
+    // everything without rerunning (D5). Computed before `settings` so the
+    // trace path (P12.7 piece 1) can point at this same directory.
+    let df = DateFormatter(); df.dateFormat = "yyyyMMdd-HHmmss"
+    let suffix = batchCount > 1 ? "-run\(index + 1)" : ""
+    let captureDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("captures/agenttest/\(df.string(from: Date()))-\(specName)\(suffix)")
+    try FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
+    let wireFile = captureDir.appendingPathComponent("wire.ndjson")
+    FileManager.default.createFile(atPath: wireFile.path, contents: nil)
+    let captureHandle = FileHandle(forWritingAtPath: wireFile.path)
+    // P12.7 piece 1: every capture dir gets a `wire.trace` file the same way it
+    // already gets `wire.ndjson` — unconditional, matching swiftstar-drive's
+    // own naming (Sources/swiftstar-drive/main.swift). The engine writes to
+    // this path directly and independently of stdin/stdout/stderr; it is read
+    // back from disk after the run completes (below), not streamed live.
+    let tracePath = captureDir.appendingPathComponent("wire.trace")
+
     let settings = AgentSettings(
         engineDir: engineDir, modelPath: URL(fileURLWithPath: gguf),
         contextSize: 32768, workspace: repoURL, shellAllowed: false,
@@ -548,7 +566,8 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // 8,192 generated tokens to produce one mutation before dying of
         // context; a ceiling well under the total cap is the point.
         thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0,
-        seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0)
+        seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0,
+        tracePath: tracePath)
     // P12.5 (D1): the model-decompose arm bumps the pool from 3 to 4 so
     // decompose gets its own independent KV-cache session (WorkerId(3)) that
     // cannot collide with the engine's untagged startup handshake (which
@@ -558,17 +577,6 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     defer { orch.stop() }
     let txn = WorktreeTransaction(repo: repoURL)
     defer { txn.abort() }
-
-    // Capture the raw wire to a committed artifact so the analyzer can re-derive
-    // everything without rerunning (D5).
-    let df = DateFormatter(); df.dateFormat = "yyyyMMdd-HHmmss"
-    let suffix = batchCount > 1 ? "-run\(index + 1)" : ""
-    let captureDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        .appendingPathComponent("captures/agenttest/\(df.string(from: Date()))-\(specName)\(suffix)")
-    try FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
-    let wireFile = captureDir.appendingPathComponent("wire.ndjson")
-    FileManager.default.createFile(atPath: wireFile.path, contents: nil)
-    let captureHandle = FileHandle(forWritingAtPath: wireFile.path)
 
     // P12.5 (D1): dispatch one model-authored decompose packet, before the
     // phase loop, on WorkerId(3) — a fresh fourth pool session, never
@@ -978,6 +986,27 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         }
         report = AgentTestAnalyzer.analyze(events: events)
         if let report { print(report.summary()) }
+    }
+
+    // P12.7 piece 2: Σprompt/Σcached/Σsuffix across the whole run (every phase,
+    // every tool round), read back from the `wire.trace` file piece 1 above
+    // wired into `AgentSettings.tracePath`. The pure summation lives in
+    // SwiftStarKit (`TraceSummary.sum`, unit tested against golden.trace and
+    // synthetic input) — this is just the read + report + record. A missing or
+    // empty trace (short run, or the file never materialized) reads as "" and
+    // sums to all-zero rather than throwing — this must never fail a run that
+    // would otherwise have succeeded. "Stateful tokens" (Σprompt - final
+    // ctx_used) is a separate, out-of-scope metric — see TraceTokenTotals'
+    // doc comment.
+    let traceText = (try? String(contentsOf: tracePath, encoding: .utf8)) ?? ""
+    let traceTotals = TraceSummary.sum(traceText: traceText)
+    print("[agenttest] trace: Σprompt=\(traceTotals.sumPrompt) Σcached=\(traceTotals.sumCached) Σsuffix=\(traceTotals.sumSuffix)")
+    var runConfigWithTrace = runConfig
+    runConfigWithTrace["sumPrompt"] = String(traceTotals.sumPrompt)
+    runConfigWithTrace["sumCached"] = String(traceTotals.sumCached)
+    runConfigWithTrace["sumSuffix"] = String(traceTotals.sumSuffix)
+    if let cfg = try? JSONSerialization.data(withJSONObject: runConfigWithTrace, options: [.prettyPrinted, .sortedKeys]) {
+        try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))
     }
 
     let elapsed = Int(Date().timeIntervalSince(runStart))

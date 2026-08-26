@@ -103,3 +103,56 @@ public struct TraceParser: Sendable {
         return Double(String(v.reversed()))
     }
 }
+
+/// Whole-run token totals from every `.prefillSync` event in a `--trace` file
+/// (P12.7 piece 2): the three fields the engine itself reports, summed
+/// verbatim across every phase and tool round — never derived (e.g. suffix is
+/// NOT computed as prompt - cached; it is the engine's own reported value,
+/// summed). Deliberately excludes "stateful tokens" (Σprompt - final
+/// ctx_used): that requires attributing a single ctx_used across multiple
+/// independent pooled `WorkerId` sessions, an open design question left to a
+/// later phase of P12.7 (see docs/superpowers/plans/2026-08-24-p12-reliable-agency.md,
+/// section "### P12.7").
+public struct TraceTokenTotals: Equatable, Sendable {
+    public var sumPrompt: Int
+    public var sumCached: Int
+    public var sumSuffix: Int
+
+    public init(sumPrompt: Int = 0, sumCached: Int = 0, sumSuffix: Int = 0) {
+        self.sumPrompt = sumPrompt
+        self.sumCached = sumCached
+        self.sumSuffix = sumSuffix
+    }
+}
+
+public enum TraceSummary {
+    /// Sums every `.prefillSync` event's `prompt`/`cached`/`suffix` fields.
+    /// Non-`.prefillSync` events (compaction, ignored) are skipped. An empty
+    /// or all-non-sync input yields all-zero totals — never a crash — so a
+    /// short run or a missing/empty trace file never fails a run that would
+    /// otherwise have succeeded.
+    public static func sum(events: [TraceEvent]) -> TraceTokenTotals {
+        var totals = TraceTokenTotals()
+        for event in events {
+            guard case .prefillSync(let prompt, let cached, let suffix, _, _) = event else { continue }
+            totals.sumPrompt += prompt
+            totals.sumCached += cached
+            totals.sumSuffix += suffix
+        }
+        return totals
+    }
+
+    /// Convenience over raw `--trace` file text: feeds every non-blank line
+    /// through a fresh `TraceParser` and sums the resulting `.prefillSync`
+    /// events. Missing/empty text yields all-zero totals.
+    public static func sum(traceText: String) -> TraceTokenTotals {
+        var parser = TraceParser()
+        var events: [TraceEvent] = []
+        for line in traceText.split(whereSeparator: \.isNewline) {
+            let s = String(line)
+            guard !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            if let event = parser.feed(s) { events.append(event) }
+        }
+        return sum(events: events)
+    }
+}
