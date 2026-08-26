@@ -52,6 +52,40 @@ struct RepairLoopTests {
         }
     }
 
+    /// The round budget must be honoured as given, not silently clamped to the
+    /// default. Two of three valid cells in the 2026-08-26 n=4 measure batch
+    /// reached an actionable failure surface on the SAME round the 2-round
+    /// budget expired, so the budget -- not the model -- was the binding
+    /// constraint on what could be observed. Raising it is only meaningful if
+    /// `RepairLoop` actually runs the rounds it is asked for.
+    @Test func honoursARoundBudgetAboveTheDefault() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        var rounds: [Int] = []
+        let result = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            writableFiles: ["a.txt"],
+            packetBuilder: { ctx in
+                rounds.append(ctx.round)
+                return HandoffPacket(taskText: "fix it", writableFiles: ["a.txt"],
+                                      validationCommand: "true", baselines: [:], turnBudget: 1000,
+                                      toolCallBudget: 8, role: .repair, sampling: SamplingPolicy(think: .off))
+            },
+            runPhase: { _, wt, _ in
+                try "round\(rounds.count)\n".write(to: wt.appendingPathComponent("a.txt"),
+                                                   atomically: true, encoding: .utf8)
+                return self.outcome(mutations: ["a.txt"])
+            },
+            grade: { _ in GradeResult(exit: 1, output: "still failing") },
+            maxCandidateRounds: 5)
+        #expect(rounds == [1, 2, 3, 4, 5],
+                "expected 5 dispatched rounds for maxCandidateRounds: 5; got \(rounds)")
+        guard case .exhausted = result else {
+            Issue.record("expected .exhausted after the full budget, got \(result)")
+            return
+        }
+    }
+
     /// V3 fix seam: `RepairContext` must carry which of the run's writable
     /// files are missing at `head`, computed BEFORE `packetBuilder` runs (not
     /// derived from the packet it returns) -- packet evidence is generated

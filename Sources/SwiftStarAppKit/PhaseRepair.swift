@@ -23,6 +23,7 @@ public enum PhaseRepair {
         runPhase: (HandoffPacket, URL, FileHandle?) throws -> TurnOutcome,
         capture: FileHandle? = nil,
         captureDir: URL? = nil,
+        maxCandidateRounds: Int = 2,
         emissionFollowUp: String? = nil
     ) throws -> Outcome {
         let failedRef = try WorktreeDispatcher.commitForRepair(failedWorktree, packet: packet, in: repo)
@@ -36,6 +37,7 @@ public enum PhaseRepair {
             grade: { _ in GradeResult(exit: 0, output: "") },
             capture: capture,
             captureDir: captureDir,
+            maxCandidateRounds: maxCandidateRounds,
             emissionFollowUp: emissionFollowUp)
         switch result {
         case .passed(let ref, _, let wt):

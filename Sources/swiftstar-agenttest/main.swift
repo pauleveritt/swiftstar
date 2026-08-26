@@ -88,6 +88,14 @@ let textContractBuild = env["AGENTTEST_TEXT_CONTRACT"] == "1"
 // docs/superpowers/specs/2026-08-25-p12-5-model-authored-packets-design.md.
 let modelDecompose = env["AGENTTEST_MODEL_DECOMPOSE"] == "1"
 
+// P16: the repair round budget, env-configurable as of 2026-08-26. The n=4
+// measure batch showed the 2-round default was the binding constraint on what
+// could be observed, not the model: in 2 of 3 valid cells Mellum reached an
+// actionable failure surface on the SAME round the budget expired (one cleared
+// the precondition gate at round 2 and was never shown the assertions it had
+// just unlocked). Recorded in run-config.json so a capture stays self-describing.
+let repairMaxRounds = max(1, Int(env["AGENTTEST_REPAIR_ROUNDS"] ?? "2") ?? 2)
+
 /// The temperature the engine actually samples at.
 ///
 /// `AgentSettings` carries no temperature field and `PoolOrchestrator` records
@@ -497,6 +505,7 @@ func runFixtureOnce(_ name: String) throws {
         grade: { wt in try AcceptanceGrader.grade(worktree: wt, acceptanceSource: acceptanceSource, pyProject: pyProject) },
         capture: captureHandle,
         captureDir: captureDir,
+        maxCandidateRounds: repairMaxRounds,
         emissionFollowUp: repairEmissionFollowUp)
 
     switch result {
@@ -686,9 +695,9 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // repairPacket's think mode actually derives from (AGENTTEST_THINK, per
         // the fix above) rather than the unwired AGENTTEST_REPAIR_THINK, so the
         // capture stays honest about what the engine ran under. repairMaxRounds
-        // is RepairLoop.run's default bound (not currently env-configurable).
+        // is the bound this run actually used (AGENTTEST_REPAIR_ROUNDS).
         "repairThink": env["AGENTTEST_THINK"] == "1" ? "on" : "nothink",
-        "repairMaxRounds": "2",
+        "repairMaxRounds": String(repairMaxRounds),
         // P13: record the variant + sampler source + available memory so the
         // capture is self-describing (I2/I7).
         "variant": resolvedVariant?.id ?? "custom-unverified",
@@ -862,6 +871,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                     },
                     capture: captureHandle,
                     captureDir: repairCaptureDir,
+                    maxCandidateRounds: repairMaxRounds,
                     emissionFollowUp: repairEmissionFollowUp)
                 switch repair {
                 case .repaired(let repairedRef, let repairedWT):
@@ -967,6 +977,7 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                     worktree: wt, acceptanceSource: acceptanceSource, pyProject: pyProject) },
                 capture: captureHandle,
                 captureDir: captureDir,
+                maxCandidateRounds: repairMaxRounds,
                 emissionFollowUp: repairEmissionFollowUp)
             switch repair {
             case .passed(let repairedRef, let g, let wt):
