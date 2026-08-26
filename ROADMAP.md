@@ -332,6 +332,24 @@ P15's plan is written:
 
 Deferred, each with the condition that reopens it.
 
+- **~~Chat as a separate surface~~ — RETIRED 2026-08-26 by product decision.**
+  One surface: the Agent. Retire the Chat tab, the `ds4-server`/SSE wire, and
+  `EngineController`; the app owns one `ds4-agent` process, one model load.
+  Chat's use case survives as a toolless agent turn with per-turn think
+  control. *Reopens as: its own phase — remove the Chat surface and fold a
+  no-think "quick reply" mode into the Agent, with `reasoning_effort`-style
+  per-turn control on the agent wire (additive engine patch, fork-ledger
+  row).*
+- **Golden agent capture predates the wire's `kind` field — the kind-driven
+  tool card has no fixture test.** `fixtures/agent/golden-tools.ndjson` was
+  captured before the engine's `param_begin` events carried `kind`
+  (`ds4_agent.c:9197` pins `"kind":"path"`), so `ToolParam.kind` /
+  `ToolCard.path` enrichment is verified only by the 2026-08-26 live probe
+  (`/tmp/swiftstar-probe/wire.ndjson`, Laguna-XS Q4_K_M, exact app argv) and
+  the engine's own C tests — not by any committed fixture. *Reopens as: a
+  complete clean agent run against the real binary (submodule-pinned), a
+  fresh `golden-tools` recapture with provenance, and a fixture test
+  asserting `kind`/`path`/`finished` populate from it.*
 - **~~Phase-level recovery~~ — LANDED as P12.8 (2026-08-25); live confirmation
   arrived 2026-08-26, and it is bad news, not good.** The wiring shipped
   (`commitForRepair`, `adoptRepairedPhase`, `PhaseRepair`, build-loop

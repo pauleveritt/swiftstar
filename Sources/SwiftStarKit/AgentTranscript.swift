@@ -1,25 +1,37 @@
 import Foundation
 
 /// One parameter of a tool call, reconstructed from the phase stream.
+/// `kind` is the wire's `param_kind` vocabulary (`path`, `offset`, `content`,
+/// `diff_old`, `diff_new`, `bash_command`, `normal` — or "" when the event
+/// carried none, e.g. P9 tool requests), so the view can render by kind
+/// (content → syntax-highlighted, diff → tinted, path → header) instead of
+/// scraping text.
 public struct ToolParam: Equatable, Sendable {
     public let name: String
     public var value: String
+    public var kind: String = ""
 }
 
 /// A tool card: one tool call's rendered state, rebuilt from the wire's
 /// `tool`/`param_begin`/`param_value`/`param_end`/`output`/`finish` phases
 /// (D4). Only the bash family ever carries `output` (json-events.md); `status`
 /// is non-nil when the block did not close cleanly (interrupt, parse error,
-/// hard failure).
+/// hard failure). `path` is the value of the `path`-kinded param, surfaced in
+/// the card header (and Quick Look-able). `finished` is set by the block's
+/// `finish` phase — the view gates syntax highlighting on it, so an in-flight
+/// card renders plain and a finished one re-typesets once.
 public struct ToolCard: Equatable, Sendable {
     public let name: String
     public var params: [ToolParam]
     public var output: String?
     public var status: String?
+    public var path: String? = nil
+    public var finished: Bool = false
 }
 
 /// One display row of the agent transcript.
 public enum AgentTranscriptRow: Equatable, Sendable {
+    case user(String)
     case thinking(String)
     case content(String)
     case tool(ToolCard)
@@ -79,6 +91,12 @@ public struct AgentTranscript: Equatable, Sendable {
         rows.append(.system(message))
     }
 
+    /// The user's own prompt echo — a real row (rendered as an accent pill),
+    /// not a `> `-prefixed system line.
+    public mutating func appendUser(_ message: String) {
+        rows.append(.user(message))
+    }
+
     private mutating func applyTool(_ te: AgentToolEvent) {
         switch te.phase {
         case .start:
@@ -89,7 +107,7 @@ public struct AgentTranscript: Equatable, Sendable {
             cardRows[te.idx] = rows.count - 1
         case .paramBegin:
             guard let row = cardRows[te.idx], case .tool(var card) = rows[row] else { return }
-            card.params.append(ToolParam(name: te.paramName ?? "", value: ""))
+            card.params.append(ToolParam(name: te.paramName ?? "", value: "", kind: te.paramKind ?? ""))
             rows[row] = .tool(card)
         case .paramValue:
             guard let row = cardRows[te.idx], case .tool(var card) = rows[row],
@@ -97,7 +115,12 @@ public struct AgentTranscript: Equatable, Sendable {
             card.params[card.params.count - 1].value += te.value ?? ""
             rows[row] = .tool(card)
         case .paramEnd:
-            break  // the param is already tracked by param_begin/param_value
+            // The just-ended param: a `path`-kinded one names the card's file
+            // (its header and Quick Look target), so surface it on the card.
+            guard let row = cardRows[te.idx], case .tool(var card) = rows[row],
+                  let ended = card.params.last else { return }
+            if ended.kind == "path" { card.path = ended.value }
+            rows[row] = .tool(card)
         case .output:
             guard let row = cardRows[te.idx], case .tool(var card) = rows[row] else { return }
             card.output = (card.output ?? "") + (te.value ?? "")
@@ -107,6 +130,7 @@ public struct AgentTranscript: Equatable, Sendable {
             // (calls == 0, idx == 0) has no card and is a no-op here.
             guard let row = cardRows[te.idx], case .tool(var card) = rows[row] else { return }
             card.status = te.status
+            card.finished = true
             rows[row] = .tool(card)
         }
     }

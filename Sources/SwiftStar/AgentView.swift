@@ -1,46 +1,10 @@
 import SwiftUI
 import SwiftStarKit
 
-/// One tool card: name, params, bash output, and a status line when the block
-/// did not close cleanly (interrupt / parse error / hard failure).
-struct ToolCardView: View {
-    let card: ToolCard
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: "wrench.and.screwdriver")
-                Text(card.name).font(.callout).bold()
-                Spacer()
-            }
-            ForEach(Array(card.params.enumerated()), id: \.offset) { _, param in
-                Text("\(param.name): \(param.value)")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
-            if let output = card.output {
-                Text(output)
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-            }
-            if let status = card.status {
-                Text(status).font(.caption).foregroundStyle(.red)
-            }
-        }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .quaternarySystemFill))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-}
-
 struct AgentView: View {
     @Bindable var controller: AgentController
     @State private var input = ""
+    @FocusState private var inputFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,6 +15,8 @@ struct AgentView: View {
             consentControls
             Divider()
             composer
+            Divider()
+            bottomStatusBar
         }
         .navigationTitle("Agent")
         .task { controller.startIfNeeded() }
@@ -61,13 +27,37 @@ struct AgentView: View {
             Circle().fill(statusColor).frame(width: 10, height: 10)
             Text(statusText).font(.caption)
             Spacer()
-            if controller.isGenerating {
-                Button("Interrupt") { controller.interrupt() }
-            } else {
-                agentButton
-            }
+            workspaceButton
+            agentButton
         }
         .padding(8)
+    }
+
+    private var workspaceButton: some View {
+        Button(action: pickWorkspace) {
+            HStack(spacing: 4) {
+                Image(systemName: "folder")
+                Text(PathAbbreviation.abbreviate(
+                    controller.settings.workspace,
+                    home: FileManager.default.homeDirectoryForCurrentUser))
+            }
+            .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        .help("Workspace: the directory the agent may touch (applied at next start)")
+    }
+
+    private func pickWorkspace() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = controller.settings.workspace
+        panel.message = "Choose the workspace the agent may touch"
+        if panel.runModal() == .OK, let url = panel.url {
+            controller.settings.workspace = url
+            UserDefaults.standard.set(url.path, forKey: "agentWorkspace")
+        }
     }
 
     @ViewBuilder
@@ -114,7 +104,12 @@ struct AgentView: View {
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onChange(of: controller.transcript.rows.count) { _, _ in
+            .onChange(of: controller.transcript.rows) { _, _ in
+                // The whole array, not `.count`: a streamed `text`/`think` event
+                // mutates the trailing row in place, so `.count` never changes
+                // mid-response and would freeze autoscroll for the whole answer
+                // (the DS4 Control lesson). The array is Equatable over its
+                // value-type rows, so comparing it fires on that in-place growth.
                 let last = controller.transcript.rows.count - 1
                 guard last >= 0 else { return }
                 withAnimation { proxy.scrollTo(last, anchor: .bottom) }
@@ -125,12 +120,14 @@ struct AgentView: View {
     @ViewBuilder
     private func rowView(_ row: AgentTranscriptRow) -> some View {
         switch row {
+        case .user(let text):
+            AgentPromptBubble(text: text)
         case .thinking(let text):
-            Text(text).font(.callout).foregroundStyle(.secondary).italic()
+            ThinkingDisclosure(text: text)
         case .content(let text):
-            Text(text).font(.body).textSelection(.enabled)
+            MarkdownText(text)
         case .tool(let card):
-            ToolCardView(card: card)
+            AgentToolCardView(card: card, workspace: controller.settings.workspace)
         case .system(let text):
             Text(text).font(.caption).foregroundStyle(.tertiary)
         }
@@ -140,14 +137,6 @@ struct AgentView: View {
     /// when the agent next starts; changing them never mutates a live child.
     private var consentControls: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Workspace").font(.caption).foregroundStyle(.secondary)
-                TextField("Workspace directory", text: Binding(
-                    get: { controller.settings.workspace.path },
-                    set: { controller.settings.workspace = URL(fileURLWithPath: $0) }
-                ))
-                .textFieldStyle(.roundedBorder)
-            }
             Toggle("Allow shell commands", isOn: Binding(
                 get: { controller.settings.shellAllowed },
                 set: { controller.settings.shellAllowed = $0 }
@@ -159,14 +148,70 @@ struct AgentView: View {
     }
 
     private var composer: some View {
-        HStack {
-            TextField("Message the agent", text: $input)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(send)
-            Button("Send", action: send)
-                .disabled(!controller.canSend || input.trimmingCharacters(in: .whitespaces).isEmpty)
+        VStack(spacing: 4) {
+            if let error = errorText {
+                HStack {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    Spacer()
+                }
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("Ask the agent…", text: $input, axis: .vertical)
+                    .font(.body)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...15)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .focused($inputFocused)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
+                    )
+                    .onKeyPress(keys: [.return], phases: .down) { press in
+                        if press.modifiers.contains(.shift) {
+                            input += "\n"
+                            return .handled
+                        }
+                        if controller.canSend {
+                            send()
+                        }
+                        return .handled
+                    }
+                    .disabled(!controller.canSend)
+                Button {
+                    if controller.isGenerating {
+                        controller.interrupt()
+                    } else {
+                        send()
+                    }
+                } label: {
+                    Image(systemName: controller.isGenerating ? "stop.circle.fill" : "arrow.up.circle.fill")
+                        .font(.system(size: 28))
+                        .symbolEffect(.variableColor.iterative, isActive: controller.isGenerating)
+                        .foregroundStyle(controller.isGenerating ? .red : .accentColor)
+                }
+                .buttonStyle(.plain)
+                .disabled(
+                    controller.state != .ready
+                        || (input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            && !controller.isGenerating)
+                )
+            }
         }
-        .padding(8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .onChange(of: controller.isGenerating) { _, generating in
+            if !generating { inputFocused = true }
+        }
+    }
+
+    private var errorText: String? {
+        if case .failed(let message) = controller.state { return message }
+        return nil
     }
 
     private func send() {
@@ -174,5 +219,98 @@ struct AgentView: View {
         guard controller.canSend, !message.isEmpty else { return }
         input = ""
         controller.send(message)
+    }
+
+    /// Bottom readout bar (ported from the DS4 Control agent window): left =
+    /// fixed-width Prompt/Decode rates + activity, right = the context-fill
+    /// ring. Hidden while the agent is down; the rates are ratcheted in the
+    /// controller so a zero reading never blanks a live rate.
+    private var bottomStatusBar: some View {
+        HStack(spacing: 8) {
+            Text(bottomStatusText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.default, value: bottomStatusText)
+            Spacer(minLength: 12)
+            if controller.isUp,
+               let footprint = controller.lastFootprintBytes,
+               let planned = controller.lastPlannedBytes, planned > 0 {
+                ValueGaugeView(
+                    fraction: Double(footprint) / Double(planned),
+                    text: nil, textFontSize: 0,
+                    trackColor: memoryRingColor(footprint: footprint, planned: planned),
+                    diameter: 15)
+                    .contentShape(Rectangle())
+                    .help(memoryRingTooltip(footprint: footprint, planned: planned))
+            }
+            if let s = controller.lastStatus, s.ctxSize > 0 {
+                ValueGaugeView(
+                    fraction: Double(s.ctxUsed) / Double(s.ctxSize),
+                    text: nil, textFontSize: 0,
+                    trackColor: contextRingColor(ctxUsed: s.ctxUsed),
+                    diameter: 15)
+                    .contentShape(Rectangle())
+                    .help(contextRingTooltip(s))
+            }
+            Button("End session") { controller.stopAgent() }
+                .disabled(controller.state == .stopped || controller.state == .stopping)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    /// Rates + activity while the agent is up, else the same state text as
+    /// the top bar (a readout, not a second control).
+    private var bottomStatusText: String {
+        if controller.state == .ready || controller.state == .generating {
+            return AgentStatusText.promptDecodeLine(
+                promptTPS: controller.lastPrefillTPS,
+                decodeTPS: controller.lastGenTPS,
+                message: AgentStatusText.stateMessage(controller.lastStatus?.state ?? ""))
+        }
+        return statusText
+    }
+
+    /// Absolute-token severity (DialLogic), not a fraction threshold: ctx_size
+    /// varies 256k–1M by RAM/variant, so fraction-anchored colors fire at the
+    /// wrong absolute usage (the P11 findings lesson).
+    private func contextRingColor(ctxUsed: Int) -> Color {
+        switch DialLogic.contextSeverity(ctxUsed: ctxUsed) {
+        case .healthy: return .green
+        case .warning: return .orange
+        case .critical: return .red
+        }
+    }
+
+    /// Generic 70/90 memory thresholds (DialLogic), unlike the context ring's
+    /// telemetry-derived absolute anchors — memory stayed well under budget in
+    /// every captured session, so there is no measured overshoot curve.
+    private func memoryRingColor(footprint: Int64, planned: Int64) -> Color {
+        switch DialLogic.memorySeverity(residentBytes: footprint, plannedBytes: planned) {
+        case .healthy: return .green
+        case .warning: return .orange
+        case .critical: return .red
+        }
+    }
+
+    private func memoryRingTooltip(footprint: Int64, planned: Int64) -> String {
+        func gb(_ b: Int64) -> String { String(format: "%.1f GB", Double(b) / 1_073_741_824) }
+        return "Agent memory footprint: \(gb(footprint)) of a \(gb(planned)) budget."
+    }
+
+    /// Carries the mechanism, not just the numbers: prefill speed is the
+    /// figure the investigation showed actually degrades as context grows.
+    private func contextRingTooltip(_ s: StatusSnapshot) -> String {
+        var text =
+            "Context window used / total: \(s.ctxUsed.formatted()) / \(s.ctxSize.formatted()). "
+            + "Once this fills, ds4-agent compacts the conversation to make room."
+        if s.prefillTPS > 0 {
+            text += String(format: " Current prefill speed: %.1f tok/s.", s.prefillTPS)
+        }
+        return text
     }
 }

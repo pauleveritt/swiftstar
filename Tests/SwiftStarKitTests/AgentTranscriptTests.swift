@@ -39,7 +39,7 @@ struct AgentTranscriptTests {
         t.apply(.tool(AgentToolEvent(phase: .paramValue, idx: 0, name: nil, paramKind: nil, paramName: nil, value: "seed.txt", status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .paramEnd, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: 1)))
-        #expect(t.rows == [.tool(ToolCard(name: "read", params: [ToolParam(name: "path", value: "seed.txt")], output: nil, status: nil))])
+        #expect(t.rows == [.tool(ToolCard(name: "read", params: [ToolParam(name: "path", value: "seed.txt", kind: "path")], output: nil, status: nil, path: "seed.txt", finished: true))])
     }
 
     @Test func emptyParamValueStillAddsParam() {
@@ -52,7 +52,7 @@ struct AgentTranscriptTests {
         t.apply(.tool(AgentToolEvent(phase: .paramBegin, idx: 0, name: nil, paramKind: "content", paramName: "content", value: nil, status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .paramEnd, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: 1)))
-        #expect(t.rows == [.tool(ToolCard(name: "write", params: [ToolParam(name: "path", value: ""), ToolParam(name: "content", value: "")], output: nil, status: nil))])
+        #expect(t.rows == [.tool(ToolCard(name: "write", params: [ToolParam(name: "path", value: "", kind: "path"), ToolParam(name: "content", value: "", kind: "content")], output: nil, status: nil, path: "", finished: true))])
     }
 
     @Test func outputAttributedToSameBlockAfterFinish() {
@@ -63,7 +63,7 @@ struct AgentTranscriptTests {
         t.apply(.tool(AgentToolEvent(phase: .tool, idx: 0, name: "bash", paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: 1)))
         t.apply(.tool(AgentToolEvent(phase: .output, idx: 0, name: nil, paramKind: nil, paramName: nil, value: "hello-world\n", status: nil, calls: nil)))
-        #expect(t.rows == [.tool(ToolCard(name: "bash", params: [], output: "hello-world\n", status: nil))])
+        #expect(t.rows == [.tool(ToolCard(name: "bash", params: [], output: "hello-world\n", status: nil, finished: true))])
     }
 
     @Test func interruptedFinishSetsStatusOnCard() {
@@ -71,7 +71,7 @@ struct AgentTranscriptTests {
         t.apply(.tool(AgentToolEvent(phase: .start, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .tool, idx: 0, name: "read", paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: "[tool call interrupted]\n", calls: 1)))
-        #expect(t.rows == [.tool(ToolCard(name: "read", params: [], output: nil, status: "[tool call interrupted]\n"))])
+        #expect(t.rows == [.tool(ToolCard(name: "read", params: [], output: nil, status: "[tool call interrupted]\n", finished: true))])
     }
 
     @Test func multiCallBlockKeysCardsByIdx() {
@@ -85,7 +85,7 @@ struct AgentTranscriptTests {
         t.apply(.tool(AgentToolEvent(phase: .finish, idx: 1, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: 2)))
         #expect(t.rows == [
             .tool(ToolCard(name: "list", params: [], output: nil, status: nil)),
-            .tool(ToolCard(name: "bash", params: [ToolParam(name: "command", value: "pwd")], output: nil, status: nil)),
+            .tool(ToolCard(name: "bash", params: [ToolParam(name: "command", value: "pwd", kind: "bash_command")], output: nil, status: nil, finished: true)),
         ])
     }
 
@@ -104,7 +104,7 @@ struct AgentTranscriptTests {
         t.apply(.tool(AgentToolEvent(phase: .start, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
         t.apply(.tool(AgentToolEvent(phase: .tool, idx: 0, name: "edit", paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
         #expect(t.rows.count == 2)
-        #expect(t.rows[0] == .tool(ToolCard(name: "read", params: [], output: nil, status: nil)))
+        #expect(t.rows[0] == .tool(ToolCard(name: "read", params: [], output: nil, status: nil, finished: true)))
         #expect(t.rows[1] == .tool(ToolCard(name: "edit", params: [], output: nil, status: nil)))
     }
 

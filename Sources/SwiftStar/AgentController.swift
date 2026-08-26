@@ -24,6 +24,26 @@ final class AgentController {
     private(set) var state: AgentState = .stopped
     private(set) var transcript = AgentTranscript()
     private(set) var stderrTail: [String] = []
+    /// Latest wire `status` snapshot, for the bottom status bar's readout
+    /// (activity line + context ring). nil before the first status event.
+    private(set) var lastStatus: StatusSnapshot?
+    /// Ratcheted prompt/decode rates (`AgentStatusText.ratchet`): the wire
+    /// reports only one of prefill/gen as nonzero per event, so a zero must
+    /// never blank a live rate (the DS4 Control 2989d2c fix).
+    private(set) var lastPrefillTPS: Double = 0
+    private(set) var lastGenTPS: Double = 0
+    /// The engine's own startup memory plan (`ready.planned_bytes`), for the
+    /// bottom bar's memory ring denominator.
+    private(set) var lastPlannedBytes: Int64?
+    /// The agent process's resident footprint, polled once a second while the
+    /// agent is up; nil when the process is gone.
+    private(set) var lastFootprintBytes: Int64?
+
+    private let memoryCollector = ProcessStatsCollector()
+    private var memoryTask: Task<Void, Never>?
+
+    /// The running agent's pid, if the child process is alive.
+    var runningPid: pid_t? { process?.processIdentifier }
     /// The last completed turn's outcome record (D12); the full trail goes to
     /// the SWIFTSTAR_LOG file. Persistence beyond that is P9/P10 work.
     private(set) var lastTurnOutcome: TurnOutcome?
@@ -83,6 +103,9 @@ final class AgentController {
 
     var canSend: Bool { state == .ready }
     var isGenerating: Bool { state == .generating }
+    /// The agent is up and serving — the state in which the bottom bar's
+    /// telemetry readout (rates, rings) is meaningful.
+    var isUp: Bool { state == .ready || state == .generating }
 
     static func defaultSettings() -> AgentSettings {
         let defaults = UserDefaults.standard
@@ -108,6 +131,10 @@ final class AgentController {
         let workspace: URL
         if let dir = defaults.string(forKey: "agentWorkspace"), !dir.isEmpty {
             workspace = URL(fileURLWithPath: dir)
+        } else if let project = AgentController.projectRoot() {
+            // During development the app is launched from the checkout; confine
+            // the agent to the repo by default instead of the whole home dir.
+            workspace = project
         } else {
             workspace = FileManager.default.homeDirectoryForCurrentUser
         }
@@ -120,6 +147,22 @@ final class AgentController {
             workspace: workspace,
             shellAllowed: shellAllowed
         )
+    }
+
+    /// The git repo root containing the launch directory, walking up at most
+    /// three levels; nil when the app was not launched from a checkout (so the
+    /// workspace falls back to home).
+    private static func projectRoot() -> URL? {
+        var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        for _ in 0..<3 {
+            if FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) {
+                return dir
+            }
+            let parent = dir.deletingLastPathComponent()
+            guard parent.path != dir.path else { break }
+            dir = parent
+        }
+        return nil
     }
 
     func startIfNeeded() {
@@ -167,6 +210,11 @@ final class AgentController {
         // never pairs a new session with a stale tail.
         parser = PoolWireParser()
         stderrTail = []
+        lastStatus = nil
+        lastPrefillTPS = 0
+        lastGenTPS = 0
+        lastPlannedBytes = nil
+        lastFootprintBytes = nil
         outcomeBuilder = nil
         sentInterrupt = false
         // D12: the build identification is resolved once per spawn (the
@@ -205,6 +253,8 @@ final class AgentController {
             Task { @MainActor in
                 guard let self else { return }
                 self.process = nil
+                self.memoryTask?.cancel()
+                self.lastFootprintBytes = nil
                 // The engine's failure mode is exiting (stderr boot lines are
                 // normal — the memory plan lives there); a mid-start or
                 // mid-turn exit is a failure carrying the stderr tail.
@@ -223,6 +273,7 @@ final class AgentController {
             state = .failed("spawn failed: \(error)")
             return
         }
+        startMemoryPolling()
 
         stdoutTask?.cancel()
         stdoutTask = Task.detached(priority: .utility) { [weak self] in
@@ -291,7 +342,7 @@ final class AgentController {
         switch event {
         case .hello:
             if state == .starting { state = .ready }
-        case .status(_):
+        case .status(let snapshot):
             // D6: the status line carries the worker's state, but it is NOT
             // the turn-end gate — the turn-end `ready` is (see `.ready`
             // below). Flipping state → .ready here on `state == "idle"`
@@ -303,8 +354,14 @@ final class AgentController {
             // guarantees ready follows idle (json-events.md), and the
             // interrupt path emits ready too, so gating on ready alone is
             // safe. The status event still feeds the outcome builder above.
+            // It also feeds the bottom status bar: the snapshot is kept as
+            //-is and its rates are ratcheted (never blanked by a zero).
+            lastStatus = snapshot
+            lastPrefillTPS = AgentStatusText.ratchet(previous: lastPrefillTPS, new: snapshot.prefillTPS)
+            lastGenTPS = AgentStatusText.ratchet(previous: lastGenTPS, new: snapshot.genTPS)
             break
-        case .ready:
+        case .ready(let plannedBytes, _, _, _):
+            if let plannedBytes { lastPlannedBytes = plannedBytes }
             if state == .starting { state = .ready }
             else if state == .generating { state = .ready }
             // D12: a turn-end ready finishes the record. The builder is nil
@@ -550,7 +607,7 @@ final class AgentController {
         let text = receipts.map { $0.injectionPrompt() }.joined(separator: "\n")
         // Send first, clear only on success — at-least-once delivery (a dropped
         // send must not silently lose the receipts).
-        if send(text) {
+        if send(text, asUser: false) {
             for worker in Array(poolState.pendingDelivery.keys) {
                 poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
             }
@@ -789,11 +846,19 @@ final class AgentController {
     }
 
     @discardableResult
-    func send(_ prompt: String) -> Bool {
+    func send(_ prompt: String, asUser: Bool = true) -> Bool {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canSend, !trimmed.isEmpty, let process,
               let pipe = process.standardInput as? Pipe else { return false }
-        transcript.appendSystem("> \(trimmed)")
+        // The composer's own prompts render as user pills; internal traffic
+        // (worker receipts injected into the orchestrator's next turn) is a
+        // quiet system row — the user never typed it, so it must not look like
+        // they did.
+        if asUser {
+            transcript.appendUser(trimmed)
+        } else {
+            transcript.appendSystem(trimmed)
+        }
         state = .generating
         sentInterrupt = false
         // D12: open the turn's outcome record with the app-known facts the
@@ -825,8 +890,8 @@ final class AgentController {
         stdoutTask?.cancel()
         stderrTask?.cancel()
         startupTimeoutTask?.cancel()
-        // EOF on stdin first (the same clean-exit shape as swiftstar-drive):
-        // the engine's non-interactive loop exits on EOF rather than relying
+        memoryTask?.cancel()
+        // EOF on stdin first (the same clean-exit shape as swiftstar-drive):        // the engine's non-interactive loop exits on EOF rather than relying
         // on SIGTERM alone.
         if let pipe = process?.standardInput as? Pipe {
             try? pipe.fileHandleForWriting.close()
@@ -834,6 +899,30 @@ final class AgentController {
         process?.terminate()
         // The termination handler lands on .stopped (its guard passes: state
         // is .stopping, not .stopped) after recording the exit.
+    }
+
+    /// One 1s poll of the agent process's resident footprint for the memory
+    /// ring. A dead pid (or nil) blanks the ring rather than showing a stale
+    /// figure. `ProcessStatsCollector` is an actor, so the IOKit sampling
+    /// never runs on the main actor.
+    private func startMemoryPolling() {
+        memoryTask?.cancel()
+        memoryTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { break }
+                await self.tickMemory()
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
+
+    private func tickMemory() async {
+        guard let pid = process?.processIdentifier else {
+            lastFootprintBytes = nil
+            return
+        }
+        let snapshot = await memoryCollector.collect(pid: pid)
+        lastFootprintBytes = snapshot.residentBytes
     }
 
     // MARK: - P10 dispatched attempt (D2/D3/D4)

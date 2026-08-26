@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
+        // Resource-bundle smoke test for the markdown renderer's dependency
+        // (gated by env): fails loudly at launch, not on the first code block.
+        MarkdownText.runResourceSelfTestIfRequested()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
