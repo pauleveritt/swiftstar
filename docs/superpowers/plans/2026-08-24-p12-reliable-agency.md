@@ -1,10 +1,24 @@
 # P12 — Reliable agency
 
-**Status:** in progress. Written 2026-08-24, replacing the earlier "P12 — More
-models" framing.
+**Status:** closed at a waypoint 2026-08-25 — two of three roles tested.
+**Reopen condition: P12.5 (model-authored packets), which never ran.** Written
+2026-08-24, replacing the earlier "P12 — More models" framing.
 
-**Progress as of 2026-08-24 evening** — several steps ran out of the plan's
-order, driven by findings rather than sequence. Landed:
+**Status as of 2026-08-25 (supersedes the 2026-08-24 evening progress note
+below, which was never revised and had gone stale on four counts).** What
+shipped: P12.1 (including the validator/parser hardening the old note lists as
+owed); P12.2; P12.3's Laguna arm; P12.4 (fixture tier 3/3 ×2 — repair *has* now
+run in-harness, and the import gate *has* fired live); P12.6's second disjunct
+(the next failure mode named and classified — see that section); P12.8
+(phase-level recovery, code landed, live confirmation still owed). What did
+not: P12.0's source-of-truth document and superseded-doc banners; P12.3's
+Mellum arm and the Mellum revision re-run; P12.4's live end-to-end tier;
+**P12.5 entirely**; P12.7 beyond plan text. Full accounting in ROADMAP's Prior
+work entry for P12.
+
+**Progress as of 2026-08-24 evening — HISTORICAL, superseded by the status
+above.** Several steps ran out of the plan's order, driven by findings rather
+than sequence. Landed:
 
 - **P12.1 is done.** `thinkBudget` wiring (`066f28d`), path presentation
   (`4535dcd`), facts actually rendered into the prompt (`aad4eb0` — they were
@@ -27,9 +41,11 @@ Tuning the implement arm across those batches advanced mechanism understanding
 substantially and the pass rate not at all. See C15–C18 in the consolidation
 doc.
 
-**Still true and unchanged:** repair has never run in-harness; the import gate is
-verified in isolation but has never fired live; the `--think-budget` submodule
-branch is not merged with the Mellum integration branch (P12.2).
+**~~Still true and unchanged~~ — all three of these are now false** (kept for
+the historical record, corrected 2026-08-25): repair has since run in-harness
+(P12.4's fixture tier, 3/3 ×2); the import gate has since fired live (5 of 6
+failing P15 build runs); and the `--think-budget` branch was merged with the
+Mellum integration branch in P12.2 — the submodule pins that merge today.
 
 **Direction.** One model, three roles, host-owned structure. The host owns phase
 boundaries, budgets, permissions, validation, and recovery; the model supplies
@@ -261,6 +277,19 @@ without productive action.
 **Done when:** a role that needs reasoning completes with bounded thinking, or
 the next failure mode is named and classified.
 
+**Status (2026-08-25): met by the second disjunct, not the first.** A
+2026-08-25 audit initially scored this NOT STARTED on the grounds that no
+commits reference P12.6 — but the criterion is a disjunction, and it never
+required commits. The second branch was satisfied: validating `--think-budget`
+(verified at the token level in C15–C18) named and classified the next failure
+mode as *completes-and-is-wrong* — up to 7 assertion failures with clean
+imports — rather than the predicted shallow exploration. **The first branch
+was not**: no run has demonstrated a role that needs reasoning completing
+*with* bounded thinking, and every self-describing capture records
+`think=nothink, thinkBudget=0`. Bounded thinking for the repair role
+specifically remains unvalidated and is filed in ROADMAP's Backlog alongside
+the inert `AGENTTEST_REPAIR_THINK` override.
+
 ### P12.7 — Honest cross-system comparison
 
 **Added 2026-08-25**, after a session's ad-hoc comparison against a Claude
@@ -341,6 +370,41 @@ with Σprompt as the comparable figure — written up in `docs/cool_things/`
 alongside the persistent-session-vs-stateless-API finding that motivated
 this phase, stated as a hypothesis pending that real measurement, not a
 result, until the trace capture actually lands.
+
+**Status (2026-08-25): NOT STARTED — plan text only.** Both P12.7 commits
+(`082329d`, `1400171`) touch this file and nothing else. There is no
+`DumbImplementer` in `Sources/`, no trace-channel capture, no
+Σprompt/Σcached/Σsuffix, no warm-started timing, and `docs/cool_things/` does
+not exist. An earlier ROADMAP entry credited P12.7 with having "corrected the
+cross-system metric definitions the measurement gate reports against" — true
+only of the definitions *in this document*, not of anything the harness
+measures; that claim has been corrected. Item 2a's `TurnOutcomeBuilder`
+accumulation bug is tracked separately and must land before any of these
+metrics are trusted.
+
+### P12.8 — Phase-level recovery
+
+**Added 2026-08-25** (after P12 was first closed), reopening P12 for the half
+of its own "recovery" charter that P12.4 left unwired: P12.4 recovers at the
+end-of-run acceptance boundary, but a build phase failing its import check
+aborts the run before `commitBack()`, so the repair loop was never reachable
+for the failure class that actually stopped 5 of 6 failing P15 build runs.
+
+Design: [`2026-08-25-p12-8-phase-level-recovery-design.md`](../specs/2026-08-25-p12-8-phase-level-recovery-design.md).
+Plan: [`2026-08-25-p12-8-phase-level-recovery-plan.md`](2026-08-25-p12-8-phase-level-recovery-plan.md).
+
+**Status: code landed, live confirmation owed.** `commitForRepair`,
+`adoptRepairedPhase`, `PhaseRepair`, and the build-loop wiring are committed
+(`6ac5df7`, `84b9fa1`, `a438634`, `de46f4f`, `cca02f2`) and the deterministic
+tier passes. The one live attempt
+(`captures/agenttest/20260825-203706-roadmap-user-story`) did **not** reach
+acceptance: phase 1 failed validation on a trivially repairable content defect,
+the repair itself returned `validationFailed`, and `RepairLoop` exited on that
+receipt **by design** (D4 — any receipt ends the loop; this is a limitation to
+be lifted, not a malfunction). No verdict record written.
+
+**Done when:** a live run shows `phase N: repaired <ref>` and continues to
+acceptance, and that run is recorded.
 
 ## Explicit non-goals
 
