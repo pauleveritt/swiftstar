@@ -118,9 +118,14 @@ item 1 is more valuable as a **control** than as a candidate:
 
 1. **intervene** — implement ONE item, run the dev set at rounds ∈ {1, 3},
    compute marginal gain and stall rate.
-2. **keep or revert** — promote only on a **dev gain of ≥2 cells**; anything
-   smaller is noise at n=3 and is reverted. **Log both outcomes.** A failed
-   intervention is data, not a wasted iteration.
+2. **keep or revert** — promote only when **BOTH**: `pass@3` improves by ≥2
+   cells, **and** marginal gain does not fall. **[amended at iteration 2]**
+   Gain alone is not sufficient and never was: `pass@3 − pass@1` is trivially
+   maximised by making round 1 *worse*, which intervention 2 did — gain rose
+   +2 cells purely because `pass@1` collapsed from 2/6 to 0/6 while `pass@3`
+   stayed flat. `pass@3` is what a user of this loop actually receives, so it is
+   the promotion gate; gain is the diagnostic. Anything smaller is noise at n=3
+   and is reverted. **Log both outcomes.** A failed intervention is data.
 3. **checkpoint** (every 3rd iteration, and on any promotion) — run held-out at
    rounds ∈ {1, 3} **with n=5 seeds**. This is the only measurement a done-when
    may be evaluated against. If dev gains do not transfer, that is

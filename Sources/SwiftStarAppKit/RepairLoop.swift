@@ -81,6 +81,7 @@ public enum RepairLoop {
         grade: (URL) throws -> GradeResult,
         capture: FileHandle? = nil, captureDir: URL? = nil,
         maxCandidateRounds: Int = 2, outputCap: Int = 8192, fileCap: Int = 16384,
+        specSource: String? = nil,
         emissionFollowUp: String? = nil
     ) throws -> Outcome {
         var head = failedRef
@@ -157,13 +158,24 @@ public enum RepairLoop {
             let (out, outNote) = MachineEvidence.cappedFailureOutput(stableOutput, cap: outputCap)
             if let outNote { truncations.append(outNote) }
             let evidence = MachineEvidence(failureOutput: out, fileContents: contents, truncations: truncations)
+            // /goal v5 intervention 2: show the acceptance suite's own source.
+            // P17 dispatched 91 repair packets and NOT ONE contained it, so a
+            // model asked to author a deleted file was guessing at a contract it
+            // could not read -- it produced a timezone-naive `timestamp` and the
+            // wrong seed count because nothing told it otherwise. At fixture tier
+            // the grader's file IS the spec, so showing it is a design choice,
+            // not an answer leak. Off by default; the caller opts in.
+            let specBlock = specSource.map {
+                "\n\n## The acceptance suite (this is the contract you must satisfy)\n\n"
+                + "```python\n" + $0 + "\n```\n"
+            } ?? ""
             for hit in evidence.redactHits(authored.redacts) {
                 FileHandle.standardError.write(Data(
                     ("[repair] note: redacted string \"\(hit)\" present in machine evidence\n").utf8))
             }
 
             let packet = HandoffPacket(
-                taskText: authored.taskText + "\n\n" + evidence.render(),
+                taskText: authored.taskText + "\n\n" + evidence.render() + specBlock,
                 writableFiles: authored.writableFiles,
                 validationCommand: authored.validationCommand,
                 selfTestCommand: authored.selfTestCommand,

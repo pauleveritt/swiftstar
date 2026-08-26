@@ -1,0 +1,13 @@
+fixture	rounds	seed	outcome	detail	capture
+depth-2	1	1	harness-void	no graded round recorded	20260826-162516-fixture-depth-2
+depth-2	1	2	fail	2 failed, 11 passed, 3 warnings in 0.22s	20260826-162649-fixture-depth-2
+depth-2	1	3	fail	2 failed, 11 passed, 3 warnings in 0.28s	20260826-162903-fixture-depth-2
+depth-2	3	1	fail	2 failed, 11 passed, 3 warnings in 0.19s	20260826-163219-fixture-depth-2
+depth-2	3	2	pass	13/13	20260826-163928-fixture-depth-2
+depth-2	3	3	pass	13/13	20260826-164401-fixture-depth-2
+framing-2	1	1	fail	1 of 9 preconditions unmet.	20260826-164646-fixture-framing-2
+framing-2	1	2	fail	1 of 9 preconditions unmet.	20260826-164904-fixture-framing-2
+framing-2	1	3	fail	1 of 9 preconditions unmet.	20260826-165128-fixture-framing-2
+framing-2	3	1	fail	1 of 9 preconditions unmet.	20260826-165330-fixture-framing-2
+framing-2	3	2	fail	1 of 9 preconditions unmet.	20260826-165823-fixture-framing-2
+framing-2	3	3	pass	13/13	20260826-170216-fixture-framing-2

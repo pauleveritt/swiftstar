@@ -173,3 +173,76 @@ the evidence), not item 1. `framing-2` is 0/6 across both budgets and its
 failures are provably guesses at a contract no packet contains; item 2 targets
 that directly. The control (item 1) is only needed to attribute a win, so it
 runs *after* a win, not before one.
+
+## 2 — 2026-08-26 — intervene (item 2: acceptance-suite source) — **REVERTED**
+
+**did:** Put the acceptance suite's own source in the repair evidence
+(`AGENTTEST_SHOW_SPEC=1`, off by default). **The metric improved and the system
+got worse.** Reverted, and the promotion rule that would have accepted it is
+amended.
+
+**intervention:** item 2 — **reverted**.
+
+**dev:**
+
+| | baseline | int 2 |
+|---|---|---|
+| `pass@1` | **2/6** | **0/5 valid (+1 void)** |
+| `pass@3` | 3/6 | 3/6 |
+| marginal gain | +0.17 | **+0.50** |
+| `framing-2` pooled | 0/6 | 1/6 |
+| stall @rounds=3 | 0% | **29%** (2/7) |
+
+**evidence:** the spec verifiably reached the model — packets went ~10K → 19–21K
+bytes and contained the exact assertion it had been guessing at:
+
+```
+contains acceptance suite: True     contains the tz assertion: True
+```
+
+### Why this is a revert despite passing the promotion bar
+
+Marginal gain rose by +2 cells, which my own rule said to promote on. But it
+rose **entirely because `pass@1` collapsed** from 2/6 to 0/6 while `pass@3`
+stayed flat at 3/6. Absolute capability did not improve; one-round capability
+got worse. **`pass@3 − pass@1` is trivially maximised by degrading round 1**,
+and I wrote a promotion rule that rewards exactly that. Amended: promotion now
+requires `pass@3` to improve by ≥2 cells *and* gain not to fall. **That is the
+second metric flaw this goal has produced in two iterations** — the first was
+measuring stalls at a budget where they do not occur.
+
+### The information-starvation hypothesis is not supported
+
+Fable's reading, and mine, was that `framing-2`'s failures were the model
+guessing at a contract no packet contained. Handed that contract verbatim it
+went **0/6 → 1/6** — one cell, below the noise floor — and its failures still
+read `1 of 9 preconditions unmet`, meaning it never even exported a `complaints`
+attribute. The tz-aware default and the seed count it previously got wrong were
+never the binding constraint.
+
+What the spec *did* change is behaviour, for the worse. With it visible the
+model stopped doing targeted repair and began rewriting the whole app —
+capture `165330` rounds 2 and 3 each emit **six headings and 12 fenced blocks**
+(`app.py`, `models.py`, all three templates, and the test file) where the
+baseline emitted one or two files. Stall rate went 0% → 29% at rounds=3: the
+two long rewrites are near-identical to each other, so a 5.2K-char full rewrite
+is now the fixed point instead of a targeted patch.
+
+**Honest denominator note:** int2's `pass@1` had one `harness-void`
+(`contractNotFollowed`, capture `162516`), so it is 0 of 5 valid, not 0 of 6.
+Also logged: the runner classifies `contractNotFollowed` as `harness-void`,
+while the v5 policy table says ambiguous attribution defaults to **model** with
+a `disputed` flag. Runner and policy disagree; queued rather than silently
+reconciled mid-run.
+
+### The claim I was about to make and did not **[v5 rule]**
+
+"Intervention 2 improved marginal gain by +0.33 — promote it." True by the rule
+as written, and wrong: it would have shipped a loop that is worse at one round,
+no better at three, and 29% stalled instead of 0%.
+
+**next:** **intervene** with item **4** (stall detection), not the control. The
+control tests whether prompt variation alone helps; this run just showed that
+adding information *hurts* by triggering whole-app rewrites, so the promising
+direction is constraining what a round may do, not enriching what it sees.
+Failure count toward the negative done-when: **1 of 3.**
