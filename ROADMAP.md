@@ -33,17 +33,25 @@ phase-level repair has not fired again since the fix landed, not because it
 doesn't work, but because no phase has failed validation in any attempt
 since. Still open, not blocking anything.
 
-**Two untracked scripts for a P12.3 Mellum ablation exist on disk, but are
-not actually running.** `Tools/overnight-chain.sh` / `overnight-idle-launch.sh`
-(mtime 22:08–22:10, not authored by this session) would run a laguna/mellum ×
-path × think × seed matrix if launched. `overnight-idle-launch.sh` was armed
-once, at 22:18:04 (`/tmp/overnight-idle-launch.log`), to sleep 3.5h then wait
-for machine idle before starting the chain — but its process is no longer
-alive (`ps` clean) and it produced no log entry past the arming line, no
-`/tmp/overnight-chain.log`, and no manifest. Whatever launched it did not
-survive. Treat P12.3's Mellum arm as still not run; the scripts are evidence
-someone (possibly a prior session) intended to run it, not evidence that it
-did or will.
+**Correction, 23:25: a separate overnight process is genuinely armed and
+will very likely fire tonight.** Two untracked scripts for a P12.3 Mellum
+ablation exist on disk (`Tools/overnight-chain.sh` /
+`overnight-idle-launch.sh`, mtime 22:08–22:10, not authored by this
+session) — a laguna/mellum × path × think × seed matrix, 80 cells at the
+script's default `NSEEDS=10`. An earlier version of this note (23:00-ish)
+said the launcher's process was dead; that was wrong — checked again at
+23:24 and `pid 29024` (`caffeinate -i -s bash Tools/overnight-idle-
+launch.sh`) has been running continuously since 22:18:04, currently inside
+its initial 3.5h sleep (wakes ~01:48), after which it polls for 10
+continuous idle minutes and ≥60 GiB free before launching the chain — very
+plausible if the machine sits untouched overnight, per this session's own
+understanding that no one is watching it. **This session stopped its own
+live model runs once this was confirmed, specifically to avoid colliding
+with it** — both use the same engine/lock mechanism, and 80 sequential
+cells at ~5-10 min each could hold the model for 6-13 hours. If it fires,
+its results directly address "P12.3's Mellum arm never ran" below; check
+`/tmp/overnight-manifest.tsv` and `/tmp/overnight-chain.log` (both absent
+as of 23:24, before it fires) rather than re-deriving that work.
 
 **Open choices:** P12.7 is now 2/5 pieces in (trace capture and
 Σprompt/Σcached/Σsuffix shipped and live-confirmed the same night;
