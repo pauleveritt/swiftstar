@@ -1,0 +1,16 @@
+# Pre-registered fixture split for /goal v5. Written BEFORE the first
+# intervention. Held-out fixtures are touched ONLY at checkpoints; touching one
+# during an iteration invalidates the run.
+#
+# role=metric  contributes to marginal round gain and stall rate
+# role=guard   sanity only, no metric contribution -- these pass at every budget
+#              (plausible-wrong-fix was 6/6 in P17), so they can detect a
+#              regression but never an improvement, and counting them would
+#              inflate every number.
+fixture	set	role	p17_pooled	why
+depth-2	dev	metric	4/5	2-file edit, has headroom (1 fail, 1 void in P17)
+framing-2	dev	metric	1/6	2-file author+edit, the largest headroom in the set
+depth-3	held-out	metric	5/6	3-file edit; superset of depth-2, so ordering is assertable
+framing-2-edit	held-out	metric	5/6	2-file edit behind a collection abort
+plausible-wrong-fix	both	guard	6/6	1-file edit; 6/6 at every budget -- regression guard only
+misleading-locus	both	guard	-	1-file edit; not run in P17, guard only

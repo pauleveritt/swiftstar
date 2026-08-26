@@ -279,8 +279,9 @@ func repairPacket(_ ctx: RepairContext, phaseScoped: Bool = false) -> HandoffPac
         scope,
         "The failure output and the current file contents are appended below",
         "under \"Failure evidence (machine output)\".",
-        "\(missingCount) of the files you may edit are missing or wrong — not",
-        "one. First, in a few sentences, work out from the failure output and",
+        "At least \(missingCount) of the files you may edit are missing or wrong",
+        "— possibly more, since a file that is present can still be wrong.",
+        "First, in a few sentences, work out from the failure output and",
         "the current file contents which of them need to change. Then, for",
         "each file that needs to change, emit its heading line followed by one",
         "fenced code block holding that file's complete corrected contents —",
@@ -416,6 +417,20 @@ for probe in [[], ["app.py"], ["app.py", "models.py", "templates/base.html"]] {
         FileHandle.standardError.write(Data(
             ("swiftstar-agenttest: repair directive asserts \"Exactly one file is wrong\" with "
              + "\(probe.count) missing writable files — the harness cannot know that.\n").utf8))
+        exit(2)
+    }
+    // The same defect in a smaller font (found by review, 2026-08-26): the
+    // multi-file branch stated an EXACT count from a variable that counts only
+    // ABSENT files, so 2 missing + 1 present-but-broken asserted "2 are wrong"
+    // when 3 were. Dormant in P17 (no fixture has >=2 missing) and live the
+    // moment pipeline measurement resumes, where missing-file storms were the
+    // dominant mode. Any count the directive names must be a lower bound.
+    if text.contains("of the files you may edit are missing or wrong"),
+       !text.contains("At least \(probe.count) of the files you may edit are missing or wrong") {
+        FileHandle.standardError.write(Data(
+            ("swiftstar-agenttest: repair directive names a file count that is not stated as a "
+             + "lower bound (\(probe.count) missing) — `missingWritableFiles` cannot see a file "
+             + "that is present and broken.\n").utf8))
         exit(2)
     }
 }

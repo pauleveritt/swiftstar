@@ -1,171 +1,176 @@
-# /goal — one iteration of a pre-registered experiment
+# /goal — one iteration of a search, not a measurement
 
-You are one iteration of a loop that **runs to completion without stopping for
-the human**. Do one unit of work, write it to the ledger, commit, and continue.
-The loop's memory is the ledger, not your context.
+You are one iteration of a loop that **searches for a repair-loop design that
+works**, keeps what beats the baseline, reverts what doesn't, and validates
+against data it never tuned on. It runs to completion without stopping for the
+human. Do one unit of work, write it to the ledger, commit, and continue.
 
-> **v4, 2026-08-26.** v1–v3 ran 21 iterations across two ledgers. They landed
-> real harness fixes and never once satisfied a single done-when clause. The
-> defect-discovery rate stayed flat at ~0.8 new defects per iteration for all 21
-> — there was never evidence that "one more fix" converges. v3 escalated to the
-> human in 4 of its 8 iterations.
+> **v5, 2026-08-26.** v4 answered its question in 3 iterations with zero
+> escalations, after v1–v3 spent 21 iterations answering nothing. But v4's
+> success was partly the question getting easier — fixture tier removed most of
+> the apparatus surface. v4's text is in git at `cb29b45`.
 >
-> v3's text is in git at `fadd48e`. Both old ledgers are closed records.
+> Every previous version **measured**. This one **optimises**, because the most
+> useful thing v4 found was not a fact about the model but a defect in the
+> machinery, and that is something this project controls.
 
-## Why v3 was replaced — three provable faults, not a change of taste
+## What v4 found that this goal exists to fix
 
-- **Clause (c)** (byte-identical packets at the same seed) **was refuted by the
-  loop's own iteration 6**: seed forwarded (verified from live argv), identical
-  prompt sha, identical prefill length, same pool worker — different output on
-  turn 1. A round-N packet embeds round-(N−1)'s non-deterministic model output,
-  so no harness change can ever satisfy it for rounds ≥ 2. **The loop proved its
-  own goal impossible and kept running under it.**
-- **Clause (d)** (every check fires on a known-bad from the current batch) is
-  **anti-convergent**: the checks detect harness defects, the defects are being
-  fixed, so a batch from a *working* harness contains no known-bads. (d) becomes
-  unsatisfiable exactly when the apparatus succeeds. With (a) it demanded a batch
-  that fails in all known ways and no unknown way.
-- **Clause (a)** (zero cells fail in an uncovered way) is a completeness claim
-  over an open failure space: falsifiable, never verifiable, cannot accumulate.
+The repair loop feeds round N+1 **the same prompt and the same evidence** as
+round N. With near-deterministic decoding the second round is a re-run of the
+first. Verified in the captures — emissions byte-identical across rounds:
 
-And the structural cause of the whack-a-mole: validity was **conjunctive over a
-long serial pipeline**, so each fix advanced the frontier exactly one link to
-where the next defect waited — while a weak model acted as a fuzzer, exercising
-harness paths no test author anticipated. Fuzzing finds bugs for as long as you
-run it.
+```
+142316-framing-2   turns 4,5,6  all 35a1272040  (2522 chars each)
+142723-framing-2   turns 3,4,5,6 all a2f66634d5 (2446 chars each)
+141608-depth-3     turns 5,6    both 82c6d4ddc8
+```
 
-Meanwhile the [80-cell verdict](../../docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md)
-had already named the cheap decisive test in §5 and open-work item 9: **a
-multi-file repair fixture**. Twenty-one iterations later it had never been built.
-It exists now (`fixtures/agenttest/repair/README-multifile.md`).
+All four of v4's failures were stalls of this shape. So **"extra rounds don't
+help" was guaranteed by construction, not measured** — v4's budget null is
+partly an artefact, and its ledger's reading of it as task structure was wrong.
+A multi-round repair loop whose rounds cannot differ is not a repair loop; it is
+one attempt billed several times.
 
 ## The goal
 
-> **Answer the original question: is Mellum's multi-file repair failure a
-> BUDGET limit, a FRAMING limit, or a DEPTH limit?**
+> **Make additional repair rounds earn their cost.**
 >
-> **Done when** every row of the pre-registered manifest
-> `docs/superpowers/research/experiment-manifest.tsv` (**24 cells** — 4 fixtures
-> × 2 budgets × 3 seeds) has a recorded outcome, `harness-void` ≤ 20% of cells
-> (≤ 4), and a dated verdict document in `docs/superpowers/research/` states the
-> answer per arm with the numbers quoted.
+> **Primary — marginal round gain:** `pass@3rounds − pass@1round` on the
+> **held-out** fixture set. Baseline today ≈ 0.
+> **Secondary — stall rate:** fraction of rounds whose emission is byte-identical
+> to the previous round's. Baseline today: 4 of 4 failures were stalls.
+>
+> **Done when EITHER:**
+> - held-out marginal gain **≥ +0.25** with stall rate **< 10%** — the loop
+>   found something that works; write the verdict; **or**
+> - **three consecutive interventions fail to move dev marginal gain** — the
+>   verdict is *"multi-round repair does not work for this model"*, the loop
+>   says so plainly and stops.
 
-"Done" is **manifest completeness** — a closed, mechanical predicate you can
-evaluate with `wc -l`. It cannot be reset by a new discovery, and a harness
-defect no longer voids the experiment: it becomes a recorded row.
+**Both endings are results.** The negative one is worth having and cheap to
+reach; if it lands, the recommendation is to delete the multi-round loop rather
+than tune it. A goal only one of whose outcomes counts as success is how v3
+ran 8 iterations against a target its own iteration 6 had disproved.
 
-**The three arms.** Depth: `plausible-wrong-fix` (1 file) → `depth-2` → `depth-3`,
-all keeping the suite importable so every defect is visible from round 1. Budget:
-the same fixtures at `AGENTTEST_REPAIR_ROUNDS` ∈ {2, 5}, comparable because the
-starting tree is **pinned by a commit** — the confound that made v2's budget
-comparison worthless is gone by construction. Framing: `framing-2` shows a
-precondition manifest where `depth-2` shows failing assertions.
+## The fixture split — pre-registered, and the load-bearing rule
 
-**The narrowness this buys, stated up front and repeated in the verdict:** this
-measures repair **in isolation from a pinned tree**, not repair in the pipeline.
-It is the only version comparable across budgets. The verdict must not
-generalise to pipeline behaviour.
+**Dev (iterate freely):** `depth-2`, `framing-2`
+**Held-out (checkpoints only, NEVER during iteration):** `depth-3`, `framing-2-edit`
+**Guards (both sets, sanity only — no metric contribution):**
+`plausible-wrong-fix`, `misleading-locus`
 
-If `ROADMAP.md`'s `## Now` stops naming this experiment, stop and tell the human.
+Registered in `docs/superpowers/research/fixture-split.tsv`.
 
-## Pre-authorised policy — the loop decides, and records
+The metric fixtures are the four with **headroom** — fixtures that sometimes
+fail at one round. `plausible-wrong-fix` is 6/6 at every budget, so it can only
+detect a regression, never an improvement; treating it as a metric fixture would
+inflate every number. It is a guard.
 
-Ratified once at adoption. This **replaces v3's "escalate on measurement
-semantics"**, which in a measurement project meant escalating on nearly
-everything.
+**Touching held-out outside a checkpoint invalidates the run.** Without this the
+loop will tune the prompt into the fixtures and call it progress — the failure
+mode a search loop has and a measurement loop does not.
+
+## The search space — pre-registered and bounded
+
+An unbounded space is how v1–v3 became whack-a-mole. One intervention per
+iteration, from this list. Adding to it requires saying why in the ledger.
+
+1. **Per-round sampling variation** — a different seed each round. Attacks the
+   byte-identical replay directly, and is nearly free.
+2. **Include the acceptance-suite source in the evidence.** Legitimate at fixture
+   tier: the grader's file *is* the spec. **0 of 91 v4 packets contained it**, so
+   the model was authoring against a contract it could not read. Tests whether
+   v4's "authoring limit" is really information starvation.
+3. **Feed forward the delta** — what the previous round changed, and which tests
+   still fail after it.
+4. **Stall detection** — if round N's tree equals round N−1's, abandon and
+   re-prompt with variation rather than replaying.
+5. **Per-file targeting** when the failure output implicates specific files.
+
+## One iteration
+
+1. **intervene** — implement ONE item, run the dev set at rounds ∈ {1, 3},
+   compute marginal gain and stall rate.
+2. **keep or revert** — keep only if dev marginal gain beats current best by
+   more than noise; otherwise revert. **Log both outcomes.** A failed
+   intervention is data, not a wasted iteration.
+3. **checkpoint** (every 3rd iteration) — run held-out at rounds ∈ {1, 3}. If
+   dev gains do not transfer, that is **overfitting**: say so, revert to the
+   last config that transferred, and note which intervention did not survive.
+4. **stress** (at each checkpoint) — build one adversarial fixture aimed at the
+   *current best* config, in a defect class it has not seen. If the config
+   survives, it generalises; if not, that fixture joins **dev** (never held-out).
+5. **verdict** — a done-when condition fired.
+
+Before any GPU tier check nothing else holds the engine (`ps aux` for
+`llama|agenttest|ds4-agent`); if held, record `deferred: engine busy`.
+
+## Policy — the loop decides, and records
 
 | situation | what the loop does, without asking |
 |---|---|
-| a harness defect voids a cell | record `harness-void: <cause>`, move to the next row |
-| one cause voids ≥3 cells or >20% so far | spend ONE iteration fixing that single cause, then re-run **only the voided cells** — never re-run a recorded cell |
-| model-vs-harness attribution genuinely ambiguous | default to **model**, set `disputed`; disputed cells are a separate line in the verdict |
-| runaway generation / `limit` stop | a **model-behaviour observation** on that cell ("ran away at N tokens, ctx used M of 32768"), not a validity question. The cell counts. |
-| failure class mislabelled (`validationFailed` vs `contractNotFollowed`) | record both labels in the row; never reclassify mid-experiment |
-| run-to-run non-determinism | a measured variable across the 3 seeds; never a blocker, never a defect |
-| engine busy (`ps aux` for `llama\|agenttest\|ds4-agent`) | record `deferred: engine busy`, do non-GPU work or stop for the session |
+| an intervention makes things worse | revert, log the number, move to the next item |
+| a harness defect voids a cell | record `harness-void: <cause>`, continue |
+| one cause voids ≥3 cells | one iteration fixing that cause, then re-run only voided cells |
+| model-vs-harness attribution ambiguous | default **model**, flag `disputed` |
+| **runaway generation / `limit` stop** | **record `stalled-runaway`; the cell counts as a failure, not a void** |
+| run-to-run non-determinism | a measured variable; with intervention 1 it becomes the *mechanism*, not noise |
 
-**The question queue.** Anything that would once have escalated gets a paragraph
-appended to `docs/superpowers/research/questions.md`: the question, the default
-taken, and which cells carry `disputed`. The human drains it whenever they like.
-Every cell keeps its raw capture, so an answer can flip flagged cells
-retroactively at **zero GPU cost**. Escalation becomes asynchronous, not blocking.
+**The `limit` ruling is a correction.** v4 shipped a contradiction — its policy
+table said a `limit` stop counts, its validity section said the same wire is
+harness-void — and the loop silently followed the second. Resolved here in
+favour of counting it: a runaway is model behaviour, and under this goal it is a
+*stall variant*, which is the thing being measured.
 
-**Budgets that guarantee termination.** 15 iterations, ~4 GPU-hours. Hitting a
-ceiling does not fail the loop — it produces the verdict from completed cells
-with `n` stated honestly. A partial answer with honest `n` is an answer.
+Anything else that would once have escalated goes to
+`docs/superpowers/research/questions.md` with the default taken. Captures are
+kept, so an answer can flip flagged cells retroactively at zero GPU cost.
 
-## Validity — two checks, not seven
+**Budgets:** 15 iterations, ~6 GPU-hours. Hitting a ceiling produces the verdict
+from what completed, with `n` stated honestly.
 
-Fixture tier collapses the burden: the starting tree is committed (no build
-phase, so no missing-file storms), there are no phase briefs and no verdict
-grader (the grade is pytest's exit and failure count, mechanical). Surviving:
+## The ledger
 
-- **delivered** — `wire.ndjson` shows no `exceeds context`, no `turnDidNotEnd`,
-  no `limit`/`contextFull` stop. (v3's `check_v5`, unchanged.)
-- **harvest-faithful** — no heading had fenced code discarded in favour of
-  commentary. (v3's widened `check_v6`, unchanged.)
-
-A cell failing either is `harness-void`, recorded, and the loop continues.
-
-Retained dormant for any future pipeline work, not in this gate: `check_v1`,
-`check_v2`, `check_v3`, `check_v4` and their fixtures. **Deleted outright:** V7
-as an invariant and the ruling behind it — the loop's own iteration 6 refuted
-it, and a check for a property the engine cannot deliver is a check that can
-only ever report failure. `MachineEvidence.normalizingEphemera` stays: it is a
-prompt-caching and cleanliness win regardless.
-
-**Do not re-audit the historical captures.** The 80-cell matrix and both n=4
-batches are harness archaeology, not model data. Both ledgers are closed. **No
-number from them appears in this verdict.**
-
-## Three actions, not five
-
-1. **run** — execute the next incomplete manifest rows, record each outcome.
-2. **repair-the-apparatus** — only when the void quota trips. One cause, one
-   iteration, a test that fails before and passes after. If the test passes on
-   arrival, say so and call it a regression guard, not a red-then-green proof.
-3. **verdict** — the manifest is full, or a ceiling was hit. Write it.
-
-## The ledger entry
-
-`docs/superpowers/research/goal-ledger-v4.md`. One entry per iteration, then
-commit that iteration alone.
+`docs/superpowers/research/goal-ledger-v5.md`, one entry per iteration, commit
+that iteration alone.
 
 ```
-## <n> — <date> — <run|repair|verdict>
+## <n> — <date> — <intervene|checkpoint|verdict>
 did: <one sentence>
-cells: <recorded>/24 recorded, <void> harness-void (quota 4), <disputed> disputed
-rows: <fixture>/<rounds>/<seed> -> pass|fail|harness-void: <cause>   (one line per cell run)
+intervention: <which search-space item, and kept or reverted>
+dev:      pass@1 <a>/<n>  pass@3 <b>/<n>  gain <+x.xx>  stall <y%>
+held-out: (checkpoints only) pass@1 <a>/<n>  pass@3 <b>/<n>  gain <+x.xx>
 evidence: <commands run and the output lines the numbers came from>
 next: <which action, and why>
 ```
 
-Rules that survive from v3 because they earned it:
+Rules kept because they earned their place:
 
-- Every number comes from a command whose output is quoted. No number from memory.
-- **Record the claim you were about to make and did not.** This caught three
-  would-be false headlines in v3 — a "first assertion-bearing packet" claim a
-  scan of 146 packets refuted, a "the tree changed each round" inference a
-  one-line diff killed, and a V6 completeness claim a compile-check disagreed
-  with. It is the single highest-yield rule in this file.
-- **Digest inequality is not evidence of change.** Diff the artifacts.
+- Every number comes from a command whose output is quoted. None from memory.
+- **Record the claim you were about to make and did not.** Highest-yield rule in
+  this file: it caught three false headlines in v3 and one in v4.
+- **Digest inequality is not evidence of change**; diff the artifacts. And its
+  converse, learned this session: **digest equality IS evidence of a stall** —
+  check it before describing a model as "grinding".
+- **Nested fixtures must respect their ordering.** `depth-3` ⊃ `depth-2`, so
+  depth-3 passing *more* is impossible and means the instrument is lying. This
+  is what exposed v4's directive defect. Assert it at every checkpoint.
+- **[v5] At adoption, diff the plan against what was implemented** — kept /
+  dropped / modified, with a reason for anything dropped. v4 silently dropped a
+  recommended runner assertion and paid a full 12-cell run for it.
 - Corrections are append-only: a new entry naming what it retracts.
-- If a sentence in your entry contradicts a number in it, resolve it before
-  committing.
 
 ## Stopping — the complete list
 
-1. **Manifest full** → write the verdict, update ROADMAP, tell the human.
-2. **The checker's self-test fails and one fix attempt does not restore it** —
-   the only thing that can make results dishonest rather than merely incomplete.
-3. **A budget ceiling is hit** → write the partial verdict, tell the human.
-4. **ROADMAP `## Now` stops naming this experiment** — direction is the human's.
+1. **Either done-when fires** → write the verdict, update ROADMAP, tell the human.
+2. **A held-out regression survives one revert** — the loop can no longer tell
+   improvement from overfitting.
+3. **A budget ceiling is hit** → partial verdict.
+4. **ROADMAP `## Now` stops naming this goal** — direction is the human's.
 
-Nothing else stops the loop. Deliberately deleted triggers: "a cell fails in a
-way no invariant covers" (now a `harness-void` row), "a decision touches
-measurement semantics" (now the policy table and the queue), "an invariant
-blocks cells after its fix landed" (now the quota rule), "two flat measure
-iterations" (meaningless when the metric is manifest completion).
+Nothing else stops the loop.
 
 What is still a failure of the loop: reporting progress whose evidence would not
-survive re-auditing.
+survive re-auditing — or reporting a dev gain as a result without a held-out
+checkpoint behind it.
