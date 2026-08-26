@@ -158,3 +158,87 @@ dropped that when writing the v4 contract**, and this iteration is the cost.
 **next:** **repair-the-apparatus** — make the repair directive's file-count
 claim true for broken files, not just missing ones, and add the runner
 assertion I omitted. Then re-run only the 9 voided cells.
+
+## 2 — 2026-08-26 — repair + re-run (rounds=2, corrected directive)
+
+**did:** Removed the false file-count claim from the repair directive, added the
+runner assertion that should have been in v4 from the start, and re-ran all 12
+rounds=2 cells. **Under a truthful directive the depth arm inverts completely.**
+
+**cells:** 12/24 recorded, 1 harness-void (quota 4), 0 disputed
+
+**rows:**
+
+```
+plausible-wrong-fix/2/1 pass 13/13   /2/2 pass 13/13   /2/3 pass 13/13
+depth-2/2/1  pass 13/13   /2/2 pass 13/13   /2/3 harness-void: V5 stop_reason=limit
+depth-3/2/1  pass 13/13   /2/2 pass 13/13   /2/3 pass 13/13
+framing-2/2/1 fail 2 failed, 11 passed   /2/2 fail 1 of 9 preconditions unmet.
+framing-2/2/3 fail 2 failed, 11 passed
+```
+
+**Depth arm, rounds=2: 1 file 3/3 · 2 files 2/3 (+1 void) · 3 files 3/3.**
+Against the same fixtures under the false directive: 3/3 · 0/3 · 2-of-3-with-a-void.
+**The directive was the entire depth signal.** Mellum repairs three coupled
+files across three file types — Python, dataclass defaults, HTML attributes —
+in a single turn, reliably, when it is not told that exactly one file is wrong.
+
+**The fix.** `missingWritableFiles` counts files that are ABSENT, so a
+present-but-broken file is invisible to it and the directive's single-file
+branch fired for 0 missing / 3 broken. The claim is removed rather than
+re-worded — the harness cannot know the count — and the directive now asks for
+one heading-plus-block pair per file that needs changing.
+
+**The runner assertion (Fable's, omitted by me in v4, restored here)** builds
+the directive with 0, 1 and 3 missing files before any model loads and refuses
+to start if the phrase appears. Proven by reintroducing the bad string:
+
+```
+swiftstar-agenttest: repair directive asserts "Exactly one file is wrong" with
+0 missing writable files — the harness cannot know that.
+```
+
+**All 12 cells re-run, including the depth-1 3/3 that would have survived.**
+Changing the directive changes what every cell was shown; keeping old rows
+beside new ones would mix conditions inside one arm. Superseded rows are
+archived in `experiment-results-superseded-directive.tsv` behind a header
+saying no number in them enters the verdict.
+
+### The framing arm is confounded more deeply than the fixture README says
+
+Both framing-2 failures land on the same two assertions, and the arc matters:
+
+```
+round 1: exit 2  (still "1 of 9 preconditions unmet")
+round 2: exit 1  FAILED test_complaint_model_contract_is_preserved
+                 FAILED test_seed_complaint_count_is_preserved
+```
+
+The model **recreated the deleted `models.py`** and got it partly right —
+missing the timezone-aware `timestamp` default and the 3–5 seed complaints. So
+framing-2 is not "the same work presented differently": it asks the model to
+**author a file from scratch whose required contents are only implied by the
+suite**, where the depth fixtures ask it to **edit files it can see**. That is a
+harder task of a different kind, and the README's stated confound understated
+it. **A "framing is the limit" claim would be wrong.**
+
+**And framing-2's budget expires exactly where its real work begins** — round 1
+spent on the precondition, round 2 reaching the assertion surface, budget over.
+That is the same pattern v2 saw in the pipeline. **Framing and budget are not
+separable at rounds=2.** The rounds=5 half of the manifest is precisely the test
+— and because the starting tree is pinned by a commit, it is a controlled
+comparison, which v2's could never be.
+
+### The claim I was about to make and did not **[v4 rule]**
+
+"Depth is not the limit; framing is" — the numbers support the first half and
+not the second. framing-2's 0/3 is currently indistinguishable between a framing
+effect, a reconstruction-vs-editing effect, and a budget effect.
+
+**Void:** `depth-2/2/3`, V5 `stop_reason=limit` — a runaway generation. Per the
+policy table this is also a model-behaviour observation, recorded on the row.
+1 of 12, inside quota.
+
+**next:** **run** — the rounds=5 half (12 cells). It separates budget from the
+other two explanations for framing-2 and tests whether depth-3's 3/3 is
+budget-independent.

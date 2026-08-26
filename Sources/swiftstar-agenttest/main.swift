@@ -294,16 +294,18 @@ func repairPacket(_ ctx: RepairContext, phaseScoped: Bool = false) -> HandoffPac
         scope,
         "The failure output and the current file contents are appended below",
         "under \"Failure evidence (machine output)\".",
-        "Exactly one file is wrong. First, in a few sentences, work out what the",
-        "failure output tells you and what the corrected line must be. Then emit",
-        "the heading line for that file followed by one fenced code block holding",
-        "that file's complete corrected contents. The heading line and its fenced",
-        "block must be the LAST thing in your response — end with the closing",
-        "fence and write nothing after it.",
-        "Do not emit a diff or a partial snippet, and do not reproduce the current",
-        "broken file: emit the corrected file exactly once. The host applies the",
-        "file you return exactly as written and \(reRun).",
-        "Do not rewrite working files and do not add new files or routes.",
+        "One or more of the files you may edit is wrong, and the failure output",
+        "may implicate more than one of them. First, in a few sentences, work out",
+        "from the failure output and the current file contents which files need",
+        "to change. Then, for each file that needs to change, emit its heading",
+        "line followed by one fenced code block holding that file's complete",
+        "corrected contents — one heading-plus-block pair per file. The headings",
+        "and blocks must be the LAST thing in your response — end with the",
+        "closing fence and write nothing after it.",
+        "Do not emit a diff or a partial snippet, and do not reproduce a file",
+        "that is already correct: emit each corrected file exactly once. The host",
+        "applies every file you return exactly as written and \(reRun).",
+        "Do not rewrite files not listed above and do not add new routes.",
     ]).joined(separator: " ")
     let writableNote = ([
         TextContract.directive,
@@ -400,6 +402,24 @@ if fixtureName == nil, !modelDecompose {
 // a malformed repairPacket only surfaces as RepairLoopError.packetInvalid from
 // inside RepairLoop.run, at repair-round time — after a full model load and all
 // implement phases have already run.
+// Runner assertion (2026-08-26): the repair directive must never assert a file
+// count the harness cannot substantiate. `missingWritableFiles` counts files
+// that are ABSENT; a file that is present and broken is invisible to it. The
+// old text said "Exactly one file is wrong" whenever fewer than 2 were
+// *missing* — so a fixture with three present-but-broken files was told exactly
+// one was wrong, and v4 iteration 1 watched Mellum obey it and fix one file.
+// Checked here, before a model loads, for 0/1/3 missing.
+for probe in [[], ["app.py"], ["app.py", "models.py", "templates/base.html"]] {
+    let text = repairPacket(RepairContext(failedRef: "", grade: GradeResult(exit: 1, output: ""),
+                                          round: 1, missingWritableFiles: probe)).taskText
+    if text.contains("Exactly one file is wrong") {
+        FileHandle.standardError.write(Data(
+            ("swiftstar-agenttest: repair directive asserts \"Exactly one file is wrong\" with "
+             + "\(probe.count) missing writable files — the harness cannot know that.\n").utf8))
+        exit(2)
+    }
+}
+
 let syntheticRepairContext = RepairContext(failedRef: "", grade: GradeResult(exit: 1, output: ""), round: 1)
 if case .invalid(let reasons) = HandoffPacketValidator.validate(repairPacket(syntheticRepairContext)) {
     FileHandle.standardError.write(Data(
