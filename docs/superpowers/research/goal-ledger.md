@@ -562,3 +562,71 @@ Per the verdict record and Fable's review it must ship *with* a whole-packet
 budget: the one cell that ever received a rich failure surface died of context
 overflow at 37,180 tokens against a 32,768 ceiling, so surfacing more errors
 per round without capping the packet converts V2 blocks into V5 blocks.
+
+## 10 — 2026-08-26 — fix (V2)
+
+**did:** Fixed V2, the last invariant blocking every cell that reaches
+acceptance repair. When pytest aborts collection, `AcceptanceGrader` now
+replaces its output with an **enumerated precondition manifest**: it walks the
+acceptance suite's own module-level AST and checks each requirement
+independently, so one grade names every unmet gate instead of the first.
+
+Derived from the suite rather than hardcoded — the suite is harness-owned and
+may change, and a hardcoded gate list would rot silently.
+
+Note what this does *not* do: `--continue-on-collection-errors`, the cheap
+option the verdict record floated, would not have worked. There is only one
+test module, so when its import fails there is nothing else to continue *to* —
+pytest still reports one error. The gate chain had to be enumerated directly.
+
+The exit code is untouched. This changes what the model is shown, never
+whether a run passed.
+
+**cells:** no new captures this iteration.
+
+**model:** (omitted — fix iteration, per contract.)
+
+**evidence:** red-then-green (fix disabled by short-circuiting its guard):
+
+```
+# disabled:
+✘ Expectation failed  ↳ grade still shows a bare collection abort
+# restored:
+✔ Test collectionAbortIsReplacedByAnEnumeratedPreconditionManifest() passed after 0.577 seconds.
+
+$ swift test                          # 540 tests, 74 suites — passed
+$ SWIFTSTAR_INTEGRATION=1 swift test  # 540 tests, 74 suites — passed
+$ python3 Tools/audit-goal-invariants.py --self-test   # PASS
+```
+
+The test reproduces the real gate chain (`app.py` present, `models.py` absent)
+and asserts the manifest names the attribute gate `models.complaints` that
+pytest can never reach, and that the probe leaves nothing behind in the tree.
+
+Run against the **real** acceptance suite, the manifest that replaces
+`ModuleNotFoundError: No module named 'models'` is:
+
+```
+  [MET]   from dataclasses import MISSING
+  [MET]   from dataclasses import fields
+  [MET]   from starlette.testclient import TestClient
+  [MET]   from turbohtml import Doctype
+  [MET]   from turbohtml import parse
+  [UNMET] from app import app -- AttributeError: module 'app' has no attribute 'app'
+  [UNMET] import models -- ModuleNotFoundError: No module named 'models'
+  [UNMET] from models import Complaint -- ModuleNotFoundError: No module named 'models'
+  [UNMET] models.complaints -- ModuleNotFoundError: No module named 'models'
+
+4 of 9 preconditions unmet.
+```
+
+Four gates in one grade. That whole chain is what consumed the entire two-round
+budget in 21 of 21 cells.
+
+**next:** **fix V5** — the whole-packet budget, before any measure. This is
+now the binding risk rather than a theoretical one: with V2 fixed, more cells
+will get *past* collection, and a cell that has all six files written plus a
+full 13-assertion failure surface is exactly the shape that overflowed at
+37,180 tokens against a 32,768 ceiling (`20260826-055741`). Fixing V2 without
+the budget converts V2 blocks into V5 blocks. The contract's measure gate
+already forbids measuring until it lands.
