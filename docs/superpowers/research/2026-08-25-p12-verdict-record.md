@@ -6,6 +6,16 @@ and the P12.8 work at `6ac5df7`..`cca02f2`. This record exists because every
 other closed phase has one and P12 did not — a gap found by the same
 2026-08-25 audit that found two false completion claims in the roadmap.*
 
+***Revised 2026-08-25, same day, after P12.5 landed live.*** *The waypoint
+verdict below named P12.5 as the reopen condition. It ran the same night, in
+an autonomous session, with design and code both reviewed by Opus before
+being trusted (see
+[`2026-08-25-p12-5-model-authored-packets-design.md`](../specs/2026-08-25-p12-5-model-authored-packets-design.md)
+for the full design, review, and result). The Verdict, Measured, What
+shipped/did not, and Done-when sections below are updated in place rather
+than left to visibly contradict this note — the original waypoint framing is
+preserved in git history, not silently erased.*
+
 ## The question P12 asked
 
 Reframed 2026-08-24 from "More models" after an overnight investigation found
@@ -22,24 +32,29 @@ model. The phase's charter:
 
 ## Verdict
 
-**Closed at a waypoint, not complete. Two of the three roles were tested.**
+**Reopen condition met the same day: all three roles have now run.**
 
 The host-owned structure is real and works: typed packets, bounded tools,
 worktree isolation, real validation, and recovery at both the acceptance
 boundary (P12.4) and the phase boundary (P12.8). The **implement** and
-**repair** roles ran against real grading. The **decompose** role never ran at
-all — `PacketRole.decompose` remains an unexercised enum case, and the
-`decompose` function in the harness is a host-side string splitter over `##
-Phase` headers, not a model role. P12.5, the sub-phase that would have tested
-it, has no commits and no captures.
+**repair** roles ran against real grading, and — as of a same-day autonomous
+follow-up session — so has **decompose**: a model-authored packet set
+(`captures/agenttest/20260825-224119-roadmap`) matched a hand-authored
+baseline's phase count, orphaned nothing from the spec, passed validation,
+and drove the run to the same final result (a passing acceptance run).
 
 So the phase's central structural claim — that a host can own the scaffolding
-well enough for one small local model to fill three roles — is **two-thirds
-evidenced and one-third untested**, and the untested third is the one the plan
-itself called "the one untested link."
+well enough for one small local model to fill three roles — is now
+**evidenced for all three roles, each at small n.** This is not a reliability
+claim (see Measured below — every figure in this record carries n=1 to n=9);
+it is the structural claim the phase was chartered to test, and that claim now
+has one real instance of each role rather than two.
 
-**Reopen condition: P12.5.** Same pattern as P13's verdict naming the condition
-that became P15.
+**Reopen condition was P12.5; it is met.** The original waypoint verdict
+(below, in spirit) named P12.5 as the condition — same pattern as P13's
+verdict naming the condition that became P15. Unlike P15, this didn't need a
+new sub-phase: P12.5 ran to a result the same day, in an autonomous session,
+its design and code reviewed by Opus at each checkpoint before being trusted.
 
 ## Measured
 
@@ -54,6 +69,8 @@ rule. None is a reliability figure.
 | Build arm, P15 text-contract | 3/9 at 13/13 with 0 tool calls | P15 verdict record |
 | Basic spec (`roadmap`), single run | 13/13, 20 tool calls, 95s | `captures/agenttest/20260825-073352-roadmap` |
 | Hard spec, single confirmation run | 13/13 on first grade, repair never fired | `captures/agenttest/20260825-072342-roadmap-user-story` |
+| Decompose role, structural | **1/1** — phase count matched baseline, nothing orphaned, every packet validated | `captures/agenttest/20260825-224119-roadmap` vs `-223848-roadmap` baseline |
+| Build arm + real repair, live, non-fixture, unseeded | **1/1** — 12/13 → 13/13 in one repair round | same capture; see P12.5 design doc's "Result" |
 
 **The headline, so nobody re-derives it:** tuning the implement arm across three
 identical-config batches advanced mechanism understanding substantially and the
@@ -84,6 +101,14 @@ What the batch-to-batch spread actually looks like on an unchanged config:
   not the predicted shallow exploration.
 - **P12.8** — phase-level recovery: `commitForRepair`, `adoptRepairedPhase`,
   `PhaseRepair`, build-loop wiring. Deterministic tier green.
+- **P12.5** — the decompose role: a model-authored packet, built and
+  dispatched on its own pool worker, exempt from `HandoffPacketValidator` by
+  construction (it makes no mutations), with a one-shot emission follow-up
+  for the reason-then-stop failure mode P15 already had to solve once. Live
+  at n=1: matched a hand-authored baseline's phase count and drove the run to
+  the same final result. See the design doc's "Result" section for the full
+  accounting, including what it does *not* establish (acceptance
+  equivalence, at n=1).
 
 ## What did not ship, stated plainly
 
@@ -97,11 +122,13 @@ What the batch-to-batch spread actually looks like on an unchanged config:
   "Mellum cannot revise" claim that the phase marked *at risk* and never
   resolved. P13's Mellum data cannot substitute: 0 tool calls in every cell
   means nothing was written, so nothing was graded.
-- **P12.4's live end-to-end tier never ran.** The overnight n=15–20/arm
-  validation was started and stopped early by explicit decision. Repair
-  evidence is fixture-tier only; a real implement failure feeding real repair
-  through to 13/13 has not been observed.
-- **P12.5 never ran at all.** See Verdict.
+- **P12.4's live end-to-end tier still hasn't run at any real n.** The
+  overnight n=15–20/arm validation was started and stopped early by explicit
+  decision. A real (non-fixture) implement failure feeding real repair
+  through to 13/13 **has now been observed once** — live, unseeded, as a
+  byproduct of the same run that closed P12.5 — but that is n=1, not a rate,
+  and it happened inside the model-decompose arm rather than the planned
+  overnight validation. The planned n=15–20/arm run is still not done.
 - **P12.7 shipped plan text only** — no `DumbImplementer`, no trace-channel
   capture, no Σprompt/Σcached/Σsuffix metrics, no warm-started timing, no
   `docs/cool_things/` write-up.
@@ -162,8 +189,8 @@ P12's own criteria, honestly scored:
 | P12.1 | Partially. Hardening landed. But sampling remains *descriptive* (env → packet), not *prescriptive* (packet → engine); the harness's own comment documents this. Path presentation is wired. |
 | P12.2 | Yes. |
 | P12.3 | Half — Laguna arm only. |
-| P12.4 | No — fixture tier only; the "three phases, 13/13, from packets" line was never exercised end-to-end with a real implement failure feeding repair. |
-| P12.5 | Not started. |
+| P12.4 | Partial — fixture tier fully met; the "three phases, 13/13, from packets" line has now been exercised end-to-end with a real implement failure feeding repair **once** (2026-08-25, live, unseeded, n=1), inside the P12.5 comparison run rather than a dedicated validation batch. Still no rate. |
+| P12.5 | **Yes**, on the structural disjunct (2026-08-25, live, n=1). Acceptance-equivalence deliberately left uncharacterized — see the design doc's "Result." |
 | P12.6 | Second disjunct only. No run has shown a role completing *with* bounded thinking; every self-describing capture records `think=nothink`. |
 | P12.7 | Not started (plan text only). |
 | P12.8 | Deterministic tier yes; live confirmation no. |
@@ -173,8 +200,16 @@ P12's own criteria, honestly scored:
 All are filed in ROADMAP's Backlog as of `e0f892c`; listed here so this record
 stands alone:
 
-- `RepairLoop` exits on every receipt, including `validationFailed` — no second
-  attempt with a new traceback. Now observed live.
+- ~~`RepairLoop` exits on every receipt, including `validationFailed` — no
+  second attempt with a new traceback.~~ **FIXED (2026-08-25, `953d05a`)** —
+  `validationFailed` now retries with fresh evidence, within the existing
+  round budget; every other receipt still exits immediately by design. P12.8's
+  own live phase-boundary confirmation is a separate, still-open item: three
+  live attempts the same night (`captures/agenttest/20260825-21*-roadmap-
+  user-story` and two more) all passed clean on the first try, so phase-level
+  repair specifically has not fired again since the one failed attempt
+  recorded in the "Now" section — not because the fix doesn't work, but
+  because no phase has failed validation in any attempt since.
 - Worker-2 session-context ceiling across multiple phase repairs (D8 sized it
   for two rounds of one repair; P12.8 allows up to three repairs per run).
 - `AGENTTEST_REPAIR_THINK` is inert; bounded thinking for the repair role is
@@ -204,13 +239,19 @@ would waste time reconstructing.
 
 ## Result class
 
-**A structural phase that delivered its structure and under-delivered its
-evidence.** The host-side machinery P12 set out to build exists, is tested at
-the unit and fixture level, and is in use. What P12 does not have is the live,
-end-to-end, repeated measurement that would let anyone state a reliability
-figure for the assembled pipeline — and it closed with its own central role
-untested.
+**A structural phase that delivered its structure, and — as of the same-day
+P12.5 follow-up — has now exercised every role it was chartered to test.**
+The host-side machinery P12 set out to build exists, is tested at the unit
+and fixture level, is in use, and has now run all three roles (decompose,
+implement, repair) at least once against real grading with no fallback path
+papering over a failure. What P12 still does not have is the live,
+end-to-end, *repeated* measurement that would let anyone state a reliability
+figure for the assembled pipeline — every number in this record is n=1 to
+n=9, and P12.5's own acceptance-equivalence question is explicitly left
+uncharacterized rather than answered on one pair.
 
 The honest summary for a future reader: **trust P12's mechanisms, not P12's
-numbers.** The mechanisms are reviewed and tested. The numbers are small-n,
-and the phase's own strongest finding is that tuning did not move them.
+numbers — and now trust that all three mechanisms have actually been used,
+not just two of three.** The mechanisms are reviewed and tested. The numbers
+are small-n, and the phase's own strongest finding is that tuning did not
+move them.

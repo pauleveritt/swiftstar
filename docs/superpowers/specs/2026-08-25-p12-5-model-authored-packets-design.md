@@ -269,3 +269,62 @@ model reply) gets the prepended newline.
   parse is independently reproducible. If time allows within the overnight
   budget, extend to ≥3 runs per arm before claiming acceptance equivalence;
   otherwise report the structural result only.
+
+## Result (2026-08-25, live comparison pair)
+
+Run against the same run of `swift build`+`swift test` (528/528 unit tests
+green) that closed out implementation, then one live pair on the easy
+`roadmap` spec — baseline `captures/agenttest/20260825-223848-roadmap`
+(`AGENTTEST_MODEL_DECOMPOSE` unset), model arm
+`captures/agenttest/20260825-224119-roadmap` (`=1`). Checked by Opus before
+being written down here, same as the design and implementation were.
+
+**Structural claim: met.** The model produced exactly 3 phase blocks in the
+exact `## Phase <N>: <title>` format requested, matching the baseline's
+phase count; all 3 dispatched and every packet passed
+`HandoffPacketValidator` normally. No phase and no spec requirement was
+orphaned — checked bullet-by-bullet against `fixtures/agenttest/specs/
+roadmap.md`, not inferred from the matching count. Two Phase-1 details were
+generalized rather than dropped (`templates/` directory creation, implied by
+the two template files it lists; `uvicorn.run`'s `app:app`/`reload=True`
+arguments, collapsed to "a `uvicorn.run` main block"), and neither is
+load-bearing for acceptance. The host's `preamble` (Mission/Tech Stack) was
+kept and reached every packet as designed, confirmed in
+`repair-packet-1.json`.
+
+Worth citing on its own: `decompose-output.txt` opens at byte 0 with
+`"## Phase 1: Home Page"` — no title line before it. This is the D2
+offset-0 case live, not hypothetical: under the pre-fix splitter this exact
+model output would have swallowed phase 1 into `preamble` and yielded 2
+phases, not 3. The fix earned its place in this very first live run.
+
+**A bonus finding, stated at its real sample size.** The model arm's build
+hit a genuine, unseeded acceptance failure — `test_complaints_board_
+renders_add_complaint_form`, 12/13 — an ordinary implement-phase content bug
+(the POST form's method/action didn't match; the requirement itself *was*
+present in the model's Phase 3 text, so this is not a decompose omission).
+`RepairLoop` fired for real (no `--fixture` anywhere in this run) and round
+1 reached 13/13 in 25s (`repair-round-1.json`, `acceptance.txt`). P12's own
+verdict record lists this as unobserved: "a real implement failure feeding
+real repair through to 13/13 has not been observed." **It is now observed
+once, live and unseeded — not closed. n=1.** Filed into the verdict record
+at that sample size, not as a resolved gap.
+
+**Acceptance-equivalence: uncharacterized, per D4 — not a decompose
+regression.** The baseline passed 13/13 on the first try; the model arm
+needed one repair round. n=1-vs-n=1 cannot distinguish "decompose caused
+this" from ordinary implement-phase variance (this project's own record:
+an unchanged config swinging 0/2 → 2/2 → 1/2). Two further, incidental
+confounds in this specific pair, noted for completeness rather than
+explained away: the arms differ in pool size (3 vs 4 workers, by D1's
+design) and in `run-config.json`'s recorded `availableBytesGiB` (100.9 vs
+47.7 — almost certainly ambient system load between the two runs, not
+caused by decompose, but recorded rather than silently omitted).
+
+**P12.5 is closed on the structural disjunct.** Per the plan's own
+done-when ("a model-authored packet passes validation and drives P12.4 to
+the same result as a hand-authored one — or the gap is characterized"),
+both halves are actually true here at once: the packet passed validation
+and drove the run to the *same final result* (a passing acceptance run) as
+the baseline, and the one gap between the arms (needing a repair round) is
+characterized rather than glossed over.

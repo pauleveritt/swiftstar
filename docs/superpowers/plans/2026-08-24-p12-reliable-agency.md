@@ -1,20 +1,24 @@
 # P12 — Reliable agency
 
-**Status:** closed at a waypoint 2026-08-25 — two of three roles tested.
-**Reopen condition: P12.5 (model-authored packets), which never ran.** Written
-2026-08-24, replacing the earlier "P12 — More models" framing.
+**Status:** reopen condition met 2026-08-25 — **all three roles now tested.**
+Written 2026-08-24, replacing the earlier "P12 — More models" framing.
 
-**Status as of 2026-08-25 (supersedes the 2026-08-24 evening progress note
-below, which was never revised and had gone stale on four counts).** What
-shipped: P12.1 (including the validator/parser hardening the old note lists as
-owed); P12.2; P12.3's Laguna arm; P12.4 (fixture tier 3/3 ×2 — repair *has* now
-run in-harness, and the import gate *has* fired live); P12.6's second disjunct
-(the next failure mode named and classified — see that section); P12.8
-(phase-level recovery, code landed, live confirmation still owed). What did
-not: P12.0's source-of-truth document and superseded-doc banners; P12.3's
-Mellum arm and the Mellum revision re-run; P12.4's live end-to-end tier;
-**P12.5 entirely**; P12.7 beyond plan text. Full accounting in ROADMAP's Prior
-work entry for P12.
+**Status as of 2026-08-25, second update (supersedes both notes below).**
+P12.5 — the reopen condition named when P12 was closed at a waypoint earlier
+the same day — is done; see its section below and the design doc's "Result."
+The decompose role ran live, produced a valid model-authored packet set, and
+drove the run to the same final result as a hand-authored one. Full
+accounting in the P12 verdict record's revised Verdict section.
+
+**Status as of 2026-08-25, first update (historical — superseded above).**
+What shipped: P12.1 (including the validator/parser hardening the old note
+lists as owed); P12.2; P12.3's Laguna arm; P12.4 (fixture tier 3/3 ×2 — repair
+*has* now run in-harness, and the import gate *has* fired live); P12.6's
+second disjunct (the next failure mode named and classified — see that
+section); P12.8 (phase-level recovery, code landed, live confirmation still
+owed). What did not: P12.0's source-of-truth document and superseded-doc
+banners; P12.3's Mellum arm and the Mellum revision re-run; P12.4's live
+end-to-end tier; **P12.5 entirely**; P12.7 beyond plan text.
 
 **Progress as of 2026-08-24 evening — HISTORICAL, superseded by the status
 above.** Several steps ran out of the plan's order, driven by findings rather
@@ -266,6 +270,22 @@ for decompose only.
 
 **Done when:** a model-authored packet passes validation and drives P12.4 to the
 same result as a hand-authored one — or the gap is characterized.
+
+**Status (2026-08-25): DONE.** Design at
+[`2026-08-25-p12-5-model-authored-packets-design.md`](../specs/2026-08-25-p12-5-model-authored-packets-design.md)
+(two rounds of Opus review before build, one after); implemented
+`5fd51e0`/`b6a970d`/`6961878`. Live comparison pair
+(`captures/agenttest/20260825-223848-roadmap` baseline,
+`-224119-roadmap` model arm): the model produced 3 phase blocks matching the
+baseline's count, nothing orphaned, every packet validated, and the run drove
+to the same final result (a passing acceptance run) as the baseline — the one
+gap between the arms (the model's build needed one repair round; the
+baseline's didn't) is characterized, not glossed over, and acceptance
+*equivalence* is explicitly left uncharacterized at n=1 per the design's own
+D4. See the design doc's "Result" section for the full accounting, including
+a bonus finding: that repair round was live, unseeded, non-fixture evidence
+for P12.4's own previously-unobserved gap (real implement failure → real
+repair → 13/13) — at n=1, not a closed rate.
 
 ### P12.6 — Bounded thinking, only where evidence demands it
 

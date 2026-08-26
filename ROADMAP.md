@@ -10,34 +10,40 @@ Backlog, not into the current phase.*
 
 ## Now
 
-**Between phases.** P15 (Host-controlled action mode) closed 2026-08-25 with its
-verdict — **Mellum is harness-addressable** — and P0–P13 and P15 are all
-complete; see [Prior work](#prior-work). P15 was a detour taken to answer P13's
-reopen condition, and its exit was always a verdict rather than a product, so
-closing it returns the roadmap to its own line of work.
+**Between phases, with P12's reopen condition now met.** P15 (Host-controlled
+action mode) closed 2026-08-25 with its verdict — **Mellum is
+harness-addressable**. The same day, in a later autonomous session, P12.5 (the
+decompose role — P12's own named reopen condition) ran live and closed on its
+structural disjunct: a model-authored packet set matched a hand-authored
+baseline's phase count, orphaned nothing, passed validation, and drove the run
+to the same final result. P0–P13 and P15 are complete; P12 now has all three
+roles (decompose, implement, repair) evidenced at least once each — see
+[Prior work](#prior-work) and the
+[P12 verdict record](docs/superpowers/research/2026-08-25-p12-verdict-record.md)
+for the full, small-n-honest accounting.
 
-**P12.8 landed; its live confirmation did not.** The phase-level recovery gap
-named above was closed as P12.8 — `commitForRepair`, `adoptRepairedPhase`,
-`PhaseRepair`, and the build-loop wiring are all committed, and the
-deterministic tier passes. But the one live confirmation run
-(`captures/agenttest/20260825-203706-roadmap-user-story`) did **not** reach
-acceptance: phase 1 failed validation on a trivially repairable content defect
-(`StaticFiles.__init__() got an unexpected keyword argument`), the repair
-attempt itself returned `validationFailed`, and `RepairLoop` exited on that
-receipt by design (D4 — any receipt ends the loop), so no second attempt ran
-with the new traceback. No verdict record has been written.
+**P12.8's retry-on-receipt limitation is fixed; its live phase-boundary
+confirmation still isn't observed.** The one live confirmation run that did
+fail (`captures/agenttest/20260825-203706-roadmap-user-story`) exposed a real
+gap — `RepairLoop` exited on any receipt, including `validationFailed`,
+instead of retrying with fresh evidence. Fixed `953d05a`, reviewed by Fable,
+within the existing round budget. Three follow-up live attempts the same
+night (`roadmap-user-story`, unmodified) all passed 13/13 on the first try —
+phase-level repair has not fired again since the fix landed, not because it
+doesn't work, but because no phase has failed validation in any attempt
+since. Still open, not blocking anything.
 
-**A 2026-08-25 audit found the record had drifted from the tree** in both
-directions — two sub-phases were credited with deliverables that do not exist,
-and the P12 plan header still asserted work that had since landed. The Prior
-work entry for P12 has been corrected; see it for what shipped and what did not.
+**A separate overnight process appears to be running its own P12.3 Mellum
+ablation** (`Tools/overnight-chain.sh`/`overnight-idle-launch.sh`, not
+authored by this session — found already on disk, untouched). If that is
+what it looks like, it directly addresses the "P12.3's Mellum arm never ran"
+gap below; check its manifest/log before re-deriving that work.
 
-**The open choice.** Three candidates, none started: finish P12.8 (lift the
-receipt-exit limitation so a failed repair gets a second attempt with the new
-traceback, then land the live confirmation and a verdict record); **P12.5**,
-P12's own named reopen condition and the untested third role; or P14 (A docs
-site), whose precondition — "once there is a reader who isn't the author" — has
-not obviously arrived.
+**Open choices, none started:** P12.7 (the cross-system metrics phase — trace
+capture, `DumbImplementer`, Σprompt/Σcached/Σsuffix, warm-started timing;
+plan text only so far, real build work); more live n for P12.4/P12.5 beyond
+their current n=1 each; or P14 (A docs site), whose precondition — "once
+there is a reader who isn't the author" — has not obviously arrived.
 
 *The next phase is picked deliberately, not by momentum.*
 
@@ -169,7 +175,7 @@ appear below.) Defined so far:
 | P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | complete (2026-08-22) |
 | P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | complete (2026-08-22) |
 | P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | complete (2026-08-23) |
-| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | **closed at a waypoint (2026-08-25)** — two of three roles tested; **reopen condition: P12.5 (model-authored packets)**. P12.8 landed but its live confirmation did not; P12.0 and P12.7 never shipped |
+| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | **complete (2026-08-25)** — all three roles evidenced live at least once (decompose closed the same day via P12.5); every number is small-n, none a reliability figure. P12.8's live phase-boundary confirmation and P12.0/P12.7 remain open, non-blocking items |
 | P13 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; deferred behind P12 so there is a harness that can actually evaluate a variant | complete (2026-08-25) — verdict: blocked on Mellum's competence gate, not the harness |
 | P14 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
 | P15 | Host-controlled action mode | The model drafts as text (`#path` + fenced blocks), the host harvests, writes, and verifies — isolating "should I act" from content competence for Mellum-class models; exit is a verdict, not a product | complete (2026-08-25) — verdict: **harness-addressable**; repair 4/4 at 13/13, build 3/9 at 13/13 with 0 tool calls |
