@@ -128,6 +128,25 @@ def evidence_files(t):
 
 # --- invariants -------------------------------------------------------------
 
+def emitted_headings(cell):
+    """Allowlisted paths the model emitted as heading lines, across all turns.
+
+    The only evidence in a capture of what the model actually *wrote*: round
+    records carry a receipt and a grade but no mutation list, and the packets'
+    file contents are what V1 is comparing in the first place.
+    """
+    ts = turns(cell)
+    if ts is None:
+        return None
+    out = set()
+    for t in ts:
+        for line in t.split('\n'):
+            h = _heading(line)
+            if h and h in WRITABLE:
+                out.add(h)
+    return out
+
+
 def check_v1(cell, loop):
     """A `.validationFailed` round's write must survive into the next round.
 
@@ -157,9 +176,23 @@ def check_v1(cell, loop):
         if not json.load(open(pk[i])).get('textContract', True):
             return UNAUDITABLE, 'tool-call mode: zero-mutation turns also yield validationFailed'
         a, b = missing_paths(task_text(pk[i])), missing_paths(task_text(pk[i + 1]))
-        if a and b == a:
-            return FAIL, (f'round {k} ended validationFailed but round {k+1} was dispatched the '
-                          f'identical missing set {sorted(a)} -- the write did not survive')
+        if not (a and b == a):
+            continue
+        # V1 says "a round that ran AND WROTE". The receipt above proves it RAN.
+        # Without this second gate the check reports a discarded write whenever
+        # a round simply did not emit the missing file -- which is correct
+        # behaviour, not a defect. That false positive blocked 20260826-112121,
+        # whose rounds 3-5 emitted a byte-identical app.py and never once
+        # emitted tests/test_app.py. It survived the whole of v2 because the
+        # frozen fixture was a 2-round capture and the case needs 3+.
+        wrote = emitted_headings(cell)
+        if wrote is None:
+            return UNAUDITABLE, 'no wire.ndjson: cannot establish the round wrote anything'
+        if not (a & wrote):
+            continue
+        return FAIL, (f'round {k} ended validationFailed but round {k+1} was dispatched the '
+                      f'identical missing set {sorted(a)}, and the model did emit '
+                      f'{sorted(a & wrote)} -- the write did not survive')
     return PASS, None
 
 
@@ -323,6 +356,10 @@ FIXTURES = [
      'known-bad: two validationFailed rounds, identical 6-file missing set'),
     ('V1', '20260826-085813-roadmap', 'repair-phase1', PASS,
      'known-good: phase repair produced a candidate on round 1, no discard path taken'),
+    ('V1', '20260826-112121-roadmap', 'repair-phase1', PASS,
+     'known-good from the current batch: rounds 3-5 ran and the missing set never '
+     'changed, but the model never emitted tests/test_app.py as a heading -- the '
+     'old check called this a discarded write'),
     ('V2', '20260826-085813-roadmap', 'acceptance', FAIL,
      'known-bad: acceptance round-1 packet carries a bare collection error'),
     ('V2', '20260826-085813-roadmap', 'repair-phase1', PASS,

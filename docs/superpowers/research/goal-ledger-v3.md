@@ -341,3 +341,54 @@ re-pointed, so no check claims a known-bad it no longer detects.
 **next:** **fix** — `check_v1`'s false positive on `112121`, the only remaining
 block whose cause is a known-broken check rather than a real defect. V1's
 frozen text already carries the correction it needs.
+
+## 4 — 2026-08-26 — fix (V1 check) — corrects a check, voiding its old counts
+
+**did:** Gated `check_v1` on the round having **written**, not merely run —
+the correction V1's frozen text has demanded since v2 entry 13. **Every V1
+result the old check produced on a multi-round capture is void.**
+
+**cells:** valid=7 blocked={V6:2, V5:1} unauditable={V4:9} of 9
+*(104551 is blocked by both V5 and V6; two distinct cells are blocked.)*
+
+**done-when: a=no b=no c=no d=no**
+
+**evidence:**
+
+```
+$ python3 Tools/audit-goal-invariants.py --self-test
+  [ok] V1 20260826-050316/repair-phase1: expected fail, got fail   (known-bad, unchanged)
+  [ok] V1 20260826-085813/repair-phase1: expected pass, got pass
+  [ok] V1 20260826-112121/repair-phase1: expected pass, got pass   (current-batch known-good)
+self-test: PASS
+
+065840 VALID   104551 BLOCKED(V5 limit, V6 x1)   104811 BLOCKED(V6 x6)
+105213 VALID   105529 VALID                      112121 VALID
+112536 VALID   112907 VALID                      113440 VALID
+```
+
+**The check did not get weaker.** Its known-bad still fails, and now says more:
+
+```
+round 1 ended validationFailed but round 2 was dispatched the identical missing
+set ['app.py','models.py','templates/...','tests/test_app.py'], and the model
+did emit ['app.py','models.py'] -- the write did not survive
+```
+
+Naming the files the model emitted that failed to survive is the evidence the
+old wording asserted without having.
+
+**How it establishes "wrote":** allowlisted paths emitted as heading lines
+across the cell's turns. Round records carry a receipt and a grade but no
+mutation list, and the packets' file contents are the very thing V1 compares —
+so the emission is the only independent evidence available. Stated limitation:
+headings are collected per-cell, not per-round, so the gate is conservative —
+it can only ever suppress a FAIL, never manufacture one.
+
+**Why v2 never caught this:** the frozen V1 fixture is a 2-round capture, and
+the false positive needs 3+. `112121` is now a fixture precisely because it
+comes from the current batch — done-when (d) is the rule that produced this fix.
+
+**next:** **fix** — V7 (reproducibility). It is the carry-forward's first
+priority, needs no GPU, and until it holds no comparison between two runs is
+controlled — including the round-budget question v2 could not answer.
