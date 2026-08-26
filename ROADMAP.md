@@ -309,17 +309,28 @@ Deferred, each with the condition that reopens it.
   verdict record written. *Reopens as: land one confirming run and write the
   record. Best done together with the receipt-exit item directly below, which
   is what blocked this specific attempt.*
-- **`RepairLoop` exits on every receipt, including `validationFailed`.** The
-  rationale holds as written — the receipt path discards the worktree and never
-  advances `head`/`lastGrade`, so a retry would replay a byte-identical dispatch
-  — but it means a repair that breaks an import gets no second attempt even
-  though its traceback is new evidence the model has not seen. **Now observed
-  live**: it is exactly what ended the 20260825-203706 P12.8 confirmation run.
-  The fix is cheaper than when this was first filed: `ValidationResult` already
-  carries `output` (`05a4fcc`), so threading it into `lastGrade` at the
-  `finalize` call site is local to `RepairLoop` — no P10-era surface touched.
-  A general form would widen `Receipt.validationFailed` to carry the output.
-  *Reopens with P12.8's live confirmation, which it currently blocks.*
+- **~~`RepairLoop` exits on every receipt, including `validationFailed`~~ —
+  FIXED (2026-08-25, `953d05a`).** `.validationFailed` now refreshes `lastGrade`
+  from the real `ValidationResult` and retries within the existing
+  `maxCandidateRounds` budget (no new parameter); every other receipt keeps the
+  immediate-exit behavior. Fable-reviewed, approved, two non-blocking notes
+  filed below. Shared machinery — applies to all three `RepairLoop` callers
+  (P12.4, P12.8, P15), not just the P12.8 case that surfaced it.
+- **Retry-round evidence coherence.** A `.validationFailed` retry shows the
+  model round-1's traceback (`lastGrade.output`) alongside file contents read
+  from a worktree re-prepared at the *unchanged* base — round 1's own edits are
+  discarded along with its worktree, so the traceback can reference lines that
+  no longer match what's shown. Strictly better than exiting (per the Fable
+  review that found it), but a live run producing confused chase-the-line-number
+  behavior would be this mechanism, not a new failure mode. *Reopens if a
+  retry round is observed reasoning about the wrong file state.*
+- **`validationFailedReceiptRetriesWithFreshEvidence` proves the retry
+  happened, not that fresh evidence reached round 2.** The fixture's
+  validation command (`test -f marker.txt`) produces no distinguishing output,
+  so a regression that continued the loop but dropped the `lastGrade =`
+  refresh would still pass. Strengthen with a validation command that emits
+  identifiable stderr, then assert it appears in `repair-packet-2.json`'s
+  `taskText`. *Reopens next time `RepairLoop.swift` is touched.*
 - **Worker-2 session-context ceiling across multiple phase repairs.** D8 sized
   worker 2 for two rounds of *one* repair (~10–12k, fits ctx=32768). P12.8
   changes the shape: up to three phase failures per run, each dispatching to the
