@@ -150,9 +150,10 @@ public enum RepairLoop {
                     contents[path] = "(file does not exist in this worktree)"
                 }
             }
-            // V7: strip the ephemeral worktree prefix BEFORE capping, so the
+            // V7: strip everything that varies between two runs of the same
+            // input (worktree UUIDs, pytest durations) BEFORE capping, so the
             // dispatched packet is byte-stable across runs at the same seed.
-            let stableOutput = MachineEvidence.normalizingWorktreePaths(lastGrade.output)
+            let stableOutput = MachineEvidence.normalizingEphemera(lastGrade.output)
             let (out, outNote) = MachineEvidence.cappedFailureOutput(stableOutput, cap: outputCap)
             if let outNote { truncations.append(outNote) }
             let evidence = MachineEvidence(failureOutput: out, fileContents: contents, truncations: truncations)

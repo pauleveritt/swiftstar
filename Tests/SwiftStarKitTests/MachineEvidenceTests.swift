@@ -14,6 +14,52 @@ struct MachineEvidenceTests {
     /// which is what pushed a repair packet to 37180 tokens against a 32768
     /// context and killed the one cell all night that had a rich failure
     /// surface to show (2026-08-26, capture 20260826-055741).
+    /// V7, source 2: pytest prints its wall-clock duration in the summary line,
+    /// so the same failing suite produces a different packet on every run. Found
+    /// by accident in the 2026-08-26 determinism probe — three identical
+    /// fixture runs, and the only difference between two packets was:
+    ///     -1 failed, 12 passed, 3 warnings in 0.20s
+    ///     +1 failed, 12 passed, 3 warnings in 0.16s
+    /// Beyond V7 this breaks prompt-prefix caching for everything after it.
+    @Test func pytestDurationsAreNormalisedOutOfEvidence() {
+        let a = "1 failed, 12 passed, 3 warnings in 0.20s"
+        let b = "1 failed, 12 passed, 3 warnings in 0.16s"
+        #expect(MachineEvidence.normalizingDurations(a) == MachineEvidence.normalizingDurations(b))
+        #expect(!MachineEvidence.normalizingDurations(a).contains("0.20"))
+        #expect(MachineEvidence.normalizingDurations(a).hasPrefix("1 failed, 12 passed, 3 warnings in "),
+                "the summary must survive; only the number is elided")
+    }
+
+    /// pytest switches to a minutes form on slower suites; that varies too.
+    @Test func pytestMinuteDurationsAreAlsoNormalised() {
+        let a = "13 failed, 13 warnings in 1m 5.43s"
+        let b = "13 failed, 13 warnings in 2m 0.01s"
+        #expect(MachineEvidence.normalizingDurations(a) == MachineEvidence.normalizingDurations(b))
+        #expect(!MachineEvidence.normalizingDurations(a).contains("5.43"))
+    }
+
+    /// The elision must not eat ordinary prose. A duration needs digits and a
+    /// trailing `s`; "in 3 steps" has neither shape.
+    @Test func normalizingDurationsLeavesProseAlone() {
+        let t = "fix this in 3 steps, in a moment, in the app.py module"
+        #expect(MachineEvidence.normalizingDurations(t) == t)
+    }
+
+    /// The combined entry point RepairLoop calls: both ephemera at once, and a
+    /// real two-run pair must collapse to one string.
+    @Test func normalizingEphemeraRemovesBothPathsAndDurations() {
+        let a = """
+          File "/private/var/x/T/swiftstar-wt-AAE9A953-215B-4A11-A295-50D57D26AD96/app.py", line 42
+        1 failed, 12 passed, 3 warnings in 0.20s
+        """
+        let b = """
+          File "/private/var/x/T/swiftstar-wt-4C01CE73-2BBA-43C0-B96F-DA6D7C7A9561/app.py", line 42
+        1 failed, 12 passed, 3 warnings in 0.16s
+        """
+        #expect(MachineEvidence.normalizingEphemera(a) == MachineEvidence.normalizingEphemera(b))
+        #expect(MachineEvidence.normalizingEphemera(a).contains("File \"app.py\", line 42"))
+    }
+
     /// V7: a fixed seed must produce a fixed prompt. Repair evidence embedded
     /// the per-round temp-worktree UUID inside tracebacks, so the same seed and
     /// config dispatched a *different* packet on every run. Measured: the

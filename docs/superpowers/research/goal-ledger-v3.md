@@ -572,3 +572,77 @@ prompt-prefix caching for everything after it in the packet.
 It is in the same authorised class as the worktree-path fix under standing
 ruling 3, needs no GPU, and is worth landing whichever way V7 is ruled. Source
 3 still needs the human's ruling and no amount of harness work removes it.
+
+## 7 — 2026-08-26 — fix (V7 source 2) — pytest durations
+
+**did:** Normalised pytest's wall-clock duration out of repair evidence
+(red-then-green) and routed `RepairLoop` through a combined entry point that
+strips both known ephemera. **The three determinism-probe packets now collapse
+to a single sha.**
+
+**cells:** unchanged (valid=7 blocked={V6:2, V5:1} unauditable={V4:9} of 9).
+
+**done-when: a=no b=no c=no d=no**
+
+**evidence:**
+
+```
+# before
+✘ pytestDurationsAreNormalisedOutOfEvidence — no member 'normalizingDurations'
+# after
+✔ MachineEvidenceTests — 16 tests passed
+$ swift test                                        # 550 tests — passed
+$ python3 Tools/audit-goal-invariants.py --self-test # PASS
+```
+
+Against the three real probe captures — the pair that matched by luck and the
+one that did not:
+
+```
+121823  raw=4a6452bbeaa4  normalised=012d074cb6c0
+121927  raw=4a6452bbeaa4  normalised=012d074cb6c0
+122134  raw=e27e650a2016  normalised=012d074cb6c0
+all three identical after normalisation: True
+```
+
+Only the number is elided (`in <elapsed>`), not the summary — how many tests
+failed is the signal; how long they took is noise the model cannot act on. A
+negative test pins that ordinary prose survives: `"fix this in 3 steps, in a
+moment, in the app.py module"` is returned unchanged, since a duration needs
+digits *and* a trailing `s`.
+
+**What this does and does not achieve.** Given identical evidence, the
+dispatched packet is now byte-stable: sources 1 (worktree UUIDs) and 2 (pytest
+durations) are both fixed. **V7 still does not hold end-to-end**, because a
+round-2 packet contains round-1's model output, and that is non-deterministic
+(iteration 6). Concretely: round-1 packets are now reproducible; every later
+round inherits the engine's non-determinism. No harness change reaches that.
+
+### The integration flake, third occurrence — hypothesis tested, not confirmed
+
+Same signature again: one run reporting `failed with 1 issue` naming no test,
+then four consecutive clean runs.
+
+```
+run 1: ✔ 550 tests passed   run 2: ✔   run 3: ✔   run 4: ✔
+```
+
+All three occurrences to date were the first integration run after a fresh
+build, so I tested that directly — touched a source file, rebuilt, ran the
+integration tier twice:
+
+```
+first integration run after rebuild:  ✔ 550 tests passed
+second:                                ✔ 550 tests passed
+```
+
+**Not reproduced. The cold-build hypothesis is recorded as tested and
+unconfirmed, not as an explanation.** Standing mitigation for next time, since
+the failure hides its own identity: run the tier with
+`swift test --xunit-output <path>` so the failing test is named in a file even
+when the console summary omits it.
+
+**next:** **fix** — make V4 auditable (`main.swift:716` captures only
+`phases[0]`). It is the last invariant that cannot be evaluated at all, it is
+required by done-when (b), and it needs no GPU. V7's remaining source and V5's
+`limit` clause both await the human.

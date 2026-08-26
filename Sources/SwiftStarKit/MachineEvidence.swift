@@ -72,6 +72,60 @@ public struct MachineEvidence: Equatable, Sendable {
         return out
     }
 
+    /// Strip pytest's wall-clock duration out of evidence text (V7, source 2).
+    ///
+    /// pytest ends its summary with `... in 0.20s` (or `in 1m 5.43s` on slower
+    /// suites). That number changes on every run, so the same failing suite
+    /// produced a different packet each time. Found in the 2026-08-26
+    /// determinism probe: three identical fixture runs, and the entire diff
+    /// between two of their packets was `in 0.20s` vs `in 0.16s`. Beyond
+    /// reproducibility it breaks prompt-prefix caching for everything after it.
+    ///
+    /// The summary line is kept and only the number elided — how many tests
+    /// failed is the signal; how long they took is noise the model cannot act on.
+    public static func normalizingDurations(_ text: String) -> String {
+        var out = ""
+        var i = text.startIndex
+        let marker = " in "
+
+        while i < text.endIndex {
+            guard text[i...].hasPrefix(marker) else {
+                out.append(text[i])
+                i = text.index(after: i)
+                continue
+            }
+            var j = text.index(i, offsetBy: marker.count)
+            let numberStart = j
+            // <digits>[.<digits>][m ]<digits>[.<digits>]s — accept the plain and
+            // the minutes form, and require the trailing `s` so ordinary prose
+            // ("in 3 steps") is left alone.
+            var sawDigit = false
+            while j < text.endIndex {
+                let c = text[j]
+                if c.isNumber { sawDigit = true } else if c == "." || c == "m" || c == " " {
+                    // separators inside a duration; a space is only legal after `m`
+                    if c == " " && !(j > numberStart && text[text.index(before: j)] == "m") { break }
+                } else { break }
+                j = text.index(after: j)
+            }
+            guard sawDigit, j < text.endIndex, text[j] == "s",
+                  text.index(after: j) == text.endIndex || !text[text.index(after: j)].isLetter else {
+                out.append(text[i])
+                i = text.index(after: i)
+                continue
+            }
+            out += marker + "<elapsed>"
+            i = text.index(after: j)
+        }
+        return out
+    }
+
+    /// Everything that varies between two runs of the same input (V7).
+    /// `RepairLoop` calls this; the parts are public so each is testable alone.
+    public static func normalizingEphemera(_ text: String) -> String {
+        normalizingDurations(normalizingWorktreePaths(text))
+    }
+
     /// Tail-cap a pytest run's output: the failure summary is at the end.
     /// Returns the kept text and a note when anything was dropped.
     /// Caps on UTF-8 byte length, not Character count, to respect true payload size.
