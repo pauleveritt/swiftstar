@@ -42,11 +42,16 @@ one attempt billed several times.
 > to the previous round's. Baseline today: 4 of 4 failures were stalls.
 >
 > **Done when EITHER:**
-> - held-out marginal gain **≥ +0.25** with stall rate **< 10%** — the loop
->   found something that works; write the verdict; **or**
+> - a **held-out confirmation at n=5** shows marginal gain **≥ +0.25** with
+>   stall rate **< 10%** — the loop found something that works; **or**
 > - **three consecutive interventions fail to move dev marginal gain** — the
 >   verdict is *"multi-round repair does not work for this model"*, the loop
 >   says so plainly and stops.
+>
+> **[amended] The threshold applies to the held-out confirmation, never to the
+> dev screen.** Dev is 2 fixtures × 3 seeds = 6 cells per budget, on which a
+> two-cell swing is well inside chance — the original contract set a +0.25 bar
+> its own measurement could not resolve. Screen cheap, confirm properly.
 
 **Both endings are results.** The negative one is worth having and cheap to
 reach; if it lands, the recommendation is to delete the multi-round loop rather
@@ -76,8 +81,26 @@ mode a search loop has and a measurement loop does not.
 An unbounded space is how v1–v3 became whack-a-mole. One intervention per
 iteration, from this list. Adding to it requires saying why in the ledger.
 
-1. **Per-round sampling variation** — a different seed each round. Attacks the
-   byte-identical replay directly, and is nearly free.
+**[amended, before any GPU spend] Rounds can differ ONLY by prompt.**
+`PoolPrompt` carries just `worker` and `s`, and the engine's `--seed` is set
+once per process, so every round re-seeds identically. Per-round *sampling*
+variation is not implementable without engine or protocol work.
+
+That yields a sharper statement of the defect than this contract opened with:
+**the repair loop is a deterministic map, and a stall is a fixed point of it.**
+Round N+1's prompt is a function of the tree and grade after round N; if the
+model's output does not change the grade, the next prompt is identical and so is
+the next output, forever. The stalls in the captures are not the model grinding
+against a hard problem — they are `f(x) = x`.
+
+So the question is not "can rounds vary" but "what breaks a fixed point", and
+item 1 is more valuable as a **control** than as a candidate:
+
+1. **Prompt variation carrying NO new information** — a round marker
+   ("attempt N of M"). **The control.** If variation alone lifts the metric,
+   the fix is cheap; if it does not, the gain must come from *information*, and
+   one cheap run has isolated that. (Replaces the unimplementable per-round
+   seed.)
 2. **Include the acceptance-suite source in the evidence.** Legitimate at fixture
    tier: the grader's file *is* the spec. **0 of 91 v4 packets contained it**, so
    the model was authoring against a contract it could not read. Tests whether
@@ -92,12 +115,14 @@ iteration, from this list. Adding to it requires saying why in the ledger.
 
 1. **intervene** — implement ONE item, run the dev set at rounds ∈ {1, 3},
    compute marginal gain and stall rate.
-2. **keep or revert** — keep only if dev marginal gain beats current best by
-   more than noise; otherwise revert. **Log both outcomes.** A failed
+2. **keep or revert** — promote only on a **dev gain of ≥2 cells**; anything
+   smaller is noise at n=3 and is reverted. **Log both outcomes.** A failed
    intervention is data, not a wasted iteration.
-3. **checkpoint** (every 3rd iteration) — run held-out at rounds ∈ {1, 3}. If
-   dev gains do not transfer, that is **overfitting**: say so, revert to the
-   last config that transferred, and note which intervention did not survive.
+3. **checkpoint** (every 3rd iteration, and on any promotion) — run held-out at
+   rounds ∈ {1, 3} **with n=5 seeds**. This is the only measurement a done-when
+   may be evaluated against. If dev gains do not transfer, that is
+   **overfitting**: say so, revert to the last config that transferred, and note
+   which intervention did not survive.
 4. **stress** (at each checkpoint) — build one adversarial fixture aimed at the
    *current best* config, in a defect class it has not seen. If the config
    survives, it generalises; if not, that fixture joins **dev** (never held-out).
@@ -115,7 +140,7 @@ Before any GPU tier check nothing else holds the engine (`ps aux` for
 | one cause voids ≥3 cells | one iteration fixing that cause, then re-run only voided cells |
 | model-vs-harness attribution ambiguous | default **model**, flag `disputed` |
 | **runaway generation / `limit` stop** | **record `stalled-runaway`; the cell counts as a failure, not a void** |
-| run-to-run non-determinism | a measured variable; with intervention 1 it becomes the *mechanism*, not noise |
+| run-to-run non-determinism | a measured variable. NOT a lever: `--seed` is process-level and `PoolPrompt` carries no seed, so rounds cannot differ by sampling |
 
 **The `limit` ruling is a correction.** v4 shipped a contradiction — its policy
 table said a `limit` stop counts, its validity section said the same wire is

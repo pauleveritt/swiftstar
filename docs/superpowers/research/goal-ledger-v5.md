@@ -59,3 +59,45 @@ improvement. Counting it would inflate every marginal-gain number.
 attacks the byte-identical replay directly, is nearly free, and if it does not
 move the needle then items 2–5 are all more expensive ways of asking the same
 question.
+
+## 0a — 2026-08-26 — amendment (no GPU, before the first intervention landed)
+
+Two amendments to a contract written hours ago. Both are recorded here because
+the contract requires a reason for any change to the search space, and because
+the second is an error of mine that the loop would otherwise have paid for.
+
+**Amendment 1 — forced. Rounds can differ only by prompt.** `PoolPrompt`
+(`Sources/SwiftStarKit/PoolPrompt.swift:13`) encodes exactly
+`{"t":"prompt","worker":N,"s":...}`, and the engine's `--seed` is a
+process-level argv flag (`AgentCommand.swift:99`). There is no per-prompt seed,
+so every round of a run re-seeds identically. **Search-space item 1, per-round
+sampling variation, is not implementable** without engine or protocol work.
+
+That gives a sharper statement of the defect than the contract opened with:
+**the repair loop is a deterministic map and a stall is a fixed point of it.**
+Round N+1's prompt is a function of the tree and grade after round N; if the
+model's output does not change the grade, the next prompt is identical and so is
+the next output — forever. The byte-identical runs in the P17 captures are not
+the model grinding against a hard problem, they are `f(x) = x`.
+
+Item 1 is therefore **repurposed as the control**: prompt variation carrying no
+new information (a round marker). If variation alone lifts the metric the fix is
+cheap; if it does not, the gain must come from *information*, and one cheap run
+has isolated that. The policy table's row claiming non-determinism becomes "the
+mechanism" under item 1 was stale on arrival and is corrected.
+
+**Amendment 2 — my error. The threshold was unresolvable by the measurement.**
+Dev is 2 fixtures × 3 seeds = **6 cells per budget**. A +0.25 marginal-gain bar
+on 6 cells is a two-cell swing, well inside chance. I wrote that threshold
+without checking it against the sample size, and the loop would most likely have
+declared a false win at iteration 2 or 3 — the checkpoint would have caught it,
+but only after burning the iterations.
+
+Amended to **screen then confirm**: dev at n=3 is a directional screen,
+promotion requires a **≥2-cell dev gain**, and the done-when threshold is
+evaluated **only** on a held-out confirmation at **n=5**. This also keeps the
+GPU budget honest — 15 twelve-cell screens is ~4.5 h, and confirming at n=5 only
+for candidates that survive the screen stays inside the 6-hour ceiling.
+
+**next:** unchanged — **intervene** with item 1 (now the control), once the
+baseline `pass@1`/`pass@3` measurement completes.

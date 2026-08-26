@@ -1,0 +1,5 @@
+fixture	rounds	seed	outcome	detail	capture
+depth-2	1	1	pass	13/13	20260826-160136-fixture-depth-2
+depth-2	1	2	pass	13/13	20260826-160239-fixture-depth-2
+depth-2	1	3	fail	2 failed, 11 passed, 3 warnings in 0.16s	20260826-160347-fixture-depth-2
+depth-2	3	1	pass	13/13	20260826-160455-fixture-depth-2
