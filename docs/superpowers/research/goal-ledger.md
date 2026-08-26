@@ -495,3 +495,70 @@ the base tree or by either round alone.
 the live path. Explicitly a probe and not a measure: V2 is still unfixed and
 still predicted to fire on any cell reaching acceptance repair, so no model
 numbers may be recorded from it.
+
+## 9 — 2026-08-26 — probe (no model numbers permitted)
+
+**did:** Two live pipeline runs to confirm the exhaustion-grading fix in the
+real path. The first was inconclusive; the second confirmed it.
+
+**Probe 1 (`20260826-100350`, abs/on/seed 1) — inconclusive.** Died in *build
+phase 1*, before reaching the code under test, on an engine error not seen
+before and covered by no invariant:
+
+```
+"state":"error","generated":467,"ctx_used":13507,
+"error":"too many malformed tool calls in a row"
+```
+
+Mellum *attempted* tool calls here (4 `tool` events, 1 `tool_request`) and
+produced malformed ones until the engine gave up — more evidence for P13's
+"rare, not never". Same seed and config as `20260826-085813`, which completed
+70 minutes earlier, so this is run-to-run variance, not a regression (the
+changed code does not touch the build phase). The capture records this only as
+a wire `status.error`; nothing in the schema names it. **Flagged, not
+converted into a V6.**
+
+**Probe 2 (`20260826-101531`, abs/off/seed 2) — confirms the fix.** A line
+that has never appeared in this project's output before:
+
+```
+[agenttest] repair: exhausted — repairExhausted
+[agenttest] repair: grading best tree reached — refs/swiftstar/candidates/F5D0D008-... (exit 1)
+```
+
+Structural confirmation, all three downstream artifacts now describing repair's
+output rather than the tree that entered repair:
+
+- `acceptance.txt` records `exit=1` (repair's grade). Every previously
+  exhausted cell recorded the pre-repair grade instead.
+- `code.md` contains **2 files** (`app.py`, `models.py`). All 20 graded matrix
+  cells that exhausted contained exactly **1**.
+- the verdict is computed against that 2-file tree.
+
+**cells:** both probes audit **BLOCKED (V2)** — exactly as predicted before
+running them. `20260826-101531`'s round-1 packet carries a bare collection
+error, so V2 fires. Cumulative valid Mellum cells: still **1**.
+
+**model:** (omitted — probe iteration. V2 was known to be unfixed and known to
+fire on any cell reaching acceptance repair, so no number from these runs is
+attributable to the model. This is the rule that iteration 5 lacked.)
+
+**evidence:**
+
+```
+$ python3 Tools/audit-goal-invariants.py captures/agenttest/20260826-101531-roadmap
+=== 20260826-101531-roadmap: BLOCKED ===
+    V2: acceptance: repair-packet-1.json: dispatched evidence is a bare collection error
+    V4: UNAUDITABLE — only phases[0] packet is captured (main.swift:716)
+
+$ grep -o '^=== .* ===' captures/agenttest/20260826-101531-roadmap/code.md
+=== app.py ===
+=== models.py ===
+```
+
+**next:** **fix V2** — the last invariant blocking every cell that reaches
+acceptance repair, and now the only thing between the loop and a real measure.
+Per the verdict record and Fable's review it must ship *with* a whole-packet
+budget: the one cell that ever received a rich failure surface died of context
+overflow at 37,180 tokens against a 32,768 ceiling, so surfacing more errors
+per round without capping the packet converts V2 blocks into V5 blocks.
