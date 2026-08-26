@@ -187,6 +187,21 @@ stands alone:
 - P12.4's parked minors M1–M12 and two unpinned behaviors, mirrored into that
   phase's design doc out of gitignored scratch.
 
+## Repo-state footnote: the second P12.4 implementation
+
+Branch `p12-4-repair-role` (worktree `.worktrees/p12-4-repair-role`, 9 commits,
+**unmerged and deliberately kept**) is a second, independently-built
+implementation of the same P12.4 plan. It was discovered mid-build: two agents
+had implemented the same design in parallel, unaware of each other. It branched
+*before* the design's second review round landed, so it does not carry those
+three findings — but it independently arrived at a better evidence-capping
+approach (middle-truncation, 16 KB cap), which the merged line then adopted
+after a Fable review flagged the same gap.
+
+Kept, not merged or deleted, by explicit decision. Recorded here because an
+unexplained 9-commit branch is exactly the kind of thing a future reader
+would waste time reconstructing.
+
 ## Result class
 
 **A structural phase that delivered its structure and under-delivered its
