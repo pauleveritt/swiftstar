@@ -116,6 +116,19 @@ item 1 is more valuable as a **control** than as a candidate:
 
 ## One iteration
 
+**[amended at iteration 2] Screening pre-check — one line, before any GPU.**
+Answer both, in the ledger, or do not run:
+*(a) at the budget I am screening at, can this intervention's mechanism actually
+fire? (b) can the promotion gate resolve the effect size I expect?*
+All three defects this goal has produced are the same species — a measurement
+defined where it has no headroom or no resolution. Concretely: **item 4 (stall
+detection) must never be screened at rounds ∈ {1,3}**, because baseline stall
+there is 0/6 — its trigger condition does not occur, so the screen is
+guaranteed to show nothing and would bank a failure toward the negative verdict
+on a foregone conclusion. Screen it at rounds ∈ {1,5} or not at all. The same
+disqualifies item 1 (the control): variation-with-no-information only matters
+where replays exist.
+
 1. **intervene** — implement ONE item, run the dev set at rounds ∈ {1, 3},
    compute marginal gain and stall rate.
 2. **keep or revert** — promote only when **BOTH**: `pass@3` improves by ≥2

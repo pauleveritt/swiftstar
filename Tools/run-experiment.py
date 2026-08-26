@@ -88,7 +88,24 @@ def main():
             else:
                 g = last_grade(cell)
                 if g is None:
-                    outcome, detail = 'harness-void', 'no graded round recorded'
+                    # The v5 policy table: ambiguous model-vs-harness attribution
+                    # defaults to MODEL with a `disputed` flag. A round ending
+                    # `contractNotFollowed` produced output the harvester could
+                    # not use -- model or parser, genuinely unclear -- so it is a
+                    # failure, not a void. The runner used to call it a void,
+                    # which disagreed with the contract it implements.
+                    receipts = []
+                    for rf in sorted(glob.glob(os.path.join(cell_dir(cell), 'repair-round-*.json'))):
+                        try:
+                            r = json.load(open(rf)).get('receipt')
+                        except Exception:
+                            continue
+                        if isinstance(r, dict):
+                            receipts += list(r.keys())
+                    if 'contractNotFollowed' in receipts:
+                        outcome, detail = 'fail', 'contractNotFollowed (disputed: model per policy)'
+                    else:
+                        outcome, detail = 'harness-void', 'no graded round recorded'
                 elif g['exit'] == 0:
                     outcome, detail = 'pass', '13/13'
                 else:

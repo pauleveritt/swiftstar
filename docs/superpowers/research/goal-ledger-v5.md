@@ -1,8 +1,10 @@
 # Goal ledger v5 — make repair rounds earn their cost
 
 > **Primary:** `pass@3rounds − pass@1round` on **held-out**. Baseline ≈ 0.
-> **Secondary:** stall rate (emission byte-identical to the previous round's).
-> Baseline: 4 of 4 P17 failures were stalls.
+> **Secondary:** stall rate — a round whose *dispatched packet* is byte-identical
+> to the previous round's. **Measured at rounds=5**, where the phenomenon exists:
+> P17 8/26 = 31%. At rounds=3 it is 0/6. (Corrected in entry 1; the original
+> "emission byte-identical / 4 of 4 failures" wording was a broken metric.)
 >
 > **Done when EITHER** held-out gain ≥ +0.25 with stall < 10% (it works),
 > **OR** three consecutive interventions fail to move dev gain — verdict
@@ -246,3 +248,64 @@ control tests whether prompt variation alone helps; this run just showed that
 adding information *hurts* by triggering whole-app rewrites, so the promising
 direction is constraining what a round may do, not enriching what it sees.
 Failure count toward the negative done-when: **1 of 3.**
+
+## 2a — 2026-08-26 — correction (no GPU) — review found a rigged next step
+
+**did:** A light external review checked the two iterations and found the
+planned next intervention would have been **uninformative by construction**.
+Landed three corrections; no numbers change except a denominator, which is now
+single.
+
+**1. Intervention 4 was the wrong next step, by this loop's own iteration-1
+finding.** Item 4 (stall detection) triggers when round N's tree equals round
+N−1's. **Baseline stall at rounds=3 is 0/6** — entry 1's headline correction.
+The dev screen runs rounds ∈ {1,3}. So screening item 4 there is *mechanically
+guaranteed* to show nothing, and would have banked failure 2-of-3 toward the
+negative verdict on a foregone conclusion — a rigged step toward "delete the
+loop." int2's 29% does not rescue it: int2 was reverted, so the configuration
+being improved is the 0%-stall baseline. The same reasoning disqualifies item 1,
+the control: variation-with-no-information only matters where replays exist,
+i.e. rounds ≥ 4.
+
+**A screening pre-check is now in the contract**, because all three defects this
+goal has produced are one species — *a measurement defined where it has no
+headroom or no resolution*: the +0.25 bar on 6 cells (unresolvable), stall rate
+at rounds=3 (phenomenon absent), gain maximisable by degrading `pass@1`. Before
+any GPU, answer in the ledger: **(a)** can this intervention's mechanism fire at
+the budget I am screening at? **(b)** can the promotion gate resolve the effect
+size I expect?
+
+**2. Runner and policy reconciled.** The runner called a round ending
+`contractNotFollowed` a `harness-void`; the policy table says ambiguous
+model-vs-harness attribution defaults to **model** with `disputed`. The runner
+now follows the contract it implements. Re-classified `depth-2/1/1` in int2:
+
+```
+  was: harness-void | no graded round recorded
+  now: fail         | contractNotFollowed (disputed: model per policy)
+```
+
+Denominators are single. **Nothing material moves** — int2 was 0/5-valid, is now
+0/6; gain is +0.50 either way and the revert stands.
+
+**3. Stale ledger header fixed** — it still described the broken
+"emission byte-identical / 4 of 4 P17 failures were stalls" metric that entry 1
+replaced. The header is what a skim reads.
+
+**Where the loop stands, honestly.** The negative verdict is now the **modal**
+outcome: `framing-2` fails `pass@3` at `1 of 9 preconditions unmet` — never
+exporting a `complaints` attribute — *with the full spec in hand*. That reads as
+a capability floor, not a loop defect. A ≥2-cell `pass@3` gain needs `framing-2`
+to go 0/3 → 2/3, and nothing observed suggests any listed intervention does
+that. The contract already declared that ending acceptable and actionable
+("delete rather than tune"). **The one way to reach it dishonestly is to spend
+the remaining two failure counts on interventions the screen cannot detect** —
+which is exactly what the corrected plan avoids.
+
+**next:** **intervene** with item **3** (feed forward the delta: what the
+previous round changed and which tests still fail). Pre-check: **(a)** its
+mechanism fires at rounds=3 — rounds genuinely differ there, so a delta exists
+to feed; **(b)** it targets `framing-2`'s 0/3, the only dev headroom, so a
+≥2-cell effect is resolvable. int2 failed by adding *untargeted* information
+that licensed whole-app rewrites; item 3 adds *targeted* information, which is
+the constraint entry 2 concluded was missing. Failure count: **1 of 3.**
