@@ -821,3 +821,143 @@ for the human, not something this iteration may adopt.
 
 **next:** **STOP — escalate.** Three triggers, listed in the message to the
 human. The loop does not choose here.
+
+---
+
+## 13 — 2026-08-26 — measure (n=4, budget=5) — **ESCALATION**
+
+**did:** At the human's instruction, made the repair round budget
+env-configurable (`AGENTTEST_REPAIR_ROUNDS`, default unchanged at 2; commit
+`deb86bd`) and reran the same 4 cells at 5 rounds. **The rerun produced zero
+model numbers and exposed two defects that the 2-round budget had been
+structurally hiding.** Recommending no further GPU runs until the human rules
+on them.
+
+**cells:** valid=3 blocked={V1:1} unauditable={V4:4} of 4 — **but see below:
+the V1 FAIL is a false positive, and I am NOT adding these 3 to the cumulative
+count.** All four cells died in phase-1 repair without ever reaching
+acceptance. **Cumulative valid Mellum cells stays at 4 of 10.**
+
+**model:** (omitted — no acceptance round ran in any cell, so there is no
+graded model result to report. `repair-round-N.json` exists only under
+`repair-phase1/`.)
+
+**evidence:**
+
+```
+$ GOAL_MANIFEST=/tmp/measure-manifest-r5.tsv python3 Tools/audit-goal-invariants.py
+=== mellum: 3 valid / 4 total ===
+    blocked:     {'V1': 1}
+    unauditable: {'V4': 4}   (NOT passes)
+
+$ ls captures/agenttest/20260826-112536-roadmap
+packet.json  repair-phase1  run-config.json  validation-phase1.txt  wire.ndjson  wire.trace
+        # no acceptance.txt, no verdict.json, no top-level repair-round-*.json — in all 4 cells
+
+run-config.json of every cell: repairMaxRounds = 5      # plumbing confirmed live
+```
+
+Baseline (entry 12, 2 rounds): 3 of 4 cells reached acceptance. This batch (5
+rounds): 0 of 4. **I am not attributing that swing to the budget** — see
+defect 2, which makes the two batches not comparable.
+
+---
+
+### Defect 1 — `check_v1` disagrees with its frozen invariant's text [v2 escalation]
+
+V1 reads: *"A round that ran **and wrote** must not be followed by a packet
+showing the identical missing-file set."* `check_v1` gates only on the round
+having **ran** (receipt `validationFailed`); it never establishes that the round
+**wrote** the missing file. When a round runs and simply does not emit the
+missing file, an unchanged missing set is correct behaviour, and the check
+calls it a discard.
+
+That is exactly what happened in `20260826-112121`:
+
+```
+turn 2: 3c1f7c4e6fad   headings=['app.py']
+turn 3: d5329a63d9de   headings=['models.py','app.py','templates/...']
+turn 4: 3c1f7c4e6fad   headings=['app.py']      <- identical to turn 2
+turn 5: 3c1f7c4e6fad   headings=['app.py']
+turn 6: 3c1f7c4e6fad   headings=['app.py']
+```
+
+`tests/test_app.py` — the file the auditor reports as "the write did not
+survive" — **was never emitted by the model in any round.** The FAIL is a false
+positive. This is the v2 contract's named escalation ("an audit check is found
+to disagree with its frozen invariant's text") and it retroactively taints any
+V1 count produced by this check on multi-round captures.
+
+**A near-miss worth recording:** I first reasoned "the five receipts have five
+different digests, so the tree changed each round." That inference is wrong.
+Consecutive packets 4 and 5 differ by exactly one line:
+
+```
+-  File ".../swiftstar-wt-AAE9A953-.../app.py", line 42, in <module>
++  File ".../swiftstar-wt-4C01CE73-.../app.py", line 42, in <module>
+```
+
+Only the ephemeral worktree UUID. Digest inequality proves nothing about the
+tree.
+
+### Defect 2 — a fixed seed does not make a run reproducible
+
+The repair packet embeds the per-round temp-worktree path inside pytest/import
+tracebacks. Same seed, same path style, same spec, different invocation ⇒
+different prompt ⇒ different sampling. Diffing the round-2 packets of
+`20260826-104811` (baseline) and `20260826-112536` (rerun), both
+mellum/absolute/seed1, shows they diverge from the traceback line onward — and
+baseline round 2 **repaired** where the rerun round 2 failed.
+
+Consequences: the budget comparison is confounded and cannot be read as
+"budget=5 is worse"; prompt-prefix caching is defeated across rounds; and an
+absolute host path is injected into runs whose entire purpose is a
+relative-vs-absolute path arm.
+
+### Defect 3 — the lenient harvest writes the model's prose into source files
+
+`LabeledBlockParser.parse` has an explicit fallback: a heading with **no fenced
+block** takes its body as everything up to the next allowlisted heading. In
+`20260826-112536` round 1 Mellum emitted six headings, prose under each, and
+**zero fences**, ending:
+
+```
+# tests/test_app.py
+
+This file is missing, but the error is about the `app` module. ...
+
+Now I'll create all the missing files with the appropriate content:
+```
+
+That is a *plan*, not code. The harness harvested it into six real files, so
+`app.py` became English prose and every later round was repairing a file full
+of the model's own commentary. Measured by compiling the `.py` contents the
+packets show as current, across **both** batches:
+
+```
+2rounds relative seed1  20260826-104551  non-compiling .py: ['app.py','models.py','tests/test_app.py']
+2rounds absolute seed1  20260826-104811  non-compiling .py: ['app.py','models.py','tests/test_app.py']
+5rounds absolute seed1  20260826-112536  non-compiling .py: ['app.py','models.py','tests/test_app.py']
+        (the other 5 cells: none)
+```
+
+**3 of 8 cells.** No invariant covers this, so per the contract it is an
+escalation and NOT a new rule. It also plausibly explains the original brief's
+whack-a-mole report.
+
+The lenience is not an accident — it was added because P15 found a strict
+parser was measuring the parser rather than the model. So reverting it is not
+obviously right, and choosing among the options (require a fence always; ignore
+a heading whose body is not code; treat an emission containing zero fences as
+`contractNotFollowed` and harvest nothing; apply lenience only when the
+emission contains at least one fence) is **a design decision with more than one
+defensible answer — the human's call, not the loop's.**
+
+**A hypothesis, explicitly not a conclusion:** since the V1 fix made rounds
+cumulative, a bad round's damage now persists into every later round, so a
+larger budget may compound damage rather than allow recovery. The
+non-reproducibility in defect 2 means this batch cannot test that.
+
+**next:** **STOP.** Three triggers: an audit check disagreeing with its
+invariant, cells failing in a way no invariant covers, and a fix requiring a
+design decision. No further GPU runs until the human rules.
