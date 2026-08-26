@@ -193,6 +193,18 @@ public enum RepairLoop {
             case .receipt(let receipt):
                 write(record: RoundRecord(round: round, candidateRef: nil, receipt: receipt, grade: nil, elapsed: elapsed),
                       to: captureDir)
+                if case .validationFailed = receipt, let validation {
+                    // Unlike the other receipts, this one carries real new evidence: the
+                    // round's own candidate broke the import check differently than the
+                    // one before it. Receipt.validationFailed itself only carries
+                    // exit+digest (dropped at the pure WorktreeDispatch.verdict boundary),
+                    // but the real ValidationResult -- with its full output -- is still
+                    // in scope right here. Refresh lastGrade from it and let the existing
+                    // round budget continue; head stays unchanged since no candidate was
+                    // produced to advance to.
+                    lastGrade = GradeResult(exit: validation.exit, output: validation.output)
+                    continue
+                }
                 return .exhausted(lastGrade: lastGrade, receipt: receipt)
             }
         }

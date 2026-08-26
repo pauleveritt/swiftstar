@@ -85,11 +85,15 @@ struct PhaseRepairTests {
             validation: ValidationResult(exit: 1, digest: "sha256:x", output: "ImportError"),
             packetBuilder: packetBuilder, runPhase: runPhase)
 
+        // Track 3A (P12): `.validationFailed` carries new evidence (a fresh
+        // traceback), so RepairLoop no longer exits on the first occurrence —
+        // it spends the round budget retrying instead. `validationCommand:
+        // "false"` fails deterministically every round, so both rounds hit
+        // `.validationFailed`, and the loop falls through its round budget to
+        // `.repairExhausted` rather than surfacing the per-round receipt.
         guard case .exhausted(let receipt) = result else {
             Issue.record("expected .exhausted, got \(result)"); return
         }
-        guard case .validationFailed = receipt else {
-            Issue.record("expected validationFailed receipt, got \(receipt)"); return
-        }
+        #expect(receipt == .repairExhausted)
     }
 }

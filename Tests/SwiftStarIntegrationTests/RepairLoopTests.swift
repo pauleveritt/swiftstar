@@ -277,6 +277,84 @@ struct RepairLoopTests {
         #expect(receipt == .contractNotFollowed)
     }
 
+    /// A `.validationFailed` receipt carries real new evidence (the round's own
+    /// candidate broke the import check) even though it produced no committed
+    /// candidate ref. Unlike other receipts, it must NOT end the loop
+    /// immediately — it should refresh `lastGrade` from the real validation
+    /// output and let the existing round budget continue.
+    @Test func validationFailedReceiptRetriesWithFreshEvidence() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let cap = FileManager.default.temporaryDirectory.appendingPathComponent("repairloop-cap-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: cap, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: cap) }
+        let calls = LockedCounter()
+        let packetWithMarkerCheck = HandoffPacket(
+            taskText: "fix it", writableFiles: ["a.txt"], validationCommand: "test -f marker.txt",
+            baselines: [:], turnBudget: 1000, toolCallBudget: 8,
+            role: .repair, sampling: SamplingPolicy(think: .off))
+        let result = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            packetBuilder: { _ in packetWithMarkerCheck },
+            runPhase: { _, wt, _ in
+                calls.increment()
+                if calls.value == 1 {
+                    // Round 1: mutate a.txt but don't create marker.txt ->
+                    // validation fails -> .receipt(.validationFailed).
+                    try "still broken\n".write(to: wt.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+                } else {
+                    // Round 2: mutate a.txt AND create marker.txt -> validation
+                    // passes -> .candidate.
+                    try "fixed\n".write(to: wt.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+                    try "".write(to: wt.appendingPathComponent("marker.txt"), atomically: true, encoding: .utf8)
+                }
+                return self.outcome(mutations: ["a.txt"])
+            },
+            grade: gradingScheme(), captureDir: cap)
+        guard case .passed = result else { Issue.record("expected passed, got \(result)"); return }
+        #expect(calls.value == 2)
+
+        // The receipt-then-candidate sequence proves round 1 hit
+        // .validationFailed and round 2 actually produced a committed
+        // candidate — the strongest available proof the retry ran on fresh
+        // evidence rather than coincidentally looping.
+        let round1 = try JSONDecoder().decode(
+            RepairLoop.RoundRecord.self,
+            from: Data(contentsOf: cap.appendingPathComponent("repair-round-1.json")))
+        guard case .validationFailed = round1.receipt else {
+            Issue.record("expected round 1 receipt to be .validationFailed, got \(String(describing: round1.receipt))")
+            return
+        }
+        #expect(round1.candidateRef == nil)
+
+        let round2 = try JSONDecoder().decode(
+            RepairLoop.RoundRecord.self,
+            from: Data(contentsOf: cap.appendingPathComponent("repair-round-2.json")))
+        #expect(round2.candidateRef != nil)
+    }
+
+    /// A non-`validationFailed` receipt (e.g. `.noChanges`, from an empty
+    /// `mutations` array) must still exit immediately with exactly one
+    /// `runPhase` call — this fix must not change behavior for other receipt
+    /// types. Companion to `receiptEndsTheLoopImmediately`, which already
+    /// exercises this path; kept here to spell out the intent explicitly.
+    @Test func nonValidationFailedReceiptStillEndsLoopImmediately() throws {
+        let repo = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let calls = LockedCounter()
+        let result = try RepairLoop.run(
+            repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
+            packetBuilder: { _ in self.authoredPacket() },
+            runPhase: { _, _, _ in
+                calls.increment()
+                return self.outcome(mutations: [])   // noChanges
+            },
+            grade: gradingScheme())
+        guard case .exhausted(_, let receipt) = result else { Issue.record("expected exhausted"); return }
+        #expect(receipt == .noChanges)
+        #expect(calls.value == 1)
+    }
+
     @Test func writesPerRoundCapture() throws {
         let repo = try makeRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
