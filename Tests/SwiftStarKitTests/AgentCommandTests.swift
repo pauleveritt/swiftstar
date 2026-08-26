@@ -134,8 +134,10 @@ struct AgentCommandTests {
     /// cwd-relative, so the spawner must point each at its absolute path via
     /// `DS4_METAL_*_SOURCE` (the same override PoolOrchestrator/swiftstar-drive
     /// use). Regression: the app's Agent tab omitted this, so the agent aborted
-    /// startup ("metal backend unavailable") before emitting `hello`.
-    @Test func metalEnvironmentPointsShadersAtAbsolutePaths() throws {
+    /// startup ("metal backend unavailable") before emitting `hello`. Also sets
+    /// the per-mode `DS4_LOCK_FILE` so Chat and Agent don't collide on the
+    /// engine's single-instance lock.
+    @Test func engineEnvironmentPointsShadersAtAbsolutePathsAndSetsLock() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("metal-env-\(UUID().uuidString)")
         let metal = dir.appendingPathComponent("metal", isDirectory: true)
@@ -145,11 +147,12 @@ struct AgentCommandTests {
         try "y".write(to: metal.appendingPathComponent("moe.metal"), atomically: true, encoding: .utf8)
         try "z".write(to: metal.appendingPathComponent("README.txt"), atomically: true, encoding: .utf8)
 
-        let env = AgentCommand.metalEnvironment(engineDir: dir, base: ["KEEP": "me"])
+        let env = AgentCommand.engineEnvironment(engineDir: dir, lockFile: "/tmp/ds4-test.lock", base: ["KEEP": "me"])
 
         #expect(env["DS4_METAL_FLASH_ATTN_SOURCE"] == metal.appendingPathComponent("flash_attn.metal").path)
         #expect(env["DS4_METAL_MOE_SOURCE"] == metal.appendingPathComponent("moe.metal").path)
         #expect(env["DS4_METAL_README_SOURCE"] == nil, "non-.metal files must not get an override")
+        #expect(env["DS4_LOCK_FILE"] == "/tmp/ds4-test.lock", "the per-mode lock file must be set")
         #expect(env["KEEP"] == "me", "the base environment must be preserved")
     }
 }

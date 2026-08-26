@@ -210,8 +210,10 @@ final class EngineController {
         let process = Process()
         process.executableURL = binary
         process.arguments = ServerCommand.argv(settings: settings)
-        process.currentDirectoryURL = settings.engineDir  // metal/*.metal resolve relative to CWD
-        process.environment = ProcessInfo.processInfo.environment
+        process.currentDirectoryURL = settings.engineDir
+        process.environment = AgentCommand.engineEnvironment(
+            engineDir: settings.engineDir, lockFile: "/tmp/ds4-server.lock",
+            base: ProcessInfo.processInfo.environment)
         let stderrPipe = Pipe()
         let stdoutPipe = Pipe()
         process.standardError = stderrPipe

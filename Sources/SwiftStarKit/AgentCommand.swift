@@ -100,12 +100,13 @@ public enum AgentCommand {
         settings.engineDir.appendingPathComponent("ds4-agent")
     }
 
-    /// The `DS4_METAL_*_SOURCE` environment overrides (F1): the engine chdir's
-    /// to `--workspace`, so the Metal shader sources (`metal/*.metal`, loaded
-    /// cwd-relative) would not resolve there. Point each at its absolute path —
-    /// the same override `PoolOrchestrator` and `swiftstar-drive` use. Merges
-    /// into (and returns) the given base environment.
-    public static func metalEnvironment(engineDir: URL, base: [String: String]) -> [String: String] {
+    /// The full spawn environment: `DS4_METAL_*_SOURCE` (absolute shader paths,
+    /// F1 — the engine chdir's to `--workspace`, so cwd-relative shaders would
+    /// not resolve) plus `DS4_LOCK_FILE` (the per-mode instance lock). The lock
+    /// is per-mode so Chat (`ds4-server`) and Agent (`ds4-agent`) can coexist,
+    /// while a duplicate of the SAME binary is still refused (the engine's
+    /// single-instance-lock intent). Merges into (and returns) `base`.
+    public static func engineEnvironment(engineDir: URL, lockFile: String, base: [String: String]) -> [String: String] {
         var env = base
         let metalDir = engineDir.appendingPathComponent("metal", isDirectory: true)
         if let names = try? FileManager.default.contentsOfDirectory(atPath: metalDir.path) {
@@ -114,6 +115,7 @@ public enum AgentCommand {
                 env["DS4_METAL_\(stem.uppercased())_SOURCE"] = metalDir.appendingPathComponent(name).path
             }
         }
+        env["DS4_LOCK_FILE"] = lockFile
         return env
     }
 }
