@@ -699,6 +699,33 @@ func runOnce(_ index: Int) throws -> RunOutcome {
     if let pkt = try? JSONEncoder().encode(phasePacket(phases[0], textContract: textContractBuild)) {
         try? pkt.write(to: captureDir.appendingPathComponent("packet.json"))
     }
+    // P12.7 piece 2: Σprompt/Σcached/Σsuffix across the whole run (every phase,
+    // every tool round), read back from the `wire.trace` file piece 1 wired
+    // into `AgentSettings.tracePath`. A `defer`, not a call at the end of the
+    // happy path, because `runOnce` has ~10 early `return RunOutcome(.stopped,
+    // …)` paths (budgetExceeded, contractNotFollowed, orchestrator errors) —
+    // exactly the runs this accounting matters most for — and a plain
+    // end-of-function call would have silently skipped all of them (Opus
+    // checkpoint review, 2026-08-25). The pure summation lives in SwiftStarKit
+    // (`TraceSummary.sum`, unit tested against golden.trace and synthetic
+    // input); this is just the read + report + record. A missing or empty
+    // trace (short run, or the file never materialized) reads as "" and sums
+    // to all-zero rather than throwing — this must never fail a run that
+    // would otherwise have succeeded. "Stateful tokens" (Σprompt - final
+    // ctx_used) is a separate, out-of-scope metric — see TraceTokenTotals'
+    // doc comment.
+    defer {
+        let traceText = (try? String(contentsOf: tracePath, encoding: .utf8)) ?? ""
+        let traceTotals = TraceSummary.sum(traceText: traceText)
+        print("[agenttest] trace: Σprompt=\(traceTotals.sumPrompt) Σcached=\(traceTotals.sumCached) Σsuffix=\(traceTotals.sumSuffix)")
+        var runConfigWithTrace = runConfig
+        runConfigWithTrace["sumPrompt"] = String(traceTotals.sumPrompt)
+        runConfigWithTrace["sumCached"] = String(traceTotals.sumCached)
+        runConfigWithTrace["sumSuffix"] = String(traceTotals.sumSuffix)
+        if let cfg = try? JSONSerialization.data(withJSONObject: runConfigWithTrace, options: [.prettyPrinted, .sortedKeys]) {
+            try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))
+        }
+    }
 
     for (i, phaseText) in phases.enumerated() {
         // Same builder the up-front validation gate ran against (host-split
@@ -986,27 +1013,6 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         }
         report = AgentTestAnalyzer.analyze(events: events)
         if let report { print(report.summary()) }
-    }
-
-    // P12.7 piece 2: Σprompt/Σcached/Σsuffix across the whole run (every phase,
-    // every tool round), read back from the `wire.trace` file piece 1 above
-    // wired into `AgentSettings.tracePath`. The pure summation lives in
-    // SwiftStarKit (`TraceSummary.sum`, unit tested against golden.trace and
-    // synthetic input) — this is just the read + report + record. A missing or
-    // empty trace (short run, or the file never materialized) reads as "" and
-    // sums to all-zero rather than throwing — this must never fail a run that
-    // would otherwise have succeeded. "Stateful tokens" (Σprompt - final
-    // ctx_used) is a separate, out-of-scope metric — see TraceTokenTotals'
-    // doc comment.
-    let traceText = (try? String(contentsOf: tracePath, encoding: .utf8)) ?? ""
-    let traceTotals = TraceSummary.sum(traceText: traceText)
-    print("[agenttest] trace: Σprompt=\(traceTotals.sumPrompt) Σcached=\(traceTotals.sumCached) Σsuffix=\(traceTotals.sumSuffix)")
-    var runConfigWithTrace = runConfig
-    runConfigWithTrace["sumPrompt"] = String(traceTotals.sumPrompt)
-    runConfigWithTrace["sumCached"] = String(traceTotals.sumCached)
-    runConfigWithTrace["sumSuffix"] = String(traceTotals.sumSuffix)
-    if let cfg = try? JSONSerialization.data(withJSONObject: runConfigWithTrace, options: [.prettyPrinted, .sortedKeys]) {
-        try? cfg.write(to: captureDir.appendingPathComponent("run-config.json"))
     }
 
     let elapsed = Int(Date().timeIntervalSince(runStart))
