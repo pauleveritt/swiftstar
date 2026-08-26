@@ -1,5 +1,7 @@
 # P11 agenttest — Laguna on the harder problem: preliminary analysis (2026-08-23)
 
+> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](2026-08-25-local-model-agency.md). Retained as the evidence record for the byte-identical verbatim-redraft finding and the four numbered failure-mode findings from the captured hard-spec wire traces.
+
 **Status:** preliminary, n=1 per failure mode, from the captured wire
 (`captures/agenttest/20260823-*-roadmap-user-story/wire.ndjson`). Three hard-spec
 runs, three distinct-but-related failure signatures; one easy-spec comparison.

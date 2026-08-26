@@ -1,5 +1,7 @@
 # P11 measurement gate — canonical arm (2026-08-23)
 
+> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](2026-08-25-local-model-agency.md). Retained as the evidence record for the two canonical-arm wall-clock runs (3.70x, 3.16x realized win) and the status-mislabeling and tokenization caveats.
+
 **Status:** canonical arm measured. The sensitivity envelope (taskText bloat
 ×1.5/×2, failure injection, packet-count sweep) is a follow-up pass of the same
 driver; the canonical number below is the headline D11(a) overhead ratio.

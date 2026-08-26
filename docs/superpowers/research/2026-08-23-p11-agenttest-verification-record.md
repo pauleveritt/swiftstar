@@ -1,5 +1,7 @@
 # P11 addendum — the canonical agent test: live run (2026-08-23)
 
+> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](2026-08-25-local-model-agency.md). Retained as the evidence record for the first live Laguna S 2.1 run's easy/hard results, the DeepSeek grader demo, and the overnight n=4 variance data.
+
 **Status:** first live run, n=1, easy + hard spec, real engine (Laguna S 2.1).
 The canonical agent test is now the project's reproducible headless proof that
 the subagent machinery works end to end.

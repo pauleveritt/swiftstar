@@ -1,5 +1,7 @@
 # Laguna S revision test — spec (2026-08-24)
 
+> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](2026-08-25-local-model-agency.md). Retained as the evidence record for the hand-holding-ladder (L1-L3) experiment design gating whether the repair role can revise its own output.
+
 **Status:** specification only. Nothing run. This is the gate experiment for the
 three-role thinking pipeline; nothing downstream should be built before it
 reports.

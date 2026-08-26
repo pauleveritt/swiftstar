@@ -1,5 +1,7 @@
 # Kimi K3 deep review of Phase 11 (2026-08-23)
 
+> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](2026-08-25-local-model-agency.md). Retained as the evidence record for Kimi K3's seven accepted bug fixes (stdin TOCTOU, parser discriminator, worker-id overflow) and the verified-not-a-bug dispositions.
+
 **Status:** external adversarial review, captured as written. Reviewer: OpenRouter
 `moonshotai/kimi-k3`. The accepted findings were fixed in order of severity; the
 full response follows.
