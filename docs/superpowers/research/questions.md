@@ -22,6 +22,12 @@ unlabelled fences, so nothing was harvested.
 
 ## 3 — Should `framing-2` be replaced by a clean framing fixture?
 
+**ADDRESSED 2026-08-26** — `fixtures/agenttest/repair/framing-2-edit` holds
+files-to-fix (2) and task type (edit, no authoring) fixed against `depth-2` and
+varies only the evidence shape. Pre-registered as 6 cells in
+`experiment-manifest-framing.tsv`. The original default below stands for the
+P17 verdict's own numbers, which are unaffected.
+
 **Default taken:** kept, with the confound stated in the verdict rather than
 silently carried. **Cells:** all 6 `framing-2` rows.
 It varies evidence-shape, defect identity, and author-vs-edit together. A clean

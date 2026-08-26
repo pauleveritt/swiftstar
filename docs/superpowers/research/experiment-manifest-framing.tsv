@@ -1,0 +1,11 @@
+# Follow-up pre-registration — clean framing arm. NOT an amendment to
+# experiment-manifest.tsv, which is complete and closed. 1 fixture x 2 budgets
+# x 3 seeds = 6 cells. Comparator is depth-2, already recorded under the same
+# corrected directive; it is NOT re-run.
+fixture	rounds	seed
+framing-2-edit	2	1
+framing-2-edit	2	2
+framing-2-edit	2	3
+framing-2-edit	5	1
+framing-2-edit	5	2
+framing-2-edit	5	3
