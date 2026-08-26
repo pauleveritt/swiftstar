@@ -95,6 +95,16 @@ public enum WorktreeDispatcher {
         }
     }
 
+    /// Commit the worktree's diff unconditionally (no verdict) and return the
+    /// commit SHA — or the parent SHA when nothing is staged (D5). P12.8 uses
+    /// this to turn a phase that failed validation into a `failedRef` that
+    /// `RepairLoop` can branch from; a no-mutation failure returns the parent
+    /// tree, which *is* the failed state to repair.
+    public static func commitForRepair(_ worktree: Worktree, packet: HandoffPacket,
+                                       in repo: URL) throws -> String {
+        try commitDiff(in: worktree.url, writableFiles: packet.writableFiles)
+    }
+
     /// Remove the worktree and its throwaway branch (the candidate commit stays
     /// reachable via the namespaced ref).
     public static func discard(_ worktree: Worktree, in repo: URL) {

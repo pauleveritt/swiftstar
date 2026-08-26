@@ -561,4 +561,39 @@ struct WorktreeDispatcherTests {
         #expect(baseline.mode == 0o644)
         #expect(baseline.lineEnding == .lf)
     }
+
+    // MARK: - commitForRepair (P12.8): commit failed phase work unconditionally
+
+    @Test func commitForRepairCommitsFailedPhaseWork() throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let packet = HandoffPacket(
+            taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
+            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
+        let worktree = try WorktreeDispatcher.prepare(packet: packet, in: repo)
+        defer { WorktreeDispatcher.discard(worktree, in: repo) }
+        try "broken\n".write(to: worktree.url.appendingPathComponent("a.txt"),
+                             atomically: true, encoding: .utf8)
+
+        let ref = try WorktreeDispatcher.commitForRepair(worktree, packet: packet, in: repo)
+        #expect(ref.count == 40, "commitForRepair must return a 40-char commit SHA")
+        let show = try git(repo, ["show", "--stat", "--name-only", ref])
+        #expect(show.contains("a.txt"), "the failed phase's mutation must be committed")
+    }
+
+    @Test func commitForRepairReturnsParentShaWhenNothingStaged() throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let head = try git(repo, ["rev-parse", "HEAD"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let packet = HandoffPacket(
+            taskText: "no-op", writableFiles: ["a.txt"], validationCommand: nil,
+            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
+        let worktree = try WorktreeDispatcher.prepare(packet: packet, in: repo)
+        defer { WorktreeDispatcher.discard(worktree, in: repo) }
+
+        let ref = try WorktreeDispatcher.commitForRepair(worktree, packet: packet, in: repo)
+        #expect(ref == head,
+                "no staged changes must return the parent SHA (the failed state is the parent tree), not an empty commit")
+    }
 }
