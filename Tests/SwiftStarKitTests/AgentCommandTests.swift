@@ -129,4 +129,27 @@ struct AgentCommandTests {
         let ws = URL(fileURLWithPath: "/tmp/ws")
         #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--seed"))
     }
+
+    /// The engine chdir's to `--workspace` and loads `metal/*.metal`
+    /// cwd-relative, so the spawner must point each at its absolute path via
+    /// `DS4_METAL_*_SOURCE` (the same override PoolOrchestrator/swiftstar-drive
+    /// use). Regression: the app's Agent tab omitted this, so the agent aborted
+    /// startup ("metal backend unavailable") before emitting `hello`.
+    @Test func metalEnvironmentPointsShadersAtAbsolutePaths() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("metal-env-\(UUID().uuidString)")
+        let metal = dir.appendingPathComponent("metal", isDirectory: true)
+        try FileManager.default.createDirectory(at: metal, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try "x".write(to: metal.appendingPathComponent("flash_attn.metal"), atomically: true, encoding: .utf8)
+        try "y".write(to: metal.appendingPathComponent("moe.metal"), atomically: true, encoding: .utf8)
+        try "z".write(to: metal.appendingPathComponent("README.txt"), atomically: true, encoding: .utf8)
+
+        let env = AgentCommand.metalEnvironment(engineDir: dir, base: ["KEEP": "me"])
+
+        #expect(env["DS4_METAL_FLASH_ATTN_SOURCE"] == metal.appendingPathComponent("flash_attn.metal").path)
+        #expect(env["DS4_METAL_MOE_SOURCE"] == metal.appendingPathComponent("moe.metal").path)
+        #expect(env["DS4_METAL_README_SOURCE"] == nil, "non-.metal files must not get an override")
+        #expect(env["KEEP"] == "me", "the base environment must be preserved")
+    }
 }

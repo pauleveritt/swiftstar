@@ -189,8 +189,11 @@ final class AgentController {
         let process = Process()
         process.executableURL = binary
         process.arguments = AgentCommand.argv(settings: settings)
-        process.currentDirectoryURL = settings.engineDir  // metal/*.metal resolve relative to CWD
-        process.environment = ProcessInfo.processInfo.environment
+        process.currentDirectoryURL = settings.engineDir
+        // Metal shaders load cwd-relative, and the engine chdir's to
+        // `--workspace`; point them at absolute paths (F1) so Metal resolves.
+        process.environment = AgentCommand.metalEnvironment(
+            engineDir: settings.engineDir, base: ProcessInfo.processInfo.environment)
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -913,7 +916,8 @@ final class AgentController {
         process.executableURL = binary
         process.arguments = AgentCommand.argv(settings: settings)
         process.currentDirectoryURL = settings.engineDir
-        process.environment = ProcessInfo.processInfo.environment
+        process.environment = AgentCommand.metalEnvironment(
+            engineDir: settings.engineDir, base: ProcessInfo.processInfo.environment)
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()

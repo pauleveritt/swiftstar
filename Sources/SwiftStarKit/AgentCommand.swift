@@ -99,4 +99,21 @@ public enum AgentCommand {
     public static func binaryPath(settings: AgentSettings) -> URL {
         settings.engineDir.appendingPathComponent("ds4-agent")
     }
+
+    /// The `DS4_METAL_*_SOURCE` environment overrides (F1): the engine chdir's
+    /// to `--workspace`, so the Metal shader sources (`metal/*.metal`, loaded
+    /// cwd-relative) would not resolve there. Point each at its absolute path —
+    /// the same override `PoolOrchestrator` and `swiftstar-drive` use. Merges
+    /// into (and returns) the given base environment.
+    public static func metalEnvironment(engineDir: URL, base: [String: String]) -> [String: String] {
+        var env = base
+        let metalDir = engineDir.appendingPathComponent("metal", isDirectory: true)
+        if let names = try? FileManager.default.contentsOfDirectory(atPath: metalDir.path) {
+            for name in names where name.hasSuffix(".metal") {
+                let stem = String(name.dropLast(".metal".count))
+                env["DS4_METAL_\(stem.uppercased())_SOURCE"] = metalDir.appendingPathComponent(name).path
+            }
+        }
+        return env
+    }
 }
