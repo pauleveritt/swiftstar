@@ -392,3 +392,100 @@ comes from the current batch — done-when (d) is the rule that produced this fi
 **next:** **fix** — V7 (reproducibility). It is the carry-forward's first
 priority, needs no GPU, and until it holds no comparison between two runs is
 controlled — including the round-budget question v2 could not answer.
+
+## 5 — 2026-08-26 — fix (V7, partial) — **ESCALATION, and retracts a v2 diagnosis**
+
+**did:** Landed worktree-path normalisation in repair evidence (red-then-green)
+and then measured whether it achieves V7. **It does not, and finding out why
+retracts v2 entry 13's root-cause claim.**
+
+**cells:** valid=7 blocked={V6:2, V5:1} unauditable={V4:9} of 9 — unchanged;
+this iteration changes the apparatus, not the classification.
+
+**done-when: a=no b=no c=no d=no**
+
+**evidence:**
+
+```
+# before
+✘ worktreePathsAreNormalisedOutOfEvidence — no member 'normalizingWorktreePaths'
+# after
+✔ MachineEvidenceTests — 12 tests passed
+$ swift test                          # 546 tests, 74 suites — passed
+$ SWIFTSTAR_INTEGRATION=1 swift test  # 546 tests, 74 suites — passed
+```
+
+Measured on real packets, not asserted:
+
+```
+112121 packet 4 vs 5 (consecutive rounds, same run)
+   diff lines before=  5   after normalisation=  0   identical=True
+104811 vs 112536 round 1 (mellum/absolute/seed1, two runs)
+   diff lines before=  0   after normalisation=  0   identical=True
+```
+
+Implemented Foundation-free (this type is deliberately pure) and matched on the
+UUID shape rather than one known URL — round 1's grade comes from the *failed
+phase's* worktree, not the round's own, so normalising against a single URL
+would have missed it.
+
+**What it did buy:** consecutive rounds inside a run no longer churn the packet
+(5 differing lines → 0), which restores prompt-prefix caching across rounds.
+That is real and worth keeping.
+
+---
+
+### Retraction — v2 entry 13's V7 root cause was wrong
+
+Entry 13 concluded: *"a fixed seed does not make a run reproducible … same seed,
+same config, different invocation ⇒ different prompt ⇒ different sampling."*
+**The second link in that chain is false.** The round-1 packets of `104811` and
+`112536` were **already byte-identical before any normalisation** — the prompt
+was never the variable. I reached the wrong conclusion by diffing *round-2*
+packets, where model output had already diverged, and reading the traceback
+line at the top of that diff as the cause rather than a symptom.
+
+Where the divergence actually starts:
+
+```
+turn 0:  SAME    (0 chars, engine handshake)
+turn 1:  DIFFER  (2660 vs 3027 chars)   <- the FIRST model emission
+turn 2:  DIFFER  (7117 vs 1448 chars)
+```
+
+Turn 1 is the phase-1 implement turn. It precedes every repair packet. And its
+inputs are identical:
+
+```
+packet.json taskText sha  45a6cb026cda  (3897 bytes)   — both runs
+seed = 1                                                — both runs
+sampler = temp 0.6 top-k 20 top-p 0.95 min-p 0.0        — both runs
+```
+
+**Identical prompt, identical recorded seed, identical sampler, different
+output on the first turn.** The harness forwards `--seed` whenever seed > 0
+(`AgentCommand.swift:99`), and the capture records seed=1, so the seed is set as
+far as the harness can express it. The remaining candidates are engine-level:
+the seed not reaching the sampler, or non-deterministic GPU kernels. `wire.trace`
+does not record argv, so the captures cannot settle it.
+
+### Escalation
+
+**V7 is not reachable by harness changes alone**, and the obvious remedies are
+measurement semantics, not implementation:
+
+- Greedy decoding (temp 0) would very likely make runs reproducible — and would
+  change what the model does, so every prior number would describe a different
+  sampling regime.
+- Accepting non-determinism means V7 must be restated as a tolerance
+  ("same seed ⇒ same *distribution*"), which changes what a valid cell means
+  and what a comparison between two batches can claim.
+
+Either way the loop does not decide it. **The cheap next measurement, if
+wanted: dispatch one identical prompt twice at a fixed seed and diff the two
+emissions** — ~2 minutes of GPU, and it separates "seed not wired into the
+engine" from "kernels are non-deterministic" without touching the pipeline.
+
+**next:** **STOP — escalate.** V7 needs a ruling. If the answer is the
+determinism probe, that is a confirm-tier run and the loop can execute it once
+told which way to resolve the outcome.

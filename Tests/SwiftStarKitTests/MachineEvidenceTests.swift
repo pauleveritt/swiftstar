@@ -14,6 +14,37 @@ struct MachineEvidenceTests {
     /// which is what pushed a repair packet to 37180 tokens against a 32768
     /// context and killed the one cell all night that had a rich failure
     /// surface to show (2026-08-26, capture 20260826-055741).
+    /// V7: a fixed seed must produce a fixed prompt. Repair evidence embedded
+    /// the per-round temp-worktree UUID inside tracebacks, so the same seed and
+    /// config dispatched a *different* packet on every run. Measured: the
+    /// round-2 packets of 20260826-104811 and 20260826-112536 (both
+    /// mellum/absolute/seed1) differed by exactly that line, and the first
+    /// repaired where the second failed. It also defeats prompt-prefix caching
+    /// and injects an absolute host path into runs whose purpose is a
+    /// relative-vs-absolute path arm.
+    ///
+    /// Worktree-independent by construction: round 1's grade comes from the
+    /// FAILED phase's worktree, not the round's own, so normalising against a
+    /// single known URL would miss it.
+    @Test func worktreePathsAreNormalisedOutOfEvidence() {
+        let a = """
+        Traceback (most recent call last):
+          File "/private/var/folders/m4/x/T/swiftstar-wt-AAE9A953-215B-4A11-A295-50D57D26AD96/app.py", line 42, in <module>
+        ModuleNotFoundError: No module named 'app'
+        """
+        let b = """
+        Traceback (most recent call last):
+          File "/private/var/folders/m4/x/T/swiftstar-wt-4C01CE73-2BBA-43C0-B96F-DA6D7C7A9561/app.py", line 42, in <module>
+        ModuleNotFoundError: No module named 'app'
+        """
+        let na = MachineEvidence.normalizingWorktreePaths(a)
+        let nb = MachineEvidence.normalizingWorktreePaths(b)
+        #expect(na == nb, "same failure from two worktrees must normalise identically")
+        #expect(na.contains("File \"app.py\", line 42"),
+                "expected a workspace-relative path, got: \(na)")
+        #expect(!na.contains("swiftstar-wt-"))
+    }
+
     @Test func cappedFailureOutputKeepsCapBytesNotTheRemainder() {
         let body = String(repeating: "x", count: 88_000) + "FAILING ASSERTION\n"
         let (out, note) = MachineEvidence.cappedFailureOutput(body, cap: 8192)

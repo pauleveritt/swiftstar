@@ -150,7 +150,10 @@ public enum RepairLoop {
                     contents[path] = "(file does not exist in this worktree)"
                 }
             }
-            let (out, outNote) = MachineEvidence.cappedFailureOutput(lastGrade.output, cap: outputCap)
+            // V7: strip the ephemeral worktree prefix BEFORE capping, so the
+            // dispatched packet is byte-stable across runs at the same seed.
+            let stableOutput = MachineEvidence.normalizingWorktreePaths(lastGrade.output)
+            let (out, outNote) = MachineEvidence.cappedFailureOutput(stableOutput, cap: outputCap)
             if let outNote { truncations.append(outNote) }
             let evidence = MachineEvidence(failureOutput: out, fileContents: contents, truncations: truncations)
             for hit in evidence.redactHits(authored.redacts) {

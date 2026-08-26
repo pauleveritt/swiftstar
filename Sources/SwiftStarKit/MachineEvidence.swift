@@ -13,6 +13,65 @@ public struct MachineEvidence: Equatable, Sendable {
         self.truncations = truncations
     }
 
+    /// Strip ephemeral worktree prefixes out of evidence text (V7).
+    ///
+    /// Every repair round runs in a fresh `swiftstar-wt-<UUID>` worktree, and
+    /// tracebacks name it absolutely. That put a per-run UUID inside the
+    /// packet, so a fixed seed produced a *different prompt* on every run and
+    /// no two runs were comparable: the round-2 packets of 20260826-104811 and
+    /// 20260826-112536 (same model, path style and seed) differed by exactly
+    /// that line, and the first repaired where the second failed. It also
+    /// defeats prompt-prefix caching and injects an absolute host path into
+    /// runs whose whole purpose is a relative-vs-absolute path arm.
+    ///
+    /// Matches the UUID shape rather than one known URL on purpose: round 1's
+    /// grade comes from the FAILED phase's worktree, not the round's own, so
+    /// normalising against a single URL would miss it.
+    ///
+    /// The prefix is removed rather than replaced with a placeholder, which
+    /// leaves `File "app.py", line 42` — the workspace-relative form the
+    /// directive already tells the model its paths are in.
+    public static func normalizingWorktreePaths(_ text: String) -> String {
+        let marker = "swiftstar-wt-"
+        guard text.contains(marker) else { return text }
+
+        // Hand-rolled rather than NSRegularExpression: this type is deliberately
+        // Foundation-free and pure.
+        var out = ""
+        var i = text.startIndex
+        var tokenStart = text.startIndex   // start of the path token we are inside
+
+        while i < text.endIndex {
+            let c = text[i]
+            if c == " " || c == "\n" || c == "\t" || c == "\"" || c == "'" {
+                out.append(contentsOf: text[tokenStart...i])
+                i = text.index(after: i)
+                tokenStart = i
+                continue
+            }
+            // At a marker: drop everything from the token start through the
+            // segment separator that ends the worktree directory name.
+            if text[i...].hasPrefix(marker) {
+                var j = text.index(i, offsetBy: marker.count)
+                while j < text.endIndex, text[j] != "/" {
+                    let ch = text[j]
+                    // A worktree name is hex and dashes; anything else means this
+                    // is not a worktree path and must be left alone.
+                    guard ch.isHexDigit || ch == "-" else { break }
+                    j = text.index(after: j)
+                }
+                if j < text.endIndex, text[j] == "/" {
+                    i = text.index(after: j)
+                    tokenStart = i
+                    continue
+                }
+            }
+            i = text.index(after: i)
+        }
+        out.append(contentsOf: text[tokenStart...])
+        return out
+    }
+
     /// Tail-cap a pytest run's output: the failure summary is at the end.
     /// Returns the kept text and a note when anything was dropped.
     /// Caps on UTF-8 byte length, not Character count, to respect true payload size.
