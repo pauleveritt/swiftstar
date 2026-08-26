@@ -205,11 +205,12 @@ stands alone:
   `validationFailed` now retries with fresh evidence, within the existing
   round budget; every other receipt still exits immediately by design. P12.8's
   own live phase-boundary confirmation is a separate, still-open item: three
-  live attempts the same night (`captures/agenttest/20260825-21*-roadmap-
-  user-story` and two more) all passed clean on the first try, so phase-level
-  repair specifically has not fired again since the one failed attempt
-  recorded in the "Now" section — not because the fix doesn't work, but
-  because no phase has failed validation in any attempt since.
+  live attempts the same night (`captures/agenttest/20260825-214309-`,
+  `-215349-`, `-220104-roadmap-user-story`) all passed 13/13 clean on the
+  first try, so phase-level repair specifically has not fired again since
+  the one failed attempt recorded in the "Now" section — not because the fix
+  doesn't work, but because no phase has failed validation in any attempt
+  since.
 - Worker-2 session-context ceiling across multiple phase repairs (D8 sized it
   for two rounds of one repair; P12.8 allows up to three repairs per run).
 - `AGENTTEST_REPAIR_THINK` is inert; bounded thinking for the repair role is

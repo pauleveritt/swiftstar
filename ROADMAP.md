@@ -33,11 +33,17 @@ phase-level repair has not fired again since the fix landed, not because it
 doesn't work, but because no phase has failed validation in any attempt
 since. Still open, not blocking anything.
 
-**A separate overnight process appears to be running its own P12.3 Mellum
-ablation** (`Tools/overnight-chain.sh`/`overnight-idle-launch.sh`, not
-authored by this session — found already on disk, untouched). If that is
-what it looks like, it directly addresses the "P12.3's Mellum arm never ran"
-gap below; check its manifest/log before re-deriving that work.
+**Two untracked scripts for a P12.3 Mellum ablation exist on disk, but are
+not actually running.** `Tools/overnight-chain.sh` / `overnight-idle-launch.sh`
+(mtime 22:08–22:10, not authored by this session) would run a laguna/mellum ×
+path × think × seed matrix if launched. `overnight-idle-launch.sh` was armed
+once, at 22:18:04 (`/tmp/overnight-idle-launch.log`), to sleep 3.5h then wait
+for machine idle before starting the chain — but its process is no longer
+alive (`ps` clean) and it produced no log entry past the arming line, no
+`/tmp/overnight-chain.log`, and no manifest. Whatever launched it did not
+survive. Treat P12.3's Mellum arm as still not run; the scripts are evidence
+someone (possibly a prior session) intended to run it, not evidence that it
+did or will.
 
 **Open choices, none started:** P12.7 (the cross-system metrics phase — trace
 capture, `DumbImplementer`, Σprompt/Σcached/Σsuffix, warm-started timing;
@@ -844,29 +850,37 @@ Completed phases move here when the roadmap outgrows the front page.
   prompt shape more often than to the model. One model runs a
   role-differentiated pipeline — decompose, implement, repair — with the host
   owning phase boundaries, budgets, permissions, validation, and recovery.
-  **Closed at a waypoint, not complete — two of three roles tested.** What
-  shipped: P12.1 hardened the packet validator/parser (schema version, CRLF,
-  block-scalar, comment-stripping fixes) and wired `thinkBudget` and path
-  presentation as a real lever; P12.2 made the Mellum Q5_0 quant loadable;
-  P12.3 ran the prompt-shape ablation for Laguna (absolute paths a real
-  lever, n=3, real grading); P12.4 added the repair role (fixture tier 3/3
-  ×2); P12.6 met the second half of its own disjunctive criterion by naming
-  and classifying the next failure mode (*completes-and-is-wrong*, not
-  shallow exploration); P12.8 wired phase-level recovery.
+  **Complete (2026-08-25) — all three roles evidenced live, each at small
+  n; not a reliability claim.** What shipped: P12.1 hardened the packet
+  validator/parser (schema version, CRLF, block-scalar, comment-stripping
+  fixes) and wired `thinkBudget` and path presentation as a real lever;
+  P12.2 made the Mellum Q5_0 quant loadable; P12.3 ran the prompt-shape
+  ablation for Laguna (absolute paths a real lever, n=3, real grading);
+  P12.4 added the repair role (fixture tier 3/3 ×2, plus one live
+  non-fixture repair reaching 13/13, n=1); P12.5 ran live the same day —
+  a model-authored decompose packet set matched a hand-authored baseline's
+  phase count, orphaned nothing, passed validation, and drove the run to
+  the same final result, n=1; P12.6 met the second half of its own
+  disjunctive criterion by naming and classifying the next failure mode
+  (*completes-and-is-wrong*, not shallow exploration); P12.8 wired
+  phase-level recovery, plus a same-night fix (`953d05a`) so a failed
+  repair now retries with fresh evidence instead of exiting immediately.
   What did **not** ship, and is not claimed: **P12.0's source-of-truth
   document was never written** and no superseded-doc banners were applied —
   `2026-08-24-overnight-consolidation.md` still stands as unmerged staging;
-  **P12.5 (model-authored packets) never ran at all** — the decompose role
-  is an unexercised enum case, so the "three roles" charter was tested for
-  two; **P12.7 shipped plan text only** — no `DumbImplementer`, no
+  **P12.7 shipped plan text only** — no `DumbImplementer`, no
   trace-channel capture, no Σprompt/Σcached/Σsuffix metrics, no
   `docs/cool_things/` write-up; P12.3's Mellum arm never ran; P12.4's live
-  end-to-end tier (three phases → 13/13 from packets) was started and
-  stopped, so the evidence is fixture-tier only.
-  **Reopen condition: P12.5.** Same pattern as P13's verdict naming its own
-  reopen condition (which became P15). An earlier version of this entry
-  claimed P12.0 and P12.7 shipped; both claims were false and were corrected
-  2026-08-25 after an audit.
+  end-to-end tier (three phases → 13/13 from packets, at any real n) was
+  started and stopped, so beyond that one n=1 instance the evidence is
+  fixture-tier only; P12.8's live phase-boundary confirmation has not
+  recurred since the fix landed — not because it doesn't work, but because
+  no live attempt since has hit a phase failure to retry.
+  **Reopen condition P12.5: met 2026-08-25.** Same pattern as P13's verdict
+  naming its own reopen condition (which became P15), except this one
+  closed the same day rather than opening a new sub-phase. An earlier
+  version of this entry claimed P12.0 and P12.7 shipped; both claims were
+  false and were corrected 2026-08-25 after an audit.
   Verdict: [`2026-08-25-p12-verdict-record.md`](docs/superpowers/research/2026-08-25-p12-verdict-record.md).
   P12.0's deliverable, landed late and at reduced scope:
   [`2026-08-25-local-model-agency.md`](docs/superpowers/research/2026-08-25-local-model-agency.md).
