@@ -70,7 +70,7 @@ rule. None is a reliability figure.
 | Basic spec (`roadmap`), single run | 13/13, 20 tool calls, 95s | `captures/agenttest/20260825-073352-roadmap` |
 | Hard spec, single confirmation run | 13/13 on first grade, repair never fired | `captures/agenttest/20260825-072342-roadmap-user-story` |
 | Decompose role, structural | **1/1** — phase count matched baseline, nothing orphaned, every packet validated | `captures/agenttest/20260825-224119-roadmap` vs `-223848-roadmap` baseline |
-| Build arm + real repair, live, non-fixture, unseeded | **1/1** — 12/13 → 13/13 in one repair round | same capture; see P12.5 design doc's "Result" |
+| Build arm + real repair, live, non-fixture, unseeded | **2/2** — 12/13→13/13 and 11/13→13/13, each in one repair round | `20260825-224119-roadmap` (see P12.5 design doc's "Result"); `20260825-225503-roadmap-user-story` (hard spec, host decompose, `AGENTTEST_TEXT_CONTRACT=1`) |
 
 **The headline, so nobody re-derives it:** tuning the implement arm across three
 identical-config batches advanced mechanism understanding substantially and the
@@ -125,10 +125,14 @@ What the batch-to-batch spread actually looks like on an unchanged config:
 - **P12.4's live end-to-end tier still hasn't run at any real n.** The
   overnight n=15–20/arm validation was started and stopped early by explicit
   decision. A real (non-fixture) implement failure feeding real repair
-  through to 13/13 **has now been observed once** — live, unseeded, as a
-  byproduct of the same run that closed P12.5 — but that is n=1, not a rate,
-  and it happened inside the model-decompose arm rather than the planned
-  overnight validation. The planned n=15–20/arm run is still not done.
+  through to 13/13 **has now been observed twice** — both live, both
+  unseeded, both byproducts of other work rather than a dedicated batch:
+  once inside the P12.5 model-decompose comparison (`20260825-224119-
+  roadmap`, easy spec, 12/13→13/13) and once during a P12.8 confirmation
+  attempt (`20260825-225503-roadmap-user-story`, hard spec, host decompose,
+  text-contract on, 11/13→13/13). That is n=2, not a rate — two different
+  configs, two different failure contents, both repaired in one round. The
+  planned n=15–20/arm run is still not done.
 - **P12.7 shipped plan text only** — no `DumbImplementer`, no trace-channel
   capture, no Σprompt/Σcached/Σsuffix metrics, no warm-started timing, no
   `docs/cool_things/` write-up.
@@ -189,7 +193,7 @@ P12's own criteria, honestly scored:
 | P12.1 | Partially. Hardening landed. But sampling remains *descriptive* (env → packet), not *prescriptive* (packet → engine); the harness's own comment documents this. Path presentation is wired. |
 | P12.2 | Yes. |
 | P12.3 | Half — Laguna arm only. |
-| P12.4 | Partial — fixture tier fully met; the "three phases, 13/13, from packets" line has now been exercised end-to-end with a real implement failure feeding repair **once** (2026-08-25, live, unseeded, n=1), inside the P12.5 comparison run rather than a dedicated validation batch. Still no rate. |
+| P12.4 | Partial — fixture tier fully met; the "three phases, 13/13, from packets" line has now been exercised end-to-end with a real implement failure feeding repair **twice** (2026-08-25, live, unseeded, n=2), as byproducts of other work rather than a dedicated validation batch. Still no rate. |
 | P12.5 | **Yes**, on the structural disjunct (2026-08-25, live, n=1). Acceptance-equivalence deliberately left uncharacterized — see the design doc's "Result." |
 | P12.6 | Second disjunct only. No run has shown a role completing *with* bounded thinking; every self-describing capture records `think=nothink`. |
 | P12.7 | Not started (plan text only). |

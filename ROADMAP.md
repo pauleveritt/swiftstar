@@ -47,9 +47,9 @@ did or will.
 
 **Open choices, none started:** P12.7 (the cross-system metrics phase — trace
 capture, `DumbImplementer`, Σprompt/Σcached/Σsuffix, warm-started timing;
-plan text only so far, real build work); more live n for P12.4/P12.5 beyond
-their current n=1 each; or P14 (A docs site), whose precondition — "once
-there is a reader who isn't the author" — has not obviously arrived.
+plan text only so far, real build work); more live n for P12.4 (n=2) or
+P12.5 (n=1); or P14 (A docs site), whose precondition — "once there is a
+reader who isn't the author" — has not obviously arrived.
 
 *The next phase is picked deliberately, not by momentum.*
 
@@ -856,8 +856,8 @@ Completed phases move here when the roadmap outgrows the front page.
   fixes) and wired `thinkBudget` and path presentation as a real lever;
   P12.2 made the Mellum Q5_0 quant loadable; P12.3 ran the prompt-shape
   ablation for Laguna (absolute paths a real lever, n=3, real grading);
-  P12.4 added the repair role (fixture tier 3/3 ×2, plus one live
-  non-fixture repair reaching 13/13, n=1); P12.5 ran live the same day —
+  P12.4 added the repair role (fixture tier 3/3 ×2, plus two live
+  non-fixture repairs reaching 13/13, n=2); P12.5 ran live the same day —
   a model-authored decompose packet set matched a hand-authored baseline's
   phase count, orphaned nothing, passed validation, and drove the run to
   the same final result, n=1; P12.6 met the second half of its own
@@ -872,10 +872,13 @@ Completed phases move here when the roadmap outgrows the front page.
   trace-channel capture, no Σprompt/Σcached/Σsuffix metrics, no
   `docs/cool_things/` write-up; P12.3's Mellum arm never ran; P12.4's live
   end-to-end tier (three phases → 13/13 from packets, at any real n) was
-  started and stopped, so beyond that one n=1 instance the evidence is
-  fixture-tier only; P12.8's live phase-boundary confirmation has not
-  recurred since the fix landed — not because it doesn't work, but because
-  no live attempt since has hit a phase failure to retry.
+  started and stopped, so beyond those two n=2 instances the evidence is
+  fixture-tier only; P12.8's own live phase-boundary confirmation
+  specifically (a `validationFailed` receipt mid-build, retried) has not
+  recurred since the fix landed — four live attempts since have hit either
+  a clean pass or a `noChanges`/eos phase followed by an end-of-run
+  acceptance failure (P12.4's repair, not P12.8's), never the mid-build
+  validation failure P12.8 targets.
   **Reopen condition P12.5: met 2026-08-25.** Same pattern as P13's verdict
   naming its own reopen condition (which became P15), except this one
   closed the same day rather than opening a new sub-phase. An earlier

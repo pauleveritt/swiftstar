@@ -285,7 +285,9 @@ baseline's didn't) is characterized, not glossed over, and acceptance
 D4. See the design doc's "Result" section for the full accounting, including
 a bonus finding: that repair round was live, unseeded, non-fixture evidence
 for P12.4's own previously-unobserved gap (real implement failure → real
-repair → 13/13) — at n=1, not a closed rate.
+repair → 13/13) — since joined by a second, independent instance during a
+same-night P12.8 confirmation attempt (`20260825-225503-roadmap-user-story`,
+hard spec, 11/13→13/13). n=2, not a closed rate.
 
 ### P12.6 — Bounded thinking, only where evidence demands it
 
