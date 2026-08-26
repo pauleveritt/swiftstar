@@ -328,3 +328,42 @@ file gets an explicit "(file does not exist in this worktree)" marker
 instead of silent omission. `cappedFailureOutput` (pytest output) is
 unchanged — tail-only truncation at 8192 bytes remains correct, since the
 failure summary is at the end of pytest output.
+
+## Parked minors from the build (mirrored 2026-08-25)
+
+These came out of P12.4's task reviews and were consciously parked as
+not-load-bearing. They lived only in that build's SDD ledger under
+`.superpowers/`, which is gitignored — one `git clean` from gone — so they
+are mirrored here, where the area's next toucher will find them. Two were
+since fixed; the rest stand.
+
+- **Fixed since:** a `writableFiles` entry absent from the worktree was
+  silently omitted from evidence (now carries an explicit marker, plus a
+  distinct one for present-but-not-UTF-8 files).
+- **Worth revisiting when this area is next touched:** the batch summary
+  carries no repair statistics at all — no rescue rate, and `repairNote` is
+  printed only for `.stopped` runs — so "how often did repair actually save a
+  run" must be reconstructed from `acceptance.txt` and round records rather
+  than read off the summary. Redaction-audit hits go to stderr only, never
+  into `RoundRecord`, so in a capture-only review they are invisible (this
+  compounds with anything that reduces what a fixture run persists).
+- **Cosmetic / low-risk, recorded for completeness:** `repairPacket` and
+  `phasePacket` duplicate ~25 lines of contract scaffolding that could drift
+  apart silently; the discard-by-provenance block has a dead branch (both
+  arms call `txn.discardFinal()`); `.exhausted(lastGrade:)`'s payload is
+  discarded at its only production call site, so a later round's partial
+  progress is visible only in `repair-round-N.json`; the fixture tier
+  dispatches on worker 1 while the live path uses worker 2 (functionally
+  equivalent, both fresh, but D8/D10's prose implies they match);
+  `acceptance.txt` is overwritten on repair success, losing the pre-repair
+  grade that triggered repair; `1...maxCandidateRounds` traps if ever passed
+  0 (unreachable today, but it is a public parameter); `pyProject` is
+  interpolated unquoted into a `bash -c` string; and `PhasePacketBuilder`'s
+  actual task-text order differs from D3's literal ordering — the *spec* text
+  is what is inaccurate there, not the code.
+- **Two unpinned behaviors** (correct today, no test holding them): that
+  round 2's `RepairContext` carries round 1's grade and ref — D4's entire
+  premise, currently proven only by a call-count assertion; and that evidence
+  containing a redacted string does **not** block dispatch, which is the core
+  D6 exemption. A regression in the second would pass every existing test and
+  then break the `plausible-wrong-fix` fixture in a confusing, indirect way.
