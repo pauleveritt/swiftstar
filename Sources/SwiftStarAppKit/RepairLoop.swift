@@ -82,6 +82,7 @@ public enum RepairLoop {
         capture: FileHandle? = nil, captureDir: URL? = nil,
         maxCandidateRounds: Int = 2, outputCap: Int = 8192, fileCap: Int = 16384,
         specSource: String? = nil,
+        feedDelta: Bool = false,
         emissionFollowUp: String? = nil
     ) throws -> Outcome {
         var head = failedRef
@@ -91,6 +92,9 @@ public enum RepairLoop {
         // candidate replaces it), so exhaustion can hand the caller the most
         // complete tree repair produced instead of silently dropping it.
         var best: BestReached?
+        // /goal v5 intervention 3: what the previous round actually wrote, so the
+        // next round can be told what it already tried instead of re-deriving it.
+        var lastMutations: [String] = []
 
         for round in 1...maxCandidateRounds {
             let start = Date()
@@ -165,6 +169,26 @@ public enum RepairLoop {
             // wrong seed count because nothing told it otherwise. At fixture tier
             // the grader's file IS the spec, so showing it is a design choice,
             // not an answer leak. Off by default; the caller opts in.
+            // /goal v5 intervention 3: feed forward the delta. Intervention 2
+            // showed that adding UNTARGETED information (the whole acceptance
+            // suite) hurts -- the model abandoned targeted repair and rewrote all
+            // six files. This adds only what the previous round did and what it
+            // failed to fix, which is the constraint that was missing.
+            var deltaBlock = ""
+            if feedDelta, round > 1, !lastMutations.isEmpty {
+                let failing = lastGrade.output
+                    .split(separator: "\n")
+                    .filter { $0.hasPrefix("FAILED") || $0.contains("[UNMET]") }
+                    .prefix(12)
+                    .map { "- " + $0.trimmingCharacters(in: .whitespaces) }
+                    .joined(separator: "\n")
+                deltaBlock = "\n\n## What your previous attempt already did\n\n"
+                    + "You rewrote: " + lastMutations.sorted().joined(separator: ", ") + ".\n"
+                    + "After applying that, these still fail:\n"
+                    + (failing.isEmpty ? "- (see the failure output above)" : failing) + "\n\n"
+                    + "Do not simply re-send the same file contents — that changed nothing. "
+                    + "Work out what your previous edit missed, and change only what still needs changing.\n"
+            }
             let specBlock = specSource.map {
                 "\n\n## The acceptance suite (this is the contract you must satisfy)\n\n"
                 + "```python\n" + $0 + "\n```\n"
@@ -175,7 +199,7 @@ public enum RepairLoop {
             }
 
             let packet = HandoffPacket(
-                taskText: authored.taskText + "\n\n" + evidence.render() + specBlock,
+                taskText: authored.taskText + "\n\n" + evidence.render() + specBlock + deltaBlock,
                 writableFiles: authored.writableFiles,
                 validationCommand: authored.validationCommand,
                 selfTestCommand: authored.selfTestCommand,
@@ -237,6 +261,7 @@ public enum RepairLoop {
             let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: wt.url)
             let dispatchOutcome = try WorktreeDispatcher.finalize(
                 wt, packet: packet, turnOutcome: turn, validation: validation, in: repo)
+            lastMutations = turn.mutations
 
             let elapsed = Int(Date().timeIntervalSince(start))
             switch dispatchOutcome {

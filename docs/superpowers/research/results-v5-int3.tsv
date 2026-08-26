@@ -1,0 +1,13 @@
+fixture	rounds	seed	outcome	detail	capture
+depth-2	1	1	fail	2 failed, 11 passed, 3 warnings in 0.19s	20260826-171604-fixture-depth-2
+depth-2	1	2	fail	1 failed, 12 passed, 3 warnings in 0.17s	20260826-171704-fixture-depth-2
+depth-2	1	3	fail	stalled-runaway (limit stop)	20260826-171809-fixture-depth-2
+depth-2	3	1	pass	13/13	20260826-172054-fixture-depth-2
+depth-2	3	2	pass	13/13	20260826-172318-fixture-depth-2
+depth-2	3	3	pass	13/13	20260826-172437-fixture-depth-2
+framing-2	1	1	fail	1 of 9 preconditions unmet.	20260826-172557-fixture-framing-2
+framing-2	1	2	fail	1 of 9 preconditions unmet.	20260826-172702-fixture-framing-2
+framing-2	1	3	fail	1 of 9 preconditions unmet.	20260826-172817-fixture-framing-2
+framing-2	3	1	fail	stalled-runaway (limit stop)	20260826-172944-fixture-framing-2
+framing-2	3	2	fail	1 of 9 preconditions unmet.	20260826-173443-fixture-framing-2
+framing-2	3	3	fail	1 failed, 12 passed, 3 warnings in 0.15s	20260826-173707-fixture-framing-2

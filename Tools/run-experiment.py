@@ -81,7 +81,15 @@ def main():
         if cell and os.path.isdir(cell):
             v5, why5 = check_v5(cell)
             v6, why6 = check_v6(cell)
-            if v5 == 'fail':
+            # The v5 policy table: a runaway / `limit` stop is recorded as
+            # `stalled-runaway` and COUNTS AS A FAILURE, not a void -- it is model
+            # behaviour, and under this goal a stall variant, which is the thing
+            # being measured. The runner previously called it a void, disagreeing
+            # with the contract it implements (same bug class as the
+            # contractNotFollowed mismatch fixed in iteration 2a).
+            if v5 == 'fail' and 'stop_reason=limit' in (why5 or ''):
+                outcome, detail = 'fail', 'stalled-runaway (limit stop)'
+            elif v5 == 'fail':
                 outcome, detail = 'harness-void', f'V5 {why5}'
             elif v6 == 'fail':
                 outcome, detail = 'harness-void', f'V6 {why6}'

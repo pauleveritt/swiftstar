@@ -309,3 +309,87 @@ to feed; **(b)** it targets `framing-2`'s 0/3, the only dev headroom, so a
 ≥2-cell effect is resolvable. int2 failed by adding *untargeted* information
 that licensed whole-app rewrites; item 3 adds *targeted* information, which is
 the constraint entry 2 concluded was missing. Failure count: **1 of 3.**
+
+## 3 — 2026-08-26 — intervene (item 3: feed-forward delta) — **NOT counted as a failure**
+
+**did:** Fed each round what the previous round wrote and what still failed.
+The mechanism landed correctly. **The result is that the dev screen cannot
+resolve any intervention, and this iteration proves it with byte-identical
+inputs.** Recorded as an apparatus finding, *not* as failure 2 of 3.
+
+**intervention:** item 3 — outcome **indeterminate** (see below).
+
+**pre-check (as the contract now requires):** (a) mechanism fires at rounds=3 —
+**verified, 4/4 round-2 packets carried the block**; (b) gate resolves the
+expected effect — **this is what turned out to be false.**
+
+```
+## What your previous attempt already did
+
+You rewrote: app.py.
+After applying that, these still fail:
+- FAILED test_acceptance.py::test_home_html_element_declares_english_language
+- FAILED test_acceptance.py::test_complaints_board_preserves_the_shared_layout
+```
+
+**dev:**
+
+| | pass@1 | pass@3 | gain |
+|---|---|---|---|
+| baseline | 2/6 | 3/6 | +0.17 |
+| int2 (reverted) | 0/6 | 3/6 | +0.50 |
+| int3 | 0/6 | 3/6 | +0.50 |
+
+### The finding: the screen's noise floor equals its promotion threshold
+
+The delta block only exists from round 2, so **every rounds=1 cell should be
+identical to baseline.** Their packets are:
+
+```
+depth-2   seed1  packet 3ff2f7f944d4 vs 3ff2f7f944d4  SAME   pass -> fail
+depth-2   seed2  packet 3ff2f7f944d4 vs 3ff2f7f944d4  SAME   pass -> fail
+depth-2   seed3  packet 3ff2f7f944d4 vs 3ff2f7f944d4  SAME   fail -> stalled-runaway
+framing-2 seed1/2/3                                   SAME   fail -> fail
+```
+
+**Byte-identical prompts, same seeds, opposite outcomes.** `depth-2` at rounds=1
+swung 2/3 → 0/3 on inputs that did not change by one byte. That is the engine
+non-determinism documented in v3 iteration 6, now demonstrated at the *outcome*
+level: **a 2-cell swing arises from noise alone, and my promotion gate is ≥2
+cells.** The screen is exactly at its own noise floor and cannot distinguish a
+real effect from a re-run.
+
+So `pass@3` being flat at 3/6 across baseline, int2 and int3 licenses **no**
+conclusion about item 3. Counting it as failure 2-of-3 would bank a failure on a
+measurement that cannot measure — the precise dishonesty the review warned about
+one iteration ago, in a new costume. **Failure count stays at 1 of 3.**
+
+**Also reconciled:** the runner called a `limit` stop `harness-void` while the
+policy table says record `stalled-runaway` and **count it as a failure**. Same
+bug class as iteration 2a's `contractNotFollowed` mismatch — the runner
+disagreeing with the contract it implements. Fixed; two int3 rows re-classified;
+denominators are single throughout the table above.
+
+### The claim I was about to make and did not **[v5 rule]**
+
+"Intervention 3 failed — `pass@3` flat, failure 2 of 3." Wrong twice over: the
+rounds=1 collapse it appears to have caused happened on inputs identical to
+baseline, and the screen cannot resolve ±2 cells anyway.
+
+### What this costs, and the fix I am not making unilaterally
+
+Binary pass/fail discards almost all the signal each cell produces. `depth-2`
+fails **3** assertions at baseline; a round that fixes 2 of 3 scores identically
+to one that fixes 0. A graded score — failing-assertion count, or passed/13 —
+would have far more resolution per cell at exactly the same GPU cost, and would
+likely lift the screen above its noise floor without raising `n`.
+
+**That changes the loop's primary metric mid-run, so it is escalated rather than
+adopted quietly.** Every other correction in this ledger has been an
+implementation fix; this one redefines what is being optimised.
+
+**next:** **escalated** — the human decides between (i) regrade on a continuous
+score and re-run the three existing configurations from their kept captures
+where possible, (ii) raise `n` to 7+ and accept ~45 min per screen, or
+(iii) take the negative verdict now on the grounds that no listed intervention
+has moved `pass@3` off 3/6 in three runs. Failure count: **1 of 3.**
