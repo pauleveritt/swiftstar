@@ -49,9 +49,11 @@ final class AgentController {
     private(set) var lastFootprintBytes: Int64?
 
     private let memoryCollector = ProcessStatsCollector()
-    /// `nonisolated(unsafe)`: mutated only on MainActor; deinit (nonisolated in
-    /// Swift 6) reads it to cancel the poll.
-    nonisolated(unsafe) private var memoryTask: Task<Void, Never>?
+    /// Mutated only on MainActor; the nonisolated `deinit` reads it to cancel
+    /// the poll. `@ObservationIgnored` because nothing observes a Task handle —
+    /// which is also what lets it be `nonisolated`: the `@Observable` macro
+    /// cannot apply `nonisolated` to a *tracked* stored property.
+    @ObservationIgnored private var memoryTask: Task<Void, Never>?
     /// The in-flight turn's decode work, accumulated per generation segment on
     /// the engine's own clock. Reset at each turn's start and end.
     private var decodeAccumulator = DecodeAccumulator()
@@ -82,7 +84,13 @@ final class AgentController {
     /// of the session, maintained incrementally as host facts arrive.
     private(set) var rollingDigest = RollingDigest()
 
-    nonisolated(unsafe) private var process: Process?
+    /// Mutated only on MainActor; the nonisolated `deinit` terminates it. No
+    /// isolation opt-out is needed on this toolchain (the compiler reports
+    /// `nonisolated(unsafe)` here as having no effect), and plain `nonisolated`
+    /// is illegal on a mutable stored property. Must stay observation-TRACKED:
+    /// `runningPid` is computed over it, and `MainView` re-points
+    /// Metrics/Diagnostics when that changes.
+    private var process: Process?
     private var parser = PoolWireParser()
     private var stdoutTask: Task<Void, Never>?
     private var stderrTask: Task<Void, Never>?
@@ -100,7 +108,7 @@ final class AgentController {
     private var activeWorkerWorktree: WorktreeDispatcher.Worktree?
     private var sentInterrupt = false
     private var buildSHA = "unknown"
-    nonisolated(unsafe) private let logHandle: FileHandle?
+    private let logHandle: FileHandle?
 
     init(settings: AgentSettings = AgentController.defaultSettings()) {
         self.settings = settings
@@ -116,8 +124,10 @@ final class AgentController {
         AgentController.shared = self
     }
 
-    deinit {
-        // @MainActor deinit is nonisolated; Process.terminate is safe off-main.
+    isolated deinit {
+        // `isolated deinit` (SE-0371) runs this on the MainActor, which is what
+        // lets `process`/`memoryTask` drop their `nonisolated(unsafe)` opt-outs
+        // and be genuinely checked again.
         process?.terminate()
         memoryTask?.cancel()
         try? logHandle?.close()
@@ -128,6 +138,14 @@ final class AgentController {
     /// The agent is up and serving — the state in which the bottom bar's
     /// telemetry readout (rates, rings) is meaningful.
     var isUp: Bool { state == .ready || state == .generating }
+
+    /// The model used when nothing else resolves. Laguna S is the app's default
+    /// but has no `Variant`, so its path is a literal — and an absolute one, in
+    /// a developer's home directory, compiled into the binary. `SWIFTSTAR_MODEL`
+    /// overrides it; giving Laguna S a real Variant (P22) retires it.
+    static let defaultModelFallback = URL(
+        fileURLWithPath: ProcessInfo.processInfo.environment["SWIFTSTAR_DEFAULT_MODEL"]
+            ?? "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
 
     static func defaultSettings() -> AgentSettings {
         let defaults = UserDefaults.standard
@@ -147,7 +165,7 @@ final class AgentController {
             selectedVariantID: defaults.string(forKey: "selectedVariantID"),
             modelPath: defaults.string(forKey: "modelPath"),
             envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
-            fallback: URL(fileURLWithPath: "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
+            fallback: defaultModelFallback
         ).url
         let contextSize = defaults.object(forKey: "contextSize") as? Int ?? 51_200
         let workspace: URL
@@ -194,8 +212,7 @@ final class AgentController {
         if let repo = projectRoot() {
             base = repo
         } else {
-            base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-                .appendingPathComponent("SwiftStar")
+            base = URL.applicationSupportDirectory.appendingPathComponent("SwiftStar")
         }
         return base.appendingPathComponent("captures/live/\(name)", isDirectory: true)
     }
@@ -242,7 +259,7 @@ final class AgentController {
         let line = String(decoding: data, as: UTF8.self) + "\n"
         if let handle = FileHandle(forWritingAtPath: url.path) {
             defer { try? handle.close() }
-            try? handle.seekToEnd()
+            _ = try? handle.seekToEnd()
             try? handle.write(contentsOf: Data(line.utf8))
         }
     }
@@ -423,9 +440,13 @@ final class AgentController {
                 while let nl = buffer.firstIndex(of: 0x0A) {
                     let lineData = buffer[buffer.startIndex..<nl]
                     buffer.removeSubrange(buffer.startIndex...nl)
-                    try? capture?.seekToEnd()
-                    try? capture?.write(lineData)
-                    try? capture?.write(Data([0x0A]))
+                    // `write(contentsOf:)`, not `write(_:)`: the latter is the
+                    // ObjC-era overload that RAISES on disk-full/EBADF, which
+                    // `try?` cannot catch — it terminates the app. No seek: the
+                    // handle opens at 0 on a file `createFile` just made, and
+                    // the offset advances on every write.
+                    try? capture?.write(contentsOf: lineData)
+                    try? capture?.write(contentsOf: Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeWire(line, generation: gen)
                 }
@@ -445,9 +466,13 @@ final class AgentController {
                 while let nl = buffer.firstIndex(of: 0x0A) {
                     let lineData = buffer[buffer.startIndex..<nl]
                     buffer.removeSubrange(buffer.startIndex...nl)
-                    try? capture?.seekToEnd()
-                    try? capture?.write(lineData)
-                    try? capture?.write(Data([0x0A]))
+                    // `write(contentsOf:)`, not `write(_:)`: the latter is the
+                    // ObjC-era overload that RAISES on disk-full/EBADF, which
+                    // `try?` cannot catch — it terminates the app. No seek: the
+                    // handle opens at 0 on a file `createFile` just made, and
+                    // the offset advances on every write.
+                    try? capture?.write(contentsOf: lineData)
+                    try? capture?.write(contentsOf: Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeStderr(line, generation: gen)
                 }
@@ -643,7 +668,7 @@ final class AgentController {
     private func log(_ s: String) {
         guard let logHandle else { return }
         let data = Data((s + "\n").utf8)
-        try? logHandle.seekToEnd()
+        _ = try? logHandle.seekToEnd()
         try? logHandle.write(contentsOf: data)
     }
 

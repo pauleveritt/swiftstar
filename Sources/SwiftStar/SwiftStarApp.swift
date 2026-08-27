@@ -7,7 +7,13 @@ struct SwiftStarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup("SwiftStar") {
+        // `Window`, not `WindowGroup`: a second window would build a second
+        // MainView, hence a second AgentController, which spawns another engine
+        // loading the same multi-GB model — two processes contending for the
+        // GPU and for /tmp/ds4-agent.lock — and would re-point
+        // `AgentController.shared` (the quit handler and Settings' lifecycle
+        // row) at the newest window. One engine, one window.
+        Window("SwiftStar", id: "main") {
             MainView()
         }
         .commands {

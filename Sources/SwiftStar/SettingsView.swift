@@ -59,7 +59,7 @@ struct SettingsView: View {
         if let dir = ProcessInfo.processInfo.environment["SWIFTSTAR_DOWNLOAD_DIR"], !dir.isEmpty {
             return URL(fileURLWithPath: dir)
         }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let base = URL.applicationSupportDirectory
         return base.appendingPathComponent("SwiftStar/Downloads")
     }
 

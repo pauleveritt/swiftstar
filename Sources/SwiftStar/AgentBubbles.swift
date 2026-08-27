@@ -12,10 +12,10 @@ struct AgentPromptBubble: View {
             Spacer(minLength: 60)
             Text(text)
                 .font(.system(size: transcriptFontSize))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color(nsColor: .alternateSelectedControlTextColor))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(Color.accentColor)
+                .background(Color(nsColor: .controlAccentColor))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .textSelection(.enabled)
         }

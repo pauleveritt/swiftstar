@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftStarKit
 
 struct MetricsView: View {
-    @Bindable var model: MetricsModel
+    let model: MetricsModel
 
     var body: some View {
         ScrollView {
@@ -85,8 +85,8 @@ struct MetricsView: View {
             : .healthy
         return dialCard("Memory", severity: severity) {
             if let resident, let budget {
-                Text(DialLogic.fixedWidth(String(format: "%.1f", Double(resident) / 1_073_741_824), width: 8) + " GiB of " +
-                     String(format: "%.1f", Double(budget) / 1_073_741_824) + " GiB")
+                Text(resident.formatted(.byteCount(style: .memory)) + " of " +
+                     budget.formatted(.byteCount(style: .memory)))
                     .font(.system(.body, design: .monospaced))
             } else {
                 Text("—")
@@ -122,11 +122,24 @@ struct MetricsView: View {
 
     private func dialCard(_ title: String, severity: Severity, @ViewBuilder value: () -> some View) -> some View {
         VStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(color(for: severity))
-                .frame(width: 12, height: 12)
+            // Severity pairs a symbol with the color: color alone is the sole
+            // channel otherwise, which fails for red/green deficiency.
+            // DiagnosticsView already does this; Metrics did not.
+            Image(systemName: symbol(for: severity))
+                .foregroundStyle(color(for: severity))
+                .font(.system(size: 12))
+                .accessibilityLabel("\(title) status: \(severity.label)")
             value()
             Text(title).font(.caption).foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func symbol(for severity: Severity) -> String {
+        switch severity {
+        case .healthy: "checkmark.circle"
+        case .warning: "exclamationmark.triangle"
+        case .critical: "xmark.octagon"
         }
     }
 

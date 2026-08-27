@@ -5,7 +5,7 @@ struct MainView: View {
     @State private var metricsModel = MetricsModel()
     @State private var diagnosticsModel = DiagnosticsModel()
 
-    private enum Section: String, CaseIterable, Identifiable {
+    private enum Pane: String, CaseIterable, Identifiable {
         case agent, metrics, diagnostics
         var id: String { rawValue }
         var title: String {
@@ -24,7 +24,7 @@ struct MainView: View {
         }
     }
 
-    @State private var selection: Section = .agent
+    @State private var selection: Pane = .agent
     // Lean-by-default: first launch shows only the detail column; the user's
     // choice persists across launches (P19.1 D1). `NavigationSplitViewVisibility`
     // is not Codable, so persist the raw string and map it through a Binding.
@@ -53,7 +53,7 @@ struct MainView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
-            List(Section.allCases, selection: $selection) { section in
+            List(Pane.allCases, selection: $selection) { section in
                 Label(section.title, systemImage: section.systemImage).tag(section)
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 220)

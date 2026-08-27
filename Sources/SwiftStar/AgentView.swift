@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftStarKit
 
 struct AgentView: View {
-    @Bindable var controller: AgentController
+    let controller: AgentController
     @State private var input = ""
     @FocusState private var inputFocused: Bool
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
@@ -181,6 +181,9 @@ struct AgentView: View {
                         .foregroundStyle(controller.isGenerating ? .red : .accentColor)
                 }
                 .buttonStyle(.plain)
+                // Icon-only, and the icon carries the whole meaning — the label
+                // has to move with the state or VoiceOver announces nothing.
+                .accessibilityLabel(controller.isGenerating ? "Stop generating" : "Send message")
                 .disabled(
                     !controller.isGenerating
                         && (controller.state != .ready
@@ -249,7 +252,14 @@ struct AgentView: View {
                     trackColor: memoryRingColor(footprint: footprint, planned: planned),
                     diameter: 15)
                     .contentShape(Rectangle())
+                    // `.help` is a mouse tooltip; VoiceOver never reads it, and
+                    // the ring renders no text. Without these the two facts the
+                    // status bar exists for are invisible to assistive tech —
+                    // and severity is carried by color alone.
                     .help(memoryRingTooltip(footprint: footprint, planned: planned))
+                    .accessibilityElement()
+                    .accessibilityLabel("Agent memory")
+                    .accessibilityValue(memoryRingTooltip(footprint: footprint, planned: planned))
             }
             if controller.isUp, let s = controller.lastStatus, s.ctxSize > 0 {
                 ValueGaugeView(
@@ -259,6 +269,9 @@ struct AgentView: View {
                     diameter: 15)
                     .contentShape(Rectangle())
                     .help(contextRingTooltip(s))
+                    .accessibilityElement()
+                    .accessibilityLabel("Context window")
+                    .accessibilityValue(contextRingTooltip(s))
             }
         }
         .padding(.horizontal, 10)
@@ -300,7 +313,7 @@ struct AgentView: View {
     }
 
     private func memoryRingTooltip(footprint: Int64, planned: Int64) -> String {
-        func gb(_ b: Int64) -> String { String(format: "%.1f GB", Double(b) / 1_073_741_824) }
+        func gb(_ b: Int64) -> String { b.formatted(.byteCount(style: .memory)) }
         var text = "Agent memory footprint: \(gb(footprint)) of a \(gb(planned)) budget."
         if Double(footprint) > Double(planned) {
             // Resident includes the mapped model, so over-budget is normal for
@@ -357,10 +370,21 @@ struct ModelMenu: View {
         .help(isGenerating ? "Model switching is disabled while generating" : "Model switching lands with P22")
     }
 
+    /// The model the next spawn will actually load. Resolved through
+    /// `VariantResolver` — the same resolver `AgentController.defaultSettings()`
+    /// uses — rather than re-deriving it here: a stale `selectedVariantID` (a
+    /// variant id left in defaults after the registry changed) used to fall to a
+    /// hardcoded "Laguna S" while the session launched something else entirely.
     private var currentLabel: String {
-        if selectedVariantID.isEmpty {
-            return modelPath.isEmpty ? "Laguna S (default)" : (modelPath as NSString).lastPathComponent
+        if !selectedVariantID.isEmpty,
+           let variant = VariantRegistry.resolve(selectedVariantID) {
+            return variant.displayName
         }
-        return VariantRegistry.resolve(selectedVariantID)?.displayName ?? "Laguna S"
+        let resolved = VariantResolver.resolveModelFile(
+            selectedVariantID: selectedVariantID.isEmpty ? nil : selectedVariantID,
+            modelPath: modelPath.isEmpty ? nil : modelPath,
+            envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
+            fallback: AgentController.defaultModelFallback)
+        return resolved.url.lastPathComponent
     }
 }
