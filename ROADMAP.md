@@ -13,6 +13,15 @@ Backlog, not into the current phase.*
 **P18: build `mellum-fixture` — a small, one-shot benchmark. Not another
 repair loop.**
 
+**Also landed 2026-08-26 (out-of-phase, now formalized as P19–P21):** the app
+is one Agent surface (Chat retired), with the ported UI, Settings, per-turn
+summaries, subagents in the one engine (`--subagent-pool 2`, `/orchestrate`,
+smart/dumb lever), and live session capture — see the phase table. The forward
+sequence is **P22 (Laguna XS + model switching)** then **P23 (wire-level think
+control)**; power pacing stays in the Backlog until P21's power measurement
+reopens it. P19–P21 were done on `main` outside the phase structure and are
+recorded here to keep the trail honest.
+
 P17 answered the original repair-limit question — see
 [`2026-08-26-p17-repair-limit-verdict.md`](docs/superpowers/research/2026-08-26-p17-repair-limit-verdict.md).
 Mellum's multi-file repair failure was **predominantly a harness defect**: the
@@ -207,6 +216,11 @@ appear below.) Defined so far:
 | P16 | Repair harness validity | Fix the four defects (round-discard, collection gate, packet budget, withheld phase brief) blocking any real measurement of Mellum's repair competence, driven by a validity-gated `/goal` loop | **demoted, not resumed** — superseded by P17's cheaper fixture-tier answer; `/goal` v1-v3 closed without meeting their goals, see [`goal-ledger.md`](docs/superpowers/research/goal-ledger.md) and [`goal-ledger-v3.md`](docs/superpowers/research/goal-ledger-v3.md) |
 | P17 | Repair-limit fixture experiment | Pre-registered fixture-tier experiment answering whether Mellum's multi-file repair failure is a budget, framing, or depth limit; then a follow-on attempt to optimise the repair loop itself | **complete (2026-08-26)** — verdict: predominantly a harness defect (a false "exactly one file" directive), not the model; Mellum 15/17 on editing tasks; the follow-on optimisation attempt (`/goal` v5) retired without a resolvable result — see [`2026-08-26-p17-repair-limit-verdict.md`](docs/superpowers/research/2026-08-26-p17-repair-limit-verdict.md) and [`goal-ledger-v5.md`](docs/superpowers/research/superseded/goal-ledger-v5.md) |
 | P18 | `mellum-fixture` benchmark | A small, one-shot fixture benchmark for Mellum: one attempt, a flat 13-requirement oracle, frozen pre-registered manifest, no repair rounds, no self-modifying loop — separate from `swiftstar-agenttest` | **planned** |
+| P19 | One surface | The Agent is the app: Chat retired (the `ds4-server`/SSE path, `EngineController`, the tab), the ported Agent UI (composer, workspace picker, status bar + rings, message rendering, tool cards), Settings (shell toggle, font-size slider), per-turn summary on bubbles | **landed 2026-08-26** — Chat retirement `f546671`; UI port `ebfc046`; Settings `5d7c1de`; turn summary `8b9710b`; stop-button fix `478d871`. Reopens as: remaining surface polish (orchestrate answer styling, stable-row-ID decision) |
+| P20 | Delegation in one engine | Subagents without a second process: the app's agent spawns with `--subagent-pool 2`; `/orchestrate` (manual → pool-routed → answer injected); smart/dumb handoff-packet lever + dumb-mode dispatch refusal; restart-safe pool state | **mostly landed 2026-08-26** — pool routing `00b5d80`; orchestrate `52257b8`/`95ac5c3`; dumb lever `2011203`/`53b7ee5`; pool reset `3e07b54`; real-engine pool protocol test (worker prompt → `pong`, one process, two sessions). Forward: **dispatch-preference bootstrap rule** (prefer dispatch after ~N exploration rounds), **two-phase `/spike`**; **small-ctx workers** (the RLM lever — may split into its own phase: engine patch, fork-ledger row, recapture) |
+| P21 | Measurable sessions | Telemetry you can act on: live session capture (wire + trace + stderr per spawn under `captures/live/`), the telemetry analyses (heavy-session compaction, spike shell-on findings) | **landed 2026-08-26** — capture `96fcc49`/`4e7cb3a`; spike findings `d04b380`. Forward: **golden recapture** (the `kind`-field fixture test), **re-anchored severity thresholds** (`DialLogic` anchors at 150k are dead at the app's 50k — the context ring never fires), the **DumbImplementer eval** (Σprompt/Σcached/Σsuffix), and **expose the wire's `power` field** (already emitted; the parser drops it) as the first step toward the power question |
+| P22 | More models: Laguna XS + model switching | Laguna XS 2.1 as a first-class, choosable preset at parity with Laguna S — merge the unmerged `p13-laguna-xs-variant` branch (8 commits, its own spec [`2026-08-26-p13-laguna-xs-variant-design.md`](docs/superpowers/specs/2026-08-26-p13-laguna-xs-variant-design.md)), the pending live acceptance run, XS golden recapture — plus **model switching** (woven in): an "Apply this model" action that stops and re-spawns the agent with the new model, feasibility-/VariantGate-admitted *before* the stop (never kill a working session to switch to an infeasible model), transcript preserved, provenance per-spawn reflects the new model, pool re-spawns with it, switch refused mid-generation. XS is also the natural line for P20's small-ctx workers | **planned** (branch unmerged; acceptance pending) |
+| P23 | Wire-level control | Per-turn think on the agent wire (`reasoning_effort`-style): the no-think "quick reply" — Chat's use case surviving as a toolless fast turn, no restart. Additive engine patch, fork-ledger row | **planned** |
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
@@ -363,10 +377,11 @@ Deferred, each with the condition that reopens it.
   engine, but at the *full* `-c` ctx — ~2.5 GB KV + ~6.15 GB scratch at 50k
   (`agent_worker_effective_ctx_size` reads the session ctx; there is no
   per-worker override). Correction 2 names the lever: a 4k worker is ~1.7 GB,
-  not ~8.7 GB. *Reopens as: a small engine patch (fork divergence) giving pool
+  not ~8.7 GB. *Reopens as P20's forward item (may split into its own phase):
+  a small engine patch (fork divergence) giving pool
   workers their own ctx, or a kept-alive `rewind`-ed small-ctx template
   session — with a fork-ledger row and golden recapture, per the submodule
-  rules.*
+  rules. The Laguna XS line (P22) is the natural worker model.*
 - **~~Phase-level recovery~~ — LANDED as P12.8 (2026-08-25); live confirmation
   arrived 2026-08-26, and it is bad news, not good.** The wiring shipped
   (`commitForRepair`, `adoptRepairedPhase`, `PhaseRepair`, build-loop
@@ -641,7 +656,9 @@ Deferred, each with the condition that reopens it.
   `ds4_session_set_power` rejects Laguna at any value below 100 and is
   engine-wide, not per-session, where it does apply (verified 2026-08-22).
   *Reopens when idle or sustained power shows a cost worth paying for; the
-  current measurement says idle draw is under 1W.*
+  current measurement says idle draw is under 1W — the reopen path is P21's
+  "expose the wire's `power` field" step, to measure the sustained draw of
+  the prefill spikes before building the lever.*
 - **An embedding spike.** *Reopens only if dynamic Swift-defined per-token logit
   masking becomes critical-path. Nothing else in `SWIFTSTAR.md` requires
   in-process access.*
