@@ -44,7 +44,7 @@ rm -f "$SMOKE"
   sleep 45
 ) | "$ENGINE_DIR/ds4-agent" -m "$ARTIFACT" -c 32768 --metal \
       --ssd-streaming --ssd-streaming-cache-experts 3200 --prefill-chunk 4096 \
-      --non-interactive --json-events --shell off --workspace /tmp --nothink -n 16 \
+      --non-interactive --json-events --nothink -n 16 \
       > "$SMOKE" 2>&1 &
 SMOKE_PID=$!
 SMOKE_WAITED=0
