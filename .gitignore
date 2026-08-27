@@ -23,3 +23,6 @@ docs/_build/
 # telemetry logs here; committed fixtures live under fixtures/ instead, chosen
 # deliberately rather than by accumulation.
 captures/
+
+# App runtime state: the agent stages Superpowers skills into its workspace.
+.swiftstar/
