@@ -481,14 +481,22 @@ final class AgentController {
             transcript.apply(event)
         case .toolRequest(let idx, let name, let params):
             if name == "dispatch" {
-                // P11 (D3/D5): dispatch is a host-control tool. Build the
-                // packet's prepared context from the model's objective + the
-                // rolling digest, enqueue it, and answer "dispatched as worker
-                // N" (the worker turn runs after this turn ends, D4).
-                if let packet = DispatchPacketBuilder.build(
+                if UserDefaults.standard.bool(forKey: "dispatchDumb") {
+                    // Dumb mode keeps the baseline clean: the subagent pool is
+                    // the architecture's biggest help, so a "dumb" run must not
+                    // secretly dispatch workers and still win. The orchestrator
+                    // sees the refusal and does the work itself — with the
+                    // minimal packet it was given.
+                    writeToolResult(ToolCallbackResponse(
+                        idx: idx, ok: false,
+                        s: ToolResultCondenser.condense("refused: dispatch is disabled in dumb mode")))
+                    outcomeBuilder?.recordHostVerdict(
+                        idx: idx, ok: false, mutations: [], exitStatus: nil,
+                        outputDigest: nil, validationRan: false)
+                    log("dispatch: refused (dumb mode)")
+                } else if let packet = DispatchPacketBuilder.build(
                     params: params, digest: rollingDigest, loaded: [:],
-                    implementer: settings.modelPath.lastPathComponent,
-                    dumb: UserDefaults.standard.bool(forKey: "dispatchDumb")) {
+                    implementer: settings.modelPath.lastPathComponent) {
                     if let workerId = PoolScheduler.availableWorker(poolState) {
                         poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
                         writeToolResult(ToolCallbackResponse(
