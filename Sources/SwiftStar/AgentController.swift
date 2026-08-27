@@ -172,6 +172,44 @@ final class AgentController {
         return ProjectRoot.locate(anchor: anchor)
     }
 
+    /// The live-session capture base: the checkout's `captures/live/<ts>` when
+    /// launched from a repo, else `~/Library/Application Support/SwiftStar`.
+    /// Timestamped per spawn (matches the drive's `yyyyMMdd-HHmmss` convention)
+    /// so each session is its own directory, readable after the fact.
+    static func captureDirectory() -> URL {
+        let df = DateFormatter()
+        df.dateFormat = "yyyyMMdd-HHmmss"
+        let name = df.string(from: Date())
+        let base: URL
+        if let repo = projectRoot() {
+            base = repo
+        } else {
+            base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                .appendingPathComponent("SwiftStar")
+        }
+        return base.appendingPathComponent("captures/live/\(name)", isDirectory: true)
+    }
+
+    /// The P5-provenance shape, written once at spawn (the manifest that lets a
+    /// reader trust and reproduce the capture).
+    private static func renderLiveProvenance(model: String, build: String, workspace: String, at dir: URL) throws {
+        let iso = ISO8601DateFormatter().string(from: Date())
+        let text = """
+        # Live session provenance
+
+        - Model: `\(model)`
+        - Build (`external/ds4` SHA): `\(build)`
+        - Workspace: `\(workspace)`
+        - Started (wall-clock): \(iso)
+
+        Captured live by the SwiftStar app (agent session). `wire.ndjson` and
+        `agent.stderr` are the verbatim raw streams; `agent.trace` is the engine's
+        `--trace` channel. Wire `ts` is monotonic-since-boot (deltas only); this
+        file anchors wall-clock.
+        """
+        try text.write(to: dir.appendingPathComponent("provenance.md"), atomically: true, encoding: .utf8)
+    }
+
     func startIfNeeded() {
         if state == .stopped { startAgent() }
     }
@@ -230,6 +268,20 @@ final class AgentController {
         // submodule SHA — the same fact the capture provenance records).
         buildSHA = AgentController.submoduleSHA(settings.engineDir)
 
+        // Live session capture (P7's deferred "live wiring", scoped 2026-08-26):
+        // persist the agent's wire + trace + stderr so the session can be read
+        // from disk — analysing prompts, tool calls, context — without
+        // SWIFTSTAR_LOG. The trace is written by the engine itself via
+        // `--trace`; the wire/stderr are teed in the drain loops below.
+        let captureDir = Self.captureDirectory()
+        try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
+        try? Self.renderLiveProvenance(
+            model: settings.modelPath.lastPathComponent, build: buildSHA,
+            workspace: settings.workspace.path, at: captureDir)
+        settings.tracePath = captureDir.appendingPathComponent("agent.trace")
+        let captureWireURL = captureDir.appendingPathComponent("wire.ndjson")
+        let captureStderrURL = captureDir.appendingPathComponent("agent.stderr")
+
         // P8: stage the Superpowers skills into the workspace (progressive
         // disclosure, D2/D3) and pass the deterministic bootstrap index via
         // -sys (D1/D4). A staging failure is non-fatal — the bootstrap still
@@ -287,6 +339,7 @@ final class AgentController {
         stdoutTask?.cancel()
         stdoutTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stdoutPipe.fileHandleForReading
+            let capture = FileHandle(forWritingAtPath: captureWireURL.path)
             var buffer = Data()
             while !Task.isCancelled {
                 let data = handle.availableData
@@ -295,15 +348,20 @@ final class AgentController {
                 while let nl = buffer.firstIndex(of: 0x0A) {
                     let lineData = buffer[buffer.startIndex..<nl]
                     buffer.removeSubrange(buffer.startIndex...nl)
+                    try? capture?.seekToEnd()
+                    try? capture?.write(lineData)
+                    try? capture?.write(Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeWire(line, generation: gen)
                 }
             }
+            try? capture?.close()
         }
 
         stderrTask?.cancel()
         stderrTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stderrPipe.fileHandleForReading
+            let capture = FileHandle(forWritingAtPath: captureStderrURL.path)
             var buffer = Data()
             while !Task.isCancelled {
                 let data = handle.availableData
@@ -312,10 +370,14 @@ final class AgentController {
                 while let nl = buffer.firstIndex(of: 0x0A) {
                     let lineData = buffer[buffer.startIndex..<nl]
                     buffer.removeSubrange(buffer.startIndex...nl)
+                    try? capture?.seekToEnd()
+                    try? capture?.write(lineData)
+                    try? capture?.write(Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeStderr(line, generation: gen)
                 }
             }
+            try? capture?.close()
         }
 
         startupTimeoutTask?.cancel()
