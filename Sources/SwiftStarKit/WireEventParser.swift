@@ -16,11 +16,17 @@ public struct StatusSnapshot: Equatable, Sendable {
     /// Added in P7: the agent controller infers turn end from the `idle`
     /// transition (D6). Metrics and Diagnostics read only the numeric fields.
     public let state: String
-    /// The wire's `power` — the engine's throttle percent (0-100), NOT watts
-    /// (P21: exposed as the roadmap's stated gate for energy-aware pacing).
+    /// The wire's `power` — the engine's throttle percent (0-100), NOT watts.
+    /// Distinct from Metrics' "Power" dial, which is `IOReportPower`-measured
+    /// watts (`MetricsView.powerDial`) — a different quantity entirely.
+    /// Surfaced in the Metrics tab as "Throttle" (`MetricsView.throttleDial`).
     public let power: Double
     /// The wire's `status.error` — the engine's own error string (empty when
-    /// healthy; P21: engine errors now surface in-app).
+    /// healthy). Surfaced in-app: `AgentView`'s bottom status bar shows it
+    /// inline, in red, whenever `AgentController.lastStatus?.error` is
+    /// non-empty (Task 2, 2026-08-27 — a prior P21 comment here claimed this
+    /// was already true; it was not, on either the parsing or the consumption
+    /// side — see `AgentWireParser`'s status case and this commit).
     public let error: String
 
     public init(ctxUsed: Int, ctxSize: Int, prefillTPS: Double, genTPS: Double,

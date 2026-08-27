@@ -42,6 +42,11 @@ public enum DialLogic {
     public static let contextCriticalTokens = 37_500
     public static let memoryWarningFraction = 0.70
     public static let memoryCriticalFraction = 0.90
+    /// Generic percent thresholds for the engine's own throttle percent
+    /// (`StatusSnapshot.power`) — a different quantity from watts, so it does
+    /// not reuse `wattsMax`/memory's fraction thresholds.
+    public static let throttleWarningPercent = 50.0
+    public static let throttleCriticalPercent = 80.0
 
     /// Absolute context anchoring (learning #1): curve-shaped on tokens, never
     /// a fraction of ctx_size.
@@ -58,6 +63,15 @@ public enum DialLogic {
         let fraction = Double(residentBytes) / Double(plannedBytes)
         if fraction >= memoryCriticalFraction { return .critical }
         if fraction >= memoryWarningFraction { return .warning }
+        return .healthy
+    }
+
+    /// The engine's own throttle percent (0-100), NOT `MachineSnapshot.watts`
+    /// severity — a distinct quantity from a distinct source (the wire, not
+    /// `IOReportPower`).
+    public static func throttleSeverity(percent: Double) -> Severity {
+        if percent >= throttleCriticalPercent { return .critical }
+        if percent >= throttleWarningPercent { return .warning }
         return .healthy
     }
 

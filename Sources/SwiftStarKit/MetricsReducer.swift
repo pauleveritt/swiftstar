@@ -9,6 +9,11 @@ public struct MetricsState: Equatable, Sendable {
     public var prefillTPS: Double = 0
     public var genTPS: Double = 0
     public var memoryBudgetPlannedBytes: Int64?
+    /// The wire's `power` — the engine's own throttle percent (0-100), NOT
+    /// watts. A completely different quantity from `MachineSnapshot.watts`
+    /// (`IOReportPower`-measured, shown as Metrics' "Power" dial); this one is
+    /// shown as "Throttle" (`MetricsView.throttleDial`) to avoid the collision.
+    public var throttlePercent: Double = 0
 
     public init() {}
 }
@@ -26,6 +31,7 @@ public struct MetricsReducer: Sendable {
             if s.ctxSize != 0 { state.ctxSize = s.ctxSize }
             if s.prefillTPS != 0 { state.prefillTPS = s.prefillTPS }
             if s.genTPS != 0 { state.genTPS = s.genTPS }
+            if s.power != 0 { state.throttlePercent = s.power }
         case .ready(let plannedBytes):
             state.memoryBudgetPlannedBytes = plannedBytes
         case .hello, .refused, .ignored:

@@ -229,14 +229,29 @@ struct AgentView: View {
     /// controller so a zero reading never blanks a live rate.
     private var bottomStatusBar: some View {
         HStack(spacing: 8) {
-            Text(bottomStatusText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .animation(.default, value: bottomStatusText)
+            // The engine's own per-worker error (StatusSnapshot.error, wire
+            // field `status.error`) is a live, non-fatal report — distinct
+            // from `AgentState.failed` (a process exit). Nothing consumed
+            // this field before (a doc-comment on StatusSnapshot claimed
+            // otherwise); it takes over the readout slot, in red, whenever
+            // non-empty, matching the composer's existing red-error styling.
+            if let engineError = controller.lastStatus?.error, !engineError.isEmpty {
+                Text("Engine error: \(engineError)")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(engineError)
+            } else {
+                Text(bottomStatusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.default, value: bottomStatusText)
+            }
             Spacer(minLength: 12)
             if controller.isUp,
                controller.lastPlannedModel == controller.settings.modelPath.lastPathComponent,
