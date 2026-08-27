@@ -139,13 +139,34 @@ final class AgentController {
     /// telemetry readout (rates, rings) is meaningful.
     var isUp: Bool { state == .ready || state == .generating }
 
-    /// The model used when nothing else resolves. Laguna S is the app's default
-    /// but has no `Variant`, so its path is a literal — and an absolute one, in
-    /// a developer's home directory, compiled into the binary. `SWIFTSTAR_MODEL`
-    /// overrides it; giving Laguna S a real Variant (P22) retires it.
+    /// The genuine last resort: used only when no variant is selected, no
+    /// legacy `modelPath` is set, and `SWIFTSTAR_MODEL` is unset. Laguna S now
+    /// has a real `Variant` (P22, `VariantRegistry.lagunaS`) and is preferred
+    /// as the default *selectable* variant below, so this literal path — an
+    /// absolute one, in a developer's home directory, compiled into the binary
+    /// — should be unreachable in practice; it stays as a genuine fallback for
+    /// the case an explicit `modelPath`/`SWIFTSTAR_MODEL` still needs to win
+    /// with no variant selected. `SWIFTSTAR_DEFAULT_MODEL` overrides it.
     static let defaultModelFallback = URL(
         fileURLWithPath: ProcessInfo.processInfo.environment["SWIFTSTAR_DEFAULT_MODEL"]
             ?? "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
+
+    /// The effective `selectedVariantID` for both model resolution
+    /// (`defaultSettings()`) and pre-spawn admission (`startAgent()`) — the
+    /// stored choice, or Laguna S's id when nothing was ever configured (no
+    /// variant, no legacy `modelPath`, no `SWIFTSTAR_MODEL` override). A
+    /// single source so the two call sites can't disagree about which variant
+    /// (if any) is in play — the failure mode that would otherwise let
+    /// `defaultSettings()` resolve Laguna S's file while `startAgent()`'s gate
+    /// still saw "no variant selected" and skipped admission entirely.
+    private static func effectiveSelectedVariantID() -> String? {
+        let defaults = UserDefaults.standard
+        if let stored = defaults.string(forKey: "selectedVariantID") { return stored }
+        let modelPath = defaults.string(forKey: "modelPath")
+        let envModel = ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"]
+        guard (modelPath?.isEmpty ?? true), (envModel?.isEmpty ?? true) else { return nil }
+        return VariantRegistry.lagunaS.id
+    }
 
     static func defaultSettings() -> AgentSettings {
         let defaults = UserDefaults.standard
@@ -160,19 +181,19 @@ final class AgentController {
         }
         // P13: resolve the model through the shared resolver, so a selected
         // variant takes precedence over the legacy path (M1), with the hardcoded
-        // Laguna default only as the final fallback.
+        // Laguna default only as the final fallback. P22: nothing-configured
+        // now resolves to Laguna S's variant, not the literal (see
+        // `effectiveSelectedVariantID`).
         let (modelPath, variant) = VariantResolver.resolveModelFile(
-            selectedVariantID: defaults.string(forKey: "selectedVariantID"),
+            selectedVariantID: effectiveSelectedVariantID(),
             modelPath: defaults.string(forKey: "modelPath"),
             envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
             fallback: defaultModelFallback
         )
         // Clamp to the resolved variant's declared range. The app default
-        // (51,200) is above every variant's `maxContext` — 40,960 for Mellum,
-        // 32,768 for Laguna XS — so without this, selecting a variant and
-        // pressing Start could only ever fail: the gate would refuse a context
-        // the variant never declared. Unselected (Laguna S, which has no
-        // Variant) keeps the requested size.
+        // (51,200) is above Mellum's/Laguna XS's `maxContext` (40,960 /
+        // 32,768) but within Laguna S's (150,000), so the common case (no
+        // variant ever chosen) now clamps to a no-op.
         let requestedContext = defaults.object(forKey: "contextSize") as? Int ?? 51_200
         let contextSize = variant?.contract.memoryBudget.clampContext(requestedContext)
             ?? requestedContext
@@ -291,7 +312,7 @@ final class AgentController {
         // EngineController), then admit it before spawn (C1).
         settings = AgentController.defaultSettings()
         if let variant = VariantResolver.resolveVariant(
-            selectedVariantID: UserDefaults.standard.string(forKey: "selectedVariantID")) {
+            selectedVariantID: AgentController.effectiveSelectedVariantID()) {
             let admission = VariantGate.admit(
                 variant, contextSize: settings.contextSize,
                 availableBytes: MemorySnapshot.availableBytes())
