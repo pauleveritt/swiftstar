@@ -994,16 +994,16 @@ final class AgentController {
         return inject(trimmed, row: row)
     }
 
-    /// `/orchestrate`'s answer: injected into the main agent's context with the
-    /// `→ orchestrated:` marker (so the main agent knows its provenance), but
-    /// rendered as its own `.orchestrated` panel — a delegated artifact, not
+    /// `/chat`'s answer: injected into the main agent's context with the
+    /// `→ consulted:` marker (so the main agent knows its provenance), but
+    /// rendered as its own `.consulted` panel — a delegated artifact, not
     /// the main agent's prose.
     @discardableResult
-    func sendOrchestrated(_ answer: String, worker: WorkerId) -> Bool {
+    func sendConsulted(_ answer: String, worker: WorkerId) -> Bool {
         let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        let wireText = "→ orchestrated: \(trimmed)"
-        return inject(wireText, row: .orchestrated(worker, trimmed))
+        let wireText = "→ consulted: \(trimmed)"
+        return inject(wireText, row: .consulted(worker, trimmed))
     }
 
     private func inject(_ wireText: String, row: AgentTranscriptRow) -> Bool {
@@ -1081,6 +1081,10 @@ final class AgentController {
         }
     }
 
+    func orchestrateStub() {
+        transcript.appendSystem("→ orchestrate: the coordination loop lands with P20 (P19.1 ships the command, not the loop)")
+    }
+
     @ObservationIgnored private var restartTask: Task<Void, Never>?
 
     /// One 1s poll of the agent process's resident footprint for the memory
@@ -1115,18 +1119,22 @@ final class AgentController {
     /// The worker's final text per completed turn, for orchestrate surfacing.
     private var workerAnswers: [WorkerId: String] = [:]
 
-    func orchestrate(task: String, writableFiles: [String]) {
+    /// The `/chat` path: run the task as a read-only pool worker and surface
+    /// the answer (the glossary's **chat** — formerly the misnamed
+    /// `/orchestrate` read-only delegation; the coordination loop keeps the
+    /// name and lands with P20).
+    func consult(task: String, writableFiles: [String]) {
         let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         guard let workerId = PoolScheduler.availableWorker(poolState) else {
-            transcript.appendSystem("→ orchestrate refused: subagent pool is busy")
+            transcript.appendSystem("→ chat refused: subagent pool is busy")
             return
         }
         guard state == .ready else {
-            transcript.appendSystem("→ orchestrate refused: agent not idle")
+            transcript.appendSystem("→ chat refused: agent not idle")
             return
         }
-        transcript.appendSystem("→ orchestrating: \(trimmed)")
+        transcript.appendSystem("→ consulting: \(trimmed)")
         let packet = HandoffPacket(
             taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
             baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
@@ -1149,8 +1157,8 @@ final class AgentController {
             if self.poolState.pendingDelivery[workerId] != nil {
                 self.poolState = PoolScheduler.apply(self.poolState, .receiptInjected(workerId))
             }
-            if !self.sendOrchestrated(answer, worker: workerId) {
-                self.transcript.append(.orchestrated(workerId, answer))
+            if !self.sendConsulted(answer, worker: workerId) {
+                self.transcript.append(.consulted(workerId, answer))
             }
         }
     }

@@ -121,10 +121,10 @@ struct AgentTranscriptTests {
         #expect(t.rows == [.system("> hello")])
     }
 
-    @Test func orchestratedRowAppends() {
+    @Test func consultedRowAppends() {
         var t = AgentTranscript()
-        t.append(.orchestrated(WorkerId(1), "the worker's answer"))
-        #expect(t.rows == [.orchestrated(WorkerId(1), "the worker's answer")])
+        t.append(.consulted(WorkerId(1), "the worker's answer"))
+        #expect(t.rows == [.consulted(WorkerId(1), "the worker's answer")])
     }
 
     @Test func reducerIsAppendOnly() {
@@ -142,7 +142,7 @@ struct AgentTranscriptTests {
         let snapshot = t.rows
         t.apply(.text(" more prose"))
         t.appendSystem("> a system note")
-        t.append(.orchestrated(WorkerId(1), "delegated result"))
+        t.append(.consulted(WorkerId(1), "delegated result"))
         #expect(Array(t.rows.prefix(snapshot.count)) == snapshot)
     }
 

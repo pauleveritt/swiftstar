@@ -124,8 +124,8 @@ struct AgentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
             AgentToolCardView(card: card, workspace: controller.settings.workspace)
-        case .orchestrated(let worker, let text):
-            OrchestratedAnswerView(worker: worker, text: text)
+        case .consulted(let worker, let text):
+            ConsultedAnswerView(worker: worker, text: text)
         case .system(let text):
             Text(text).font(.caption).foregroundStyle(.tertiary)
         }
@@ -202,19 +202,22 @@ struct AgentView: View {
 
     private func send() {
         let message = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        // `/orchestrate <text>` — optionally `--files a.swift, b.swift`:
-        // dispatch as a subagent task in place (fresh context, worktree), the
-        // named files writable (worktree-relative), else read-only. Stays in
-        // the chat; the main context is untouched. Manual, so it stays
-        // available in dumb mode (the user's own hand).
-        if let request = OrchestrateCommand.parse(message) {
+        // Commands (P19.1 D10, glossary): `/chat` runs a read-only worker;
+        // `/orchestrate` is the coordination loop (P20-forward). A bare prompt
+        // is the default agent mode. Command names MUST agree with the glossary.
+        switch CommandRouter.parse(message) {
+        case .chat(let task):
             input = ""
-            controller.orchestrate(task: request.task, writableFiles: request.writableFiles)
-            return
+            controller.consult(task: task, writableFiles: [])
+        case .orchestrate:
+            input = ""
+            controller.orchestrateStub()
+        case nil:
+            guard controller.canSend, !message.isEmpty else { return }
+            input = ""
+            controller.send(message)
         }
-        guard controller.canSend, !message.isEmpty else { return }
-        input = ""
-        controller.send(message)
+        return
     }
 
     /// Bottom readout bar (ported from the DS4 Control agent window): left =
