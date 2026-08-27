@@ -39,6 +39,17 @@ struct MetricsReducerTests {
         #expect(state.ctxSize == 32768)
     }
 
+    @Test func statusRatchetsThrottlePercent() {
+        // Same ratchet rule as prefill/gen TPS: a zero-filled `power` (absent
+        // on the wire, not an explicit 0%) must not blank the last real value.
+        var state = MetricsState()
+        var reducer = MetricsReducer()
+        reducer.reduce(&state, .status(StatusSnapshot(ctxUsed: 0, ctxSize: 32768, prefillTPS: 0, genTPS: 0, ts: 0, generated: 0, state: "", power: 42)))
+        #expect(state.throttlePercent == 42)
+        reducer.reduce(&state, .status(StatusSnapshot(ctxUsed: 0, ctxSize: 32768, prefillTPS: 0, genTPS: 0, ts: 0, generated: 0, state: "", power: 0)))
+        #expect(state.throttlePercent == 42)  // held, not blanked
+    }
+
     @Test func readySetsBudget() {
         var state = MetricsState()
         var reducer = MetricsReducer()

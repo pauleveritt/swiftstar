@@ -17,6 +17,15 @@ struct DialLogicTests {
         #expect(DialLogic.memorySeverity(residentBytes: 50, plannedBytes: 0) == .healthy)  // no budget
     }
 
+    @Test func throttleThresholdsAreGenericPercent() {
+        #expect(DialLogic.throttleSeverity(percent: 0) == .healthy)
+        #expect(DialLogic.throttleSeverity(percent: 49) == .healthy)
+        #expect(DialLogic.throttleSeverity(percent: 50) == .warning)
+        #expect(DialLogic.throttleSeverity(percent: 79) == .warning)
+        #expect(DialLogic.throttleSeverity(percent: 80) == .critical)
+        #expect(DialLogic.throttleSeverity(percent: 100) == .critical)
+    }
+
     @Test func fixedWidthPadsToWidth() {
         #expect(DialLogic.fixedWidth("41.2", width: 8) == "    41.2")
         #expect(DialLogic.fixedWidth("128340", width: 8) == "  128340")

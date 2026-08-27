@@ -26,6 +26,7 @@ struct MetricsView: View {
                     gpuDial
                     cpuDial
                     powerDial
+                    throttleDial
                 }
                 Spacer()
             }
@@ -108,9 +109,27 @@ struct MetricsView: View {
         }
     }
 
+    /// `IOReportPower`-measured watts — see `throttleDial` below for the
+    /// engine's own, unrelated throttle-percent reading.
     private var powerDial: some View {
         dialCard("Power", severity: .healthy) {
             sampledText(String(format: "%.1f W", model.machine.watts), width: 8)
+        }
+    }
+
+    /// The engine's own throttle percent (`StatusSnapshot.power`, wire field
+    /// `power`) — a completely different quantity from `powerDial`'s watts
+    /// (`IOReportPower`-measured). Labeled "Throttle," never "Power," to avoid
+    /// any reader conflating the two. Gated on live-wire provenance, not
+    /// `model.sampling` (`sampledText`'s gate): this comes from the agent's
+    /// own status events, not the machine-wide IOKit/IOReport poller, so the
+    /// two can be live/idle independently of each other.
+    private var throttleDial: some View {
+        dialCard("Throttle", severity: DialLogic.throttleSeverity(percent: model.state.throttlePercent)) {
+            Text(model.provenance == .live
+                 ? DialLogic.fixedWidth(String(format: "%.0f%%", model.state.throttlePercent), width: 6)
+                 : "—")
+                .font(.system(.body, design: .monospaced))
         }
     }
 
