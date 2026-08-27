@@ -41,11 +41,15 @@ extension MarkdownText {
     /// one that crashed the shipped DS4 .app when Highlightr's/SwiftMath's
     /// bundles weren't resolvable (`Bundle.module` `fatalError`). Building a
     /// code block + math forces Highlightr and SwiftMath to load their resource
-    /// bundles. Gated by `DS4_SELFTEST_MARKDOWN=1` so it's inert in normal use;
-    /// run the packaged binary with the env set to verify the bundles resolve
-    /// before shipping. (Provenance: agent-mode `MarkdownText.swift`.)
+    /// bundles. Gated by the env var **and** an explicit `--markdown-selftest`
+    /// argument (never the env alone: an inherited env var from a user shell
+    /// must not silently exit the app at launch). Run the packaged binary as
+    /// `DS4_SELFTEST_MARKDOWN=1 SwiftStar --markdown-selftest`. (Provenance:
+    /// agent-mode `MarkdownText.swift`.)
     @MainActor static func runResourceSelfTestIfRequested() {
-        guard ProcessInfo.processInfo.environment["DS4_SELFTEST_MARKDOWN"] == "1" else { return }
+        guard ProcessInfo.processInfo.environment["DS4_SELFTEST_MARKDOWN"] == "1",
+            CommandLine.arguments.contains("--markdown-selftest")
+        else { return }
         _ = NSApplication.shared  // math rendering reads NSApp.effectiveAppearance; set NSApp first
         let md = "```swift\nlet x = 1\n```\n\nInline math: $x^2 + 1$\n"
         _ = MarkdownTextView.PreprocessedContent(parserResult: MarkdownParser().parse(md), theme: .default)

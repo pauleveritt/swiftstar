@@ -237,10 +237,15 @@ struct AgentView: View {
                 .animation(.default, value: bottomStatusText)
             Spacer(minLength: 12)
             if controller.isUp,
+               controller.lastPlannedModel == controller.settings.modelPath.lastPathComponent,
                let footprint = controller.lastFootprintBytes,
                let planned = controller.lastPlannedBytes, planned > 0 {
+                // Clamped at 1.0 for the ring: footprint is resident (includes
+                // the mapped model), so it can exceed the planned budget and
+                // the ring must read "full," not overflow. The color still uses
+                // the true fraction (over-budget = critical, via DialLogic).
                 ValueGaugeView(
-                    fraction: Double(footprint) / Double(planned),
+                    fraction: min(Double(footprint) / Double(planned), 1.0),
                     text: nil, textFontSize: 0,
                     trackColor: memoryRingColor(footprint: footprint, planned: planned),
                     diameter: 15)
@@ -299,7 +304,14 @@ struct AgentView: View {
 
     private func memoryRingTooltip(footprint: Int64, planned: Int64) -> String {
         func gb(_ b: Int64) -> String { String(format: "%.1f GB", Double(b) / 1_073_741_824) }
-        return "Agent memory footprint: \(gb(footprint)) of a \(gb(planned)) budget."
+        var text = "Agent memory footprint: \(gb(footprint)) of a \(gb(planned)) budget."
+        if Double(footprint) > Double(planned) {
+            // Resident includes the mapped model, so over-budget is normal for
+            // a large model — say so rather than letting the critical color
+            // stand unexplained.
+            text += " Over budget (resident includes the mapped model)."
+        }
+        return text
     }
 
     /// Carries the mechanism, not just the numbers: prefill speed is the

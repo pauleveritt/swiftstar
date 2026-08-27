@@ -60,6 +60,39 @@ it is now gated on `isUp` like the memory ring. Minors noted, not blocking:
 ends it); `StreamingMarkdownText` collapsed into one `MarkdownText` (the two
 were identical in the source; the transcript coalesces in place).
 
+## Follow-on review fixes (round 2)
+
+Second review pass requested by the author; all findings acted on:
+
+- **Workspace default anchored to the executable, not cwd** — `projectRoot()`
+  now walks up from `Bundle.main.executableURL` (`.build/debug/SwiftStar` →
+  the checkout) via a new pure, tested `ProjectRoot.locate(anchor:)` in Kit.
+  A cwd-derived default confined the agent to whatever repo the app was
+  launched from — a shipped .app (no `.git` above it) falls back to home as
+  before. (`ProjectRootTests`: 4 tests.)
+- **Memory-ring plan keyed by model** — `lastPlannedBytes` is now paired with
+  `lastPlannedModel` and the ring only uses it when it matches the running
+  model, mirroring EngineController's stale-plan guard.
+- **Memory-ring fraction clamped at 1.0 + over-budget tooltip** — footprint
+  is resident (includes the mapped model) so it can exceed the planned
+  budget; the ring reads "full" and the tooltip explains over-budget rather
+  than leaving an unexplained critical color. Color still uses the true
+  fraction.
+- **Rates reset at turn start** — `send()` zeroes the ratcheted rates so a
+  new turn never shows the previous turn's numbers while fresh status events
+  are pending.
+- **`deinit` cancels the memory poll** (`memoryTask` marked
+  `nonisolated(unsafe)`, matching the file's `process`/`logHandle` pattern).
+- **`ToolParam.kind` is `let`** via an explicit init (default `""`),
+  restoring immutability.
+- **Selftest hardened** — `DS4_SELFTEST_MARKDOWN=1` alone no longer exits the
+  app at launch; the check also requires `--markdown-selftest`. Verified:
+  env-only stays running, env+arg exits 0 with `DS4_SELFTEST_MARKDOWN: OK`.
+- **Comment typo fixed** (`//-is` line wrap).
+
+Re-verified after the round: 576 tests / 79 suites green (fast +
+integration), bundle selftest green under the new contract.
+
 ## Recorded follow-ups
 
 - **Golden recapture queued** (ROADMAP Backlog): `golden-tools.ndjson`

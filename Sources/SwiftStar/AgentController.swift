@@ -35,12 +35,18 @@ final class AgentController {
     /// The engine's own startup memory plan (`ready.planned_bytes`), for the
     /// bottom bar's memory ring denominator.
     private(set) var lastPlannedBytes: Int64?
+    /// The model (`modelPath` last component) the plan in `lastPlannedBytes`
+    /// was measured for; the memory ring only uses the denominator when it
+    /// matches the running model (mirrors EngineController's stale-plan guard).
+    private(set) var lastPlannedModel: String?
     /// The agent process's resident footprint, polled once a second while the
     /// agent is up; nil when the process is gone.
     private(set) var lastFootprintBytes: Int64?
 
     private let memoryCollector = ProcessStatsCollector()
-    private var memoryTask: Task<Void, Never>?
+    /// `nonisolated(unsafe)`: mutated only on MainActor; deinit (nonisolated in
+    /// Swift 6) reads it to cancel the poll.
+    nonisolated(unsafe) private var memoryTask: Task<Void, Never>?
 
     /// The running agent's pid, if the child process is alive.
     var runningPid: pid_t? { process?.processIdentifier }
@@ -97,7 +103,9 @@ final class AgentController {
     }
 
     deinit {
+        // @MainActor deinit is nonisolated; Process.terminate is safe off-main.
         process?.terminate()
+        memoryTask?.cancel()
         try? logHandle?.close()
     }
 
@@ -149,20 +157,15 @@ final class AgentController {
         )
     }
 
-    /// The git repo root containing the launch directory, walking up at most
-    /// three levels; nil when the app was not launched from a checkout (so the
-    /// workspace falls back to home).
+    /// The checkout containing the running executable, if any: anchored to
+    /// the binary's location (`.build/debug/SwiftStar` → the repo), never the
+    /// launch cwd — a cwd-derived default would confine the agent to whatever
+    /// repo the app happened to be launched from. nil outside a checkout (a
+    /// shipped .app) → the workspace falls back to home.
     private static func projectRoot() -> URL? {
-        var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        for _ in 0..<3 {
-            if FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) {
-                return dir
-            }
-            let parent = dir.deletingLastPathComponent()
-            guard parent.path != dir.path else { break }
-            dir = parent
-        }
-        return nil
+        let anchor = Bundle.main.executableURL?.deletingLastPathComponent()
+            ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return ProjectRoot.locate(anchor: anchor)
     }
 
     func startIfNeeded() {
@@ -214,6 +217,7 @@ final class AgentController {
         lastPrefillTPS = 0
         lastGenTPS = 0
         lastPlannedBytes = nil
+        lastPlannedModel = nil
         lastFootprintBytes = nil
         outcomeBuilder = nil
         sentInterrupt = false
@@ -354,14 +358,17 @@ final class AgentController {
             // guarantees ready follows idle (json-events.md), and the
             // interrupt path emits ready too, so gating on ready alone is
             // safe. The status event still feeds the outcome builder above.
-            // It also feeds the bottom status bar: the snapshot is kept as
-            //-is and its rates are ratcheted (never blanked by a zero).
+            // It also feeds the bottom status bar: the snapshot is kept as-is
+            // and its rates are ratcheted (never blanked by a zero).
             lastStatus = snapshot
             lastPrefillTPS = AgentStatusText.ratchet(previous: lastPrefillTPS, new: snapshot.prefillTPS)
             lastGenTPS = AgentStatusText.ratchet(previous: lastGenTPS, new: snapshot.genTPS)
             break
         case .ready(let plannedBytes, _, _, _):
-            if let plannedBytes { lastPlannedBytes = plannedBytes }
+            if let plannedBytes {
+                lastPlannedModel = settings.modelPath.lastPathComponent
+                lastPlannedBytes = plannedBytes
+            }
             if state == .starting { state = .ready }
             else if state == .generating { state = .ready }
             // D12: a turn-end ready finishes the record. The builder is nil
@@ -859,6 +866,11 @@ final class AgentController {
         } else {
             transcript.appendSystem(trimmed)
         }
+        // A new turn starts with honest zeros: the previous turn's ratcheted
+        // rates would mislead ("Prompt 1200" while prefill is actually 0) in
+        // the brief window before fresh status events arrive.
+        lastPrefillTPS = 0
+        lastGenTPS = 0
         state = .generating
         sentInterrupt = false
         // D12: open the turn's outcome record with the app-known facts the

@@ -9,7 +9,13 @@ import Foundation
 public struct ToolParam: Equatable, Sendable {
     public let name: String
     public var value: String
-    public var kind: String = ""
+    public let kind: String
+
+    public init(name: String, value: String, kind: String = "") {
+        self.name = name
+        self.value = value
+        self.kind = kind
+    }
 }
 
 /// A tool card: one tool call's rendered state, rebuilt from the wire's
