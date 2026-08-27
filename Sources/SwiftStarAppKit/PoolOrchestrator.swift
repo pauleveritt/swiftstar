@@ -31,24 +31,20 @@ public final class PoolOrchestrator {
         process.executableURL = binary
         process.arguments = PoolEngine.argv(settings: settings, workers: workers)
         process.currentDirectoryURL = settings.engineDir
-        process.environment = ProcessInfo.processInfo.environment
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
         process.standardInput = stdinPipe
         process.standardOutput = stdoutPipe
         process.standardError = FileHandle.standardError  // inherit: engine stderr goes to the harness log
-        // The engine chdir's to `--workspace`; Metal shaders load cwd-relative
-        // and would not resolve there. Point each at its absolute path (the same
-        // override `swiftstar-drive` uses), so Metal resolves regardless of cwd.
-        var engineEnv = ProcessInfo.processInfo.environment
-        let metalDir = settings.engineDir.appendingPathComponent("metal", isDirectory: true)
-        if let names = try? FileManager.default.contentsOfDirectory(atPath: metalDir.path) {
-            for name in names where name.hasSuffix(".metal") {
-                let stem = String(name.dropLast(".metal".count))
-                engineEnv["DS4_METAL_\(stem.uppercased())_SOURCE"] = metalDir.appendingPathComponent(name).path
-            }
-        }
-        process.environment = engineEnv
+        // Item 5a (P22 cleanup): use the shared engineEnvironment (the same
+        // Metal-path resolution AgentController's spawn path already uses)
+        // instead of rebuilding it inline — the two had drifted, and this one
+        // never set a lock file at all. A distinct lock path (not the live
+        // app's `/tmp/ds4-agent.lock`) so a running app session and a
+        // swiftstar-agenttest run never collide on the same lock.
+        process.environment = AgentCommand.engineEnvironment(
+            engineDir: settings.engineDir, lockFile: "/tmp/ds4-agent-pool.lock",
+            base: ProcessInfo.processInfo.environment)
         try process.run()
         self.process = process
         self.stdin = stdinPipe.fileHandleForWriting
