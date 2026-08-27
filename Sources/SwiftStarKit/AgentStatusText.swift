@@ -31,8 +31,10 @@ public enum AgentStatusText {
     }
 
     /// The `2989d2c` lesson, as a pure function: keep the last nonzero reading.
-    /// A fresh nonzero replaces it; a zero leaves it untouched.
+    /// A fresh nonzero replaces it; a zero leaves it untouched. A non-finite
+    /// reading never latches (∞ > 0 is true, so the pre-P21 ratchet held a
+    /// garbage wire value forever).
     public static func ratchet(previous: Double, new: Double) -> Double {
-        new > 0 ? new : previous
+        new.isFinite && new > 0 ? new : previous
     }
 }

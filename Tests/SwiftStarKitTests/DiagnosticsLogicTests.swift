@@ -13,6 +13,16 @@ struct DiagnosticsLogicTests {
         #expect(DiagnosticsLogic.baselineTPS(statuses) == 330)
     }
 
+    @Test func baselineIgnoresOutlierViaMedian() {
+        // A single garbage prefill sample (100k) must not poison the baseline
+        // the way a no-floor .max() would: the median of [200, 330, 100k] is
+        // 330, not 100k.
+        let statuses = [
+            status(1_000, 330), status(2_000, 200), status(3_000, 100_000),
+        ]
+        #expect(DiagnosticsLogic.baselineTPS(statuses) == 330)
+    }
+
     @Test func baselineIgnoresHighContextAndZeroRate() {
         let statuses = [
             status(3_400, 0), status(20_000, 180), status(92_500, 44),

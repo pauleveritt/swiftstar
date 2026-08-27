@@ -11,7 +11,7 @@ public struct StatusSnapshot: Equatable, Sendable {
     public let genTPS: Double
     public let ts: UInt64
     /// The wire's monotonic generated-token counter, for Δ/Δ rate arithmetic
-    /// (`ts` is CLOCK_MONOTONIC nanoseconds — see `TurnSummary.averageDecodeTPS`).
+    /// (`ts` is CLOCK_MONOTONIC microseconds — see `TurnSummary.averageDecodeTPS`).
     public let generated: Int
     /// The wire's `status.state` string (`idle`, `prefill`, `generating`, …).
     /// Added in P7: the agent controller infers turn end from the `idle`

@@ -461,6 +461,9 @@ final class AgentController {
             // It also feeds the bottom status bar: the snapshot is kept as-is
             // and its rates are ratcheted (never blanked by a zero).
             lastStatus = snapshot
+            // P21: the decode-average baseline is the first *generating*
+            // snapshot of the turn (excludes prefill). Held once captured.
+            turnBaselineStatus = TurnSummary.baseline(for: snapshot, current: turnBaselineStatus)
             lastPrefillTPS = AgentStatusText.ratchet(previous: lastPrefillTPS, new: snapshot.prefillTPS)
             lastGenTPS = AgentStatusText.ratchet(previous: lastGenTPS, new: snapshot.genTPS)
             break
@@ -500,6 +503,12 @@ final class AgentController {
                     generatedTokens: outcome.generatedTokens,
                     ctxUsed: outcome.ctxUsed)
                 transcript.attachSummary(summary)
+                // The status bar's Prompt/Decode readout resets at turn end: a
+                // permanent "last observed" must not pose as "current" while
+                // the agent idles between turns (send() also zeros at the next
+                // turn's start — this covers the idle window).
+                lastPrefillTPS = 0
+                lastGenTPS = 0
                 turnBaselineStatus = nil
             }
             // P11 (D4): the orchestrator's turn ended — run any workers it
@@ -1030,8 +1039,11 @@ final class AgentController {
         // the brief window before fresh status events arrive.
         lastPrefillTPS = 0
         lastGenTPS = 0
-        // Capture the turn's start counters for the decode-rate average.
-        turnBaselineStatus = lastStatus
+        // Baseline nil: the decode average starts at the FIRST generating
+        // snapshot of this turn (the previous turn's trailing status was the
+        // old baseline, which the engine's per-turn counter reset made garbage
+        // from turn 2 on).
+        turnBaselineStatus = nil
         state = .generating
         sentInterrupt = false
         // D12: open the turn's outcome record with the app-known facts the

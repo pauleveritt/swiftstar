@@ -69,16 +69,20 @@ public enum DialLogic {
     }
 
     /// Private-API hardware reads can return garbage; the surface never shows
-    /// it. Negative -> 0, NaN -> 0, clean values pass through.
+    /// it. NaN, ±∞, negatives → 0; watts is additionally upper-clamped (a
+    /// garbage IOReport delta must not render as 9.2e18 W); clean values pass
+    /// through.
     public static func sanitize(_ raw: MachineSnapshot) -> MachineSnapshot {
-        func clamp(_ v: Double) -> Double { v.isNaN || v < 0 ? 0 : v }
-        let resident: Int64?
-        if let r = raw.residentBytes, r < 0 { resident = 0 } else { resident = raw.residentBytes }
+        func finite(_ v: Double) -> Bool { v.isFinite && v >= 0 }
         return MachineSnapshot(
-            residentBytes: resident,
-            watts: clamp(raw.watts),
-            gpuUtilization: clamp(raw.gpuUtilization),
-            cpuUtilization: clamp(raw.cpuUtilization)
+            residentBytes: raw.residentBytes.map { $0 < 0 ? 0 : $0 },
+            watts: finite(raw.watts) ? Swift.min(raw.watts, wattsMax) : 0,
+            gpuUtilization: finite(raw.gpuUtilization) ? raw.gpuUtilization : 0,
+            cpuUtilization: finite(raw.cpuUtilization) ? raw.cpuUtilization : 0
         )
     }
+
+    /// Upper bound for a plausible watts reading — a Mac draws single-digit
+    /// hundreds, so this only catches IOReport garbage.
+    public static let wattsMax: Double = 10_000
 }

@@ -19,8 +19,11 @@ public struct MetricsReducer: Sendable {
     public func reduce(_ state: inout MetricsState, _ event: WireEvent) {
         switch event {
         case .status(let s):
-            state.ctxUsed = s.ctxUsed
-            state.ctxSize = s.ctxSize
+            // A status event whose ctx fields were zero-filled (absent on the
+            // wire) must not blank the dial — one incomplete event would empty
+            // the ring until the next complete one.
+            if s.ctxUsed != 0 { state.ctxUsed = s.ctxUsed }
+            if s.ctxSize != 0 { state.ctxSize = s.ctxSize }
             if s.prefillTPS != 0 { state.prefillTPS = s.prefillTPS }
             if s.genTPS != 0 { state.genTPS = s.genTPS }
         case .ready(let plannedBytes):

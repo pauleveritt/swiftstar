@@ -36,4 +36,16 @@ struct DialLogicTests {
         let raw = MachineSnapshot(residentBytes: 1024, watts: 0.8, gpuUtilization: 98.0, cpuUtilization: 6.5)
         #expect(DialLogic.sanitize(raw) == raw)
     }
+
+    @Test func sanitizeClampsNonFiniteAndWatts() {
+        // +∞ passes the old NaN/negative clamp; it must be clamped to 0.
+        let raw = MachineSnapshot(residentBytes: nil, watts: .infinity, gpuUtilization: .infinity, cpuUtilization: .nan)
+        let clean = DialLogic.sanitize(raw)
+        #expect(clean.watts == 0)
+        #expect(clean.gpuUtilization == 0)
+        #expect(clean.cpuUtilization == 0)
+        // A garbage IOReport watts delta must not render as 9.2e18 W.
+        let huge = MachineSnapshot(residentBytes: nil, watts: 1_000_000, gpuUtilization: 5, cpuUtilization: 5)
+        #expect(DialLogic.sanitize(huge).watts == DialLogic.wattsMax)
+    }
 }

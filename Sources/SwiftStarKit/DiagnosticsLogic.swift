@@ -14,13 +14,17 @@ public enum DiagnosticsLogic {
     /// `cached / prompt` floor for "prefix cache healthy".
     public static let prefixCacheHealthyFraction = 0.5
 
-    /// The session's own early prefill rate: the highest `prefill_tps` among
-    /// statuses with `ctx_used <= baselineWindowTokens`. Nil if none qualify.
+    /// The session's own early prefill rate: the MEDIAN prefill_tps among
+    /// statuses with `ctx_used <= baselineWindowTokens`. Median, not max — a
+    /// single garbage outlier sample must not poison the baseline into a
+    /// fabricated critical finding. Nil if none qualify.
     public static func baselineTPS(_ statuses: [StatusSnapshot]) -> Double? {
-        statuses
+        let rates = statuses
             .filter { $0.prefillTPS > 0 && $0.ctxUsed <= baselineWindowTokens }
             .map(\.prefillTPS)
-            .max()
+            .sorted()
+        guard !rates.isEmpty else { return nil }
+        return rates[rates.count / 2]
     }
 
     /// The current prefill rate: the last status with `prefill_tps > 0`.

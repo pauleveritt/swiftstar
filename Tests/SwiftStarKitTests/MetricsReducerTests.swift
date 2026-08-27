@@ -27,6 +27,18 @@ struct MetricsReducerTests {
         #expect(state.ctxSize == 32768)
     }
 
+    @Test func missingCtxDoesNotBlankTheRing() {
+        // A status event whose ctx_used/ctx_size were zero-filled (absent on
+        // the wire) must not blank the ring — one incomplete event would
+        // otherwise empty the dial until the next complete one.
+        var state = MetricsState()
+        var reducer = MetricsReducer()
+        reducer.reduce(&state, .status(StatusSnapshot(ctxUsed: 958, ctxSize: 32768, prefillTPS: 0, genTPS: 0, ts: 0, generated: 0, state: "")))
+        reducer.reduce(&state, .status(StatusSnapshot(ctxUsed: 0, ctxSize: 0, prefillTPS: 0, genTPS: 0, ts: 0, generated: 0, state: "")))
+        #expect(state.ctxUsed == 958)
+        #expect(state.ctxSize == 32768)
+    }
+
     @Test func readySetsBudget() {
         var state = MetricsState()
         var reducer = MetricsReducer()

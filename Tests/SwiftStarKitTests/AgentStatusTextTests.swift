@@ -29,6 +29,15 @@ struct AgentStatusTextTests {
             == "Prompt 1234 / Decode   67 tok/s — Prefilling…")
     }
 
+    @Test func ratchetDoesNotLatchNonFinite() {
+        // A garbage wire rate must not latch ∞ into the status bar (∞ > 0 is
+        // true, so the pre-fix ratchet held it forever).
+        #expect(AgentStatusText.ratchet(previous: 5, new: .infinity) == 5)
+        #expect(AgentStatusText.ratchet(previous: 5, new: .nan) == 5)
+        #expect(AgentStatusText.ratchet(previous: 0, new: .infinity) == 0)
+        #expect(AgentStatusText.ratchet(previous: 5, new: 6.5) == 6.5)
+    }
+
     // MARK: TPS ratchet — the 2989d2c lesson: hold the last nonzero reading
     // (the wire reports only one of prefill/gen as nonzero per event).
 
