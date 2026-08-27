@@ -6,7 +6,7 @@ struct SettingsView: View {
     @AppStorage("engineDir") private var engineDir = ""
     @AppStorage("modelPath") private var modelPath = ""
     @AppStorage("selectedVariantID") private var selectedVariantID = ""
-    @AppStorage("contextSize") private var contextSize = 32768
+    @AppStorage("contextSize") private var contextSize = 51_200
     @AppStorage("port") private var port = 0
     // Agent pane (2026-08-26): the shell toggle moved here from the Agent tab;
     // the transcript font size applies immediately.

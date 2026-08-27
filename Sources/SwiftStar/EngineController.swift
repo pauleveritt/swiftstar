@@ -79,7 +79,7 @@ final class EngineController {
             envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
             fallback: URL(fileURLWithPath: "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
         ).url
-        let contextSize = defaults.object(forKey: "contextSize") as? Int ?? 32768
+        let contextSize = defaults.object(forKey: "contextSize") as? Int ?? 51_200
         let savedPort = defaults.object(forKey: "port") as? Int ?? 0
         return EngineSettings(
             engineDir: engineDir,
