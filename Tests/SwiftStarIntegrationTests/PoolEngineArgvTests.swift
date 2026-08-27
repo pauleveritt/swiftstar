@@ -46,4 +46,18 @@ struct PoolEngineArgvTests {
         #expect(Array(argv.prefix(base.count)) == base)
         #expect(Array(argv.suffix(2)) == ["--subagent-pool", "4"])
     }
+
+    /// The live acceptance run spawns through `PoolEngine.argv` (the pool
+    /// delegates to `AgentCommand.argv`), so a variant's runtime flags must
+    /// survive into the pooled argv — this is the load-bearing line for the
+    /// Laguna XS `--ssd-streaming` live run.
+    @Test func variantRuntimeFlagsFlowThroughThePoolArgv() {
+        var s = settings()
+        s.runtime = EngineRuntimeConfig(ssdStreaming: true, ssdStreamingCacheExperts: 3200, prefillChunk: 4096)
+        let argv = PoolEngine.argv(settings: s, workers: 3)
+        let flags = ["--ssd-streaming", "--ssd-streaming-cache-experts", "3200", "--prefill-chunk", "4096"]
+        let poolIdx = argv.firstIndex(of: "--subagent-pool")!
+        #expect(Array(argv[..<poolIdx].suffix(5)) == flags)
+        #expect(Array(argv.suffix(2)) == ["--subagent-pool", "3"])
+    }
 }

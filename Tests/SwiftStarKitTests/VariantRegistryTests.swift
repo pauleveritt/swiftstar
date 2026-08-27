@@ -11,6 +11,7 @@ struct VariantRegistryTests {
         #expect(variant.contract.rope.scalingType == "yarn")
         #expect(variant.contract.rope.freqBase == 500_000.0)
         #expect(variant.contract.quantLayout.downType == .q8_0)
+        #expect(variant.contract.quantLayout.startLayer == 0)
         #expect(variant.contract.quantLayout.layerCount == 28)
         #expect(variant.contract.quantLayout.downTensorName(layer: 3) == "blk.3.ffn_down_exps.weight")
         // JetBrains' published Mellum sampling (ds4.c:63358).
