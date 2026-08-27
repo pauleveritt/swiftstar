@@ -48,8 +48,8 @@ lean-by-default column visibility; a real window toolbar (`ToolbarCommands`,
 customizable) absorbing the control surface; Settings moves (pool size, session
 capture, smart/dumb default, workspace default); the model-choice toolbar menu
 (control shape + lifecycle-hiding convention only); the component/region
-vocabulary registry; the concurrency gates; Dispatch/Metrics/Diagnostics as
-sidebar sections; the composer attachment *seam* (no paste implementation).
+vocabulary registry; the concurrency gates; Metrics/Diagnostics as
+sidebar sections (the Dispatch tab is dissolved — see D10); the composer attachment *seam* (no paste implementation).
 
 **Out (explicit):** the projects/sessions tree (structure reserved, not built);
 SDD mode and the phase-browser rail (vocabulary term reserved, not built); the
@@ -101,8 +101,9 @@ description pipeline (backlog — consumes the vocabulary, does not ship here);
 
 1. **`AppShellView`** (replaces `MainView`'s `TabView`): a `NavigationSplitView`
    with `columnVisibility` bound to persisted state. Sidebar column = a `List`
-   with the four sections (Agent, Dispatch, Metrics, Diagnostics; the Help
-   placeholder tab is removed). Detail column = the selected section's view. Style:
+   with the three sections (Agent, Metrics, Diagnostics; the Help placeholder
+   tab is removed and the Dispatch tab is dissolved into the command model —
+   see D10). Detail column = the selected section's view. Style:
    `.prominentDetail` so the detail holds size as columns toggle. `columnVisibility`
    defaults to `.detailOnly` on first launch and is persisted
    (`@SceneStorage`), so "lean" is the default and the sidebar is reveal-on-demand
@@ -182,7 +183,7 @@ description pipeline (backlog — consumes the vocabulary, does not ship here);
   content), not a `TabView(.sidebarAdaptable)`. Rationale: the projects/sessions
   tree wants to *be* the top-level sidebar, and `NavigationSplitView` grows it
   as a section/column in place without a nested second sidebar; `.prominentDetail`
-  + `columnVisibility` give the lean/reveal story; the migration is ~5 views.
+  + `columnVisibility` give the lean/reveal story; the migration is ~4 views.
 - **D2** — Real window toolbar (Tahoe-forward), `ToolbarCommands` +
   `.toolbar(id:)` customization. Controls move out of the in-view top bar; the
   telemetry rings/rates stay in the bottom in-view status bar.
@@ -204,20 +205,29 @@ description pipeline (backlog — consumes the vocabulary, does not ship here);
 - **D6** — Concurrency gates land incrementally and land **only** in this phase
   (not silently in P19.0): strict concurrency → `.v6` → `defaultIsolation(MainActor)`
   on the app target only. Kit/AppKit keep explicit isolation.
-- **D7** — Dispatch, Metrics, Diagnostics are secondary sidebar sections
-  (Dispatch is **not** folded into orchestrate — it is P10's worktree-isolated
-  capability, a distinct mechanism). Metrics/Diagnostics *models* stay
-  shell-owned; only their views move.
+- **D7** — Metrics and Diagnostics are secondary sidebar sections; the Dispatch
+  tab is **dissolved**. Its mechanism (P10's worktree-isolated dispatch) stays
+  in `SwiftStarKit` for the headless orchestrator/`swiftstar-agenttest`; the GUI
+  form and the app-target `dispatchAttempt` glue go away. Metrics/Diagnostics
+  *models* stay shell-owned; only their views move.
 - **D8** — The composer is shaped to accept a future attachment/paste seam
   (an attachment chip above the input), but no paste/attachment code ships.
 - **D9** — Controller ownership is preserved: one `AgentController` at shell
   level, `weak shared` for quit. If SDD later becomes a second window, the
   controller design is revisited then — recorded, not solved here.
+- **D10** — `docs/glossary.md` is the naming authority for modes/roles/mechanisms
+  (**agent** = default mode; **chat** = `/chat`, read-only; **orchestrate** = the
+  plan→dispatch→validate→iterate loop, escalated-to or forced; **dispatch** =
+  the orchestrator's internal verb, not a user surface). The command model — a
+  typed router replacing the ad-hoc `OrchestrateCommand` parse — hosts `/chat`
+  and `/orchestrate`; the `/chat` prompt classifier (auto-detect "is this a
+  question?") is a small, deferrable gate. Command names MUST agree with the
+  glossary.
 
 ## Verification (done-when)
 
-1. `MainView` is a `NavigationSplitView`; the sidebar lists Agent, Dispatch,
-   Metrics, Diagnostics; first launch is `.detailOnly`; the choice persists
+1. `MainView` is a `NavigationSplitView`; the sidebar lists Agent, Metrics,
+   Diagnostics; first launch is `.detailOnly`; the choice persists
    across relaunches.
 2. A real window toolbar is present with `ToolbarCommands`; "Customize Toolbar"
    works; the workspace control, model menu, and End session live there; the
@@ -226,8 +236,9 @@ description pipeline (backlog — consumes the vocabulary, does not ship here);
 3. Settings exposes pool size (default 2), session capture (default on),
    smart/dumb default, and workspace default; each flows to the spawn/capture
    path (asserted by the argv/capture tests).
-4. The toolbar Model menu enumerates the registry variants + custom, is disabled
-   mid-generation, and a same-model selection is a no-op.
+4. The toolbar Model menu enumerates the effective model (Laguna S default +
+   registry variants + custom), is disabled mid-generation, and a same-model
+   selection is a no-op.
 5. The component/region registry enumerates every shell region with a unique
    stable id and role; its unit tests pass.
 6. Concurrency gates land in the three incremental steps with the full suite
@@ -257,3 +268,5 @@ description pipeline (backlog — consumes the vocabulary, does not ship here);
 - **`WindowTabGroup` / multi-window** — overkill for the one-surface app.
 - **Autoscroll / markdown render preferences** — Settings candidates, "only if
   trivial"; not part of the shell.
+- **Further UI polish** — any additional surface "bling" is backlogged; P19.1
+  ships the shell + the delegation digestion and nothing more.
