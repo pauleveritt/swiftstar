@@ -121,6 +121,31 @@ struct AgentTranscriptTests {
         #expect(t.rows == [.system("> hello")])
     }
 
+    @Test func orchestratedRowAppends() {
+        var t = AgentTranscript()
+        t.append(.orchestrated(WorkerId(1), "the worker's answer"))
+        #expect(t.rows == [.orchestrated(WorkerId(1), "the worker's answer")])
+    }
+
+    @Test func reducerIsAppendOnly() {
+        // The transcript ForEach is keyed by offset (AgentView). That is only
+        // correct while the reducer appends and mutates in place — never
+        // inserts before an existing row or removes one. This pins the
+        // invariant: a later event stream leaves every earlier row a prefix.
+        var t = AgentTranscript()
+        t.apply(.text("hello"))
+        t.apply(.think("thinking"))
+        t.appendUser("a prompt")
+        t.apply(.tool(AgentToolEvent(phase: .start, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
+        t.apply(.tool(AgentToolEvent(phase: .tool, idx: 0, name: "read", paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
+        t.apply(.tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: 1)))
+        let snapshot = t.rows
+        t.apply(.text(" more prose"))
+        t.appendSystem("> a system note")
+        t.append(.orchestrated(WorkerId(1), "delegated result"))
+        #expect(Array(t.rows.prefix(snapshot.count)) == snapshot)
+    }
+
     @Test func goldenToolsTranscriptBuildsToolCards() throws {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

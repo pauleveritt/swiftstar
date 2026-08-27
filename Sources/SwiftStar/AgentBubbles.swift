@@ -58,3 +58,27 @@ struct ThinkingDisclosure: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
+
+/// A worker's final answer surfaced by `/orchestrate` — a delegated artifact,
+/// so it renders as its own panel with a provenance header, not as the main
+/// agent's prose. The markdown body is the worker's text; the header carries
+/// the worker id.
+struct OrchestratedAnswerView: View {
+    let worker: WorkerId
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Orchestrated answer · worker \(worker.rawValue)",
+                  systemImage: "arrow.triangle.branch")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            MarkdownText(text)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}

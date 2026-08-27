@@ -110,6 +110,12 @@ struct AgentView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
+                    // Rows are keyed by offset — a stable-row-ID decision (P19.0):
+                    // the transcript reducer is append-only (never inserts before
+                    // or removes a row), so an offset is a stable identity for the
+                    // row's whole lifetime. Pinned by
+                    // `AgentTranscriptTests.reducerIsAppendOnly`; revisit if a
+                    // reorder/insert/delete path ever lands (then stable IDs, not offsets).
                     ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { _, row in
                         rowView(row)
                     }
@@ -154,6 +160,8 @@ struct AgentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
             AgentToolCardView(card: card, workspace: controller.settings.workspace)
+        case .orchestrated(let worker, let text):
+            OrchestratedAnswerView(worker: worker, text: text)
         case .system(let text):
             Text(text).font(.caption).foregroundStyle(.tertiary)
         }

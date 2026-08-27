@@ -985,17 +985,30 @@ final class AgentController {
     @discardableResult
     func send(_ prompt: String, asUser: Bool = true) -> Bool {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard canSend, !trimmed.isEmpty, let process,
-              let pipe = process.standardInput as? Pipe else { return false }
         // The composer's own prompts render as user pills; internal traffic
         // (worker receipts injected into the orchestrator's next turn) is a
         // quiet system row — the user never typed it, so it must not look like
         // they did.
-        if asUser {
-            transcript.appendUser(trimmed)
-        } else {
-            transcript.appendSystem(trimmed)
-        }
+        let row: AgentTranscriptRow = asUser ? .user(trimmed) : .system(trimmed)
+        return inject(trimmed, row: row)
+    }
+
+    /// `/orchestrate`'s answer: injected into the main agent's context with the
+    /// `→ orchestrated:` marker (so the main agent knows its provenance), but
+    /// rendered as its own `.orchestrated` panel — a delegated artifact, not
+    /// the main agent's prose.
+    @discardableResult
+    func sendOrchestrated(_ answer: String, worker: WorkerId) -> Bool {
+        let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let wireText = "→ orchestrated: \(trimmed)"
+        return inject(wireText, row: .orchestrated(worker, trimmed))
+    }
+
+    private func inject(_ wireText: String, row: AgentTranscriptRow) -> Bool {
+        guard canSend, !wireText.isEmpty, let process,
+              let pipe = process.standardInput as? Pipe else { return false }
+        transcript.append(row)
         // A new turn starts with honest zeros: the previous turn's ratcheted
         // rates would mislead ("Prompt 1200" while prefill is actually 0) in
         // the brief window before fresh status events arrive.
@@ -1012,9 +1025,9 @@ final class AgentController {
             model: settings.modelPath.lastPathComponent,
             build: buildSHA,
             sampler: "engine-defaults",
-            task: trimmed
+            task: wireText
         )
-        pipe.fileHandleForWriting.write(Data((trimmed + "\n").utf8))
+        pipe.fileHandleForWriting.write(Data((wireText + "\n").utf8))
         return true
     }
 
@@ -1147,9 +1160,8 @@ final class AgentController {
             if self.poolState.pendingDelivery[workerId] != nil {
                 self.poolState = PoolScheduler.apply(self.poolState, .receiptInjected(workerId))
             }
-            let message = "→ orchestrated: \(answer)"
-            if !self.send(message, asUser: false) {
-                self.transcript.appendSystem(message)
+            if !self.sendOrchestrated(answer, worker: workerId) {
+                self.transcript.append(.orchestrated(workerId, answer))
             }
         }
     }
