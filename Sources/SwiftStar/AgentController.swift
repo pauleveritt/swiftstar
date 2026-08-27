@@ -1082,7 +1082,9 @@ final class AgentController {
     /// watch task on the main actor surfaces the outcome once `isDispatching`
     /// flips false (a completion crossing the detached-task boundary fails
     /// Swift 6's sending rules; observing the flip is the race-free
-    /// equivalent).
+    /// equivalent). The answer is also injected into the main agent's context
+    /// (the receipts pattern) so "implement the results" means something — the
+    /// orchestrator sees the proposal, not just the user.
     @ObservationIgnored private var orchestrateWatchTask: Task<Void, Never>?
     func orchestrate(task: String, writableFiles: [String]) {
         let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1112,7 +1114,14 @@ final class AgentController {
             } else {
                 summary = "failed: \(self.dispatchError ?? "unknown")"
             }
-            self.transcript.appendSystem("→ orchestrated: \(summary)")
+            // Inject the worker's answer into the main agent's context — the
+            // receipts pattern (send as a quiet system row pushes it over stdin
+            // too, so the orchestrator's session actually has the proposal). If
+            // the main agent isn't ready, the row still shows in the transcript.
+            let message = "→ orchestrated: \(summary)"
+            if !self.send(message, asUser: false) {
+                self.transcript.appendSystem(message)
+            }
         }
     }
 
