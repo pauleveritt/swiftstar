@@ -20,6 +20,24 @@ struct DispatchReceiptTests {
         #expect(!r.injectionPrompt().contains("refused"))
         #expect(r.injectionPrompt().contains("candidate"))
     }
+    @Test func consultAnswerWinsOverTheVerdictInInjection() {
+        // A consult worker runs read-only, so its verdict is ALWAYS a refusal.
+        // If the direct send is refused (the user started a turn mid-consult)
+        // the receipt stays pending and folds back through this path — it must
+        // deliver the answer, not "Worker 1 refused: noChanges", which describes
+        // the contract rather than what the worker said.
+        let r = DispatchReceipt(worker: WorkerId(1), ref: nil, reason: "noChanges",
+                                summary: "noChanges", answerText: "the answer text")
+        #expect(r.injectionPrompt().contains("the answer text"))
+        #expect(!r.injectionPrompt().contains("refused"))
+    }
+
+    @Test func emptyAnswerFallsBackToTheVerdict() {
+        let r = DispatchReceipt(worker: WorkerId(1), ref: nil, reason: "noChanges",
+                                summary: "noChanges", answerText: "")
+        #expect(r.injectionPrompt().contains("refused"))
+    }
+
     @Test func answerTextDefaultsNilAndRoundTrips() throws {
         let r = DispatchReceipt(worker: WorkerId(1), ref: nil, reason: nil, summary: "done")
         #expect(r.answerText == nil)

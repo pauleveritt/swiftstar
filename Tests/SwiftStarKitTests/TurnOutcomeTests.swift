@@ -121,6 +121,27 @@ struct TurnOutcomeTests {
     // `exitStatus`, `outputDigest`, and `validationRan`. The wire cannot carry
     // them (the host learns them by executing), so the builder leaves them at
     // their defaults and the app sets them on the finished record.
+    // MARK: outcomes.ndjson — the capture's per-turn record
+
+    @Test func outcomeRoundTripsAsOneNdjsonLine() throws {
+        // outcomes.ndjson is one JSON line per finished turn. Two things must
+        // hold for a capture to be readable evidence: the encoding survives a
+        // round trip, and it never contains a raw newline (that would split one
+        // turn across two records).
+        var builder = TurnOutcomeBuilder(model: "laguna-s.gguf", build: "abc123",
+                                         sampler: "engine-defaults",
+                                         task: "multi\nline\ntask")
+        builder.apply(.text("an answer\nwith newlines"))
+        let outcome = builder.finish()
+
+        let data = try JSONEncoder().encode(outcome)
+        let line = String(decoding: data, as: UTF8.self)
+        #expect(!line.contains("\n"))
+
+        let decoded = try JSONDecoder().decode(TurnOutcome.self, from: data)
+        #expect(decoded == outcome)
+    }
+
     @Test func hostFactFieldsDefaultInBuilderFinish() {
         var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
         b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 1, ctxUsed: 2))
