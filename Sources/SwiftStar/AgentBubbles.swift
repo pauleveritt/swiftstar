@@ -5,11 +5,13 @@ import SwiftStarKit
 /// the DS4 Control agent window's `AgentPromptBubble` (agent-mode worktree).
 struct AgentPromptBubble: View {
     let text: String
+    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     var body: some View {
         HStack {
             Spacer(minLength: 60)
             Text(text)
+                .font(.system(size: transcriptFontSize))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)

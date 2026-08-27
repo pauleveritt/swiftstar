@@ -12,6 +12,7 @@ import SwiftStarKit
 struct AgentToolCardView: View {
     let card: ToolCard
     let workspace: URL
+    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     @State private var quickLookURL: URL?
 
@@ -51,7 +52,7 @@ struct AgentToolCardView: View {
     @ViewBuilder
     private var headerView: some View {
         let label = Label(Self.headerText(card), systemImage: Self.icon(for: card.name))
-            .font(.system(.callout, weight: .semibold))
+            .font(.system(size: transcriptFontSize, weight: .semibold))
             .foregroundStyle(.primary)
 
         if Self.quickLookEligibleToolNames.contains(card.name), let url = resolvedFileURL() {
@@ -173,7 +174,7 @@ struct AgentToolCardView: View {
                 value, language: MarkdownPreprocess.language(forPath: card.path)))
         } else {
             Text(value)
-                .font(.system(.caption, design: .monospaced))
+                .font(.system(size: transcriptFontSize, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

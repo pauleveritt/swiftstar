@@ -5,6 +5,7 @@ struct AgentView: View {
     @Bindable var controller: AgentController
     @State private var input = ""
     @FocusState private var inputFocused: Bool
+    @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,6 +18,7 @@ struct AgentView: View {
             bottomStatusBar
         }
         .navigationTitle("Agent")
+        .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(transcriptFontSize)))
         .task { controller.startIfNeeded() }
     }
 
@@ -143,7 +145,7 @@ struct AgentView: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Ask the agent…", text: $input, axis: .vertical)
-                    .font(.body)
+                    .font(.system(size: CGFloat(TranscriptFontScale.clamp(transcriptFontSize))))
                     .textFieldStyle(.plain)
                     .lineLimit(1...15)
                     .padding(.horizontal, 12)

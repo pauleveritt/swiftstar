@@ -25,14 +25,20 @@ import SwiftStarKit
 /// mutation (no separate streaming variant needed).
 struct MarkdownText: View {
     let source: String
+    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     init(_ source: String) { self.source = source }
 
     var body: some View {
         // `.default` theme: its colors are `NSColor.labelColor` / system dynamic
-        // colors, so it tracks light/dark automatically.
-        MarkdownNSText(markdown: MarkdownPreprocess.stripTaggedBlocks(
-            MarkdownPreprocess.deLaTeXed(source)))
+        // colors, so it tracks light/dark automatically. The body font is
+        // aligned to the environment's transcript size, so the Settings slider
+        // re-typesets the prose live (a size change rebuilds the theme and
+        // re-parses — see `MarkdownNSText.updateNSView`).
+        MarkdownNSText(
+            markdown: MarkdownPreprocess.stripTaggedBlocks(
+                MarkdownPreprocess.deLaTeXed(source)),
+            fontSize: transcriptFontSize)
     }
 }
 
@@ -68,10 +74,19 @@ extension MarkdownText {
 /// SwiftUI makes while scrolling are cheap.
 private struct MarkdownNSText: NSViewRepresentable {
     let markdown: String
+    let fontSize: CGFloat
+
+    /// A theme with the conversation's body font aligned to `size`. `align(to:)`
+    /// scales body/code/bold/italic/largeTitle/title from the fork's defaults.
+    static func theme(for size: CGFloat) -> MarkdownTheme {
+        var theme = MarkdownTheme.default
+        theme.align(to: size)
+        return theme
+    }
 
     func makeNSView(context _: Context) -> MarkdownTextView {
         let view = MarkdownTextView()
-        view.theme = .default
+        view.theme = Self.theme(for: fontSize)
         view.setContentHuggingPriority(.required, for: .vertical)
         view.setContentCompressionResistancePriority(.required, for: .vertical)
         view.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -80,10 +95,19 @@ private struct MarkdownNSText: NSViewRepresentable {
     }
 
     func updateNSView(_ view: MarkdownTextView, context: Context) {
-        guard context.coordinator.lastMarkdown != markdown else { return }
-        context.coordinator.lastMarkdown = markdown
+        // Re-apply when either the text OR the font size changed — a size
+        // change alone must re-typeset (the Settings slider). The theme is
+        // rebuilt so `setMarkdownManually` picks up the new fonts.
+        let markdownChanged = context.coordinator.lastMarkdown != markdown
+        let sizeChanged = context.coordinator.lastFontSize != fontSize
+        guard markdownChanged || sizeChanged else { return }
+        if markdownChanged { context.coordinator.lastMarkdown = markdown }
+        if sizeChanged {
+            context.coordinator.lastFontSize = fontSize
+            view.theme = Self.theme(for: fontSize)
+        }
         let result = MarkdownParser().parse(markdown)
-        let content = MarkdownTextView.PreprocessedContent(parserResult: result, theme: .default)
+        let content = MarkdownTextView.PreprocessedContent(parserResult: result, theme: Self.theme(for: fontSize))
         view.setMarkdownManually(content)
         view.invalidateIntrinsicContentSize()
         context.coordinator.measuredWidth = -1  // content changed → next measure is real, not cached
@@ -112,6 +136,7 @@ private struct MarkdownNSText: NSViewRepresentable {
 
     @MainActor final class Coordinator {
         var lastMarkdown = ""
+        var lastFontSize: CGFloat = -1
         var measuredWidth: CGFloat = -1
         var measuredHeight: CGFloat = 0
     }

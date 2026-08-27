@@ -8,6 +8,10 @@ struct SettingsView: View {
     @AppStorage("selectedVariantID") private var selectedVariantID = ""
     @AppStorage("contextSize") private var contextSize = 32768
     @AppStorage("port") private var port = 0
+    // Agent pane (2026-08-26): the shell toggle moved here from the Agent tab;
+    // the transcript font size applies immediately.
+    @AppStorage("agentShellAllowed") private var shellAllowed = false
+    @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
 
     // Download section (P3)
     @State private var downloadRunner = DownloadRunner()
@@ -89,10 +93,42 @@ struct SettingsView: View {
                 }
                 downloadStatus
             }
+            Section("Agent") {
+                Toggle("Allow shell commands", isOn: $shellAllowed)
+                Text("Applies when the agent next starts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Slider(value: fontSliderValue, in: 0...3, step: 1) {
+                    Text("Transcript font size")
+                }
+                HStack {
+                    Text("Transcript font size: \(TranscriptFontScale.sizes[fontSizeIndex]) pt")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Applies immediately")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 360)
+        .frame(width: 520, height: 440)
         .onDisappear { downloadTask?.cancel() }
+    }
+
+    /// The slider's 0…3 slot index, mapped through `TranscriptFontScale.sizes`
+    /// so the stored value is always a defined size (clamped on read).
+    private var fontSizeIndex: Int {
+        TranscriptFontScale.sizes.firstIndex(of: transcriptFontSize)
+            ?? TranscriptFontScale.sizes.firstIndex(of: TranscriptFontScale.clamp(transcriptFontSize))!
+    }
+
+    private var fontSliderValue: Binding<Double> {
+        Binding(
+            get: { Double(fontSizeIndex) },
+            set: { transcriptFontSize = TranscriptFontScale.sizes[max(0, min(3, Int($0.rounded())))] }
+        )
     }
 
     @ViewBuilder
