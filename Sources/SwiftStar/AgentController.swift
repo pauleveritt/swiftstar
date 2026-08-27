@@ -68,7 +68,7 @@ final class AgentController {
     var settings: AgentSettings
     /// P11 (D1): the pool scheduler state — enqueued workers, the running
     /// worker, and receipts awaiting delivery back into the orchestrator.
-    private(set) var poolState = PoolState()
+    private(set) var poolState = PoolState(workerCapacity: 1)
     /// P11 (D6): the rolling digest — the objective-independent reduced form
     /// of the session, maintained incrementally as host facts arrive.
     private(set) var rollingDigest = RollingDigest()
@@ -302,7 +302,12 @@ final class AgentController {
 
         let process = Process()
         process.executableURL = binary
-        process.arguments = AgentCommand.argv(settings: settings)
+        // P11 pool: one orchestrator + one worker session in the SAME engine,
+        // so `/orchestrate` (and the model's dispatch tool) run subagents
+        // without a second model process. +1 session ≈ +8.7 GB at ctx 50k
+        // (Correction 2: N × (KV + ~6.1 GB scratch)); the alternative — a
+        // second 48 GB model load — is worse and was the orchestrate hang.
+        process.arguments = AgentCommand.argv(settings: settings) + ["--subagent-pool", "2"]
         process.currentDirectoryURL = settings.engineDir
         // Metal shaders load cwd-relative, and the engine chdir's to
         // `--workspace`; point them at absolute paths (F1) so Metal resolves.
@@ -657,6 +662,9 @@ final class AgentController {
     /// candidate *ref* (the worktree commit SHA) is produced by the P10
     /// `WorktreeDispatcher`, which the pooled path will reuse for the commit.
     private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome) {
+        // Stash the worker's text: `/orchestrate` surfaces it as the answer
+        // (for a read-only worker the text IS the value, not the verdict).
+        workerAnswers[worker] = outcome.text
         let packet = activeWorkerPacket ?? HandoffPacket(
             taskText: "", writableFiles: [], validationCommand: nil,
             baselines: [:], turnBudget: 0, toolCallBudget: 0)
@@ -708,7 +716,12 @@ final class AgentController {
     /// turn's prompt (D4): the orchestrator sees only the bounded receipts, not
     /// the worker transcripts.
     private func injectPendingReceipts() {
-        let receipts = poolState.pendingDelivery.values.sorted { $0.worker < $1.worker }
+        // Orchestrate-initiated workers surface their text directly (see
+        // `orchestrate`); skip their receipts so the orchestrator isn't sent
+        // both a verdict AND the text.
+        let receipts = poolState.pendingDelivery.values
+            .filter { !orchestrateWorkers.contains($0.worker) }
+            .sorted { $0.worker < $1.worker }
         guard !receipts.isEmpty else { return }
         let text = receipts.map { $0.injectionPrompt() }.joined(separator: "\n")
         // Send first, clear only on success — at-least-once delivery (a dropped
@@ -1074,51 +1087,49 @@ final class AgentController {
         }
     }
 
-    /// `/orchestrate <task> [--files …]`: dispatch the task as a subagent
-    /// (fresh context, disposable worktree, shell off) and surface the worker's
-    /// answer back into the transcript — the main context stays untouched. The
-    /// writable set is worktree-relative (the Dispatch tab's convention); empty
-    /// = read-only investigation, the value being the worker's final text. A
-    /// watch task on the main actor surfaces the outcome once `isDispatching`
-    /// flips false (a completion crossing the detached-task boundary fails
-    /// Swift 6's sending rules; observing the flip is the race-free
-    /// equivalent). The answer is also injected into the main agent's context
-    /// (the receipts pattern) so "implement the results" means something — the
-    /// orchestrator sees the proposal, not just the user.
     @ObservationIgnored private var orchestrateWatchTask: Task<Void, Never>?
+    /// Workers enqueued by `/orchestrate`: their result is surfaced as the
+    /// worker's text (not a receipt), and their receipt is not auto-injected
+    /// into the orchestrator (the text is the value, not a verdict).
+    private var orchestrateWorkers: Set<WorkerId> = []
+    /// The worker's final text per completed turn, for orchestrate surfacing.
+    private var workerAnswers: [WorkerId: String] = [:]
+
     func orchestrate(task: String, writableFiles: [String]) {
         let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isDispatching else { return }
+        guard !trimmed.isEmpty else { return }
+        guard let workerId = PoolScheduler.availableWorker(poolState) else {
+            transcript.appendSystem("→ orchestrate refused: subagent pool is busy")
+            return
+        }
+        guard state == .ready else {
+            transcript.appendSystem("→ orchestrate refused: agent not idle")
+            return
+        }
         transcript.appendSystem("→ orchestrating: \(trimmed)")
         let packet = HandoffPacket(
             taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
             baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
-        dispatchAttempt(packet: packet)
+        poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
+        orchestrateWorkers.insert(workerId)
+        // Run the worker now in the SAME engine (a context-isolated session) —
+        // no second model process, so the dispatchAttempt hang class is gone.
+        drainQueuedWorkers()
         orchestrateWatchTask?.cancel()
         orchestrateWatchTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            while self.isDispatching && !Task.isCancelled {
+            while self.poolState.completed[workerId] == nil && !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(250))
             }
             guard !Task.isCancelled else { return }
-            let summary: String
-            if let outcome = self.dispatchOutcome {
-                switch outcome {
-                case .candidate(_, let turnOutcome, _):
-                    summary = turnOutcome.text.isEmpty
-                        ? "candidate: \(turnOutcome.mutations.count) mutation(s)"
-                        : turnOutcome.text
-                case .receipt(let receipt):
-                    summary = Self.receiptReason(receipt)
-                }
-            } else {
-                summary = "failed: \(self.dispatchError ?? "unknown")"
+            let answer = self.workerAnswers[workerId]
+                ?? self.poolState.completed[workerId]?.summary
+                ?? "done"
+            self.orchestrateWorkers.remove(workerId)
+            if self.poolState.pendingDelivery[workerId] != nil {
+                self.poolState = PoolScheduler.apply(self.poolState, .receiptInjected(workerId))
             }
-            // Inject the worker's answer into the main agent's context — the
-            // receipts pattern (send as a quiet system row pushes it over stdin
-            // too, so the orchestrator's session actually has the proposal). If
-            // the main agent isn't ready, the row still shows in the transcript.
-            let message = "→ orchestrated: \(summary)"
+            let message = "→ orchestrated: \(answer)"
             if !self.send(message, asUser: false) {
                 self.transcript.appendSystem(message)
             }
