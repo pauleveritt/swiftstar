@@ -10,6 +10,9 @@ struct SwiftStarApp: App {
         WindowGroup("SwiftStar") {
             MainView()
         }
+        .commands {
+            ToolbarCommands()
+        }
         .defaultSize(width: 900, height: 640)
 
         Settings {

@@ -6,12 +6,9 @@ struct AgentView: View {
     @State private var input = ""
     @FocusState private var inputFocused: Bool
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
-    @AppStorage("dispatchDumb") private var dispatchDumb = false
 
     var body: some View {
         VStack(spacing: 0) {
-            statusBar
-            Divider()
             transcriptView
             Divider()
             composer
@@ -20,30 +17,19 @@ struct AgentView: View {
         }
         .navigationTitle("Agent")
         .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(transcriptFontSize)))
-        .task { controller.startIfNeeded() }
-    }
-
-    private var statusBar: some View {
-        HStack {
-            Circle().fill(statusColor).frame(width: 10, height: 10)
-            Text(statusText).font(.caption)
-            Spacer()
-            workspaceButton
-            // The dumb/smart handoff-packet lever (P12.7 DumbImplementer, built
-            // 2026-08-26 as the demo/eval control): Smart = the engineered
-            // packet with the architecture's context help; Dumb = the minimal
-            // "here's the spec, build it" brief. Applies to the next dispatch.
-            Picker("Dispatch mode", selection: $dispatchDumb) {
-                Text("Smart").tag(false)
-                Text("Dumb").tag(true)
+        .toolbar(id: "main") {
+            ToolbarItem(id: "workspace", placement: .automatic) {
+                workspaceButton
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 110)
-            .help("Handoff packets: Smart carries the architecture's context help; Dumb is the minimal brief (eval/demo lever).")
-            agentButton
+            ToolbarItem(id: "model", placement: .automatic) {
+                ModelMenuPlaceholder()
+            }
+            ToolbarItem(id: "endSession", placement: .primaryAction) {
+                Button("End session") { controller.stopAgent() }
+                    .help("Stop the agent run (the engine stops when you quit SwiftStar)")
+            }
         }
-        .padding(8)
+        .task { controller.startIfNeeded() }
     }
 
     private var workspaceButton: some View {
@@ -73,18 +59,6 @@ struct AgentView: View {
         }
     }
 
-    @ViewBuilder
-    private var agentButton: some View {
-        switch controller.state {
-        case .ready, .generating, .starting:
-            Button("Stop Agent") { controller.stopAgent() }
-        case .stopped, .failed:
-            Button("Start Agent") { controller.startAgent() }
-        case .stopping:
-            Button("Start Agent") { controller.startAgent() }.disabled(true)
-        }
-    }
-
     private var statusText: String {
         switch controller.state {
         case .stopped: return "Agent stopped"
@@ -93,16 +67,6 @@ struct AgentView: View {
         case .generating: return "Working…"
         case .stopping: return "Stopping…"
         case .failed(let message): return "Failed: \(message)"
-        }
-    }
-
-    private var statusColor: Color {
-        switch controller.state {
-        case .stopped: return .gray
-        case .starting, .stopping: return .yellow
-        case .ready: return .green
-        case .generating: return .blue
-        case .failed: return .red
         }
     }
 
@@ -178,6 +142,8 @@ struct AgentView: View {
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
+                // D8 attachment seam (reserved): a future clipboard-paste/attachment
+                // chip renders directly above this field. No paste code this phase.
                 TextField("Ask the agent…", text: $input, axis: .vertical)
                     .font(.system(size: CGFloat(TranscriptFontScale.clamp(transcriptFontSize))))
                     .textFieldStyle(.plain)
@@ -291,8 +257,6 @@ struct AgentView: View {
                     .contentShape(Rectangle())
                     .help(contextRingTooltip(s))
             }
-            Button("End session") { controller.stopAgent() }
-                .disabled(controller.state == .stopped || controller.state == .stopping)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -354,5 +318,12 @@ struct AgentView: View {
             text += String(format: " Current prefill speed: %.1f tok/s.", s.prefillTPS)
         }
         return text
+    }
+}
+
+/// Task 4 placeholder; Task 6 replaces this with the real model menu (D4).
+struct ModelMenuPlaceholder: View {
+    var body: some View {
+        Text("Model")
     }
 }
