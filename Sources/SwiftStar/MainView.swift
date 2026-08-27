@@ -9,8 +9,6 @@ struct MainView: View {
         TabView {
             AgentView(controller: agentController)
                 .tabItem { Label("Agent", systemImage: "person.crop.circle") }
-            DispatchView(controller: agentController)
-                .tabItem { Label("Dispatch", systemImage: "arrow.triangle.branch") }
             MetricsView(model: metricsModel)
                 .tabItem { Label("Metrics", systemImage: "gauge") }
             DiagnosticsView(model: diagnosticsModel)

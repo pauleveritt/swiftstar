@@ -62,14 +62,6 @@ final class AgentController {
     /// The last completed turn's outcome record (D12); the full trail goes to
     /// the SWIFTSTAR_LOG file. Persistence beyond that is P9/P10 work.
     private(set) var lastTurnOutcome: TurnOutcome?
-    /// P10: the last dispatched attempt's outcome (candidate ref or receipt),
-    /// the error on infrastructure failure, and the dispatching flag. The
-    /// Dispatch tab observes these; `dispatchAttempt` runs the turn on a
-    /// detached task (the wire drain blocks) and marshals the result back.
-    private(set) var dispatchOutcome: DispatchOutcome?
-    private(set) var dispatchError: String?
-    private(set) var isDispatching = false
-    @ObservationIgnored private var dispatchTask: Task<Void, Never>?
     var settings: AgentSettings
     /// P11 (D1): the pool scheduler state — enqueued workers, the running
     /// worker, and receipts awaiting delivery back into the orchestrator.
@@ -1082,42 +1074,6 @@ final class AgentController {
         lastFootprintBytes = snapshot.residentBytes
     }
 
-    // MARK: - P10 dispatched attempt (D2/D3/D4)
-
-    /// The wall-clock safety net for a dispatched turn (the packet's token/tool
-    /// budgets are a post-hoc verdict; this catches a runaway that never emits
-    /// a turn-end `ready`). `cancelDispatch()` is the responsive path.
-    private nonisolated static let dispatchTurnTimeout: TimeInterval = 600
-
-    func dispatchAttempt(packet: HandoffPacket) {
-        guard !isDispatching else { return }
-        isDispatching = true
-        dispatchOutcome = nil
-        dispatchError = nil
-        let baseSettings = settings
-        let workspace = settings.workspace
-        dispatchTask = Task.detached { [weak self] in
-            let repo = Self.resolveRepoRoot(from: workspace)
-            do {
-                let outcome = try WorktreeDispatcher.dispatch(
-                    packet: packet, in: repo) { enrichedPacket, worktree in
-                    try Self.runDispatchedTurn(
-                        packet: enrichedPacket, worktree: worktree, baseSettings: baseSettings)
-                }
-                await MainActor.run {
-                    self?.dispatchOutcome = outcome
-                    self?.dispatchError = nil
-                    self?.isDispatching = false
-                }
-            } catch {
-                await MainActor.run {
-                    self?.dispatchError = "\(error)"
-                    self?.isDispatching = false
-                }
-            }
-        }
-    }
-
     @ObservationIgnored private var orchestrateWatchTask: Task<Void, Never>?
     /// Workers enqueued by `/orchestrate`: their result is surfaced as the
     /// worker's text (not a receipt), and their receipt is not auto-injected
@@ -1144,7 +1100,7 @@ final class AgentController {
         poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
         orchestrateWorkers.insert(workerId)
         // Run the worker now in the SAME engine (a context-isolated session) —
-        // no second model process, so the dispatchAttempt hang class is gone.
+        // no second model process, so the separate-process hang class is gone.
         drainQueuedWorkers()
         orchestrateWatchTask?.cancel()
         orchestrateWatchTask = Task { @MainActor [weak self] in
@@ -1164,143 +1120,6 @@ final class AgentController {
                 self.transcript.append(.orchestrated(workerId, answer))
             }
         }
-    }
-
-    /// Cancel an in-flight dispatch: cancel the detached task (the drain's
-    /// `Task.isCancelled` check aborts within the 1s poll window) and let the
-    /// task's catch land the error. The worktree is removed by `dispatch`'s
-    /// defer; the agent process is terminated by `runDispatchedTurn`'s defer.
-    func cancelDispatch() {
-        dispatchTask?.cancel()
-    }
-
-    /// Run one dispatched turn in `worktree` (D2): spawn a fresh, ephemeral
-    /// `ds4-agent` at `--workspace <worktree>` with shell off and host-tools on
-    /// (P9), send `packet.taskText` as the prompt, drain the wire answering each
-    /// `.toolRequest` through the responder with the `writableFiles` revision
-    /// check, and return the P9 `TurnOutcome` carrying the observed mutations —
-    /// relativized to the worktree so the pure verdict can compare them against
-    /// `packet.writableFiles` (which are worktree-relative). The first `ready`
-    /// is the idle handshake (send the prompt); a subsequent `ready` is the
-    /// turn end (finish the record). `nonisolated` — touches only `Process`/
-    /// `FileManager` (not `self`); the synchronous drain blocks the detached
-    /// task, which is the point (the wire is synchronous per request).
-    nonisolated static func runDispatchedTurn(
-        packet: HandoffPacket, worktree: URL, baseSettings: AgentSettings
-    ) throws -> TurnOutcome {
-        let settings = AgentSettings(
-            engineDir: baseSettings.engineDir,
-            modelPath: baseSettings.modelPath,
-            contextSize: baseSettings.contextSize,
-            workspace: worktree,
-            shellAllowed: false,        // D2: shell off for the dispatched attempt
-            systemPrompt: nil)          // minimal: the task text carries the instructions
-        let binary = AgentCommand.binaryPath(settings: settings)
-        guard FileManager.default.isExecutableFile(atPath: binary.path) else {
-            throw DispatchAttemptError.agentBinaryMissing(binary.path)
-        }
-        let process = Process()
-        process.executableURL = binary
-        process.arguments = AgentCommand.argv(settings: settings)
-        process.currentDirectoryURL = settings.engineDir
-        process.environment = AgentCommand.engineEnvironment(
-            engineDir: settings.engineDir, lockFile: "/tmp/ds4-agent-dispatch.lock",
-            base: ProcessInfo.processInfo.environment)
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        try process.run()
-        defer {
-            try? stdinPipe.fileHandleForWriting.close()
-            process.terminate()
-        }
-
-        let stdin = stdinPipe.fileHandleForWriting
-        let fd = stdoutPipe.fileHandleForReading.fileDescriptor
-        let deadline = Date().addingTimeInterval(dispatchTurnTimeout)
-        var parser = AgentWireParser()
-        var builder: TurnOutcomeBuilder?
-        var seenHello = false
-        var result: TurnOutcome?
-        var buffer = Data()
-        var chunk = [UInt8](repeating: 0, count: 4096)
-        loop: while Date() < deadline {
-            if Task.isCancelled { throw DispatchAttemptError.cancelled }
-            var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-            let pr = Darwin.poll(&pfd, 1, 1000)
-            guard pr >= 0 else { continue }  // EINTR; retry
-            guard (pfd.revents & Int16(POLLIN)) != 0 || (pfd.revents & Int16(POLLHUP)) != 0 else { continue }
-            let n = Darwin.read(fd, &chunk, chunk.count)
-            if n <= 0 { break loop }  // EOF: the agent exited (early or cleanly)
-            buffer.append(contentsOf: chunk[0..<n])
-            while let nl = buffer.firstIndex(of: 0x0A) {
-                let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
-                buffer.removeSubrange(buffer.startIndex...nl)
-                guard let event = parser.feed(line) else { continue }
-                builder?.apply(event)
-                switch event {
-                case .hello:
-                    seenHello = true
-                case .ready:
-                    if builder == nil {
-                        // The first `ready` is the idle handshake: the engine
-                        // blocks on stdin after emitting it, so the prompt is
-                        // the first input. Open the turn's outcome record and
-                        // send the task text.
-                        builder = TurnOutcomeBuilder(
-                            model: settings.modelPath.lastPathComponent,
-                            build: "dispatched",
-                            sampler: "engine-defaults",
-                            task: packet.taskText)
-                        let prompt = packet.taskText.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
-                        stdin.write(Data(prompt.utf8))
-                    } else {
-                        // A subsequent `ready` is the turn end. Finish the
-                        // record (the wire's stop_reason; nil defaults to .eos)
-                        // and relativize the mutations to the worktree so the
-                        // pure verdict compares them against `writableFiles`
-                        // (which are worktree-relative).
-                        let outcome = builder!.finish(appStopReason: nil)
-                        result = WorktreeDispatch.relativize(
-                            outcome: outcome, worktree: worktree)
-                        break loop
-                    }
-                case .toolRequest(let idx, let name, let params):
-                    // P9 host execution + P10 revision check: the responder
-                    // confines mutating tools to `packet.writableFiles` (an
-                    // out-of-set write is refused, not executed) and records
-                    // the host facts; write the `tool_result` line back.
-                    let response = ToolCallbackResponder.respond(
-                        idx: idx, name: name, params: params,
-                        workspace: worktree, shellAllowed: false,
-                        writableFiles: packet.writableFiles,
-                        execute: Self.executeHostTool)
-                    stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
-                    builder?.recordHostVerdict(
-                        idx: idx, ok: response.ok,
-                        mutations: response.mutations, exitStatus: response.exitStatus,
-                        outputDigest: response.outputDigest, validationRan: response.validationRan)
-                case .toolRequestRefused(let idx, let reason):
-                    // A malformed request must not hang the wire (the engine
-                    // blocks on its result): answer `ok:false` so it unblocks.
-                    let response = ToolCallbackResponse(
-                        idx: idx, ok: false, s: ToolResultCondenser.condense(reason))
-                    stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
-                case .refused(let line):
-                    throw DispatchAttemptError.handshakeRefused(line)
-                default:
-                    break
-                }
-            }
-        }
-        if Task.isCancelled { throw DispatchAttemptError.cancelled }
-        guard let result else {
-            throw seenHello ? DispatchAttemptError.turnDidNotEnd : DispatchAttemptError.agentDidNotHandshake
-        }
-        return result
     }
 
     /// Resolve the git repo root for `workspace` (`git rev-parse --show-toplevel`)
@@ -1327,15 +1146,3 @@ final class AgentController {
     }
 }
 
-/// Errors thrown by a dispatched attempt on infrastructure failure (a missing
-/// agent binary, a wire handshake refusal, the turn never ending, or a
-/// cancellation); a validation command exiting non-zero is a `Receipt`, not
-/// this error, and a git failure from `WorktreeDispatcher` surfaces as its
-/// own `WorktreeDispatcherError`.
-enum DispatchAttemptError: Error, Sendable {
-    case agentBinaryMissing(String)
-    case agentDidNotHandshake
-    case handshakeRefused(String)
-    case turnDidNotEnd
-    case cancelled
-}
