@@ -216,24 +216,28 @@ final class AgentController {
     }
 
     /// The P5-provenance shape, written once at spawn (the manifest that lets a
-    /// reader trust and reproduce the capture).
+    /// reader trust and reproduce the capture). Item 6 (P22 cleanup): the
+    /// assembly (title + bulleted facts + closing note) is shared with
+    /// `swiftstar-drive`'s `CaptureWriter` via `CaptureProvenance`; the facts
+    /// themselves (sampler, workspace grant) stay specific to a live app
+    /// session.
     private static func renderLiveProvenance(model: String, build: String, workspace: String, contextSize: Int, sampler: String, at dir: URL) throws {
-        let iso = ISO8601DateFormatter().string(from: Date())
-        let text = """
-        # Live session provenance
-
-        - Model: `\(model)`
-        - Build (`external/ds4` SHA): `\(build)`
-        - Context: \(contextSize)
-        - Sampler: \(sampler)
-        - Workspace: `\(workspace)`
-        - Started (wall-clock): \(iso)
-
-        Captured live by the SwiftStar app (agent session). `wire.ndjson` and
-        `agent.stderr` are the verbatim raw streams; `agent.trace` is the engine's
-        `--trace` channel. Wire `ts` is monotonic-since-boot (deltas only); this
-        file anchors wall-clock.
-        """
+        let text = CaptureProvenance.render(
+            title: "Live session provenance",
+            facts: [
+                .init("Model", "`\(model)`"),
+                .init("Build (`external/ds4` SHA)", "`\(build)`"),
+                .init("Context", "\(contextSize)"),
+                .init("Sampler", sampler),
+                .init("Workspace", "`\(workspace)`"),
+                CaptureProvenance.startedAtFact(Date()),
+            ],
+            closingNote: """
+            Captured live by the SwiftStar app (agent session). `wire.ndjson` and
+            `agent.stderr` are the verbatim raw streams; `agent.trace` is the engine's
+            `--trace` channel. Wire `ts` is monotonic-since-boot (deltas only); this
+            file anchors wall-clock.
+            """)
         try text.write(to: dir.appendingPathComponent("provenance.md"), atomically: true, encoding: .utf8)
     }
 
@@ -250,16 +254,16 @@ final class AgentController {
     }
 
     /// Persist one finished turn's outcome as an appended line in the session's
-    /// outcomes.ndjson (P21): captures become self-contained evidence.
+    /// outcomes.ndjson (P21): captures become self-contained evidence. Item 6
+    /// (P22 cleanup): routed through `SafeAppendFile` — a fresh one per call
+    /// (this fires once per turn, not worth holding a handle open for the
+    /// whole session), which also means it is safe even if the upfront
+    /// `startAgent()` create step below were ever removed (construction
+    /// itself guarantees the file exists).
     private func appendOutcome(_ outcome: TurnOutcome) {
         guard let url = outcomesURL,
               let data = try? JSONEncoder().encode(outcome) else { return }
-        let line = String(decoding: data, as: UTF8.self) + "\n"
-        if let handle = FileHandle(forWritingAtPath: url.path) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: Data(line.utf8))
-        }
+        SafeAppendFile(path: url.path).append(Data((String(decoding: data, as: UTF8.self) + "\n").utf8))
     }
 
     /// The configured subagent-pool size (one orchestrator + N−1 workers),
@@ -422,10 +426,19 @@ final class AgentController {
         }
         startMemoryPolling()
 
+        // Item 6 (P22 cleanup): both tees route through `SafeAppendFile`
+        // (shared with swiftstar-agenttest's own wire.ndjson capture) instead
+        // of a raw `FileHandle(forWritingAtPath:)` + manual `write(contentsOf:)`
+        // — closing the exact "lazy open against a path that was never
+        // created silently no-ops the whole session" bug class at the type
+        // level. Gated on `captureEnabled` here (not inside `SafeAppendFile`,
+        // which always creates its path): disabled capture must create
+        // nothing, and `SafeAppendFile` has no notion of that toggle — only
+        // the caller does.
         stdoutTask?.cancel()
         stdoutTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stdoutPipe.fileHandleForReading
-            let capture = FileHandle(forWritingAtPath: captureWireURL.path)
+            let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureWireURL.path) : nil
             var buffer = Data()
             while !Task.isCancelled {
                 let data = handle.availableData
@@ -434,24 +447,19 @@ final class AgentController {
                 while let nl = buffer.firstIndex(of: 0x0A) {
                     let lineData = buffer[buffer.startIndex..<nl]
                     buffer.removeSubrange(buffer.startIndex...nl)
-                    // `write(contentsOf:)`, not `write(_:)`: the latter is the
-                    // ObjC-era overload that RAISES on disk-full/EBADF, which
-                    // `try?` cannot catch — it terminates the app. No seek: the
-                    // handle opens at 0 on a file `createFile` just made, and
-                    // the offset advances on every write.
-                    try? capture?.write(contentsOf: lineData)
-                    try? capture?.write(contentsOf: Data([0x0A]))
+                    capture?.append(lineData)
+                    capture?.append(Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeWire(line, generation: gen)
                 }
             }
-            try? capture?.close()
+            capture?.close()
         }
 
         stderrTask?.cancel()
         stderrTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stderrPipe.fileHandleForReading
-            let capture = FileHandle(forWritingAtPath: captureStderrURL.path)
+            let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureStderrURL.path) : nil
             var buffer = Data()
             while !Task.isCancelled {
                 let data = handle.availableData
@@ -460,18 +468,13 @@ final class AgentController {
                 while let nl = buffer.firstIndex(of: 0x0A) {
                     let lineData = buffer[buffer.startIndex..<nl]
                     buffer.removeSubrange(buffer.startIndex...nl)
-                    // `write(contentsOf:)`, not `write(_:)`: the latter is the
-                    // ObjC-era overload that RAISES on disk-full/EBADF, which
-                    // `try?` cannot catch — it terminates the app. No seek: the
-                    // handle opens at 0 on a file `createFile` just made, and
-                    // the offset advances on every write.
-                    try? capture?.write(contentsOf: lineData)
-                    try? capture?.write(contentsOf: Data([0x0A]))
+                    capture?.append(lineData)
+                    capture?.append(Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeStderr(line, generation: gen)
                 }
             }
-            try? capture?.close()
+            capture?.close()
         }
 
         startupTimeoutTask?.cancel()

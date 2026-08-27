@@ -577,8 +577,13 @@ func runFixtureOnce(_ name: String) throws {
         .appendingPathComponent("captures/agenttest/\(df.string(from: Date()))-fixture-\(name)")
     try FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
     let wireFile = captureDir.appendingPathComponent("wire.ndjson")
-    FileManager.default.createFile(atPath: wireFile.path, contents: nil)
-    let captureHandle = FileHandle(forWritingAtPath: wireFile.path)
+    // Item 6 (P22 cleanup): SafeAppendFile.ensureAndOpen (shared with
+    // AgentController's own wire tee) guarantees wireFile exists before
+    // anything opens it — the create-then-open ordering a lazy
+    // `FileHandle(forWritingAtPath:)` silently gets wrong otherwise. Returns a
+    // plain FileHandle for RepairLoop/PoolOrchestrator's existing
+    // `capture: FileHandle?` parameters, which this cleanup left alone.
+    let captureHandle = SafeAppendFile.ensureAndOpen(wireFile.path)
     print("[agenttest] fixture \(name): capture=\(captureDir.path)")
 
     let result = try RepairLoop.run(
@@ -654,8 +659,9 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         .appendingPathComponent("captures/agenttest/\(df.string(from: Date()))-\(specName)\(suffix)")
     try FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
     let wireFile = captureDir.appendingPathComponent("wire.ndjson")
-    FileManager.default.createFile(atPath: wireFile.path, contents: nil)
-    let captureHandle = FileHandle(forWritingAtPath: wireFile.path)
+    // Item 6 (P22 cleanup): see the sibling fixture-tier call site's comment —
+    // SafeAppendFile.ensureAndOpen guarantees wireFile exists before it's opened.
+    let captureHandle = SafeAppendFile.ensureAndOpen(wireFile.path)
     // P12.7 piece 1: every capture dir gets a `wire.trace` file the same way it
     // already gets `wire.ndjson` — unconditional, matching swiftstar-drive's
     // own naming (Sources/swiftstar-drive/main.swift). The engine writes to

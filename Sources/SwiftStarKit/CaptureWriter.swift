@@ -22,6 +22,14 @@ public struct CaptureManifest: Equatable, Sendable {
 /// byte-for-byte (the verbatim-raw rule); the provenance is rendered. The
 /// `--trace` file is written by the engine itself (the driver points `--trace`
 /// at `<dir>/wire.trace`), so it is not a parameter here.
+///
+/// `swiftstar-drive` buffers its whole session in memory (`DriveState`) and
+/// calls `write` exactly once, at the end, so there is no lazy-open step here
+/// to get wrong (item 6, P22 cleanup) — `SafeAppendFile` (which
+/// `AgentController` and `swiftstar-agenttest` use for their incremental
+/// wire.ndjson tees) would not change anything here and is not used. The
+/// provenance rendering IS shared, via `CaptureProvenance` — see
+/// `renderProvenance` below.
 public enum CaptureWriter {
     public static func write(
         directory: URL,
@@ -37,23 +45,21 @@ public enum CaptureWriter {
     }
 
     static func renderProvenance(_ m: CaptureManifest) -> String {
-        let iso = ISO8601DateFormatter()
-        let date = iso.string(from: m.startedAt)
-        let command = m.commandLine.joined(separator: " ")
-        return """
-        # Capture provenance
-
-        - Submodule (`external/ds4`) SHA: `\(m.submoduleSHA)`
-        - Model: `\(m.model)`
-        - Context (`-c`): \(m.ctx)
-        - Started (wall-clock): \(date)
-        - Command line: `\(command)`
-
-        Captured by `swiftstar-drive`. The `wire.ndjson` and `wire.stderr` files are
-        byte-for-byte verbatim (the verbatim-raw rule); `wire.trace` is the engine's
-        `--trace` output. Timestamps are on the wire (`ts`, monotonic since boot — only
-        deltas are meaningful); this file records the wall-clock start for absolute
-        anchoring.
-        """
+        CaptureProvenance.render(
+            title: "Capture provenance",
+            facts: [
+                .init("Submodule (`external/ds4`) SHA", "`\(m.submoduleSHA)`"),
+                .init("Model", "`\(m.model)`"),
+                .init("Context (`-c`)", "\(m.ctx)"),
+                CaptureProvenance.startedAtFact(m.startedAt),
+                .init("Command line", "`\(m.commandLine.joined(separator: " "))`"),
+            ],
+            closingNote: """
+            Captured by `swiftstar-drive`. The `wire.ndjson` and `wire.stderr` files are
+            byte-for-byte verbatim (the verbatim-raw rule); `wire.trace` is the engine's
+            `--trace` output. Timestamps are on the wire (`ts`, monotonic since boot — only
+            deltas are meaningful); this file records the wall-clock start for absolute
+            anchoring.
+            """)
     }
 }

@@ -87,7 +87,12 @@ public final class PoolOrchestrator {
             while let nl = buffer.firstIndex(of: 0x0A) {
                 let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
                 buffer.removeSubrange(buffer.startIndex...nl)
-                if let capture { capture.write(Data((line + "\n").utf8)) }
+                // `write(contentsOf:)`, not `write(_:)`: the latter is the
+                // ObjC-era overload that RAISES on a closed/broken handle,
+                // uncatchable by `try?` — it would kill the whole harness
+                // over a capture-write failure (item 6, P22 cleanup; the same
+                // lesson SafeAppendFile documents).
+                if let capture { try? capture.write(contentsOf: Data((line + "\n").utf8)) }
                 guard let poolEvent = parser.feed(line), poolEvent.worker == worker else { continue }
                 let event = poolEvent.event
                 if ProcessInfo.processInfo.environment["AGENTTEST_DEBUG"] != nil {
