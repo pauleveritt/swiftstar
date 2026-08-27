@@ -40,7 +40,7 @@ SMOKE=/tmp/p13-xs-smoke.out
 rm -f "$SMOKE"
 (
   sleep 60                                   # allow the 15 GiB SSD-streaming load
-  printf '%s\n' '{"t":"prompt","s":"Say hello in one word."}'
+  printf '%s\n' 'Say hello in one word.'      # bare line = prompt to worker 0
   sleep 45
 ) | "$ENGINE_DIR/ds4-agent" -m "$ARTIFACT" -c 32768 --metal \
       --ssd-streaming --ssd-streaming-cache-experts 3200 --prefill-chunk 4096 \
