@@ -420,7 +420,8 @@ final class AgentController {
                 // N" (the worker turn runs after this turn ends, D4).
                 if let packet = DispatchPacketBuilder.build(
                     params: params, digest: rollingDigest, loaded: [:],
-                    implementer: settings.modelPath.lastPathComponent) {
+                    implementer: settings.modelPath.lastPathComponent,
+                    dumb: UserDefaults.standard.bool(forKey: "dispatchDumb")) {
                     if let workerId = PoolScheduler.availableWorker(poolState) {
                         poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
                         writeToolResult(ToolCallbackResponse(

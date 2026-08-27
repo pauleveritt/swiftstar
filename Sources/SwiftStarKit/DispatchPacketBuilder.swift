@@ -16,7 +16,8 @@ public enum DispatchPacketBuilder {
         loaded: [String: String],
         implementer: String,
         turnBudget: Int = 100_000,
-        toolCallBudget: Int = 64
+        toolCallBudget: Int = 64,
+        dumb: Bool = false
     ) -> HandoffPacket? {
         guard let objective = params.first(where: { $0.name == "taskText" })?.value,
               !objective.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -30,13 +31,24 @@ public enum DispatchPacketBuilder {
         let rawValidation = params.first(where: { $0.name == "validationCommand" })?.value ?? ""
         let validationCommand = rawValidation.isEmpty ? nil : rawValidation
 
-        let adaptation = ContextAssembly.deterministicAdaptation(
-            objective: objective, digest: digest, loaded: loaded, implementer: implementer)
-        let prepared = ContextAssembly.assemble(
-            objective: objective, digest: digest, loaded: loaded, adaptation: adaptation)
+        let taskText: String
+        if dumb {
+            // P12.7 DumbImplementer: the minimal "here's the spec, build it"
+            // packet — no pinned facts (digest), no staged reads, no
+            // adaptation. The writable-file constraint stays: isolation and
+            // the verdict machinery still need it (dumb runs go through the
+            // same grading). This is the eval/demo lever showing how much of
+            // the architecture's help the packet actually carries.
+            taskText = "Task: \(objective)\n\nWritable files: \(writableFiles.joined(separator: ", "))"
+        } else {
+            let adaptation = ContextAssembly.deterministicAdaptation(
+                objective: objective, digest: digest, loaded: loaded, implementer: implementer)
+            taskText = ContextAssembly.assemble(
+                objective: objective, digest: digest, loaded: loaded, adaptation: adaptation)
+        }
 
         return HandoffPacket(
-            taskText: prepared,
+            taskText: taskText,
             writableFiles: writableFiles,
             validationCommand: validationCommand,
             baselines: [:],

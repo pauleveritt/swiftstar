@@ -6,6 +6,7 @@ struct AgentView: View {
     @State private var input = ""
     @FocusState private var inputFocused: Bool
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
+    @AppStorage("dispatchDumb") private var dispatchDumb = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,6 +29,18 @@ struct AgentView: View {
             Text(statusText).font(.caption)
             Spacer()
             workspaceButton
+            // The dumb/smart handoff-packet lever (P12.7 DumbImplementer, built
+            // 2026-08-26 as the demo/eval control): Smart = the engineered
+            // packet with the architecture's context help; Dumb = the minimal
+            // "here's the spec, build it" brief. Applies to the next dispatch.
+            Picker("Dispatch mode", selection: $dispatchDumb) {
+                Text("Smart").tag(false)
+                Text("Dumb").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 110)
+            .help("Handoff packets: Smart carries the architecture's context help; Dumb is the minimal brief (eval/demo lever).")
             agentButton
         }
         .padding(8)
