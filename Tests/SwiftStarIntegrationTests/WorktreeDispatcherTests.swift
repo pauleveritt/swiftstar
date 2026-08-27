@@ -432,6 +432,26 @@ struct WorktreeDispatcherTests {
         #expect(quiet?.digest != a?.digest)
     }
 
+    /// Item 3 (P22 cleanup): the async overload shares `digestValidation` with
+    /// the sync one — same digest/exit-mapping behavior, just off the calling
+    /// thread. Pinned here so a future edit to the shared digest logic cannot
+    /// silently diverge the two.
+    @Test func runValidationAsyncMatchesSyncBehavior() async throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let r = try await WorktreeDispatcher.runValidation(
+            ">&2 echo 'ImportError: attempted relative import'; exit 1", in: repo)
+        #expect(r?.exit == 1)
+        #expect(r?.output.contains("ImportError: attempted relative import") == true)
+    }
+
+    @Test func runValidationAsyncReturnsNilWithNoCommand() async throws {
+        let repo = try makeFixtureRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let r = try await WorktreeDispatcher.runValidation(nil, in: repo)
+        #expect(r == nil)
+    }
+
     @Test func validationPassedYieldsCandidate() throws {
         let repo = try makeFixtureRepo()
         defer { try? FileManager.default.removeItem(at: repo) }

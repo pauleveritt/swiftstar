@@ -2,7 +2,6 @@ import Foundation
 import Observation
 import SwiftStarKit
 import SwiftStarAppKit
-import CryptoKit
 import Darwin
 
 /// The agent child's lifecycle + turn state. Unlike the server's `Supervisor`
@@ -98,14 +97,22 @@ final class AgentController {
     private var generation = 0
     // D12 turn-outcome state.
     private var outcomeBuilder: TurnOutcomeBuilder?
-    // P11 (D4) worker-turn state: the in-flight worker's packet (its
-    // writableFiles confine the worker's mutations), outcome builder, and id.
-    private var activeWorkerPacket: HandoffPacket?
-    private var workerOutcomeBuilder: TurnOutcomeBuilder?
-    private var activeWorkerId: WorkerId?
-    /// P11: the in-flight worker's disposable worktree — its file mutations
-    /// land here, never in the caller's tree (the P10 isolation guarantee).
-    private var activeWorkerWorktree: WorktreeDispatcher.Worktree?
+    // P11 (D4) worker-turn state: everything that exists only while one
+    // worker turn is in flight, consolidated into one value (item 1 of the
+    // P22 cleanup) so there is exactly one place that creates/clears it —
+    // previously six hand-synced properties reset by hand in three places
+    // (the restart reset below, `failActiveWorker`, `finishWorkerTurn`).
+    // Wraps SwiftStarKit's pure `WorkerTurnState` (the testable id/packet/
+    // consult-membership bookkeeping) together with the app-only live
+    // handles that cannot leave the app target: the disposable worktree (its
+    // file mutations land here, never in the caller's tree — the P10
+    // isolation guarantee), the outcome builder, and the watchdog task.
+    // Deliberately NOT @ObservationIgnored (unlike memoryTask/process, whose
+    // nonisolated deinit access forces that opt-out): `isConsulting` below
+    // reads it, and Observation only notifies a view when the property it
+    // read is tracked. Same treatment as `outcomeBuilder`, which is mutated
+    // just as often (per wire event) and stays tracked.
+    private var workerTurn = ActiveWorkerTurn()
     private var sentInterrupt = false
     private var buildSHA = "unknown"
     private let logHandle: FileHandle?
@@ -138,85 +145,62 @@ final class AgentController {
     /// The agent is up and serving — the state in which the bottom bar's
     /// telemetry readout (rates, rings) is meaningful.
     var isUp: Bool { state == .ready || state == .generating }
-
-    /// The genuine last resort: used only when no variant is selected, no
-    /// legacy `modelPath` is set, and `SWIFTSTAR_MODEL` is unset. Laguna S now
-    /// has a real `Variant` (P22, `VariantRegistry.lagunaS`) and is preferred
-    /// as the default *selectable* variant below, so this literal path — an
-    /// absolute one, in a developer's home directory, compiled into the binary
-    /// — should be unreachable in practice; it stays as a genuine fallback for
-    /// the case an explicit `modelPath`/`SWIFTSTAR_MODEL` still needs to win
-    /// with no variant selected. `SWIFTSTAR_DEFAULT_MODEL` overrides it.
-    static let defaultModelFallback = URL(
-        fileURLWithPath: ProcessInfo.processInfo.environment["SWIFTSTAR_DEFAULT_MODEL"]
-            ?? "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
-
-    /// The effective `selectedVariantID` for both model resolution
-    /// (`defaultSettings()`) and pre-spawn admission (`startAgent()`) — the
-    /// stored choice, or Laguna S's id when nothing was ever configured (no
-    /// variant, no legacy `modelPath`, no `SWIFTSTAR_MODEL` override). A
-    /// single source so the two call sites can't disagree about which variant
-    /// (if any) is in play — the failure mode that would otherwise let
-    /// `defaultSettings()` resolve Laguna S's file while `startAgent()`'s gate
-    /// still saw "no variant selected" and skipped admission entirely.
-    private static func effectiveSelectedVariantID() -> String? {
-        let defaults = UserDefaults.standard
-        if let stored = defaults.string(forKey: "selectedVariantID") { return stored }
-        let modelPath = defaults.string(forKey: "modelPath")
-        let envModel = ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"]
-        guard (modelPath?.isEmpty ?? true), (envModel?.isEmpty ?? true) else { return nil }
-        return VariantRegistry.lagunaS.id
+    /// True only while a `/chat` consult worker is running (item 2 of the
+    /// P22 cleanup). `consult()`'s worker turn runs via `drainQueuedWorkers()`
+    /// without ever touching `state` — it stays `.ready` for the whole turn,
+    /// on purpose: `sendConsulted`'s delivery requires `canSend`, `interrupt()`
+    /// keys off `isGenerating`, and `ModelMenu` disables on `isGenerating` —
+    /// all three would break if a worker turn reused `.generating`. This is a
+    /// separate signal so AgentView can show a distinct "consulting" affordance
+    /// (composer visibly busy, but not the generating/interrupt state) instead
+    /// of looking idle while a consult worker is in flight.
+    var isConsulting: Bool {
+        guard let id = workerTurn.activeId else { return false }
+        return workerTurn.isConsult(id)
     }
 
+    /// The model used when nothing else resolves. Laguna S is the app's default
+    /// but has no `Variant`, so its path is a literal — and an absolute one, in
+    /// a developer's home directory, compiled into the binary. `SWIFTSTAR_MODEL`
+    /// overrides it; giving Laguna S a real Variant (P22) retires it.
+    ///
+    /// Item 5b (P22 cleanup): the literal now lives in
+    /// `SwiftStarKit.AgentDefaultSettings.defaultModelFallback(environment:)`
+    /// (unit-testable there); this stays the same externally-visible
+    /// `static let` so `AgentView`'s `ModelMenu` (the other call site) needs
+    /// no change.
+    static let defaultModelFallback = AgentDefaultSettings.defaultModelFallback(
+        environment: ProcessInfo.processInfo.environment)
+
+    /// The effective `selectedVariantID` for both model resolution
+    /// (`defaultSettings()`, inside `AgentDefaultSettings.resolve`) and
+    /// pre-spawn admission (`startAgent()`) — the stored choice, or Laguna S's
+    /// id when nothing was ever configured (no variant, no legacy `modelPath`,
+    /// no `SWIFTSTAR_MODEL` override). A single pure function so the two call
+    /// sites can't disagree about which variant (if any) is in play — the
+    /// failure mode that would otherwise let `defaultSettings()` resolve
+    /// Laguna S's file while `startAgent()`'s gate still saw "no variant
+    /// selected" and skipped admission entirely. Delegates to
+    /// `SwiftStarKit.AgentDefaultSettings.effectiveSelectedVariantID` (unit-
+    /// tested there) with the real `UserDefaults`/environment.
+    private static func effectiveSelectedVariantID() -> String? {
+        AgentDefaultSettings.effectiveSelectedVariantID(
+            defaults: .standard, environment: ProcessInfo.processInfo.environment)
+    }
+
+    /// Item 5b (P22 cleanup): a thin wrapper over
+    /// `SwiftStarKit.AgentDefaultSettings.resolve` (the pure logic, unit-
+    /// tested there — `Sources/SwiftStar` has no test target). Supplies the
+    /// three implicit inputs the pure function needs explicitly:
+    /// `UserDefaults.standard`, the real process environment, and this app's
+    /// own checkout-anchored `projectRoot()` (Bundle.main-dependent, so it
+    /// stays here rather than becoming a fourth pure-function parameter that
+    /// would just re-implement the same anchoring inside SwiftStarKit).
     static func defaultSettings() -> AgentSettings {
-        let defaults = UserDefaults.standard
-        let engineDir: URL
-        if let dir = defaults.string(forKey: "engineDir"), !dir.isEmpty {
-            engineDir = URL(fileURLWithPath: dir)
-        } else if let dir = ProcessInfo.processInfo.environment["DS4_DIR"] {
-            engineDir = URL(fileURLWithPath: dir)
-        } else {
-            engineDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                .appendingPathComponent("external/ds4")
-        }
-        // P13: resolve the model through the shared resolver, so a selected
-        // variant takes precedence over the legacy path (M1), with the hardcoded
-        // Laguna default only as the final fallback. P22: nothing-configured
-        // now resolves to Laguna S's variant, not the literal (see
-        // `effectiveSelectedVariantID`).
-        let (modelPath, variant) = VariantResolver.resolveModelFile(
-            selectedVariantID: effectiveSelectedVariantID(),
-            modelPath: defaults.string(forKey: "modelPath"),
-            envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
-            fallback: defaultModelFallback
-        )
-        // Clamp to the resolved variant's declared range. The app default
-        // (51,200) is above Mellum's/Laguna XS's `maxContext` (40,960 /
-        // 32,768) but within Laguna S's (150,000), so the common case (no
-        // variant ever chosen) now clamps to a no-op.
-        let requestedContext = defaults.object(forKey: "contextSize") as? Int ?? 51_200
-        let contextSize = variant?.contract.memoryBudget.clampContext(requestedContext)
-            ?? requestedContext
-        let workspace: URL
-        if let dir = defaults.string(forKey: "agentWorkspace"), !dir.isEmpty {
-            workspace = URL(fileURLWithPath: dir)
-        } else if let project = AgentController.projectRoot() {
-            // During development the app is launched from the checkout; confine
-            // the agent to the repo by default instead of the whole home dir.
-            workspace = project
-        } else {
-            workspace = FileManager.default.homeDirectoryForCurrentUser
-        }
-        // D2: the app's default posture is deny — shell off until granted.
-        let shellAllowed = defaults.bool(forKey: "agentShellAllowed")
-        return AgentSettings(
-            engineDir: engineDir,
-            modelPath: modelPath,
-            contextSize: contextSize,
-            workspace: workspace,
-            shellAllowed: shellAllowed,
-            runtime: variant?.runtime
-        )
+        AgentDefaultSettings.resolve(
+            defaults: .standard,
+            environment: ProcessInfo.processInfo.environment,
+            projectRoot: AgentController.projectRoot())
     }
 
     /// The checkout containing the running executable, if any: anchored to
@@ -248,24 +232,28 @@ final class AgentController {
     }
 
     /// The P5-provenance shape, written once at spawn (the manifest that lets a
-    /// reader trust and reproduce the capture).
+    /// reader trust and reproduce the capture). Item 6 (P22 cleanup): the
+    /// assembly (title + bulleted facts + closing note) is shared with
+    /// `swiftstar-drive`'s `CaptureWriter` via `CaptureProvenance`; the facts
+    /// themselves (sampler, workspace grant) stay specific to a live app
+    /// session.
     private static func renderLiveProvenance(model: String, build: String, workspace: String, contextSize: Int, sampler: String, at dir: URL) throws {
-        let iso = ISO8601DateFormatter().string(from: Date())
-        let text = """
-        # Live session provenance
-
-        - Model: `\(model)`
-        - Build (`external/ds4` SHA): `\(build)`
-        - Context: \(contextSize)
-        - Sampler: \(sampler)
-        - Workspace: `\(workspace)`
-        - Started (wall-clock): \(iso)
-
-        Captured live by the SwiftStar app (agent session). `wire.ndjson` and
-        `agent.stderr` are the verbatim raw streams; `agent.trace` is the engine's
-        `--trace` channel. Wire `ts` is monotonic-since-boot (deltas only); this
-        file anchors wall-clock.
-        """
+        let text = CaptureProvenance.render(
+            title: "Live session provenance",
+            facts: [
+                .init("Model", "`\(model)`"),
+                .init("Build (`external/ds4` SHA)", "`\(build)`"),
+                .init("Context", "\(contextSize)"),
+                .init("Sampler", sampler),
+                .init("Workspace", "`\(workspace)`"),
+                CaptureProvenance.startedAtFact(Date()),
+            ],
+            closingNote: """
+            Captured live by the SwiftStar app (agent session). `wire.ndjson` and
+            `agent.stderr` are the verbatim raw streams; `agent.trace` is the engine's
+            `--trace` channel. Wire `ts` is monotonic-since-boot (deltas only); this
+            file anchors wall-clock.
+            """)
         try text.write(to: dir.appendingPathComponent("provenance.md"), atomically: true, encoding: .utf8)
     }
 
@@ -282,16 +270,16 @@ final class AgentController {
     }
 
     /// Persist one finished turn's outcome as an appended line in the session's
-    /// outcomes.ndjson (P21): captures become self-contained evidence.
+    /// outcomes.ndjson (P21): captures become self-contained evidence. Item 6
+    /// (P22 cleanup): routed through `SafeAppendFile` — a fresh one per call
+    /// (this fires once per turn, not worth holding a handle open for the
+    /// whole session), which also means it is safe even if the upfront
+    /// `startAgent()` create step below were ever removed (construction
+    /// itself guarantees the file exists).
     private func appendOutcome(_ outcome: TurnOutcome) {
         guard let url = outcomesURL,
               let data = try? JSONEncoder().encode(outcome) else { return }
-        let line = String(decoding: data, as: UTF8.self) + "\n"
-        if let handle = FileHandle(forWritingAtPath: url.path) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: Data(line.utf8))
-        }
+        SafeAppendFile(path: url.path).append(Data((String(decoding: data, as: UTF8.self) + "\n").utf8))
     }
 
     /// The configured subagent-pool size (one orchestrator + N−1 workers),
@@ -356,12 +344,8 @@ final class AgentController {
         // A restart is a fresh engine = a fresh pool: stale pending workers and
         // consult bookkeeping must not survive into the new session.
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
-        consultWorkers = []
-        workerWatchdogTask?.cancel()
-        activeWorkerId = nil
-        activeWorkerPacket = nil
-        activeWorkerWorktree = nil
-        workerOutcomeBuilder = nil
+        workerTurn.watchdog?.cancel()
+        workerTurn = ActiveWorkerTurn()
         // D12: the build identification is resolved once per spawn (the
         // submodule SHA — the same fact the capture provenance records).
         buildSHA = AgentController.submoduleSHA(settings.engineDir)
@@ -459,10 +443,19 @@ final class AgentController {
         }
         startMemoryPolling()
 
+        // Item 6 (P22 cleanup): both tees route through `SafeAppendFile`
+        // (shared with swiftstar-agenttest's own wire.ndjson capture) instead
+        // of a raw `FileHandle(forWritingAtPath:)` + manual `write(contentsOf:)`
+        // — closing the exact "lazy open against a path that was never
+        // created silently no-ops the whole session" bug class at the type
+        // level. Gated on `captureEnabled` here (not inside `SafeAppendFile`,
+        // which always creates its path): disabled capture must create
+        // nothing, and `SafeAppendFile` has no notion of that toggle — only
+        // the caller does.
         stdoutTask?.cancel()
         stdoutTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stdoutPipe.fileHandleForReading
-            let capture = FileHandle(forWritingAtPath: captureWireURL.path)
+            let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureWireURL.path) : nil
             var buffer = Data()
             while !Task.isCancelled {
                 let data = handle.availableData
@@ -471,24 +464,19 @@ final class AgentController {
                 while let nl = buffer.firstIndex(of: 0x0A) {
                     let lineData = buffer[buffer.startIndex..<nl]
                     buffer.removeSubrange(buffer.startIndex...nl)
-                    // `write(contentsOf:)`, not `write(_:)`: the latter is the
-                    // ObjC-era overload that RAISES on disk-full/EBADF, which
-                    // `try?` cannot catch — it terminates the app. No seek: the
-                    // handle opens at 0 on a file `createFile` just made, and
-                    // the offset advances on every write.
-                    try? capture?.write(contentsOf: lineData)
-                    try? capture?.write(contentsOf: Data([0x0A]))
+                    capture?.append(lineData)
+                    capture?.append(Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeWire(line, generation: gen)
                 }
             }
-            try? capture?.close()
+            capture?.close()
         }
 
         stderrTask?.cancel()
         stderrTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stderrPipe.fileHandleForReading
-            let capture = FileHandle(forWritingAtPath: captureStderrURL.path)
+            let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureStderrURL.path) : nil
             var buffer = Data()
             while !Task.isCancelled {
                 let data = handle.availableData
@@ -497,18 +485,13 @@ final class AgentController {
                 while let nl = buffer.firstIndex(of: 0x0A) {
                     let lineData = buffer[buffer.startIndex..<nl]
                     buffer.removeSubrange(buffer.startIndex...nl)
-                    // `write(contentsOf:)`, not `write(_:)`: the latter is the
-                    // ObjC-era overload that RAISES on disk-full/EBADF, which
-                    // `try?` cannot catch — it terminates the app. No seek: the
-                    // handle opens at 0 on a file `createFile` just made, and
-                    // the offset advances on every write.
-                    try? capture?.write(contentsOf: lineData)
-                    try? capture?.write(contentsOf: Data([0x0A]))
+                    capture?.append(lineData)
+                    capture?.append(Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeStderr(line, generation: gen)
                 }
             }
-            try? capture?.close()
+            capture?.close()
         }
 
         startupTimeoutTask?.cancel()
@@ -522,7 +505,7 @@ final class AgentController {
         }
     }
 
-    private func consumeWire(_ line: String, generation: Int) {
+    private func consumeWire(_ line: String, generation: Int) async {
         guard generation == self.generation else { return }
         guard let poolEvent = parser.feed(line) else { return }
         let event = poolEvent.event
@@ -530,7 +513,7 @@ final class AgentController {
         // P11 (D1/D4): worker-tagged events belong to the in-flight worker
         // turn, not the orchestrator's transcript/outcome.
         if poolEvent.worker != .orchestrator {
-            handleWorkerEvent(worker: poolEvent.worker, event: event)
+            await handleWorkerEvent(worker: poolEvent.worker, event: event, generation: generation)
             return
         }
 
@@ -658,12 +641,27 @@ final class AgentController {
                 // records the host facts), write the `tool_result` line to the
                 // agent's stdin, and feed the host facts into the open
                 // TurnOutcomeBuilder. The engine blocks on the result line, so
-                // this is synchronous (the stdout drain awaits consumeWire per
-                // line; the engine emits one request then blocks).
-                let response = ToolCallbackResponder.respond(
+                // the wire itself is still request→result; but item 3 (P22
+                // cleanup) made `execute` genuinely async (a `bash` call awaits
+                // `SubprocessRunner`'s async `run`) so a long-running command no
+                // longer blocks the MainActor — this `await` is a real
+                // suspension point, not just the actor-hop the outer call
+                // already had.
+                let response = await ToolCallbackResponder.respond(
                     idx: idx, name: name, params: params,
                     workspace: settings.workspace, shellAllowed: settings.shellAllowed,
                     execute: Self.executeHostTool)
+                // Reentrancy guard (item 3): freeing the MainActor during the
+                // await above means Stop/Restart became reachable mid-tool-call
+                // in a way they weren't when this was synchronous. A restart
+                // bumps `generation` and resets poolState/outcomeBuilder/
+                // rollingDigest for a brand-new session — folding this stale
+                // response into that new state (or writing its tool_result to
+                // the NEW engine's stdin) would corrupt it, so bail before
+                // touching any of it. A plain Stop (no restart) doesn't bump
+                // `generation`; `writeToolResult` itself is written to tolerate
+                // that (see its doc).
+                guard generation == self.generation else { return }
                 writeToolResult(response)
                 outcomeBuilder?.recordHostVerdict(
                     idx: idx, ok: response.ok,
@@ -705,11 +703,20 @@ final class AgentController {
 
     /// Write one `tool_result` line to the engine's stdin (the single sink for
     /// both the P9 responder path and the P11 dispatch path).
+    ///
+    /// `write(contentsOf:)`, not `write(_:)`: the latter is the ObjC-era
+    /// overload that RAISES on a closed/broken pipe, which `try?` cannot catch
+    /// — it terminates the app (the same lesson the wire-capture tees document
+    /// above). Item 3 (P22 cleanup) made the host `bash` executor genuinely
+    /// async, freeing the MainActor for the duration of a tool call — so
+    /// `stopAgent()` closing this pipe's write side is now reachable while a
+    /// call is in flight. `stopAgent()` does not bump `generation` (only a
+    /// restart does), so the caller's post-await generation guard does not
+    /// catch a plain Stop; this write must tolerate a closed pipe on its own.
     private func writeToolResult(_ response: ToolCallbackResponse) {
-        if let pipe = process?.standardInput as? Pipe {
-            pipe.fileHandleForWriting.write(
-                Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
-        }
+        guard let pipe = process?.standardInput as? Pipe else { return }
+        try? pipe.fileHandleForWriting.write(
+            contentsOf: Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
     }
 
     // MARK: - P11 worker-turn loop (D4)
@@ -737,14 +744,13 @@ final class AgentController {
             return
         }
         poolState = PoolScheduler.apply(poolState, .workerStarted(worker))
-        activeWorkerId = worker
-        activeWorkerPacket = packet
-        activeWorkerWorktree = worktree
-        workerOutcomeBuilder = TurnOutcomeBuilder(
-            model: settings.modelPath.lastPathComponent,
-            build: buildSHA,
-            sampler: "engine-defaults",
-            task: packet.taskText)
+        workerTurn.start(
+            id: worker, packet: packet, worktree: worktree,
+            outcomeBuilder: TurnOutcomeBuilder(
+                model: settings.modelPath.lastPathComponent,
+                build: buildSHA,
+                sampler: "engine-defaults",
+                task: packet.taskText))
         if let pipe = process?.standardInput as? Pipe {
             pipe.fileHandleForWriting.write(
                 Data((PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n").utf8))
@@ -759,12 +765,12 @@ final class AgentController {
     /// The watchdog is the only bound on that — delivery is edge-triggered, so
     /// there is no poll left to notice.
     private func armWorkerWatchdog(_ worker: WorkerId) {
-        workerWatchdogTask?.cancel()
+        workerTurn.watchdog?.cancel()
         let gen = generation
-        workerWatchdogTask = Task { @MainActor [weak self] in
+        workerTurn.watchdog = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(Self.workerTurnTimeoutSeconds))
             guard !Task.isCancelled, let self,
-                  self.generation == gen, self.activeWorkerId == worker else { return }
+                  self.generation == gen, self.workerTurn.activeId == worker else { return }
             self.failActiveWorker(worker, reason: "worker turn timed out")
         }
     }
@@ -773,19 +779,16 @@ final class AgentController {
     /// same bookkeeping `finishWorkerTurn` does, minus the outcome (there is no
     /// `ready`, so there is nothing to finalize).
     private func failActiveWorker(_ worker: WorkerId, reason: String) {
-        guard activeWorkerId == worker else { return }
-        let isConsult = consultWorkers.contains(worker)
-        if let worktree = activeWorkerWorktree {
+        guard workerTurn.activeId == worker else { return }
+        let isConsult = workerTurn.isConsult(worker)
+        if let worktree = workerTurn.worktree {
             WorktreeDispatcher.discard(worktree, in: Self.resolveRepoRoot(from: settings.workspace))
         }
-        workerOutcomeBuilder = nil
-        activeWorkerId = nil
-        activeWorkerPacket = nil
-        activeWorkerWorktree = nil
+        workerTurn.clearActive()
         let receipt = DispatchReceipt(worker: worker, ref: nil, reason: reason, summary: reason)
         poolState = PoolScheduler.apply(poolState, .workerFailed(worker, receipt))
         if isConsult {
-            consultWorkers.remove(worker)
+            workerTurn.removeConsult(worker)
             poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
             transcript.appendSystem("→ chat failed: \(reason)")
         }
@@ -795,19 +798,24 @@ final class AgentController {
 
     /// Route one worker-tagged event through the worker's turn (D4): answer its
     /// tool requests (revision-checked against its packet's writableFiles), and
-    /// finish the turn on its `ready`.
-    private func handleWorkerEvent(worker: WorkerId, event: AgentEvent) {
-        workerOutcomeBuilder?.apply(event)
+    /// finish the turn on its `ready`. `generation` is the wire generation this
+    /// event was read under (threaded from `consumeWire`); item 3 (P22
+    /// cleanup) made the tool executor and `finishWorkerTurn`'s validation
+    /// genuinely async, so this — like `consumeWire` — re-checks it after
+    /// every await before touching shared controller state.
+    private func handleWorkerEvent(worker: WorkerId, event: AgentEvent, generation: Int) async {
+        workerTurn.outcomeBuilder?.apply(event)
         switch event {
         case .toolRequest(let idx, let name, let params):
-            let response = ToolCallbackResponder.respond(
+            let response = await ToolCallbackResponder.respond(
                 idx: idx, name: name, params: params,
-                workspace: activeWorkerWorktree?.url ?? settings.workspace,
+                workspace: workerTurn.worktree?.url ?? settings.workspace,
                 shellAllowed: false,
-                writableFiles: activeWorkerPacket?.writableFiles,
+                writableFiles: workerTurn.activePacket?.writableFiles,
                 execute: Self.executeHostTool)
+            guard generation == self.generation else { return }
             writeToolResult(response)
-            workerOutcomeBuilder?.recordHostVerdict(
+            workerTurn.outcomeBuilder?.recordHostVerdict(
                 idx: idx, ok: response.ok, mutations: response.mutations,
                 exitStatus: response.exitStatus, outputDigest: response.outputDigest,
                 validationRan: response.validationRan)
@@ -818,10 +826,10 @@ final class AgentController {
             writeToolResult(ToolCallbackResponse(idx: idx, ok: false,
                 s: ToolResultCondenser.condense(reason)))
         case .ready:
-            if let builder = workerOutcomeBuilder {
+            if let builder = workerTurn.outcomeBuilder {
                 let outcome = builder.finish()
-                workerOutcomeBuilder = nil
-                finishWorkerTurn(worker: worker, outcome: outcome)
+                workerTurn.outcomeBuilder = nil
+                await finishWorkerTurn(worker: worker, outcome: outcome, generation: generation)
             }
         default:
             break
@@ -834,19 +842,22 @@ final class AgentController {
     /// candidate-vs-receipt verdict is the pure `WorktreeDispatch.verdict`; the
     /// candidate *ref* (the worktree commit SHA) is produced by the P10
     /// `WorktreeDispatcher`, which the pooled path will reuse for the commit.
-    private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome) {
-        workerWatchdogTask?.cancel()
-        let isConsult = consultWorkers.contains(worker)
+    private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome, generation: Int) async {
+        workerTurn.watchdog?.cancel()
+        let isConsult = workerTurn.isConsult(worker)
         let answerText: String? = isConsult ? outcome.text : nil
-        let packet = activeWorkerPacket ?? HandoffPacket(
+        let packet = workerTurn.activePacket ?? HandoffPacket(
             taskText: "", writableFiles: [], validationCommand: nil,
             baselines: [:], turnBudget: 0, toolCallBudget: 0)
         let receipt: DispatchReceipt
-        if let worktree = activeWorkerWorktree {
+        if let worktree = workerTurn.worktree {
             let repo = Self.resolveRepoRoot(from: settings.workspace)
             let relativized = WorktreeDispatch.relativize(outcome: outcome, worktree: worktree.url)
             do {
-                let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: worktree.url)
+                // Item 3 (P22 cleanup): async, off the MainActor — this used to
+                // freeze the whole app's UI for as long as the validation
+                // command ran. `finalize` itself stays sync (no subprocess).
+                let validation = try await WorktreeDispatcher.runValidation(packet.validationCommand, in: worktree.url)
                 let dispatchOutcome = try WorktreeDispatcher.finalize(
                     worktree, packet: packet, turnOutcome: relativized,
                     validation: validation, in: repo)
@@ -881,6 +892,13 @@ final class AgentController {
                     answerText: answerText)
             }
         }
+        // Reentrancy guard (item 3): the worktree above is discarded either
+        // way — no leak — but a restart during the `await` above (bumping
+        // `generation`) already reset poolState/workerTurn/rollingDigest for a
+        // brand-new session; folding this stale turn's receipt into that state
+        // (or writing to the new session's wire) would corrupt it, so bail
+        // once cleanup is done.
+        guard generation == self.generation else { return }
         poolState = PoolScheduler.apply(poolState, .workerFinished(worker, receipt))
         // A consult runs read-only (writableFiles is empty by construction), so
         // its verdict is ALWAYS a refusal. Recording it would leave a phantom
@@ -889,11 +907,9 @@ final class AgentController {
         if !isConsult {
             rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
         }
-        activeWorkerId = nil
-        activeWorkerPacket = nil
-        activeWorkerWorktree = nil
+        workerTurn.clearActive()
         if isConsult {
-            consultWorkers.remove(worker)
+            workerTurn.removeConsult(worker)
             // Surface the answer directly; never deliver a consult's receipt as
             // orchestrator prose — the answer IS the delivery. Clear the receipt
             // only when the send lands (at-least-once, matching
@@ -980,178 +996,27 @@ final class AgentController {
     /// P9: the host's side-effecting tool executor (D3/D6). The pure
     /// `ToolCallbackResponder` handles consent + condensation + the
     /// `tool_result` line; this closure is the app's file/process capability
-    /// the responder injects. It runs the six tool families under the
-    /// consent-cleared grant: `read`/`more`/`write`/`list`/`edit`/`search` read
-    /// or mutate files at `request.resolvedPath` (already confined by the
-    /// consent check); `bash` runs the command in the workspace cwd. The `ok`
-    /// verdict is the executor's own (true = ran, false = could not run); a
-    /// consent refusal never calls this. For `bash` the host facts ride along:
-    /// the exit status, a SHA-256 digest of stdout, and `validationRan` (the
-    /// host ran the command and can report its exit). `bash_status`/`bash_stop`
-    /// are not yet implemented in host mode (a fresh `Process` would re-run /
-    /// re-stop instead of polling / stopping a job) — the executor refuses them
-    /// with `ok:false` rather than mis-executing; the real job protocol is
-    /// P10+ hardening.
-    /// `nonisolated` — touches only `FileManager`/`Process` (not `self`); the
-    /// synchronous run blocks the main actor during a `bash` call, which P9's
-    /// scope accepts (the engine blocks on the result line anyway).
+    /// the responder injects.
+    ///
+    /// Item 4 (P22 cleanup): the actual six-tool-family implementation now
+    /// lives once, in `SwiftStarAppKit.HostToolExecutor`, shared with
+    /// `PoolOrchestrator` — this is a thin wrapper selecting the app's policy
+    /// (`.app`: no read cache, `bash` just runs since `shellAllowed` was
+    /// already checked by `ToolCallbackResponder.consent`, `search` honors
+    /// `case_sensitive` and a match-count header, `bash_status`/`bash_stop`
+    /// get an explicit refusal). `nonisolated` — touches only the executor
+    /// (not `self`); `async` because `bash` awaits `SubprocessRunner`'s async
+    /// `run` (item 3), which yields instead of blocking a thread, so a
+    /// long-running command no longer freezes the MainActor for up to its
+    /// timeout (300s default) — the engine still blocks on the result line
+    /// either way (the wire protocol is unchanged), but the app's UI stays
+    /// responsive while it waits.
+    nonisolated private static let hostToolExecutor = HostToolExecutor(policy: .app)
+
     nonisolated private static func executeHostTool(
         _ request: ToolExecutionRequest
-    ) -> ToolExecutionResult {
-        switch request.name {
-        case "read", "more":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            guard let data = FileManager.default.contents(atPath: path),
-                  let text = String(data: data, encoding: .utf8) else {
-                return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
-            }
-            return ToolExecutionResult(ok: true, text: text)
-
-        case "list":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            do {
-                let entries = try FileManager.default.contentsOfDirectory(atPath: path)
-                return ToolExecutionResult(ok: true, text: entries.sorted().joined(separator: "\n"))
-            } catch {
-                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
-            }
-
-        case "search":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            let query = request.params.first(where: { $0.name == "query" })?.value ?? ""
-            var caseSensitive = true
-            if let v = request.params.first(where: { $0.name == "case_sensitive" })?.value {
-                caseSensitive = v != "false" && v != "0"
-            }
-            let matches = AgentController.searchRecursive(
-                root: path, query: query, caseSensitive: caseSensitive, maxResults: 50)
-            if matches.isEmpty {
-                return ToolExecutionResult(ok: true, text: "No matches\n")
-            }
-            let header = "\(matches.count) match\(matches.count == 1 ? "" : "es") shown\n\n"
-            return ToolExecutionResult(ok: true, text: header + matches.joined(separator: "\n"))
-
-        case "write":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            let content = request.params.first(where: { $0.name == "content" })?.value ?? ""
-            do {
-                try content.write(toFile: path, atomically: true, encoding: .utf8)
-                return ToolExecutionResult(ok: true, text: "wrote \(path)", mutations: [path])
-            } catch {
-                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
-            }
-
-        case "edit":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            let old = request.params.first(where: { $0.name == "old" })?.value ?? ""
-            let new = request.params.first(where: { $0.name == "new" })?.value ?? ""
-            guard !old.isEmpty else {
-                return ToolExecutionResult(ok: false, text: "error: edit requires non-empty old text")
-            }
-            guard let data = FileManager.default.contents(atPath: path),
-                  var text = String(data: data, encoding: .utf8) else {
-                return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
-            }
-            guard let range = text.range(of: old) else {
-                return ToolExecutionResult(ok: false, text: "error: old text not found in \(path)")
-            }
-            text.replaceSubrange(range, with: new)
-            do {
-                try text.write(toFile: path, atomically: true, encoding: .utf8)
-                return ToolExecutionResult(ok: true, text: "edited \(path)", mutations: [path])
-            } catch {
-                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
-            }
-
-        case "bash":
-            let command = request.params.first(where: { $0.name == "command" })?.value ?? ""
-            guard !command.isEmpty else {
-                return ToolExecutionResult(ok: false, text: "error: bash requires command")
-            }
-            // SubprocessRunner drains stdout/stderr concurrently and enforces a
-            // timeout (F1: waitUntilExit-before-read deadlocks on a full pipe).
-            let r: SubprocessRunner.Result
-            do {
-                r = try SubprocessRunner.run(command, in: request.workspace)
-            } catch {
-                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
-            }
-            let combined = r.stdout + (r.stderr.isEmpty ? "" : r.stderr)
-            let digest = "sha256:" + SHA256.hash(data: Data(r.stdout.utf8))
-                .map { String(format: "%02x", $0) }.joined()
-            return ToolExecutionResult(
-                ok: r.exit == 0 && !r.timedOut,
-                text: combined,
-                exitStatus: Int(r.exit),
-                outputDigest: digest, validationRan: true)
-
-        case "bash_status", "bash_stop":
-            // Not yet implemented in host mode: a fresh `Process` would re-run
-            // the command (bash_status) or re-run instead of stopping
-            // (bash_stop) — mis-execution, not a real poll/stop. Refuse loudly
-            // (ok:false) so the agent sees the limitation and can fall back to a
-            // plain `bash` with a short timeout. The real job protocol
-            // (long-lived bash jobs + status/stop) is P10+ hardening.
-            return ToolExecutionResult(
-                ok: false,
-                text: "bash_status/bash_stop are not yet implemented in host mode; use a plain bash with a short timeout")
-
-        default:
-            return ToolExecutionResult(ok: false, text: "error: unknown tool \(request.name)")
-        }
-    }
-
-    /// Belt-and-suspenders re-confinement for the executor: the pure `consent`
-    /// check resolves `..` but not symlinks (no I/O); the engine's confinement
-    /// uses `realpath`, which does. A symlink under the workspace that points
-    /// outside would pass the pure check but escape the grant on execution — this
-    /// resolves symlinks on both the workspace and the file and refuses when the
-    /// real path is outside the real workspace root. The same rules P7 put in
-    /// the engine (D1), enforced host-side. Returns the symlink-resolved
-    /// absolute path, or nil on refusal.
-    nonisolated private static func confinedRealPath(_ request: ToolExecutionRequest) -> String? {
-        HostToolConfinement.realPath(request)
-    }
-
-    /// Recursive grep for the `search` executor: walks `root` depth-first, reads
-    /// each regular file as UTF-8, and collects `path:lineNo:line` for lines
-    /// containing `query` (substring; case-sensitive unless `caseSensitive` is
-    /// false), capped at `maxResults` matches. Skips unreadable/binary files.
-    nonisolated private static func searchRecursive(
-        root: String, query: String, caseSensitive: Bool, maxResults: Int
-    ) -> [String] {
-        guard !query.isEmpty else { return [] }
-        let fm = FileManager.default
-        var results: [String] = []
-        let enumerator = fm.enumerator(atPath: root)
-        while let entry = enumerator?.nextObject() as? String {
-            if results.count >= maxResults { break }
-            let full = (root as NSString).appendingPathComponent(entry)
-            var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: full, isDirectory: &isDir),
-                  !isDir.boolValue else { continue }
-            guard let data = fm.contents(atPath: full),
-                  let text = String(data: data, encoding: .utf8) else { continue }
-            let needle = caseSensitive ? query : query.lowercased()
-            for (i, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-                if results.count >= maxResults { break }
-                let hay = caseSensitive ? String(line) : String(line).lowercased()
-                if hay.contains(needle) {
-                    results.append("\(entry):\(i + 1):\(line)")
-                }
-            }
-        }
-        return results
+    ) async -> ToolExecutionResult {
+        await hostToolExecutor.execute(request)
     }
 
     @discardableResult
@@ -1290,16 +1155,10 @@ final class AgentController {
         lastFootprintBytes = snapshot.residentBytes
     }
 
-    /// Workers enqueued by `/chat`: their answer is surfaced as the worker's
-    /// text directly (not a receipt), and their receipt is never injected into
-    /// the orchestrator (the text is the value, not a verdict).
-    private var consultWorkers: Set<WorkerId> = []
-
     /// How long a worker turn may run before the watchdog frees the pool. Well
     /// above a real turn (a deep-context worker turn is tens of seconds); this
     /// is a wedge-breaker, not a budget — the packet's budgets are the budget.
     static let workerTurnTimeoutSeconds = 600.0
-    @ObservationIgnored private var workerWatchdogTask: Task<Void, Never>?
 
     /// The `/chat` path: run the task as a read-only pool worker and surface
     /// the answer (the glossary's **chat** — formerly the misnamed
@@ -1321,7 +1180,7 @@ final class AgentController {
             taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
             baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
         poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
-        consultWorkers.insert(workerId)
+        workerTurn.markConsult(workerId)
         // Run the worker now in the SAME engine (a context-isolated session) —
         // no second model process, so the separate-process hang class is gone.
         // The answer is surfaced in finishWorkerTurn when the worker's turn

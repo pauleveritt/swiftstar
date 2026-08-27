@@ -192,6 +192,47 @@ public enum ToolCallbackResponder {
         return .refuse("refused: unknown or unsupported tool: \(name)")
     }
 
+    /// The consent-check step shared by both `respond` overloads (item 3, P22
+    /// cleanup): either a finished response (a consent refusal, or `dispatch`'s
+    /// host-control admit — neither calls `execute`) or the consent-cleared
+    /// request for the caller to run through its own (sync or async)
+    /// `execute` closure.
+    private enum PreExecute {
+        case response(ToolCallbackResponse)
+        case execute(ToolExecutionRequest)
+    }
+
+    private static func preExecute(
+        idx: Int, name: String, params: [ToolParam],
+        workspace: URL, shellAllowed: Bool, writableFiles: [String]?
+    ) -> PreExecute {
+        // P11 (D3): `dispatch` is a host-control tool — the host enqueues the
+        // worker. The responder admits a well-formed call and returns ok:true
+        // (the controller overwrites `s` with "dispatched as worker N" after
+        // enqueueing). No `execute` runs.
+        if name == "dispatch" {
+            switch consent(idx: idx, name: name, params: params,
+                           workspace: workspace, shellAllowed: shellAllowed,
+                           writableFiles: writableFiles) {
+            case .refuse(let reason):
+                return .response(ToolCallbackResponse(idx: idx, ok: false,
+                    s: ToolResultCondenser.condense(reason)))
+            case .proceed:
+                return .response(ToolCallbackResponse(idx: idx, ok: true, s: "dispatched"))
+            }
+        }
+        switch consent(idx: idx, name: name, params: params,
+                       workspace: workspace, shellAllowed: shellAllowed,
+                       writableFiles: writableFiles) {
+        case .refuse(let reason):
+            return .response(ToolCallbackResponse(
+                idx: idx, ok: false, s: ToolResultCondenser.condense(reason),
+                mutations: [], exitStatus: nil, outputDigest: nil, validationRan: false))
+        case .proceed(let req):
+            return .execute(req)
+        }
+    }
+
     /// The pure `request → result` mapping: consent-check, execute (the
     /// injected, side-effecting closure), condense, and assemble the response.
     /// A consent refusal returns `ok:false` with the condensed reason and does
@@ -207,30 +248,38 @@ public enum ToolCallbackResponder {
         writableFiles: [String]? = nil,
         execute: (ToolExecutionRequest) -> ToolExecutionResult
     ) -> ToolCallbackResponse {
-        // P11 (D3): `dispatch` is a host-control tool — the host enqueues the
-        // worker. The responder admits a well-formed call and returns ok:true
-        // (the controller overwrites `s` with "dispatched as worker N" after
-        // enqueueing). No `execute` runs.
-        if name == "dispatch" {
-            switch consent(idx: idx, name: name, params: params,
-                           workspace: workspace, shellAllowed: shellAllowed,
-                           writableFiles: writableFiles) {
-            case .refuse(let reason):
-                return ToolCallbackResponse(idx: idx, ok: false,
-                    s: ToolResultCondenser.condense(reason))
-            case .proceed:
-                return ToolCallbackResponse(idx: idx, ok: true, s: "dispatched")
-            }
-        }
-        switch consent(idx: idx, name: name, params: params,
-                       workspace: workspace, shellAllowed: shellAllowed,
-                       writableFiles: writableFiles) {
-        case .refuse(let reason):
-            return ToolCallbackResponse(
-                idx: idx, ok: false, s: ToolResultCondenser.condense(reason),
-                mutations: [], exitStatus: nil, outputDigest: nil, validationRan: false)
-        case .proceed(let req):
+        switch preExecute(idx: idx, name: name, params: params,
+                          workspace: workspace, shellAllowed: shellAllowed,
+                          writableFiles: writableFiles) {
+        case .response(let response):
+            return response
+        case .execute(let req):
             let raw = execute(req)
+            return ToolCallbackResponse(
+                idx: idx, ok: raw.ok, s: ToolResultCondenser.condense(raw.text),
+                mutations: raw.mutations, exitStatus: raw.exitStatus,
+                outputDigest: raw.outputDigest, validationRan: raw.validationRan)
+        }
+    }
+
+    /// The async twin of `respond` (item 3, P22 cleanup): identical mapping,
+    /// but awaits an async `execute` closure. `AgentController` routes both
+    /// its orchestrator and pool-worker tool requests through this overload
+    /// now that its host executor can run a `bash` call via
+    /// `SubprocessRunner`'s async `run` without blocking the MainActor.
+    public static func respond(
+        idx: Int, name: String, params: [ToolParam],
+        workspace: URL, shellAllowed: Bool,
+        writableFiles: [String]? = nil,
+        execute: (ToolExecutionRequest) async -> ToolExecutionResult
+    ) async -> ToolCallbackResponse {
+        switch preExecute(idx: idx, name: name, params: params,
+                          workspace: workspace, shellAllowed: shellAllowed,
+                          writableFiles: writableFiles) {
+        case .response(let response):
+            return response
+        case .execute(let req):
+            let raw = await execute(req)
             return ToolCallbackResponse(
                 idx: idx, ok: raw.ok, s: ToolResultCondenser.condense(raw.text),
                 mutations: raw.mutations, exitStatus: raw.exitStatus,
