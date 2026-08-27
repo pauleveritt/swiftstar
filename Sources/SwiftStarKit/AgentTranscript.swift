@@ -43,6 +43,10 @@ public enum AgentTranscriptRow: Equatable, Sendable {
     /// (the renderer shows it as a small static line under the bubble).
     case content(String, summary: TurnSummary?)
     case tool(ToolCard)
+    /// A worker's final answer surfaced by `/chat` — a delegated artifact,
+    /// rendered as its own panel (clearly not the main agent speaking).
+    /// Carries the worker's id for the panel's provenance badge.
+    case consulted(WorkerId, String)
     case system(String)
 }
 
@@ -103,6 +107,13 @@ public struct AgentTranscript: Equatable, Sendable {
     /// not a `> `-prefixed system line.
     public mutating func appendUser(_ message: String) {
         rows.append(.user(message))
+    }
+
+    /// Append a non-wire row directly (the generic entry point under the
+    /// semantic mutators). The orchestrated-answer row uses it — the controller
+    /// builds the row, the transcript only appends.
+    public mutating func append(_ row: AgentTranscriptRow) {
+        rows.append(row)
     }
 
     /// Freeze the turn's summary onto its reply bubble: attaches to the

@@ -12,6 +12,17 @@ struct SettingsView: View {
     // the transcript font size applies immediately.
     @AppStorage("agentShellAllowed") private var shellAllowed = false
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
+    // P19.1 D3: delegation defaults — the toolbar holds the active session's
+    // values; Settings holds the defaults.
+    @AppStorage("subagentPoolSize") private var subagentPoolSize = 2
+    @AppStorage("sessionCaptureEnabled") private var sessionCaptureEnabled = true
+    @AppStorage("defaultWorkspace") private var defaultWorkspace = ""
+    @AppStorage("dispatchDumb") private var dispatchDumb = false
+
+    // P19.1 D4: the engine lifecycle escape hatch, stashed here (not the main
+    // surface). Reached via AgentController.shared — the weak reference set in
+    // init, alive as long as MainView owns the controller.
+    @State private var engineController: AgentController?
 
     // Download section (P3)
     @State private var downloadRunner = DownloadRunner()
@@ -84,6 +95,21 @@ struct SettingsView: View {
                 Text("A selected variant is verified before launch; a custom file is not. Settings apply when the engine next starts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let engineController {
+                    Divider()
+                    HStack {
+                        Text(engineStateLabel(engineController.state))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Stop") { engineController.stopAgent() }
+                            .disabled(engineController.state == .stopped || engineController.state == .stopping)
+                        Button("Start") { engineController.startAgent() }
+                            .disabled(engineController.state == .ready || engineController.state == .starting)
+                        Button("Restart") { engineController.restartAgent() }
+                            .disabled(engineController.state == .stopping)
+                    }
+                }
             }
             Section("Download model") {
                 Picker("Model", selection: $selectedTarget) {
@@ -111,10 +137,30 @@ struct SettingsView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+            Section("Delegation") {
+                Stepper("Subagent pool: \(SubagentPoolSize.clamp(subagentPoolSize))", value: $subagentPoolSize, in: 1...8)
+                Toggle("Capture sessions to captures/live/", isOn: $sessionCaptureEnabled)
+                Toggle("Dispatch mode: Smart (off) / Dumb (on)", isOn: $dispatchDumb)
+                TextField("Default workspace (blank = repo root)", text: $defaultWorkspace)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 440)
+        .frame(width: 520, height: 560)
+        .onAppear { engineController = AgentController.shared }
         .onDisappear { downloadTask?.cancel() }
+    }
+
+    /// The engine's current state, for the Settings escape-hatch readout
+    /// (P19.1 D4). Mirrors the main surface's status text.
+    private func engineStateLabel(_ s: AgentController.AgentState) -> String {
+        switch s {
+        case .stopped: return "Agent stopped"
+        case .starting: return "Starting agent…"
+        case .ready: return "Agent ready"
+        case .generating: return "Working…"
+        case .stopping: return "Stopping…"
+        case .failed(let message): return "Failed: \(message)"
+        }
     }
 
     /// The slider's 0…3 slot index, mapped through `TranscriptFontScale.sizes`

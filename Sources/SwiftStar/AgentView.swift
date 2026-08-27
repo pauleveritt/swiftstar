@@ -6,12 +6,9 @@ struct AgentView: View {
     @State private var input = ""
     @FocusState private var inputFocused: Bool
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
-    @AppStorage("dispatchDumb") private var dispatchDumb = false
 
     var body: some View {
         VStack(spacing: 0) {
-            statusBar
-            Divider()
             transcriptView
             Divider()
             composer
@@ -20,30 +17,19 @@ struct AgentView: View {
         }
         .navigationTitle("Agent")
         .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(transcriptFontSize)))
-        .task { controller.startIfNeeded() }
-    }
-
-    private var statusBar: some View {
-        HStack {
-            Circle().fill(statusColor).frame(width: 10, height: 10)
-            Text(statusText).font(.caption)
-            Spacer()
-            workspaceButton
-            // The dumb/smart handoff-packet lever (P12.7 DumbImplementer, built
-            // 2026-08-26 as the demo/eval control): Smart = the engineered
-            // packet with the architecture's context help; Dumb = the minimal
-            // "here's the spec, build it" brief. Applies to the next dispatch.
-            Picker("Dispatch mode", selection: $dispatchDumb) {
-                Text("Smart").tag(false)
-                Text("Dumb").tag(true)
+        .toolbar(id: "main") {
+            ToolbarItem(id: "workspace", placement: .automatic) {
+                workspaceButton
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 110)
-            .help("Handoff packets: Smart carries the architecture's context help; Dumb is the minimal brief (eval/demo lever).")
-            agentButton
+            ToolbarItem(id: "model", placement: .automatic) {
+                ModelMenu(isGenerating: controller.isGenerating)
+            }
+            ToolbarItem(id: "endSession", placement: .primaryAction) {
+                Button("End session") { controller.stopAgent() }
+                    .help("Stop the agent run (the engine stops when you quit SwiftStar)")
+            }
         }
-        .padding(8)
+        .task { controller.startIfNeeded() }
     }
 
     private var workspaceButton: some View {
@@ -73,18 +59,6 @@ struct AgentView: View {
         }
     }
 
-    @ViewBuilder
-    private var agentButton: some View {
-        switch controller.state {
-        case .ready, .generating, .starting:
-            Button("Stop Agent") { controller.stopAgent() }
-        case .stopped, .failed:
-            Button("Start Agent") { controller.startAgent() }
-        case .stopping:
-            Button("Start Agent") { controller.startAgent() }.disabled(true)
-        }
-    }
-
     private var statusText: String {
         switch controller.state {
         case .stopped: return "Agent stopped"
@@ -96,20 +70,16 @@ struct AgentView: View {
         }
     }
 
-    private var statusColor: Color {
-        switch controller.state {
-        case .stopped: return .gray
-        case .starting, .stopping: return .yellow
-        case .ready: return .green
-        case .generating: return .blue
-        case .failed: return .red
-        }
-    }
-
     private var transcriptView: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
+                    // Rows are keyed by offset — a stable-row-ID decision (P19.0):
+                    // the transcript reducer is append-only (never inserts before
+                    // or removes a row), so an offset is a stable identity for the
+                    // row's whole lifetime. Pinned by
+                    // `AgentTranscriptTests.reducerIsAppendOnly`; revisit if a
+                    // reorder/insert/delete path ever lands (then stable IDs, not offsets).
                     ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { _, row in
                         rowView(row)
                     }
@@ -154,6 +124,8 @@ struct AgentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
             AgentToolCardView(card: card, workspace: controller.settings.workspace)
+        case .consulted(let worker, let text):
+            ConsultedAnswerView(worker: worker, text: text)
         case .system(let text):
             Text(text).font(.caption).foregroundStyle(.tertiary)
         }
@@ -170,6 +142,8 @@ struct AgentView: View {
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
+                // D8 attachment seam (reserved): a future clipboard-paste/attachment
+                // chip renders directly above this field. No paste code this phase.
                 TextField("Ask the agent…", text: $input, axis: .vertical)
                     .font(.system(size: CGFloat(TranscriptFontScale.clamp(transcriptFontSize))))
                     .textFieldStyle(.plain)
@@ -228,19 +202,22 @@ struct AgentView: View {
 
     private func send() {
         let message = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        // `/orchestrate <text>` — optionally `--files a.swift, b.swift`:
-        // dispatch as a subagent task in place (fresh context, worktree), the
-        // named files writable (worktree-relative), else read-only. Stays in
-        // the chat; the main context is untouched. Manual, so it stays
-        // available in dumb mode (the user's own hand).
-        if let request = OrchestrateCommand.parse(message) {
+        // Commands (P19.1 D10, glossary): `/chat` runs a read-only worker;
+        // `/orchestrate` is the coordination loop (P20-forward). A bare prompt
+        // is the default agent mode. Command names MUST agree with the glossary.
+        switch CommandRouter.parse(message) {
+        case .chat(let task):
             input = ""
-            controller.orchestrate(task: request.task, writableFiles: request.writableFiles)
-            return
+            controller.consult(task: task, writableFiles: [])
+        case .orchestrate:
+            input = ""
+            controller.orchestrateStub()
+        case nil:
+            guard controller.canSend, !message.isEmpty else { return }
+            input = ""
+            controller.send(message)
         }
-        guard controller.canSend, !message.isEmpty else { return }
-        input = ""
-        controller.send(message)
+        return
     }
 
     /// Bottom readout bar (ported from the DS4 Control agent window): left =
@@ -283,8 +260,6 @@ struct AgentView: View {
                     .contentShape(Rectangle())
                     .help(contextRingTooltip(s))
             }
-            Button("End session") { controller.stopAgent() }
-                .disabled(controller.state == .stopped || controller.state == .stopping)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -346,5 +321,37 @@ struct AgentView: View {
             text += String(format: " Current prefill speed: %.1f tok/s.", s.prefillTPS)
         }
         return text
+    }
+}
+
+/// The toolbar model menu (P19.1 D4): enumerates the effective model (Laguna S
+/// default + registry variants + custom), disabled mid-generation. A selection
+/// is a no-op for the same model; the actual switch behavior lands with P22.
+struct ModelMenu: View {
+    @AppStorage("selectedVariantID") private var selectedVariantID = ""
+    @AppStorage("modelPath") private var modelPath = ""
+    var isGenerating: Bool
+
+    var body: some View {
+        Menu {
+            ForEach(ModelChoice.list(variants: VariantRegistry.all)) { choice in
+                Button(choice.label) {
+                    // "" is the Settings picker's custom-file tag; "default"
+                    // is the implicit fallback (resolve fails -> Laguna S).
+                    selectedVariantID = choice.id == ModelChoice.customID ? "" : choice.id
+                }
+            }
+        } label: {
+            Label(currentLabel, systemImage: "cpu")
+        }
+        .disabled(isGenerating)
+        .help(isGenerating ? "Model switching is disabled while generating" : "Model switching lands with P22")
+    }
+
+    private var currentLabel: String {
+        if selectedVariantID.isEmpty || selectedVariantID == ModelChoice.customID {
+            return modelPath.isEmpty ? "Custom model" : (modelPath as NSString).lastPathComponent
+        }
+        return VariantRegistry.resolve(selectedVariantID)?.displayName ?? "Laguna S"
     }
 }
