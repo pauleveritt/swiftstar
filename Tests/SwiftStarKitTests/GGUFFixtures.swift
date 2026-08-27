@@ -55,6 +55,36 @@ enum GGUFBuilder {
         return body
     }
 
+    /// A Laguna-shaped byte stream: same as `make` but with `laguna.rope.*`
+    /// metadata keys (Laguna XS 2.1).
+    static func makeLaguna(
+        architecture: String = "laguna",
+        scalingType: String = "yarn",
+        freqBase: Float = 500_000.0,
+        tensors: [(name: String, type: UInt32, dims: [UInt64])],
+        version: UInt32 = 3
+    ) -> Data {
+        let kv: [Data] = [
+            str("general.architecture") + u32(stringType) + str(architecture),
+            str("laguna.rope.scaling.type") + u32(stringType) + str(scalingType),
+            str("laguna.rope.freq_base") + u32(float32Type) + f32(freqBase),
+        ]
+        var body = Data()
+        body.append(u32(0x4655_4747))       // "GGUF"
+        body.append(u32(version))
+        body.append(u64(UInt64(tensors.count)))
+        body.append(u64(UInt64(kv.count)))
+        for k in kv { body.append(k) }
+        for t in tensors {
+            body.append(str(t.name))
+            body.append(u32(UInt32(t.dims.count)))
+            for dim in t.dims { body.append(u64(dim)) }
+            body.append(u32(t.type))
+            body.append(u64(0))
+        }
+        return body
+    }
+
     /// A Mellum-shaped tensor directory: `blk.N.ffn_down_exps.weight` for N in
     /// 0..<layerCount, all `downType` (Q8_0 = 8). `dropLayer` omits one layer.
     static func mellumTensors(
@@ -64,6 +94,22 @@ enum GGUFBuilder {
     ) -> [(name: String, type: UInt32, dims: [UInt64])] {
         var tensors: [(String, UInt32, [UInt64])] = []
         for layer in 0..<layerCount {
+            if layer == dropLayer { continue }
+            tensors.append(("blk.\(layer).ffn_down_exps.weight", downType, [896, 2304, 64]))
+        }
+        return tensors
+    }
+
+    /// A Laguna-XS-shaped tensor directory: `blk.N.ffn_down_exps.weight` for N
+    /// in startLayer..<layerCount (1..<40), all `downType` (Q3_K = 11).
+    static func lagunaTensors(
+        downType: UInt32 = 11,
+        startLayer: Int = 1,
+        layerCount: Int = 40,
+        dropLayer: Int? = nil
+    ) -> [(name: String, type: UInt32, dims: [UInt64])] {
+        var tensors: [(String, UInt32, [UInt64])] = []
+        for layer in startLayer..<layerCount {
             if layer == dropLayer { continue }
             tensors.append(("blk.\(layer).ffn_down_exps.weight", downType, [896, 2304, 64]))
         }
@@ -87,6 +133,30 @@ func makeMellumMetadata(
 ) -> GGUFMetadata {
     var tensorTypes: [String: GGUFType] = [:]
     for layer in 0..<layerCount {
+        if layer == dropLayer { continue }
+        tensorTypes["blk.\(layer).ffn_down_exps.weight"] = downType
+    }
+    return GGUFMetadata(
+        architecture: architecture,
+        ropeScalingType: scalingType,
+        ropeFreqBase: freqBase,
+        tensorTypes: tensorTypes
+    )
+}
+
+/// A clean Laguna XS 2.1 `GGUFMetadata` (architecture "laguna", rope yarn /
+/// 500000, routed down tensors Q3_K on layers 1..<40 — dense layer 0 skipped).
+func makeLagunaMetadata(
+    downType: GGUFType = .q3_k,
+    startLayer: Int = 1,
+    layerCount: Int = 40,
+    dropLayer: Int? = nil,
+    architecture: String? = "laguna",
+    scalingType: String? = "yarn",
+    freqBase: Double? = 500_000.0
+) -> GGUFMetadata {
+    var tensorTypes: [String: GGUFType] = [:]
+    for layer in startLayer..<layerCount {
         if layer == dropLayer { continue }
         tensorTypes["blk.\(layer).ffn_down_exps.weight"] = downType
     }

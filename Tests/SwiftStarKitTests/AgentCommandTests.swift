@@ -173,4 +173,17 @@ struct AgentCommandTests {
         #expect(env["DS4_LOCK_FILE"] == "/tmp/ds4-test.lock", "the per-mode lock file must be set")
         #expect(env["KEEP"] == "me", "the base environment must be preserved")
     }
+
+    @Test func argvAppendsVariantRuntimeFlags() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        var settings = makeSettings(workspace: ws)
+        settings.runtime = EngineRuntimeConfig(ssdStreaming: true, ssdStreamingCacheExperts: 3200, prefillChunk: 4096)
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(Array(argv.suffix(5)) == ["--ssd-streaming", "--ssd-streaming-cache-experts", "3200", "--prefill-chunk", "4096"])
+    }
+
+    @Test func argvOmitsRuntimeFlagsWhenNil() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--ssd-streaming"))
+    }
 }

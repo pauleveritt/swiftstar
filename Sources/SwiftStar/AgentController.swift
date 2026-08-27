@@ -161,21 +161,21 @@ final class AgentController {
         // P13: resolve the model through the shared resolver, so a selected
         // variant takes precedence over the legacy path (M1), with the hardcoded
         // Laguna default only as the final fallback.
-        let modelPath = VariantResolver.resolveModelFile(
+        let (modelPath, variant) = VariantResolver.resolveModelFile(
             selectedVariantID: defaults.string(forKey: "selectedVariantID"),
             modelPath: defaults.string(forKey: "modelPath"),
             envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
             fallback: defaultModelFallback
-        ).url
-        // Clamp to the selected variant's declared range. The app default
-        // (51,200) is above every variant's `maxContext`, so without this,
-        // selecting a variant and pressing Start could only ever fail: the gate
-        // would refuse a context the variant never declared. Unselected (Laguna
-        // S, which has no Variant) keeps the requested size.
+        )
+        // Clamp to the resolved variant's declared range. The app default
+        // (51,200) is above every variant's `maxContext` — 40,960 for Mellum,
+        // 32,768 for Laguna XS — so without this, selecting a variant and
+        // pressing Start could only ever fail: the gate would refuse a context
+        // the variant never declared. Unselected (Laguna S, which has no
+        // Variant) keeps the requested size.
         let requestedContext = defaults.object(forKey: "contextSize") as? Int ?? 51_200
-        let contextSize = VariantResolver.resolveVariant(
-            selectedVariantID: defaults.string(forKey: "selectedVariantID")
-        )?.contract.memoryBudget.clampContext(requestedContext) ?? requestedContext
+        let contextSize = variant?.contract.memoryBudget.clampContext(requestedContext)
+            ?? requestedContext
         let workspace: URL
         if let dir = defaults.string(forKey: "agentWorkspace"), !dir.isEmpty {
             workspace = URL(fileURLWithPath: dir)
@@ -193,7 +193,8 @@ final class AgentController {
             modelPath: modelPath,
             contextSize: contextSize,
             workspace: workspace,
-            shellAllowed: shellAllowed
+            shellAllowed: shellAllowed,
+            runtime: variant?.runtime
         )
     }
 

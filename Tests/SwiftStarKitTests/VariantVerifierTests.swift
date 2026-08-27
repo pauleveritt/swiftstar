@@ -84,3 +84,48 @@ struct VariantVerifierTests {
         #expect(mismatches[0].message.contains("mellum"))
     }
 }
+
+struct LagunaXSVerifierTests {
+    private let lagunaXS = VariantRegistry.lagunaXS
+
+    @Test func cleanLagunaIsAdmitted() {
+        let mismatches = VariantVerifier.verify(lagunaXS, metadata: makeLagunaMetadata())
+        #expect(mismatches.isEmpty)
+    }
+
+    @Test func wrongArchitectureIsNamed() {
+        let meta = makeLagunaMetadata(architecture: "mellum")
+        let mismatches = VariantVerifier.verify(lagunaXS, metadata: meta)
+        #expect(mismatches.count == 1)
+        guard case .architecture(let expected, let actual) = mismatches[0] else {
+            Issue.record("expected .architecture, got \(mismatches)")
+            return
+        }
+        #expect(expected == "laguna")
+        #expect(actual == "mellum")
+    }
+
+    @Test func wrongDownTypeIsNamedAcrossRoutedLayers() {
+        let meta = makeLagunaMetadata(downType: .q4_k)
+        let mismatches = VariantVerifier.verify(lagunaXS, metadata: meta)
+        #expect(mismatches.count == 39)
+        guard case .downQuant(let layer, _, _) = mismatches[0] else {
+            Issue.record("expected .downQuant, got \(mismatches)")
+            return
+        }
+        #expect(layer == 1)  // dense layer 0 is not checked
+    }
+
+    @Test func missingRoutedLayerIsAMismatchNotASkip() {
+        let meta = makeLagunaMetadata(dropLayer: 20)
+        let mismatches = VariantVerifier.verify(lagunaXS, metadata: meta)
+        #expect(mismatches.count == 1)
+        guard case .downQuant(let layer, let expected, let actual) = mismatches[0] else {
+            Issue.record("expected .downQuant, got \(mismatches)")
+            return
+        }
+        #expect(layer == 20)
+        #expect(expected == .q3_k)
+        #expect(actual == nil)
+    }
+}

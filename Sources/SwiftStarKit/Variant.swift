@@ -3,6 +3,7 @@ import Foundation
 /// The model family the engine keys its default sampling and admission on.
 public enum ModelFamily: String, Equatable, Sendable {
     case mellum
+    case lagunaXS
 }
 
 /// Declared sampling defaults for a variant. Optional per-field and as a whole:
@@ -33,6 +34,43 @@ public struct SamplerDefaults: Equatable, Sendable {
     }
 }
 
+/// The launch-time engine flags a variant needs beyond the shared base argv.
+/// The *wired* analog of `SamplerDefaults` (which is declared but unwired):
+/// `AgentCommand`/`ServerCommand` append `argvFlags` whenever a variant
+/// declares a non-nil runtime. nil = no extra flags (engine defaults).
+public struct EngineRuntimeConfig: Equatable, Sendable {
+    /// `--ssd-streaming`: stream routed experts from SSD instead of residency
+    /// (the Laguna XS 2.1 16 GB config).
+    public var ssdStreaming: Bool
+    /// `--ssd-streaming-cache-experts <n>`: resident expert-cache size.
+    public var ssdStreamingCacheExperts: Int?
+    /// `--prefill-chunk <n>`: prefill chunking to bound the prefill cap.
+    public var prefillChunk: Int?
+
+    public init(
+        ssdStreaming: Bool = false,
+        ssdStreamingCacheExperts: Int? = nil,
+        prefillChunk: Int? = nil
+    ) {
+        self.ssdStreaming = ssdStreaming
+        self.ssdStreamingCacheExperts = ssdStreamingCacheExperts
+        self.prefillChunk = prefillChunk
+    }
+
+    /// The argv fragments this config contributes, in engine order.
+    public var argvFlags: [String] {
+        var out: [String] = []
+        if ssdStreaming { out.append("--ssd-streaming") }
+        if let n = ssdStreamingCacheExperts {
+            out.append(contentsOf: ["--ssd-streaming-cache-experts", String(n)])
+        }
+        if let n = prefillChunk {
+            out.append(contentsOf: ["--prefill-chunk", String(n)])
+        }
+        return out
+    }
+}
+
 /// The rope configuration a variant's runtime must honor. The two load-bearing
 /// facts are the scaling type (which export the engine implements) and the
 /// frequency base — a wrong export flipped a greedy token at 26 tokens on
@@ -52,12 +90,18 @@ public struct RopeContract: Equatable, Sendable {
 /// owns the deeper gate/up agreement checks.
 public struct QuantContract: Equatable, Sendable {
     public var downType: GGUFType
+    /// First layer index that carries the down tensor. Laguna XS 2.1 has a
+    /// dense leading layer (index 0) with no routed experts, so its contract
+    /// starts at 1; Mellum starts at 0.
+    public var startLayer: Int
+    /// Exclusive upper bound on the layer index (`startLayer..<layerCount`).
     public var layerCount: Int
     /// printf-style tensor-name pattern, e.g. `blk.%d.ffn_down_exps.weight`.
     public var downTensorPattern: String
 
-    public init(downType: GGUFType, layerCount: Int, downTensorPattern: String) {
+    public init(downType: GGUFType, startLayer: Int = 0, layerCount: Int, downTensorPattern: String) {
         self.downType = downType
+        self.startLayer = startLayer
         self.layerCount = layerCount
         self.downTensorPattern = downTensorPattern
     }
@@ -157,6 +201,8 @@ public struct Variant: Equatable, Sendable, Identifiable {
     public var modelFile: URL
     public var family: ModelFamily
     public var sampler: SamplerDefaults?
+    /// Launch-time engine flags (SSD streaming etc.); nil = engine defaults.
+    public var runtime: EngineRuntimeConfig?
     public var contract: RuntimeContract
 
     public init(
@@ -165,6 +211,7 @@ public struct Variant: Equatable, Sendable, Identifiable {
         modelFile: URL,
         family: ModelFamily,
         sampler: SamplerDefaults? = nil,
+        runtime: EngineRuntimeConfig? = nil,
         contract: RuntimeContract
     ) {
         self.id = id
@@ -172,6 +219,7 @@ public struct Variant: Equatable, Sendable, Identifiable {
         self.modelFile = modelFile
         self.family = family
         self.sampler = sampler
+        self.runtime = runtime
         self.contract = contract
     }
 }

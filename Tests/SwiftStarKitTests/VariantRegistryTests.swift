@@ -11,6 +11,7 @@ struct VariantRegistryTests {
         #expect(variant.contract.rope.scalingType == "yarn")
         #expect(variant.contract.rope.freqBase == 500_000.0)
         #expect(variant.contract.quantLayout.downType == .q8_0)
+        #expect(variant.contract.quantLayout.startLayer == 0)
         #expect(variant.contract.quantLayout.layerCount == 28)
         #expect(variant.contract.quantLayout.downTensorName(layer: 3) == "blk.3.ffn_down_exps.weight")
         // JetBrains' published Mellum sampling (ds4.c:63358).
@@ -26,6 +27,32 @@ struct VariantRegistryTests {
 
     @Test func allContainsMellum() {
         #expect(VariantRegistry.all.map(\.id).contains("mellum-2.1"))
+    }
+
+    @Test func resolvesLagunaXS() throws {
+        let variant = try #require(VariantRegistry.resolve("laguna-xs-2.1"))
+        #expect(variant.id == "laguna-xs-2.1")
+        #expect(variant.family == .lagunaXS)
+        #expect(variant.contract.architecture == "laguna")
+        #expect(variant.contract.rope.scalingType == "yarn")
+        #expect(variant.contract.rope.freqBase == 500_000.0)
+        #expect(variant.contract.quantLayout.downType == .q3_k)
+        #expect(variant.contract.quantLayout.startLayer == 1)
+        #expect(variant.contract.quantLayout.layerCount == 40)
+        #expect(variant.contract.quantLayout.downTensorName(layer: 5) == "blk.5.ffn_down_exps.weight")
+        // Laguna family sampling defaults (engine-lines.md).
+        #expect(variant.sampler?.temperature == 0.7)
+        #expect(variant.sampler?.topK == 20)
+        #expect(variant.sampler?.topP == 0.95)
+        #expect(variant.sampler?.minP == 0.05)
+        // The 16 GB SSD-streaming config (LAGUNA-XS21.md §6).
+        #expect(variant.runtime?.ssdStreaming == true)
+        #expect(variant.runtime?.ssdStreamingCacheExperts == 3200)
+        #expect(variant.runtime?.prefillChunk == 4096)
+    }
+
+    @Test func allContainsLagunaXS() {
+        #expect(VariantRegistry.all.map(\.id).contains("laguna-xs-2.1"))
     }
 }
 
@@ -104,6 +131,28 @@ struct MemoryBudgetTests {
     }
 }
 
+struct LagunaXSMemoryBudgetTests {
+    private let budget = VariantRegistry.lagunaXS.contract.memoryBudget
+
+    @Test func residentFootprintAt32k() throws {
+        let total = try #require(budget.totalBytes(at: 32_768))
+        let gib = Double(total) / 1_073_741_824
+        #expect(abs(gib - 6.53) < 0.01)
+    }
+
+    @Test func residentFootprintAt16k() throws {
+        let total = try #require(budget.totalBytes(at: 16_384))
+        let gib = Double(total) / 1_073_741_824
+        #expect(abs(gib - 5.91) < 0.01)
+    }
+
+    @Test func unsupportedContextIsRefused() {
+        #expect(budget.totalBytes(at: 16_383) == nil)
+        #expect(budget.totalBytes(at: 32_769) == nil)
+        #expect(budget.totalBytes(at: 51_200) == nil)
+    }
+}
+
 struct VariantResolverTests {
     @Test func variantBeatsLegacyPath() {
         let variant = VariantRegistry.mellum
@@ -140,5 +189,32 @@ struct VariantResolverTests {
             envModel: nil, fallback: URL(fileURLWithPath: "/fallback.gguf"))
         #expect(url2.path == "/fallback.gguf")
         #expect(r2 == nil)
+    }
+}
+
+struct ModelLocationTests {
+    /// The XS default named `~/models`, which holds only the Mellum file. The
+    /// acceptance run set SWIFTSTAR_LAGUNA_XS_MODEL, so a green run masked a
+    /// variant nobody could select without that variable.
+    @Test func everyRegisteredVariantResolvesToAReadableFile() {
+        for variant in VariantRegistry.all {
+            #expect(FileManager.default.isReadableFile(atPath: variant.modelFile.path),
+                    "\(variant.id) resolves to \(variant.modelFile.path), which is not readable")
+        }
+    }
+
+    @Test func envOverrideWinsOverTheSearchPath() {
+        // The override is how CI and the acceptance runs point at a staged file.
+        let key = "SWIFTSTAR_MELLUM_MODEL"
+        guard ProcessInfo.processInfo.environment[key] == nil else { return }
+        #expect(VariantRegistry.locateModel("nope.gguf", envKey: key).lastPathComponent == "nope.gguf")
+    }
+
+    @Test func unfoundFileStillNamesAPlausiblePath() {
+        // A refusal must name something a human can act on, not "".
+        let url = VariantRegistry.locateModel("definitely-absent-\(UUID().uuidString).gguf",
+                                              envKey: "SWIFTSTAR_NO_SUCH_KEY")
+        #expect(url.path.hasSuffix(".gguf"))
+        #expect(url.pathComponents.count > 2)
     }
 }
