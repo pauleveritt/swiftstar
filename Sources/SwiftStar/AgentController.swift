@@ -133,12 +133,12 @@ final class AgentController {
         // P13: resolve the model through the shared resolver, so a selected
         // variant takes precedence over the legacy path (M1), with the hardcoded
         // Laguna default only as the final fallback.
-        let modelPath = VariantResolver.resolveModelFile(
+        let (modelPath, variant) = VariantResolver.resolveModelFile(
             selectedVariantID: defaults.string(forKey: "selectedVariantID"),
             modelPath: defaults.string(forKey: "modelPath"),
             envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
             fallback: URL(fileURLWithPath: "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
-        ).url
+        )
         let contextSize = defaults.object(forKey: "contextSize") as? Int ?? 51_200
         let workspace: URL
         if let dir = defaults.string(forKey: "agentWorkspace"), !dir.isEmpty {
@@ -157,7 +157,8 @@ final class AgentController {
             modelPath: modelPath,
             contextSize: contextSize,
             workspace: workspace,
-            shellAllowed: shellAllowed
+            shellAllowed: shellAllowed,
+            runtime: variant?.runtime
         )
     }
 
@@ -1144,7 +1145,8 @@ final class AgentController {
             contextSize: baseSettings.contextSize,
             workspace: worktree,
             shellAllowed: false,        // D2: shell off for the dispatched attempt
-            systemPrompt: nil)          // minimal: the task text carries the instructions
+            systemPrompt: nil,          // minimal: the task text carries the instructions
+            runtime: baseSettings.runtime)
         let binary = AgentCommand.binaryPath(settings: settings)
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
             throw DispatchAttemptError.agentBinaryMissing(binary.path)

@@ -14,6 +14,7 @@ public struct GGUFType: RawRepresentable, Equatable, Hashable, Sendable {
     public static let q5_0 = GGUFType(rawValue: 6)
     public static let q8_0 = GGUFType(rawValue: 8)
     public static let q8_1 = GGUFType(rawValue: 9)
+    public static let q3_k = GGUFType(rawValue: 11)
     public static let q4_k = GGUFType(rawValue: 12)
 
     public var name: String {
@@ -22,6 +23,7 @@ public struct GGUFType: RawRepresentable, Equatable, Hashable, Sendable {
         case 6: return "q5_0"
         case 8: return "q8_0"
         case 9: return "q8_1"
+        case 11: return "q3_k"
         case 12: return "q4_k"
         default: return "type(\(rawValue))"
         }
@@ -124,6 +126,16 @@ public enum GGUFMetadataReader {
             case "mellum.rope.freq_base":
                 guard type == float32 else {
                     throw ReadError(path: url.path, reason: "mellum.rope.freq_base is not f32")
+                }
+                ropeFreqBase = try r.readF32()
+            case "laguna.rope.scaling.type":
+                guard type == string else {
+                    throw ReadError(path: url.path, reason: "laguna.rope.scaling.type is not a string")
+                }
+                ropeScalingType = try r.readString()
+            case "laguna.rope.freq_base":
+                guard type == float32 else {
+                    throw ReadError(path: url.path, reason: "laguna.rope.freq_base is not f32")
                 }
                 ropeFreqBase = try r.readF32()
             default:

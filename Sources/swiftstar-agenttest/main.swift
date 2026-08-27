@@ -560,7 +560,8 @@ func runFixtureOnce(_ name: String) throws {
         maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192,
         noThink: env["AGENTTEST_THINK"] != "1",
         thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0,
-        seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0))
+        seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0,
+        runtime: resolvedVariant?.runtime))
     defer { orch.stop() }
 
     // Give the fixture tier the same capture trail runOnce gets (D5/D9). D10's
@@ -674,7 +675,8 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         // context; a ceiling well under the total cap is the point.
         thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0,
         seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0,
-        tracePath: tracePath)
+        tracePath: tracePath,
+        runtime: resolvedVariant?.runtime)
     // P12.5 (D1): the model-decompose arm bumps the pool from 3 to 4 so
     // decompose gets its own independent KV-cache session (WorkerId(3)) that
     // cannot collide with the engine's untagged startup handshake (which

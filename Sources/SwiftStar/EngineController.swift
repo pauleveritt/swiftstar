@@ -73,18 +73,19 @@ final class EngineController {
         // P13: resolve the model through the shared resolver, so a selected
         // variant takes precedence over the legacy path (M1), with the hardcoded
         // Laguna default only as the final fallback.
-        let modelPath = VariantResolver.resolveModelFile(
+        let (modelPath, variant) = VariantResolver.resolveModelFile(
             selectedVariantID: defaults.string(forKey: "selectedVariantID"),
             modelPath: defaults.string(forKey: "modelPath"),
             envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
             fallback: URL(fileURLWithPath: "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
-        ).url
+        )
         let contextSize = defaults.object(forKey: "contextSize") as? Int ?? 51_200
         let savedPort = defaults.object(forKey: "port") as? Int ?? 0
         return EngineSettings(
             engineDir: engineDir,
             modelPath: modelPath,
-            port: savedPort > 0 ? savedPort : EngineController.probeFreePort()
+            port: savedPort > 0 ? savedPort : EngineController.probeFreePort(),
+            runtime: variant?.runtime
         )
     }
 

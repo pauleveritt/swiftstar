@@ -32,4 +32,21 @@ struct ServerCommandTests {
         #expect(ServerCommand.argv(settings: settings).contains("0.0.0.0"))
         #expect(ServerCommand.argv(settings: settings).contains("9"))
     }
+
+    @Test func argvAppendsVariantRuntimeFlags() {
+        let settings = EngineSettings(
+            engineDir: URL(fileURLWithPath: "/tmp/engine"),
+            modelPath: URL(fileURLWithPath: "/tmp/model.gguf"),
+            port: 43210,
+            contextSize: 32768,
+            runtime: EngineRuntimeConfig(ssdStreaming: true, ssdStreamingCacheExperts: 3200, prefillChunk: 4096)
+        )
+        let argv = ServerCommand.argv(settings: settings)
+        #expect(Array(argv.suffix(5)) == ["--ssd-streaming", "--ssd-streaming-cache-experts", "3200", "--prefill-chunk", "4096"])
+        let plain = EngineSettings(
+            engineDir: URL(fileURLWithPath: "/tmp/engine"),
+            modelPath: URL(fileURLWithPath: "/tmp/model.gguf"),
+            port: 43210)
+        #expect(!ServerCommand.argv(settings: plain).contains("--ssd-streaming"))
+    }
 }

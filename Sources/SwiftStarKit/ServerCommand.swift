@@ -7,19 +7,24 @@ public struct EngineSettings: Equatable, Sendable {
     public var port: Int
     public var contextSize: Int
     public var host: String
+    /// Launch-time engine flags (SSD streaming etc.) declared by a selected
+    /// variant; nil = engine defaults.
+    public var runtime: EngineRuntimeConfig?
 
     public init(
         engineDir: URL,
         modelPath: URL,
         port: Int,
         contextSize: Int = 32768,
-        host: String = "127.0.0.1"
+        host: String = "127.0.0.1",
+        runtime: EngineRuntimeConfig? = nil
     ) {
         self.engineDir = engineDir
         self.modelPath = modelPath
         self.port = port
         self.contextSize = contextSize
         self.host = host
+        self.runtime = runtime
     }
 }
 
@@ -28,12 +33,16 @@ public struct EngineSettings: Equatable, Sendable {
 /// validates. The binary path itself is NOT part of the returned array.
 public enum ServerCommand {
     public static func argv(settings: EngineSettings) -> [String] {
-        [
+        var argv: [String] = [
             "-m", settings.modelPath.path,
             "-c", String(settings.contextSize),
             "--host", settings.host,
             "--port", String(settings.port),
         ]
+        if let runtime = settings.runtime {
+            argv.append(contentsOf: runtime.argvFlags)
+        }
+        return argv
     }
 
     /// The executable to spawn for these settings.

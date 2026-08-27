@@ -42,6 +42,9 @@ public struct AgentSettings: Equatable, Sendable {
     /// unaffected — `swiftstar-drive` sets its own `tracePath` independently of
     /// this struct and is untouched by this field.
     public var tracePath: URL?
+    /// Launch-time engine flags (SSD streaming etc.) declared by a selected
+    /// variant; nil = engine defaults. Wired into argv (P13 Laguna XS arm).
+    public var runtime: EngineRuntimeConfig?
 
     public init(
         engineDir: URL,
@@ -54,7 +57,8 @@ public struct AgentSettings: Equatable, Sendable {
         thinkBudget: Int = 0,
         seed: UInt64 = 0,
         systemPrompt: String? = nil,
-        tracePath: URL? = nil
+        tracePath: URL? = nil,
+        runtime: EngineRuntimeConfig? = nil
     ) {
         self.engineDir = engineDir
         self.modelPath = modelPath
@@ -67,6 +71,7 @@ public struct AgentSettings: Equatable, Sendable {
         self.seed = seed
         self.systemPrompt = systemPrompt
         self.tracePath = tracePath
+        self.runtime = runtime
     }
 }
 
@@ -104,6 +109,9 @@ public enum AgentCommand {
         }
         if let tracePath = settings.tracePath {
             argv.append(contentsOf: ["--trace", tracePath.path])
+        }
+        if let runtime = settings.runtime {
+            argv.append(contentsOf: runtime.argvFlags)
         }
         return argv
     }

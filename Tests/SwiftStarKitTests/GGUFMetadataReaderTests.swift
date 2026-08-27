@@ -33,6 +33,19 @@ struct GGUFMetadataReaderTests {
         #expect(meta.tensorTypes["blk.0.ffn_down_exps.weight"] == .q5_0)
     }
 
+    @Test func parsesLagunaRopeKeysAndQ3K() throws {
+        let data = GGUFBuilder.makeLaguna(tensors: GGUFBuilder.lagunaTensors())
+        let url = try write(data)
+        let meta = try GGUFMetadataReader.parse(at: url)
+        #expect(meta.architecture == "laguna")
+        #expect(meta.ropeScalingType == "yarn")
+        #expect(meta.ropeFreqBase == 500_000.0)
+        #expect(meta.tensorTypes.count == 39)
+        #expect(meta.tensorTypes["blk.1.ffn_down_exps.weight"] == .q3_k)
+        #expect(meta.tensorTypes["blk.39.ffn_down_exps.weight"] == .q3_k)
+        #expect(meta.tensorTypes["blk.0.ffn_down_exps.weight"] == nil)
+    }
+
     @Test func wrongVersionIsNamedRefusal() throws {
         let data = GGUFBuilder.make(tensors: GGUFBuilder.mellumTensors(), version: 2)
         let url = try write(data)

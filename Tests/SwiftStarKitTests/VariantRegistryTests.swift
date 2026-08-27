@@ -27,6 +27,32 @@ struct VariantRegistryTests {
     @Test func allContainsMellum() {
         #expect(VariantRegistry.all.map(\.id).contains("mellum-2.1"))
     }
+
+    @Test func resolvesLagunaXS() throws {
+        let variant = try #require(VariantRegistry.resolve("laguna-xs-2.1"))
+        #expect(variant.id == "laguna-xs-2.1")
+        #expect(variant.family == .lagunaXS)
+        #expect(variant.contract.architecture == "laguna")
+        #expect(variant.contract.rope.scalingType == "yarn")
+        #expect(variant.contract.rope.freqBase == 500_000.0)
+        #expect(variant.contract.quantLayout.downType == .q3_k)
+        #expect(variant.contract.quantLayout.startLayer == 1)
+        #expect(variant.contract.quantLayout.layerCount == 40)
+        #expect(variant.contract.quantLayout.downTensorName(layer: 5) == "blk.5.ffn_down_exps.weight")
+        // Laguna family sampling defaults (engine-lines.md).
+        #expect(variant.sampler?.temperature == 0.7)
+        #expect(variant.sampler?.topK == 20)
+        #expect(variant.sampler?.topP == 0.95)
+        #expect(variant.sampler?.minP == 0.05)
+        // The 16 GB SSD-streaming config (LAGUNA-XS21.md §6).
+        #expect(variant.runtime?.ssdStreaming == true)
+        #expect(variant.runtime?.ssdStreamingCacheExperts == 3200)
+        #expect(variant.runtime?.prefillChunk == 4096)
+    }
+
+    @Test func allContainsLagunaXS() {
+        #expect(VariantRegistry.all.map(\.id).contains("laguna-xs-2.1"))
+    }
 }
 
 struct MemoryBudgetTests {
@@ -61,6 +87,28 @@ struct MemoryBudgetTests {
         let t32 = try #require(budget.totalBytes(at: 32_768))
         let t40 = try #require(budget.totalBytes(at: 40_960))
         #expect(t32 < t40)
+    }
+}
+
+struct LagunaXSMemoryBudgetTests {
+    private let budget = VariantRegistry.lagunaXS.contract.memoryBudget
+
+    @Test func residentFootprintAt32k() throws {
+        let total = try #require(budget.totalBytes(at: 32_768))
+        let gib = Double(total) / 1_073_741_824
+        #expect(abs(gib - 6.53) < 0.01)
+    }
+
+    @Test func residentFootprintAt16k() throws {
+        let total = try #require(budget.totalBytes(at: 16_384))
+        let gib = Double(total) / 1_073_741_824
+        #expect(abs(gib - 5.91) < 0.01)
+    }
+
+    @Test func unsupportedContextIsRefused() {
+        #expect(budget.totalBytes(at: 16_383) == nil)
+        #expect(budget.totalBytes(at: 32_769) == nil)
+        #expect(budget.totalBytes(at: 51_200) == nil)
     }
 }
 
