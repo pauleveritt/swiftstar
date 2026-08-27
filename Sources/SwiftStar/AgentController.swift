@@ -108,7 +108,12 @@ final class AgentController {
     // handles that cannot leave the app target: the disposable worktree (its
     // file mutations land here, never in the caller's tree — the P10
     // isolation guarantee), the outcome builder, and the watchdog task.
-    @ObservationIgnored private var workerTurn = ActiveWorkerTurn()
+    // Deliberately NOT @ObservationIgnored (unlike memoryTask/process, whose
+    // nonisolated deinit access forces that opt-out): `isConsulting` below
+    // reads it, and Observation only notifies a view when the property it
+    // read is tracked. Same treatment as `outcomeBuilder`, which is mutated
+    // just as often (per wire event) and stays tracked.
+    private var workerTurn = ActiveWorkerTurn()
     private var sentInterrupt = false
     private var buildSHA = "unknown"
     private let logHandle: FileHandle?
@@ -141,6 +146,19 @@ final class AgentController {
     /// The agent is up and serving — the state in which the bottom bar's
     /// telemetry readout (rates, rings) is meaningful.
     var isUp: Bool { state == .ready || state == .generating }
+    /// True only while a `/chat` consult worker is running (item 2 of the
+    /// P22 cleanup). `consult()`'s worker turn runs via `drainQueuedWorkers()`
+    /// without ever touching `state` — it stays `.ready` for the whole turn,
+    /// on purpose: `sendConsulted`'s delivery requires `canSend`, `interrupt()`
+    /// keys off `isGenerating`, and `ModelMenu` disables on `isGenerating` —
+    /// all three would break if a worker turn reused `.generating`. This is a
+    /// separate signal so AgentView can show a distinct "consulting" affordance
+    /// (composer visibly busy, but not the generating/interrupt state) instead
+    /// of looking idle while a consult worker is in flight.
+    var isConsulting: Bool {
+        guard let id = workerTurn.activeId else { return false }
+        return workerTurn.isConsult(id)
+    }
 
     /// The model used when nothing else resolves. Laguna S is the app's default
     /// but has no `Variant`, so its path is a literal — and an absolute one, in

@@ -141,6 +141,23 @@ struct AgentView: View {
                     Spacer()
                 }
             }
+            // Item 2 (P22 cleanup): `state` stays `.ready` for the whole
+            // consult worker turn (see AgentController.isConsulting's doc —
+            // `.generating` is load-bearing elsewhere and must not be
+            // reused), so without this the composer looks idle while a
+            // worker actually runs. A small spinner + label, matching the
+            // errorText row's shape, closes that gap without touching
+            // canSend/isGenerating.
+            if controller.isConsulting {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Consulting a worker…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            }
             HStack(alignment: .bottom, spacing: 8) {
                 // D8 attachment seam (reserved): a future clipboard-paste/attachment
                 // chip renders directly above this field. No paste code this phase.
@@ -162,12 +179,16 @@ struct AgentView: View {
                             input += "\n"
                             return .handled
                         }
-                        if controller.canSend {
+                        if controller.canSend && !controller.isConsulting {
                             send()
                         }
                         return .handled
                     }
-                    .disabled(!controller.canSend)
+                    // `canSend` alone stays true through a consult worker's
+                    // turn (state never leaves `.ready`) — `isConsulting`
+                    // closes that gap so the field visibly can't fire a
+                    // conflicting turn while a worker is running.
+                    .disabled(!controller.canSend || controller.isConsulting)
                 Button {
                     if controller.isGenerating {
                         controller.interrupt()
@@ -187,6 +208,7 @@ struct AgentView: View {
                 .disabled(
                     !controller.isGenerating
                         && (controller.state != .ready
+                            || controller.isConsulting
                             || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 )
             }
