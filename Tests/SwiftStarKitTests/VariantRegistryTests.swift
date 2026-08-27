@@ -151,3 +151,30 @@ struct VariantResolverTests {
         #expect(r2 == nil)
     }
 }
+
+struct ModelLocationTests {
+    /// The XS default named `~/models`, which holds only the Mellum file. The
+    /// acceptance run set SWIFTSTAR_LAGUNA_XS_MODEL, so a green run masked a
+    /// variant nobody could select without that variable.
+    @Test func everyRegisteredVariantResolvesToAReadableFile() {
+        for variant in VariantRegistry.all {
+            #expect(FileManager.default.isReadableFile(atPath: variant.modelFile.path),
+                    "\(variant.id) resolves to \(variant.modelFile.path), which is not readable")
+        }
+    }
+
+    @Test func envOverrideWinsOverTheSearchPath() {
+        // The override is how CI and the acceptance runs point at a staged file.
+        let key = "SWIFTSTAR_MELLUM_MODEL"
+        guard ProcessInfo.processInfo.environment[key] == nil else { return }
+        #expect(VariantRegistry.locateModel("nope.gguf", envKey: key).lastPathComponent == "nope.gguf")
+    }
+
+    @Test func unfoundFileStillNamesAPlausiblePath() {
+        // A refusal must name something a human can act on, not "".
+        let url = VariantRegistry.locateModel("definitely-absent-\(UUID().uuidString).gguf",
+                                              envKey: "SWIFTSTAR_NO_SUCH_KEY")
+        #expect(url.path.hasSuffix(".gguf"))
+        #expect(url.pathComponents.count > 2)
+    }
+}

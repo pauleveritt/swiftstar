@@ -11,13 +11,42 @@ public enum VariantRegistry {
         all.first { $0.id == id }
     }
 
+    /// Locate a variant's gguf. Model files legitimately live in more than one
+    /// place on a development machine — the Mellum drop in `~/models`, the
+    /// Laguna line in the ds4 checkout's `gguf/` — and a variant that names the
+    /// wrong directory is unusable with no signal beyond `.unreadableFile`.
+    /// (That is precisely how the XS default shipped: it named `~/models`, which
+    /// holds only the Mellum file, and the acceptance run set the env override,
+    /// so the green run masked it.)
+    ///
+    /// Order: the variant's own env override, then `SWIFTSTAR_MODEL_DIR`, then
+    /// each known directory that actually has the file. When nothing matches,
+    /// return the first candidate so the refusal names a plausible path rather
+    /// than an empty string.
+    static func locateModel(_ fileName: String, envKey: String) -> URL {
+        let env = ProcessInfo.processInfo.environment
+        if let override = env[envKey], !override.isEmpty {
+            return URL(fileURLWithPath: override)
+        }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        var directories: [URL] = []
+        if let dir = env["SWIFTSTAR_MODEL_DIR"], !dir.isEmpty {
+            directories.append(URL(fileURLWithPath: dir))
+        }
+        directories.append(home.appending(path: "models"))
+        directories.append(home.appending(path: "projects/ds4/gguf"))
+
+        let candidates = directories.map { $0.appending(path: fileName) }
+        return candidates.first { FileManager.default.isReadableFile(atPath: $0.path) }
+            ?? candidates[0]
+    }
+
     public static let mellum: Variant = {
-        let defaultPath = NSHomeDirectory() + "/models/mellum-thinking-TARGET.gguf"
-        let path = ProcessInfo.processInfo.environment["SWIFTSTAR_MELLUM_MODEL"] ?? defaultPath
+        let path = locateModel("mellum-thinking-TARGET.gguf", envKey: "SWIFTSTAR_MELLUM_MODEL")
         return Variant(
             id: "mellum-2.1",
             displayName: "Mellum 2.1",
-            modelFile: URL(fileURLWithPath: path),
+            modelFile: path,
             family: .mellum,
             // JetBrains' published sampling (ds4_engine_sampling_defaults,
             // ds4.c:63358): temp 0.6, top-k 20, top-p 0.95, min-p 0.0. Declared
@@ -43,12 +72,11 @@ public enum VariantRegistry {
     }()
 
     public static let lagunaXS: Variant = {
-        let defaultPath = NSHomeDirectory() + "/models/laguna-xs-2.1-RoutedQ3_K-biased.gguf"
-        let path = ProcessInfo.processInfo.environment["SWIFTSTAR_LAGUNA_XS_MODEL"] ?? defaultPath
+        let path = locateModel("laguna-xs-2.1-RoutedQ3_K-biased.gguf", envKey: "SWIFTSTAR_LAGUNA_XS_MODEL")
         return Variant(
             id: "laguna-xs-2.1",
             displayName: "Laguna XS 2.1",
-            modelFile: URL(fileURLWithPath: path),
+            modelFile: path,
             family: .lagunaXS,
             // Laguna family sampling defaults (engine-lines.md): temp 0.7,
             // top-k 20, top-p 0.95, min-p 0.05. Declared, not wired (D6).
