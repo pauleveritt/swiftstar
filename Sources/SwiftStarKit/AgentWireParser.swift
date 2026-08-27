@@ -103,6 +103,7 @@ public struct AgentWireParser: Sendable {
                 prefillTPS: (object["prefill_tps"] as? NSNumber)?.doubleValue ?? 0,
                 genTPS: (object["gen_tps"] as? NSNumber)?.doubleValue ?? 0,
                 ts: (object["ts"] as? NSNumber)?.uint64Value ?? 0,
+                generated: (object["generated"] as? NSNumber)?.intValue ?? 0,
                 state: (object["state"] as? String) ?? ""
             ))
         case "ready":

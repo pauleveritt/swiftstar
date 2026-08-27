@@ -10,6 +10,9 @@ public struct StatusSnapshot: Equatable, Sendable {
     public let prefillTPS: Double
     public let genTPS: Double
     public let ts: UInt64
+    /// The wire's monotonic generated-token counter, for Δ/Δ rate arithmetic
+    /// (`ts` is CLOCK_MONOTONIC nanoseconds — see `TurnSummary.averageDecodeTPS`).
+    public let generated: Int
     /// The wire's `status.state` string (`idle`, `prefill`, `generating`, …).
     /// Added in P7: the agent controller infers turn end from the `idle`
     /// transition (D6). Metrics and Diagnostics read only the numeric fields.
@@ -70,6 +73,7 @@ public struct WireEventParser: Sendable {
                 prefillTPS: (object["prefill_tps"] as? NSNumber)?.doubleValue ?? 0,
                 genTPS: (object["gen_tps"] as? NSNumber)?.doubleValue ?? 0,
                 ts: (object["ts"] as? NSNumber)?.uint64Value ?? 0,
+                generated: (object["generated"] as? NSNumber)?.intValue ?? 0,
                 state: (object["state"] as? String) ?? ""
             ))
         case "ready":

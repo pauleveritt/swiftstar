@@ -9,7 +9,7 @@ struct AgentTranscriptTests {
         var t = AgentTranscript()
         t.apply(.text("Hello "))
         t.apply(.text("world"))
-        #expect(t.rows == [.content("Hello world")])
+        #expect(t.rows == [.content("Hello world", summary: nil)])
     }
 
     @Test func thinkingCoalescesSeparately() {
@@ -17,7 +17,7 @@ struct AgentTranscriptTests {
         t.apply(.think("hmm"))
         t.apply(.think(" more"))
         t.apply(.text("answer"))
-        #expect(t.rows == [.thinking("hmm more"), .content("answer")])
+        #expect(t.rows == [.thinking("hmm more"), .content("answer", summary: nil)])
     }
 
     @Test func leadingNewlineQuirkStripsOnce() {
@@ -28,7 +28,7 @@ struct AgentTranscriptTests {
         t.apply(.think("done"))
         t.apply(.text("\n\n\nThe answer"))
         t.apply(.text(" and more"))  // a later chunk is not stripped
-        #expect(t.rows == [.thinking("done"), .content("The answer and more")])
+        #expect(t.rows == [.thinking("done"), .content("The answer and more", summary: nil)])
     }
 
     @Test func singleCallBlockBuildsCard() {

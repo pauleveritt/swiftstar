@@ -93,6 +93,18 @@ Second review pass requested by the author; all findings acted on:
 Re-verified after the round: 576 tests / 79 suites green (fast +
 integration), bundle selftest green under the new contract.
 
+## After the merge (same day)
+
+- **Settings started**: Agent pane (shell toggle restored from the Agent tab;
+  transcript font-size slider, 4 slots / default 16, live via an environment
+  value + `MarkdownTheme.align`). `TranscriptFontScale` (5 tests).
+- **Per-turn summary on the reply bubble** (the live status-bar rate stays;
+  the finished turn's summary freezes under the bubble, DS4 stats-line
+  precedent): `TurnSummary` (decode average via Δgenerated/Δts — `ts` is
+  `CLOCK_MONOTONIC` ns, verified in the engine source), `StatusSnapshot`
+  gained `generated`, transcript `.content` carries the summary
+  (`attachSummary` guards trailing-content). 8 tests.
+
 ## Recorded follow-ups
 
 - **Golden recapture queued** (ROADMAP Backlog): `golden-tools.ndjson`

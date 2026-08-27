@@ -63,6 +63,6 @@ struct ToolCardEnrichmentTests {
         #expect(t.rows == [.user("hello")])
         // A subsequent content row is a separate row, not coalesced into the user row.
         t.apply(.text("reply"))
-        #expect(t.rows == [.user("hello"), .content("reply")])
+        #expect(t.rows == [.user("hello"), .content("reply", summary: nil)])
     }
 }

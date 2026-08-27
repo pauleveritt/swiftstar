@@ -39,7 +39,9 @@ public struct ToolCard: Equatable, Sendable {
 public enum AgentTranscriptRow: Equatable, Sendable {
     case user(String)
     case thinking(String)
-    case content(String)
+    /// The assistant's prose, with the turn's frozen summary once it completes
+    /// (the renderer shows it as a small static line under the bubble).
+    case content(String, summary: TurnSummary?)
     case tool(ToolCard)
     case system(String)
 }
@@ -70,10 +72,10 @@ public struct AgentTranscript: Equatable, Sendable {
                 text = String(text.drop(while: { $0.isWhitespace }))
                 sawThink = false
             }
-            if case .content(let existing)? = rows.last {
-                rows[rows.count - 1] = .content(existing + text)
+            if case .content(let existing, let summary)? = rows.last {
+                rows[rows.count - 1] = .content(existing + text, summary: summary)
             } else {
-                rows.append(.content(text))
+                rows.append(.content(text, summary: nil))
             }
         case .think(let s):
             sawThink = true
@@ -101,6 +103,15 @@ public struct AgentTranscript: Equatable, Sendable {
     /// not a `> `-prefixed system line.
     public mutating func appendUser(_ message: String) {
         rows.append(.user(message))
+    }
+
+    /// Freeze the turn's summary onto its reply bubble: attaches to the
+    /// trailing `.content` row only. A turn that ends with a tool card (no
+    /// prose) must not tag an earlier turn's content — so no trailing content
+    /// row means no attachment.
+    public mutating func attachSummary(_ summary: TurnSummary) {
+        guard case .content(let text, _)? = rows.last else { return }
+        rows[rows.count - 1] = .content(text, summary: summary)
     }
 
     private mutating func applyTool(_ te: AgentToolEvent) {

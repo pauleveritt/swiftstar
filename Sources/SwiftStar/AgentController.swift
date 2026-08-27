@@ -47,6 +47,10 @@ final class AgentController {
     /// `nonisolated(unsafe)`: mutated only on MainActor; deinit (nonisolated in
     /// Swift 6) reads it to cancel the poll.
     nonisolated(unsafe) private var memoryTask: Task<Void, Never>?
+    /// The `lastStatus` captured when a turn starts: the denominator of the
+    /// turn's decode-rate average (Δgenerated / Δts over the turn). nil when
+    /// the turn started before any status event (no fabricated average).
+    private var turnBaselineStatus: StatusSnapshot?
 
     /// The running agent's pid, if the child process is alive.
     var runningPid: pid_t? { process?.processIdentifier }
@@ -219,6 +223,7 @@ final class AgentController {
         lastPlannedBytes = nil
         lastPlannedModel = nil
         lastFootprintBytes = nil
+        turnBaselineStatus = nil
         outcomeBuilder = nil
         sentInterrupt = false
         // D12: the build identification is resolved once per spawn (the
@@ -383,6 +388,24 @@ final class AgentController {
                 outcomeBuilder = nil
                 lastTurnOutcome = outcome
                 log("turn outcome: \(outcome)")
+                // Freeze the turn's summary onto its reply bubble: the decode
+                // average over the turn (Δgenerated/Δts) when the counters
+                // advanced, else the engine-reported rate — never a fabricated
+                // average. `promptTPS` is the turn-end ratchet, matching the
+                // status bar's readout.
+                let decodeTPS: Double?
+                if let first = turnBaselineStatus, let last = lastStatus {
+                    decodeTPS = TurnSummary.averageDecodeTPS(first: first, last: last)
+                } else {
+                    decodeTPS = nil
+                }
+                let summary = TurnSummary(
+                    promptTPS: lastPrefillTPS,
+                    decodeTPS: decodeTPS ?? lastGenTPS,
+                    generatedTokens: outcome.generatedTokens,
+                    ctxUsed: outcome.ctxUsed)
+                transcript.attachSummary(summary)
+                turnBaselineStatus = nil
             }
             // P11 (D4): the orchestrator's turn ended — run any workers it
             // dispatched.
@@ -871,6 +894,8 @@ final class AgentController {
         // the brief window before fresh status events arrive.
         lastPrefillTPS = 0
         lastGenTPS = 0
+        // Capture the turn's start counters for the decode-rate average.
+        turnBaselineStatus = lastStatus
         state = .generating
         sentInterrupt = false
         // D12: open the turn's outcome record with the app-known facts the

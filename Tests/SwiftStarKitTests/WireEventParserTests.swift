@@ -47,7 +47,7 @@ struct WireEventParserTests {
         var parser = WireEventParser()
         _ = parser.feed(Self.handshake)
         let line = #"{"t":"status","state":"prefill","prefill_done":2,"prefill_total":142,"prefill_tps":5.8,"generated":0,"gen_tps":0.0,"ctx_used":1100,"ctx_size":32768,"power":100,"error":"","ts":12345}"#
-        #expect(parser.feed(line) == .status(StatusSnapshot(ctxUsed: 1100, ctxSize: 32768, prefillTPS: 5.8, genTPS: 0.0, ts: 12345, state: "prefill")))
+        #expect(parser.feed(line) == .status(StatusSnapshot(ctxUsed: 1100, ctxSize: 32768, prefillTPS: 5.8, genTPS: 0.0, ts: 12345, generated: 0, state: "prefill")))
     }
 
     @Test func readyLineParsesPlannedBytes() {

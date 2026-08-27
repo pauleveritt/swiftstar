@@ -124,8 +124,21 @@ struct AgentView: View {
             AgentPromptBubble(text: text)
         case .thinking(let text):
             ThinkingDisclosure(text: text)
-        case .content(let text):
-            MarkdownText(text)
+        case .content(let text, let summary):
+            VStack(alignment: .leading, spacing: 4) {
+                MarkdownText(text)
+                if let summary {
+                    // The frozen per-turn summary: decode average, tokens, ctx —
+                    // styled small and secondary so engine telemetry never reads
+                    // as part of the answer (the DS4 stats-line precedent).
+                    Text(summary.line)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .textSelection(.enabled)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
             AgentToolCardView(card: card, workspace: controller.settings.workspace)
         case .system(let text):
