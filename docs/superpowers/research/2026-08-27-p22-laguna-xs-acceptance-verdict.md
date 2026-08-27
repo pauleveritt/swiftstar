@@ -99,3 +99,15 @@ Evidence per run: `captures/agenttest/20260827-074305-roadmap/` and
   action, pre-admitted before stop, switch refused mid-generation) — not built.
 - **Branch unmerged** — `p13-laguna-xs-variant` (8 commits) is ready to merge;
   P22's forward items remain on the branch + this record.
+- **SSD support across the Laguna line (S arm, forward)** — Laguna S still
+  refuses `--ssd-streaming` (the pin's gate, `ds4.c:62233`, admits XS21 only).
+  The enabling change already exists: commit `2613723` ("admit --ssd-streaming"
+  for S 2.1, 6 lines) on the local `laguna-s21-ssd` branch in `~/projects/ds4`
+  (not pushed, not in the fork). To share SSD support across the line: merge
+  that commit into the fork's integration line → submodule bump → the standing
+  golden-recapture gate; add a `laguna-s-2.1` Variant so the shared
+  `EngineRuntimeConfig` carries the flags; then measure S-ssd's resident
+  footprint (mini-notes §8 numbers are XS's, not S's), define the S-ssd target
+  machine (32 GB?), and check DFlash × SSD-streaming interplay. S was
+  deliberately excluded from SSD streaming (engine-lines.md), so this is an
+  explicit re-scope, not a fix.
