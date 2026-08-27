@@ -283,19 +283,26 @@ final class AgentController {
         // from disk — analysing prompts, tool calls, context — without
         // SWIFTSTAR_LOG. The trace is written by the engine itself via
         // `--trace`; the wire/stderr are teed in the drain loops below.
+        let captureEnabled = UserDefaults.standard.object(forKey: "sessionCaptureEnabled") as? Bool ?? true
         let captureDir = Self.captureDirectory()
-        try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
-        try? Self.renderLiveProvenance(
-            model: settings.modelPath.lastPathComponent, build: buildSHA,
-            workspace: settings.workspace.path, at: captureDir)
-        settings.tracePath = captureDir.appendingPathComponent("agent.trace")
+        if captureEnabled {
+            try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
+            try? Self.renderLiveProvenance(
+                model: settings.modelPath.lastPathComponent, build: buildSHA,
+                workspace: settings.workspace.path, at: captureDir)
+            settings.tracePath = captureDir.appendingPathComponent("agent.trace")
+        }
         let captureWireURL = captureDir.appendingPathComponent("wire.ndjson")
         let captureStderrURL = captureDir.appendingPathComponent("agent.stderr")
         // `FileHandle(forWritingAtPath:)` opens an existing file — it does not
         // create one. The drains open it lazily, so create the empty files here
-        // or the tees silently write nothing for the whole session.
-        FileManager.default.createFile(atPath: captureWireURL.path, contents: nil)
-        FileManager.default.createFile(atPath: captureStderrURL.path, contents: nil)
+        // or the tees silently write nothing for the whole session. Capture
+        // disabled = no files created, so the lazy opens return nil and the
+        // tees no-op (P19.1 D3).
+        if captureEnabled {
+            FileManager.default.createFile(atPath: captureWireURL.path, contents: nil)
+            FileManager.default.createFile(atPath: captureStderrURL.path, contents: nil)
+        }
 
         // P8: stage the Superpowers skills into the workspace (progressive
         // disclosure, D2/D3) and pass the deterministic bootstrap index via
@@ -317,7 +324,9 @@ final class AgentController {
         // without a second model process. +1 session ≈ +8.7 GB at ctx 50k
         // (Correction 2: N × (KV + ~6.1 GB scratch)); the alternative — a
         // second 48 GB model load — is worse and was the orchestrate hang.
-        process.arguments = AgentCommand.argv(settings: settings) + ["--subagent-pool", "2"]
+        let poolRaw = UserDefaults.standard.integer(forKey: "subagentPoolSize")
+        let pool = SubagentPoolSize.clamp(poolRaw == 0 ? 2 : poolRaw)
+        process.arguments = AgentCommand.argv(settings: settings) + ["--subagent-pool", String(pool)]
         process.currentDirectoryURL = settings.engineDir
         // Metal shaders load cwd-relative, and the engine chdir's to
         // `--workspace`; point them at absolute paths (F1) so Metal resolves.
@@ -1049,6 +1058,30 @@ final class AgentController {
         // The termination handler lands on .stopped (its guard passes: state
         // is .stopping, not .stopped) after recording the exit.
     }
+
+    /// Stop, wait for the termination handler to land `.stopped`, then start
+    /// again. `startAgent()` refuses any state but `.stopped`/`.failed`, so a
+    /// restart cannot call it directly after `stopAgent()` (state is still
+    /// `.stopping`); it waits on the transition. The Settings escape hatch
+    /// (P19.1 D4): the engine lifecycle stays implicit in the main surface.
+    func restartAgent() {
+        switch state {
+        case .stopped, .failed:
+            startAgent()
+        default:
+            stopAgent()
+            restartTask?.cancel()
+            restartTask = Task { @MainActor [weak self] in
+                while self?.state != .stopped && !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                guard !Task.isCancelled, let self else { return }
+                self.startAgent()
+            }
+        }
+    }
+
+    @ObservationIgnored private var restartTask: Task<Void, Never>?
 
     /// One 1s poll of the agent process's resident footprint for the memory
     /// ring. A dead pid (or nil) blanks the ring rather than showing a stale
