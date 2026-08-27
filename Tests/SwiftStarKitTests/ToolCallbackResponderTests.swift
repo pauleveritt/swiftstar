@@ -335,6 +335,71 @@ struct ToolCallbackResponderTests {
         #expect(resp.exitStatus == 2)
     }
 
+    // MARK: - async respond (item 3, P22 cleanup): identical mapping to the
+    // sync overload, awaiting an async `execute` closure instead.
+
+    @Test func asyncRespondRefuseReturnsOkFalseAndDoesNotExecute() async {
+        var didExecute = false
+        let resp = await ToolCallbackResponder.respond(
+            idx: 7, name: "bash",
+            params: [param("command", "ls")],
+            workspace: ws, shellAllowed: false,
+            execute: { _ in
+                didExecute = true
+                return ToolExecutionResult(ok: true, text: "should not be used")
+            })
+        #expect(resp.ok == false)
+        #expect(resp.idx == 7)
+        #expect(!didExecute, "a refused consent must not call execute")
+    }
+
+    @Test func asyncRespondProceedAwaitsExecuteAndCarriesCondensedResult() async {
+        let resp = await ToolCallbackResponder.respond(
+            idx: 1, name: "read",
+            params: [param("path", "seed.txt")],
+            workspace: ws, shellAllowed: false,
+            execute: { _ in
+                // A real suspension point, not just an async-labeled sync
+                // closure — proves `respond` genuinely awaits `execute`.
+                try? await Task.sleep(nanoseconds: 1_000_000)
+                return ToolExecutionResult(ok: true, text: "hello")
+            })
+        #expect(resp.ok == true)
+        #expect(resp.s == "hello")
+        #expect(resp.idx == 1)
+    }
+
+    @Test func asyncRespondCarriesHostFacts() async {
+        let resp = await ToolCallbackResponder.respond(
+            idx: 0, name: "bash",
+            params: [param("command", "make test")],
+            workspace: ws, shellAllowed: true,
+            execute: { _ in
+                ToolExecutionResult(ok: true, text: "all good",
+                                    mutations: ["/tmp/a"],
+                                    exitStatus: 0, outputDigest: "sha256:deadbeef",
+                                    validationRan: true)
+            })
+        #expect(resp.ok == true)
+        #expect(resp.mutations == ["/tmp/a"])
+        #expect(resp.exitStatus == 0)
+        #expect(resp.outputDigest == "sha256:deadbeef")
+        #expect(resp.validationRan == true)
+    }
+
+    @Test func asyncDispatchProceedsWhenWellFormedWithoutCallingExecute() async {
+        let params = [ToolParam(name: "taskText", value: "fix a.swift")]
+        let r = await ToolCallbackResponder.respond(
+            idx: 0, name: "dispatch", params: params,
+            workspace: URL(fileURLWithPath: "/tmp/w"), shellAllowed: false,
+            execute: { _ in
+                Issue.record("execute must not run for dispatch")
+                return ToolExecutionResult(ok: true, text: "nope")
+            })
+        #expect(r.ok)
+        #expect(r.s == "dispatched")
+    }
+
     // MARK: - resultLine (the tool_result JSON line, D2)
 
     @Test func resultLineIsJsonToolResult() {

@@ -517,7 +517,7 @@ final class AgentController {
         }
     }
 
-    private func consumeWire(_ line: String, generation: Int) {
+    private func consumeWire(_ line: String, generation: Int) async {
         guard generation == self.generation else { return }
         guard let poolEvent = parser.feed(line) else { return }
         let event = poolEvent.event
@@ -525,7 +525,7 @@ final class AgentController {
         // P11 (D1/D4): worker-tagged events belong to the in-flight worker
         // turn, not the orchestrator's transcript/outcome.
         if poolEvent.worker != .orchestrator {
-            handleWorkerEvent(worker: poolEvent.worker, event: event)
+            await handleWorkerEvent(worker: poolEvent.worker, event: event, generation: generation)
             return
         }
 
@@ -653,12 +653,27 @@ final class AgentController {
                 // records the host facts), write the `tool_result` line to the
                 // agent's stdin, and feed the host facts into the open
                 // TurnOutcomeBuilder. The engine blocks on the result line, so
-                // this is synchronous (the stdout drain awaits consumeWire per
-                // line; the engine emits one request then blocks).
-                let response = ToolCallbackResponder.respond(
+                // the wire itself is still request→result; but item 3 (P22
+                // cleanup) made `execute` genuinely async (a `bash` call awaits
+                // `SubprocessRunner`'s async `run`) so a long-running command no
+                // longer blocks the MainActor — this `await` is a real
+                // suspension point, not just the actor-hop the outer call
+                // already had.
+                let response = await ToolCallbackResponder.respond(
                     idx: idx, name: name, params: params,
                     workspace: settings.workspace, shellAllowed: settings.shellAllowed,
                     execute: Self.executeHostTool)
+                // Reentrancy guard (item 3): freeing the MainActor during the
+                // await above means Stop/Restart became reachable mid-tool-call
+                // in a way they weren't when this was synchronous. A restart
+                // bumps `generation` and resets poolState/outcomeBuilder/
+                // rollingDigest for a brand-new session — folding this stale
+                // response into that new state (or writing its tool_result to
+                // the NEW engine's stdin) would corrupt it, so bail before
+                // touching any of it. A plain Stop (no restart) doesn't bump
+                // `generation`; `writeToolResult` itself is written to tolerate
+                // that (see its doc).
+                guard generation == self.generation else { return }
                 writeToolResult(response)
                 outcomeBuilder?.recordHostVerdict(
                     idx: idx, ok: response.ok,
@@ -700,11 +715,20 @@ final class AgentController {
 
     /// Write one `tool_result` line to the engine's stdin (the single sink for
     /// both the P9 responder path and the P11 dispatch path).
+    ///
+    /// `write(contentsOf:)`, not `write(_:)`: the latter is the ObjC-era
+    /// overload that RAISES on a closed/broken pipe, which `try?` cannot catch
+    /// — it terminates the app (the same lesson the wire-capture tees document
+    /// above). Item 3 (P22 cleanup) made the host `bash` executor genuinely
+    /// async, freeing the MainActor for the duration of a tool call — so
+    /// `stopAgent()` closing this pipe's write side is now reachable while a
+    /// call is in flight. `stopAgent()` does not bump `generation` (only a
+    /// restart does), so the caller's post-await generation guard does not
+    /// catch a plain Stop; this write must tolerate a closed pipe on its own.
     private func writeToolResult(_ response: ToolCallbackResponse) {
-        if let pipe = process?.standardInput as? Pipe {
-            pipe.fileHandleForWriting.write(
-                Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
-        }
+        guard let pipe = process?.standardInput as? Pipe else { return }
+        try? pipe.fileHandleForWriting.write(
+            contentsOf: Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
     }
 
     // MARK: - P11 worker-turn loop (D4)
@@ -786,17 +810,22 @@ final class AgentController {
 
     /// Route one worker-tagged event through the worker's turn (D4): answer its
     /// tool requests (revision-checked against its packet's writableFiles), and
-    /// finish the turn on its `ready`.
-    private func handleWorkerEvent(worker: WorkerId, event: AgentEvent) {
+    /// finish the turn on its `ready`. `generation` is the wire generation this
+    /// event was read under (threaded from `consumeWire`); item 3 (P22
+    /// cleanup) made the tool executor and `finishWorkerTurn`'s validation
+    /// genuinely async, so this — like `consumeWire` — re-checks it after
+    /// every await before touching shared controller state.
+    private func handleWorkerEvent(worker: WorkerId, event: AgentEvent, generation: Int) async {
         workerTurn.outcomeBuilder?.apply(event)
         switch event {
         case .toolRequest(let idx, let name, let params):
-            let response = ToolCallbackResponder.respond(
+            let response = await ToolCallbackResponder.respond(
                 idx: idx, name: name, params: params,
                 workspace: workerTurn.worktree?.url ?? settings.workspace,
                 shellAllowed: false,
                 writableFiles: workerTurn.activePacket?.writableFiles,
                 execute: Self.executeHostTool)
+            guard generation == self.generation else { return }
             writeToolResult(response)
             workerTurn.outcomeBuilder?.recordHostVerdict(
                 idx: idx, ok: response.ok, mutations: response.mutations,
@@ -812,7 +841,7 @@ final class AgentController {
             if let builder = workerTurn.outcomeBuilder {
                 let outcome = builder.finish()
                 workerTurn.outcomeBuilder = nil
-                finishWorkerTurn(worker: worker, outcome: outcome)
+                await finishWorkerTurn(worker: worker, outcome: outcome, generation: generation)
             }
         default:
             break
@@ -825,7 +854,7 @@ final class AgentController {
     /// candidate-vs-receipt verdict is the pure `WorktreeDispatch.verdict`; the
     /// candidate *ref* (the worktree commit SHA) is produced by the P10
     /// `WorktreeDispatcher`, which the pooled path will reuse for the commit.
-    private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome) {
+    private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome, generation: Int) async {
         workerTurn.watchdog?.cancel()
         let isConsult = workerTurn.isConsult(worker)
         let answerText: String? = isConsult ? outcome.text : nil
@@ -837,7 +866,10 @@ final class AgentController {
             let repo = Self.resolveRepoRoot(from: settings.workspace)
             let relativized = WorktreeDispatch.relativize(outcome: outcome, worktree: worktree.url)
             do {
-                let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: worktree.url)
+                // Item 3 (P22 cleanup): async, off the MainActor — this used to
+                // freeze the whole app's UI for as long as the validation
+                // command ran. `finalize` itself stays sync (no subprocess).
+                let validation = try await WorktreeDispatcher.runValidation(packet.validationCommand, in: worktree.url)
                 let dispatchOutcome = try WorktreeDispatcher.finalize(
                     worktree, packet: packet, turnOutcome: relativized,
                     validation: validation, in: repo)
@@ -872,6 +904,13 @@ final class AgentController {
                     answerText: answerText)
             }
         }
+        // Reentrancy guard (item 3): the worktree above is discarded either
+        // way — no leak — but a restart during the `await` above (bumping
+        // `generation`) already reset poolState/workerTurn/rollingDigest for a
+        // brand-new session; folding this stale turn's receipt into that state
+        // (or writing to the new session's wire) would corrupt it, so bail
+        // once cleanup is done.
+        guard generation == self.generation else { return }
         poolState = PoolScheduler.apply(poolState, .workerFinished(worker, receipt))
         // A consult runs read-only (writableFiles is empty by construction), so
         // its verdict is ALWAYS a refusal. Recording it would leave a phantom
@@ -981,12 +1020,17 @@ final class AgentController {
     /// re-stop instead of polling / stopping a job) — the executor refuses them
     /// with `ok:false` rather than mis-executing; the real job protocol is
     /// P10+ hardening.
-    /// `nonisolated` — touches only `FileManager`/`Process` (not `self`); the
-    /// synchronous run blocks the main actor during a `bash` call, which P9's
-    /// scope accepts (the engine blocks on the result line anyway).
+    /// `nonisolated` — touches only `FileManager`/`Process` (not `self`).
+    /// `async` (item 3, P22 cleanup): `bash` awaits `SubprocessRunner`'s async
+    /// `run`, which yields instead of blocking a thread, so a long-running
+    /// command no longer freezes the MainActor for up to its timeout (300s
+    /// default) — the engine still blocks on the result line either way (the
+    /// wire protocol is unchanged), but the app's UI stays responsive while it
+    /// waits. The other five cases have no await; they just run inside an
+    /// async function now.
     nonisolated private static func executeHostTool(
         _ request: ToolExecutionRequest
-    ) -> ToolExecutionResult {
+    ) async -> ToolExecutionResult {
         switch request.name {
         case "read", "more":
             guard let path = AgentController.confinedRealPath(request) else {
@@ -1069,9 +1113,12 @@ final class AgentController {
             }
             // SubprocessRunner drains stdout/stderr concurrently and enforces a
             // timeout (F1: waitUntilExit-before-read deadlocks on a full pipe).
+            // Item 3 (P22 cleanup): the async overload — yields via
+            // `Task.sleep` instead of blocking this (already off-MainActor)
+            // thread with `Thread.sleep`.
             let r: SubprocessRunner.Result
             do {
-                r = try SubprocessRunner.run(command, in: request.workspace)
+                r = try await SubprocessRunner.run(command, in: request.workspace)
             } catch {
                 return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
             }

@@ -159,13 +159,33 @@ public enum WorktreeDispatcher {
     /// exit status and a SHA-256 digest of stdout. Returns `nil` when the packet
     /// sets no validation command. A non-zero exit is a validation result (not a
     /// throw); the pure verdict maps it to `.validationFailed`.
+    ///
+    /// Blocks the calling thread for up to the command's timeout — fine for
+    /// `dispatch`'s synchronous `attempt` closure and the many sync callers
+    /// (`RepairLoop`, `swiftstar-agenttest`, tests). `AgentController`'s pool
+    /// worker path calls the async overload below instead (item 3, P22
+    /// cleanup): `finishWorkerTurn` runs on the MainActor, and this used to
+    /// freeze the whole app's UI for as long as the validation command ran.
     public static func runValidation(_ command: String?, in worktree: URL) throws -> ValidationResult? {
         guard let command else { return nil }
         let r = try SubprocessRunner.run(command, in: worktree)
-        // Combined, and digested over the same text `output` carries. Hashing
-        // stdout alone meant a Python traceback (stderr) produced the digest of
-        // the empty string — a field that looked like evidence and described
-        // nothing.
+        return digestValidation(r)
+    }
+
+    /// The async twin of `runValidation` (item 3, P22 cleanup): same command,
+    /// same digest, but waits via `SubprocessRunner`'s async `run` (yields
+    /// instead of blocking the MainActor).
+    public static func runValidation(_ command: String?, in worktree: URL) async throws -> ValidationResult? {
+        guard let command else { return nil }
+        let r = try await SubprocessRunner.run(command, in: worktree)
+        return digestValidation(r)
+    }
+
+    /// Shared tail of both `runValidation` overloads: combine stdout+stderr
+    /// (the same text `output` carries — hashing stdout alone meant a Python
+    /// traceback on stderr produced the digest of the empty string, a field
+    /// that looked like evidence and described nothing) and digest it.
+    private static func digestValidation(_ r: SubprocessRunner.Result) -> ValidationResult {
         let combined = r.stdout + (r.stdout.isEmpty || r.stderr.isEmpty ? "" : "\n") + r.stderr
         let digest = "sha256:" + SHA256.hash(data: Data(combined.utf8))
             .map { String(format: "%02x", $0) }.joined()
