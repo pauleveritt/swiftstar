@@ -247,7 +247,7 @@ struct AgentView: View {
                     .contentShape(Rectangle())
                     .help(memoryRingTooltip(footprint: footprint, planned: planned))
             }
-            if let s = controller.lastStatus, s.ctxSize > 0 {
+            if controller.isUp, let s = controller.lastStatus, s.ctxSize > 0 {
                 ValueGaugeView(
                     fraction: Double(s.ctxUsed) / Double(s.ctxSize),
                     text: nil, textFontSize: 0,
