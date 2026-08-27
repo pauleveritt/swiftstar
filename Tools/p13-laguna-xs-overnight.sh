@@ -55,8 +55,7 @@ if kill -0 "$SMOKE_PID" 2>/dev/null; then
   kill "$SMOKE_PID" 2>/dev/null; sleep 2; kill -9 "$SMOKE_PID" 2>/dev/null
 fi
 wait "$SMOKE_PID" 2>/dev/null
-if grep -qE '"ready"|"text"|planned_bytes' "$SMOKE" 2>/dev/null \
-   && ! grep -qiE 'ds4: |refus|segmentation|panic|fatal' "$SMOKE" 2>/dev/null; then
+if grep -qE '"t":"text"' "$SMOKE" 2>/dev/null; then
   echo "[smoke] LOADED + generated"
 else
   echo "[smoke] FAILED to load/generate — aborting before the eval loop"
