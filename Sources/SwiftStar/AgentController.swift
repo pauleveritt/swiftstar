@@ -270,6 +270,18 @@ final class AgentController {
         turnBaselineStatus = nil
         outcomeBuilder = nil
         sentInterrupt = false
+        // A restart is a fresh engine = a fresh pool: stale pending workers,
+        // orchestrate bookkeeping, and an in-flight orchestrate watch must not
+        // survive into the new session (a watch on the old engine's worker id
+        // would wait forever).
+        poolState = PoolState(workerCapacity: 1)
+        orchestrateWorkers = []
+        workerAnswers = [:]
+        orchestrateWatchTask?.cancel()
+        activeWorkerId = nil
+        activeWorkerPacket = nil
+        activeWorkerWorktree = nil
+        workerOutcomeBuilder = nil
         // D12: the build identification is resolved once per spawn (the
         // submodule SHA — the same fact the capture provenance records).
         buildSHA = AgentController.submoduleSHA(settings.engineDir)

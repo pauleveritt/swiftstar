@@ -95,6 +95,27 @@ integration), bundle selftest green under the new contract.
 
 ## After the merge (same day)
 
+### Later same day — Chat retired, pool proven, orchestrate in-process
+
+- **Headless spike (shell on)**: the spike prompt ran against the real engine
+  with `--shell on` — `bash` entered the tool mix (6 calls: `git log`, reads)
+  alongside `read`/`list`, confirming the shell lever; but think=high dominated
+  (1,232 think events) and the model never dispatched to the pool worker on
+  its own.
+- **Chat surface retired** (`f546671`): ChatView, EngineController, the whole
+  `ds4-server`/SSE path (ServerCommand, SSEParser, ChatTranscript, Supervisor,
+  BootLineParser) and the fake-server fixtures removed. The app is one Agent
+  surface, one `ds4-agent` process; Metrics attributes the agent pid; the app
+  delegate stops the agent on quit (no orphan).
+- **Pool proven against the real engine**: a headless run sent a `PoolPrompt`
+  (worker 1) while the engine was idle; worker 1 responded `"pong"`, and the
+  stderr showed two session allocations (orchestrator + worker) in one process
+  — the orchestrate-via-pool path is engine-verified, not just harness-tested.
+- **Pool-state reset on restart** (this commit): `poolState`,
+  `orchestrateWorkers`, `workerAnswers`, the watch task, and the in-flight
+  worker bookkeeping are now cleared in `startAgent` — a restart mid-orchestrate
+  no longer leaves a watch waiting on a dead engine's worker id.
+
 - **Settings started**: Agent pane (shell toggle restored from the Agent tab;
   transcript font-size slider, 4 slots / default 16, live via an environment
   value + `MarkdownTheme.align`). `TranscriptFontScale` (5 tests).
