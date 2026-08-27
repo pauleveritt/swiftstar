@@ -208,9 +208,9 @@ struct AgentView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(
-                    controller.state != .ready
-                        || (input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            && !controller.isGenerating)
+                    !controller.isGenerating
+                        && (controller.state != .ready
+                            || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 )
             }
         }
