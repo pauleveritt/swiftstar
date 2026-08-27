@@ -14,8 +14,13 @@ public enum MemorySnapshot {
             }
         }
         guard result == KERN_SUCCESS else {
-            // Fallback: total physical memory (over-optimistic but safe to refuse on).
-            return Int64(ProcessInfo.processInfo.physicalMemory)
+            // 0, not physical memory. This value is the numerator of an
+            // admission decision (`VariantGate.admit`), so an over-optimistic
+            // fallback ADMITS a launch that should be refused — the opposite of
+            // the "safe to refuse on" the old comment claimed. Reporting no
+            // available memory makes a failed reading refuse, which is the only
+            // conservative direction here.
+            return 0
         }
         var pageSize: vm_size_t = 0
         host_page_size(host, &pageSize)

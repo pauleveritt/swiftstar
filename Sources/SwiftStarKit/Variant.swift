@@ -114,6 +114,16 @@ public struct MemoryBudget: Equatable, Sendable {
         }
     }
 
+    /// The nearest context this variant actually supports. The app's default
+    /// (51,200) sits above every declared `maxContext`, so a selected variant
+    /// was admitted against a context it never declared and `VariantGate`
+    /// refused the launch outright — correct arithmetic, unreachable model.
+    /// Clamping keeps the refusal for genuinely infeasible cases while letting
+    /// a supported model start; the caller surfaces the adjustment.
+    public func clampContext(_ requested: Int) -> Int {
+        Swift.min(Swift.max(requested, minContext), maxContext)
+    }
+
     /// Total resident bytes at a context size; nil when the size is unsupported.
     public func totalBytes(at ctx: Int) -> Int64? {
         guard let kv = kvGiB(at: ctx) else { return nil }

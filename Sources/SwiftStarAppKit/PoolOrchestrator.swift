@@ -180,7 +180,7 @@ public final class PoolOrchestrator {
     private func executeHostTool(_ request: ToolExecutionRequest) -> ToolExecutionResult {
         switch request.name {
         case "read", "more":
-            guard let path = request.resolvedPath,
+            guard let path = HostToolConfinement.realPath(request),
                   let data = FileManager.default.contents(atPath: path),
                   let text = String(data: data, encoding: .utf8) else {
                 return ToolExecutionResult(ok: false, text: "error: could not read")
@@ -192,7 +192,9 @@ public final class PoolOrchestrator {
             readCache[path] = hash
             return ToolExecutionResult(ok: true, text: text)
         case "list":
-            guard let path = request.resolvedPath else { return ToolExecutionResult(ok: false, text: "error: no path") }
+            guard let path = HostToolConfinement.realPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
             do {
                 let entries = try FileManager.default.contentsOfDirectory(atPath: path)
                 return ToolExecutionResult(ok: true, text: entries.sorted().joined(separator: "\n"))
@@ -200,12 +202,16 @@ public final class PoolOrchestrator {
                 return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
             }
         case "search":
-            guard let path = request.resolvedPath else { return ToolExecutionResult(ok: false, text: "error: no path") }
+            guard let path = HostToolConfinement.realPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
             let query = request.params.first(where: { $0.name == "query" })?.value ?? ""
             let matches = Self.searchRecursive(root: path, query: query, maxResults: 50)
             return ToolExecutionResult(ok: true, text: matches.isEmpty ? "No matches\n" : matches.joined(separator: "\n"))
         case "write":
-            guard let path = request.resolvedPath else { return ToolExecutionResult(ok: false, text: "error: no path") }
+            guard let path = HostToolConfinement.realPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
             let content = request.params.first(where: { $0.name == "content" })?.value ?? ""
             do {
                 // Create parent directories so `templates/base.html` works even
@@ -219,7 +225,9 @@ public final class PoolOrchestrator {
                 return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
             }
         case "edit":
-            guard let path = request.resolvedPath else { return ToolExecutionResult(ok: false, text: "error: no path") }
+            guard let path = HostToolConfinement.realPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
             let old = request.params.first(where: { $0.name == "old" })?.value ?? ""
             let new = request.params.first(where: { $0.name == "new" })?.value ?? ""
             guard !old.isEmpty else { return ToolExecutionResult(ok: false, text: "error: edit requires non-empty old text") }

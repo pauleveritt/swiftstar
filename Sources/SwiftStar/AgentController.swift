@@ -167,7 +167,15 @@ final class AgentController {
             envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
             fallback: defaultModelFallback
         ).url
-        let contextSize = defaults.object(forKey: "contextSize") as? Int ?? 51_200
+        // Clamp to the selected variant's declared range. The app default
+        // (51,200) is above every variant's `maxContext`, so without this,
+        // selecting a variant and pressing Start could only ever fail: the gate
+        // would refuse a context the variant never declared. Unselected (Laguna
+        // S, which has no Variant) keeps the requested size.
+        let requestedContext = defaults.object(forKey: "contextSize") as? Int ?? 51_200
+        let contextSize = VariantResolver.resolveVariant(
+            selectedVariantID: defaults.string(forKey: "selectedVariantID")
+        )?.contract.memoryBudget.clampContext(requestedContext) ?? requestedContext
         let workspace: URL
         if let dir = defaults.string(forKey: "agentWorkspace"), !dir.isEmpty {
             workspace = URL(fileURLWithPath: dir)
@@ -1089,13 +1097,7 @@ final class AgentController {
     /// the engine (D1), enforced host-side. Returns the symlink-resolved
     /// absolute path, or nil on refusal.
     nonisolated private static func confinedRealPath(_ request: ToolExecutionRequest) -> String? {
-        guard let path = request.resolvedPath else { return nil }
-        let wsReal = request.workspace.resolvingSymlinksInPath()
-        let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath()
-        guard resolved.path == wsReal.path || resolved.path.hasPrefix(wsReal.path + "/") else {
-            return nil
-        }
-        return resolved.path
+        HostToolConfinement.realPath(request)
     }
 
     /// Recursive grep for the `search` executor: walks `root` depth-first, reads

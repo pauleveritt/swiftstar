@@ -30,6 +30,19 @@ struct VariantRegistryTests {
 }
 
 struct MemoryBudgetTests {
+    @Test func clampsToTheDeclaredRange() {
+        let b = VariantRegistry.mellum.contract.memoryBudget
+        // The app's own default sits above every declared maxContext — the
+        // combination that made a selected variant unlaunchable.
+        #expect(b.maxContext < 51_200)
+        #expect(b.clampContext(51_200) == b.maxContext)
+        #expect(b.clampContext(1_024) == b.minContext)
+        #expect(b.clampContext(32_768) == 32_768)
+        // A clamped context is, by construction, one the budget can price.
+        #expect(b.kvGiB(at: b.clampContext(51_200)) != nil)
+    }
+
+
     private let budget = VariantRegistry.mellum.contract.memoryBudget
 
     @Test func kvAnchors() {
