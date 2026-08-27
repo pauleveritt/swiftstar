@@ -98,14 +98,17 @@ final class AgentController {
     private var generation = 0
     // D12 turn-outcome state.
     private var outcomeBuilder: TurnOutcomeBuilder?
-    // P11 (D4) worker-turn state: the in-flight worker's packet (its
-    // writableFiles confine the worker's mutations), outcome builder, and id.
-    private var activeWorkerPacket: HandoffPacket?
-    private var workerOutcomeBuilder: TurnOutcomeBuilder?
-    private var activeWorkerId: WorkerId?
-    /// P11: the in-flight worker's disposable worktree — its file mutations
-    /// land here, never in the caller's tree (the P10 isolation guarantee).
-    private var activeWorkerWorktree: WorktreeDispatcher.Worktree?
+    // P11 (D4) worker-turn state: everything that exists only while one
+    // worker turn is in flight, consolidated into one value (item 1 of the
+    // P22 cleanup) so there is exactly one place that creates/clears it —
+    // previously six hand-synced properties reset by hand in three places
+    // (the restart reset below, `failActiveWorker`, `finishWorkerTurn`).
+    // Wraps SwiftStarKit's pure `WorkerTurnState` (the testable id/packet/
+    // consult-membership bookkeeping) together with the app-only live
+    // handles that cannot leave the app target: the disposable worktree (its
+    // file mutations land here, never in the caller's tree — the P10
+    // isolation guarantee), the outcome builder, and the watchdog task.
+    @ObservationIgnored private var workerTurn = ActiveWorkerTurn()
     private var sentInterrupt = false
     private var buildSHA = "unknown"
     private let logHandle: FileHandle?
@@ -335,12 +338,8 @@ final class AgentController {
         // A restart is a fresh engine = a fresh pool: stale pending workers and
         // consult bookkeeping must not survive into the new session.
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
-        consultWorkers = []
-        workerWatchdogTask?.cancel()
-        activeWorkerId = nil
-        activeWorkerPacket = nil
-        activeWorkerWorktree = nil
-        workerOutcomeBuilder = nil
+        workerTurn.watchdog?.cancel()
+        workerTurn = ActiveWorkerTurn()
         // D12: the build identification is resolved once per spawn (the
         // submodule SHA — the same fact the capture provenance records).
         buildSHA = AgentController.submoduleSHA(settings.engineDir)
@@ -715,14 +714,13 @@ final class AgentController {
             return
         }
         poolState = PoolScheduler.apply(poolState, .workerStarted(worker))
-        activeWorkerId = worker
-        activeWorkerPacket = packet
-        activeWorkerWorktree = worktree
-        workerOutcomeBuilder = TurnOutcomeBuilder(
-            model: settings.modelPath.lastPathComponent,
-            build: buildSHA,
-            sampler: "engine-defaults",
-            task: packet.taskText)
+        workerTurn.start(
+            id: worker, packet: packet, worktree: worktree,
+            outcomeBuilder: TurnOutcomeBuilder(
+                model: settings.modelPath.lastPathComponent,
+                build: buildSHA,
+                sampler: "engine-defaults",
+                task: packet.taskText))
         if let pipe = process?.standardInput as? Pipe {
             pipe.fileHandleForWriting.write(
                 Data((PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n").utf8))
@@ -737,12 +735,12 @@ final class AgentController {
     /// The watchdog is the only bound on that — delivery is edge-triggered, so
     /// there is no poll left to notice.
     private func armWorkerWatchdog(_ worker: WorkerId) {
-        workerWatchdogTask?.cancel()
+        workerTurn.watchdog?.cancel()
         let gen = generation
-        workerWatchdogTask = Task { @MainActor [weak self] in
+        workerTurn.watchdog = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(Self.workerTurnTimeoutSeconds))
             guard !Task.isCancelled, let self,
-                  self.generation == gen, self.activeWorkerId == worker else { return }
+                  self.generation == gen, self.workerTurn.activeId == worker else { return }
             self.failActiveWorker(worker, reason: "worker turn timed out")
         }
     }
@@ -751,19 +749,16 @@ final class AgentController {
     /// same bookkeeping `finishWorkerTurn` does, minus the outcome (there is no
     /// `ready`, so there is nothing to finalize).
     private func failActiveWorker(_ worker: WorkerId, reason: String) {
-        guard activeWorkerId == worker else { return }
-        let isConsult = consultWorkers.contains(worker)
-        if let worktree = activeWorkerWorktree {
+        guard workerTurn.activeId == worker else { return }
+        let isConsult = workerTurn.isConsult(worker)
+        if let worktree = workerTurn.worktree {
             WorktreeDispatcher.discard(worktree, in: Self.resolveRepoRoot(from: settings.workspace))
         }
-        workerOutcomeBuilder = nil
-        activeWorkerId = nil
-        activeWorkerPacket = nil
-        activeWorkerWorktree = nil
+        workerTurn.clearActive()
         let receipt = DispatchReceipt(worker: worker, ref: nil, reason: reason, summary: reason)
         poolState = PoolScheduler.apply(poolState, .workerFailed(worker, receipt))
         if isConsult {
-            consultWorkers.remove(worker)
+            workerTurn.removeConsult(worker)
             poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
             transcript.appendSystem("→ chat failed: \(reason)")
         }
@@ -775,17 +770,17 @@ final class AgentController {
     /// tool requests (revision-checked against its packet's writableFiles), and
     /// finish the turn on its `ready`.
     private func handleWorkerEvent(worker: WorkerId, event: AgentEvent) {
-        workerOutcomeBuilder?.apply(event)
+        workerTurn.outcomeBuilder?.apply(event)
         switch event {
         case .toolRequest(let idx, let name, let params):
             let response = ToolCallbackResponder.respond(
                 idx: idx, name: name, params: params,
-                workspace: activeWorkerWorktree?.url ?? settings.workspace,
+                workspace: workerTurn.worktree?.url ?? settings.workspace,
                 shellAllowed: false,
-                writableFiles: activeWorkerPacket?.writableFiles,
+                writableFiles: workerTurn.activePacket?.writableFiles,
                 execute: Self.executeHostTool)
             writeToolResult(response)
-            workerOutcomeBuilder?.recordHostVerdict(
+            workerTurn.outcomeBuilder?.recordHostVerdict(
                 idx: idx, ok: response.ok, mutations: response.mutations,
                 exitStatus: response.exitStatus, outputDigest: response.outputDigest,
                 validationRan: response.validationRan)
@@ -796,9 +791,9 @@ final class AgentController {
             writeToolResult(ToolCallbackResponse(idx: idx, ok: false,
                 s: ToolResultCondenser.condense(reason)))
         case .ready:
-            if let builder = workerOutcomeBuilder {
+            if let builder = workerTurn.outcomeBuilder {
                 let outcome = builder.finish()
-                workerOutcomeBuilder = nil
+                workerTurn.outcomeBuilder = nil
                 finishWorkerTurn(worker: worker, outcome: outcome)
             }
         default:
@@ -813,14 +808,14 @@ final class AgentController {
     /// candidate *ref* (the worktree commit SHA) is produced by the P10
     /// `WorktreeDispatcher`, which the pooled path will reuse for the commit.
     private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome) {
-        workerWatchdogTask?.cancel()
-        let isConsult = consultWorkers.contains(worker)
+        workerTurn.watchdog?.cancel()
+        let isConsult = workerTurn.isConsult(worker)
         let answerText: String? = isConsult ? outcome.text : nil
-        let packet = activeWorkerPacket ?? HandoffPacket(
+        let packet = workerTurn.activePacket ?? HandoffPacket(
             taskText: "", writableFiles: [], validationCommand: nil,
             baselines: [:], turnBudget: 0, toolCallBudget: 0)
         let receipt: DispatchReceipt
-        if let worktree = activeWorkerWorktree {
+        if let worktree = workerTurn.worktree {
             let repo = Self.resolveRepoRoot(from: settings.workspace)
             let relativized = WorktreeDispatch.relativize(outcome: outcome, worktree: worktree.url)
             do {
@@ -867,11 +862,9 @@ final class AgentController {
         if !isConsult {
             rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
         }
-        activeWorkerId = nil
-        activeWorkerPacket = nil
-        activeWorkerWorktree = nil
+        workerTurn.clearActive()
         if isConsult {
-            consultWorkers.remove(worker)
+            workerTurn.removeConsult(worker)
             // Surface the answer directly; never deliver a consult's receipt as
             // orchestrator prose — the answer IS the delivery. Clear the receipt
             // only when the send lands (at-least-once, matching
@@ -1268,16 +1261,10 @@ final class AgentController {
         lastFootprintBytes = snapshot.residentBytes
     }
 
-    /// Workers enqueued by `/chat`: their answer is surfaced as the worker's
-    /// text directly (not a receipt), and their receipt is never injected into
-    /// the orchestrator (the text is the value, not a verdict).
-    private var consultWorkers: Set<WorkerId> = []
-
     /// How long a worker turn may run before the watchdog frees the pool. Well
     /// above a real turn (a deep-context worker turn is tens of seconds); this
     /// is a wedge-breaker, not a budget — the packet's budgets are the budget.
     static let workerTurnTimeoutSeconds = 600.0
-    @ObservationIgnored private var workerWatchdogTask: Task<Void, Never>?
 
     /// The `/chat` path: run the task as a read-only pool worker and surface
     /// the answer (the glossary's **chat** — formerly the misnamed
@@ -1299,7 +1286,7 @@ final class AgentController {
             taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
             baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
         poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
-        consultWorkers.insert(workerId)
+        workerTurn.markConsult(workerId)
         // Run the worker now in the SAME engine (a context-isolated session) —
         // no second model process, so the separate-process hang class is gone.
         // The answer is surfaced in finishWorkerTurn when the worker's turn
