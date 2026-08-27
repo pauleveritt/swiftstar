@@ -2,7 +2,6 @@ import Foundation
 import Observation
 import SwiftStarKit
 import SwiftStarAppKit
-import CryptoKit
 import Darwin
 
 /// The agent child's lifecycle + turn state. Unlike the server's `Supervisor`
@@ -1008,186 +1007,27 @@ final class AgentController {
     /// P9: the host's side-effecting tool executor (D3/D6). The pure
     /// `ToolCallbackResponder` handles consent + condensation + the
     /// `tool_result` line; this closure is the app's file/process capability
-    /// the responder injects. It runs the six tool families under the
-    /// consent-cleared grant: `read`/`more`/`write`/`list`/`edit`/`search` read
-    /// or mutate files at `request.resolvedPath` (already confined by the
-    /// consent check); `bash` runs the command in the workspace cwd. The `ok`
-    /// verdict is the executor's own (true = ran, false = could not run); a
-    /// consent refusal never calls this. For `bash` the host facts ride along:
-    /// the exit status, a SHA-256 digest of stdout, and `validationRan` (the
-    /// host ran the command and can report its exit). `bash_status`/`bash_stop`
-    /// are not yet implemented in host mode (a fresh `Process` would re-run /
-    /// re-stop instead of polling / stopping a job) — the executor refuses them
-    /// with `ok:false` rather than mis-executing; the real job protocol is
-    /// P10+ hardening.
-    /// `nonisolated` — touches only `FileManager`/`Process` (not `self`).
-    /// `async` (item 3, P22 cleanup): `bash` awaits `SubprocessRunner`'s async
-    /// `run`, which yields instead of blocking a thread, so a long-running
-    /// command no longer freezes the MainActor for up to its timeout (300s
-    /// default) — the engine still blocks on the result line either way (the
-    /// wire protocol is unchanged), but the app's UI stays responsive while it
-    /// waits. The other five cases have no await; they just run inside an
-    /// async function now.
+    /// the responder injects.
+    ///
+    /// Item 4 (P22 cleanup): the actual six-tool-family implementation now
+    /// lives once, in `SwiftStarAppKit.HostToolExecutor`, shared with
+    /// `PoolOrchestrator` — this is a thin wrapper selecting the app's policy
+    /// (`.app`: no read cache, `bash` just runs since `shellAllowed` was
+    /// already checked by `ToolCallbackResponder.consent`, `search` honors
+    /// `case_sensitive` and a match-count header, `bash_status`/`bash_stop`
+    /// get an explicit refusal). `nonisolated` — touches only the executor
+    /// (not `self`); `async` because `bash` awaits `SubprocessRunner`'s async
+    /// `run` (item 3), which yields instead of blocking a thread, so a
+    /// long-running command no longer freezes the MainActor for up to its
+    /// timeout (300s default) — the engine still blocks on the result line
+    /// either way (the wire protocol is unchanged), but the app's UI stays
+    /// responsive while it waits.
+    nonisolated private static let hostToolExecutor = HostToolExecutor(policy: .app)
+
     nonisolated private static func executeHostTool(
         _ request: ToolExecutionRequest
     ) async -> ToolExecutionResult {
-        switch request.name {
-        case "read", "more":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            guard let data = FileManager.default.contents(atPath: path),
-                  let text = String(data: data, encoding: .utf8) else {
-                return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
-            }
-            return ToolExecutionResult(ok: true, text: text)
-
-        case "list":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            do {
-                let entries = try FileManager.default.contentsOfDirectory(atPath: path)
-                return ToolExecutionResult(ok: true, text: entries.sorted().joined(separator: "\n"))
-            } catch {
-                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
-            }
-
-        case "search":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            let query = request.params.first(where: { $0.name == "query" })?.value ?? ""
-            var caseSensitive = true
-            if let v = request.params.first(where: { $0.name == "case_sensitive" })?.value {
-                caseSensitive = v != "false" && v != "0"
-            }
-            let matches = AgentController.searchRecursive(
-                root: path, query: query, caseSensitive: caseSensitive, maxResults: 50)
-            if matches.isEmpty {
-                return ToolExecutionResult(ok: true, text: "No matches\n")
-            }
-            let header = "\(matches.count) match\(matches.count == 1 ? "" : "es") shown\n\n"
-            return ToolExecutionResult(ok: true, text: header + matches.joined(separator: "\n"))
-
-        case "write":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            let content = request.params.first(where: { $0.name == "content" })?.value ?? ""
-            do {
-                try content.write(toFile: path, atomically: true, encoding: .utf8)
-                return ToolExecutionResult(ok: true, text: "wrote \(path)", mutations: [path])
-            } catch {
-                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
-            }
-
-        case "edit":
-            guard let path = AgentController.confinedRealPath(request) else {
-                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
-            }
-            let old = request.params.first(where: { $0.name == "old" })?.value ?? ""
-            let new = request.params.first(where: { $0.name == "new" })?.value ?? ""
-            guard !old.isEmpty else {
-                return ToolExecutionResult(ok: false, text: "error: edit requires non-empty old text")
-            }
-            guard let data = FileManager.default.contents(atPath: path),
-                  var text = String(data: data, encoding: .utf8) else {
-                return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
-            }
-            guard let range = text.range(of: old) else {
-                return ToolExecutionResult(ok: false, text: "error: old text not found in \(path)")
-            }
-            text.replaceSubrange(range, with: new)
-            do {
-                try text.write(toFile: path, atomically: true, encoding: .utf8)
-                return ToolExecutionResult(ok: true, text: "edited \(path)", mutations: [path])
-            } catch {
-                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
-            }
-
-        case "bash":
-            let command = request.params.first(where: { $0.name == "command" })?.value ?? ""
-            guard !command.isEmpty else {
-                return ToolExecutionResult(ok: false, text: "error: bash requires command")
-            }
-            // SubprocessRunner drains stdout/stderr concurrently and enforces a
-            // timeout (F1: waitUntilExit-before-read deadlocks on a full pipe).
-            // Item 3 (P22 cleanup): the async overload — yields via
-            // `Task.sleep` instead of blocking this (already off-MainActor)
-            // thread with `Thread.sleep`.
-            let r: SubprocessRunner.Result
-            do {
-                r = try await SubprocessRunner.run(command, in: request.workspace)
-            } catch {
-                return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
-            }
-            let combined = r.stdout + (r.stderr.isEmpty ? "" : r.stderr)
-            let digest = "sha256:" + SHA256.hash(data: Data(r.stdout.utf8))
-                .map { String(format: "%02x", $0) }.joined()
-            return ToolExecutionResult(
-                ok: r.exit == 0 && !r.timedOut,
-                text: combined,
-                exitStatus: Int(r.exit),
-                outputDigest: digest, validationRan: true)
-
-        case "bash_status", "bash_stop":
-            // Not yet implemented in host mode: a fresh `Process` would re-run
-            // the command (bash_status) or re-run instead of stopping
-            // (bash_stop) — mis-execution, not a real poll/stop. Refuse loudly
-            // (ok:false) so the agent sees the limitation and can fall back to a
-            // plain `bash` with a short timeout. The real job protocol
-            // (long-lived bash jobs + status/stop) is P10+ hardening.
-            return ToolExecutionResult(
-                ok: false,
-                text: "bash_status/bash_stop are not yet implemented in host mode; use a plain bash with a short timeout")
-
-        default:
-            return ToolExecutionResult(ok: false, text: "error: unknown tool \(request.name)")
-        }
-    }
-
-    /// Belt-and-suspenders re-confinement for the executor: the pure `consent`
-    /// check resolves `..` but not symlinks (no I/O); the engine's confinement
-    /// uses `realpath`, which does. A symlink under the workspace that points
-    /// outside would pass the pure check but escape the grant on execution — this
-    /// resolves symlinks on both the workspace and the file and refuses when the
-    /// real path is outside the real workspace root. The same rules P7 put in
-    /// the engine (D1), enforced host-side. Returns the symlink-resolved
-    /// absolute path, or nil on refusal.
-    nonisolated private static func confinedRealPath(_ request: ToolExecutionRequest) -> String? {
-        HostToolConfinement.realPath(request)
-    }
-
-    /// Recursive grep for the `search` executor: walks `root` depth-first, reads
-    /// each regular file as UTF-8, and collects `path:lineNo:line` for lines
-    /// containing `query` (substring; case-sensitive unless `caseSensitive` is
-    /// false), capped at `maxResults` matches. Skips unreadable/binary files.
-    nonisolated private static func searchRecursive(
-        root: String, query: String, caseSensitive: Bool, maxResults: Int
-    ) -> [String] {
-        guard !query.isEmpty else { return [] }
-        let fm = FileManager.default
-        var results: [String] = []
-        let enumerator = fm.enumerator(atPath: root)
-        while let entry = enumerator?.nextObject() as? String {
-            if results.count >= maxResults { break }
-            let full = (root as NSString).appendingPathComponent(entry)
-            var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: full, isDirectory: &isDir),
-                  !isDir.boolValue else { continue }
-            guard let data = fm.contents(atPath: full),
-                  let text = String(data: data, encoding: .utf8) else { continue }
-            let needle = caseSensitive ? query : query.lowercased()
-            for (i, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-                if results.count >= maxResults { break }
-                let hay = caseSensitive ? String(line) : String(line).lowercased()
-                if hay.contains(needle) {
-                    results.append("\(entry):\(i + 1):\(line)")
-                }
-            }
-        }
-        return results
+        await hostToolExecutor.execute(request)
     }
 
     @discardableResult
