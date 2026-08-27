@@ -14,10 +14,10 @@ struct DownloadIntegrationTests {
         var data = Data()
         for i in 0..<bytes { data.append(UInt8(i % 251)) }
         try data.write(to: source)
-        let port = try FakeServerHarness.freePort()
+        let port = try FakeProcessHarness.freePort()
         let log = dir.appendingPathComponent("ranges.log")
-        let binary = try FakeServerHarness.compileFile(at: FakeServerHarness.repoRoot.appendingPathComponent("Tools/RangeFileServer.swift"), into: dir)
-        let server = try FakeServerHarness.spawn(binary, arguments: ["--port", "\(port)", "--file", source.path, "--log", log.path], env: [:])
+        let binary = try FakeProcessHarness.compileFile(at: FakeProcessHarness.repoRoot.appendingPathComponent("Tools/RangeFileServer.swift"), into: dir)
+        let server = try FakeProcessHarness.spawn(binary, arguments: ["--port", "\(port)", "--file", source.path, "--log", log.path], env: [:])
         // Real wait for the listening line (availableData is non-blocking).
         let stderr = server.stderr.fileHandleForReading
         let deadline = Date().addingTimeInterval(5)

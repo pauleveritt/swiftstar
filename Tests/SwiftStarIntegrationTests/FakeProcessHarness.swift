@@ -2,25 +2,19 @@ import Foundation
 import Darwin
 import SwiftStarKit
 
-enum FakeServerHarnessError: LocalizedError {
+/// Generic process-spawn harness for integration tests (extracted from the
+/// retired `FakeServerHarness` when the Chat server surface went away — the
+/// download tests still need a way to compile + run a local HTTP file server).
+enum FakeProcessHarnessError: LocalizedError {
     case bindFailed(errno: Int32)
-    case connectFailed(errno: Int32)
     case compileFailed(status: Int32, output: String)
-    case timeout(eventCount: Int)
-    case unexpectedEOF
 
     var errorDescription: String? {
         switch self {
         case .bindFailed(let code):
             return "bind failed: \(String(cString: strerror(code)))"
-        case .connectFailed(let code):
-            return "connect failed: \(String(cString: strerror(code)))"
         case .compileFailed(let status, let output):
             return "swiftc failed (exit \(status)): \(output)"
-        case .timeout(let count):
-            return "timed out waiting for [DONE]; got \(count) events"
-        case .unexpectedEOF:
-            return "unexpected EOF before [DONE]"
         }
     }
 }
@@ -31,17 +25,12 @@ struct FakeProcess {
     let stderr: Pipe
 }
 
-enum FakeServerHarness {
+enum FakeProcessHarness {
     static let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-    static func fixture(_ name: String) throws -> URL {
-        repoRoot.appendingPathComponent("fixtures/server").appendingPathComponent(name)
-    }
-
     /// Returns a free port. Known race: the port is released before the caller
-    /// binds it. Accepted for this harness (sequential tests, short window); the
-    /// fake server sets SO_REUSEADDR to survive the rebound.
+    /// binds it. Accepted for this harness (sequential tests, short window).
     static func freePort() throws -> Int {
         let s = socket(AF_INET, SOCK_STREAM, 0)
         defer { close(s) }
@@ -54,7 +43,7 @@ enum FakeServerHarness {
                 bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
-        guard r == 0 else { throw FakeServerHarnessError.bindFailed(errno: errno) }
+        guard r == 0 else { throw FakeProcessHarnessError.bindFailed(errno: errno) }
         var len = socklen_t(MemoryLayout<sockaddr_in>.size)
         var got = sockaddr_in()
         let g = withUnsafeMutablePointer(to: &got) { ptr in
@@ -62,7 +51,7 @@ enum FakeServerHarness {
                 getsockname(s, $0, &len)
             }
         }
-        guard g == 0 else { throw FakeServerHarnessError.bindFailed(errno: errno) }
+        guard g == 0 else { throw FakeProcessHarnessError.bindFailed(errno: errno) }
         return Int(got.sin_port.bigEndian)
     }
 
@@ -89,13 +78,6 @@ enum FakeServerHarness {
         return URL(fileURLWithPath: "/usr/bin/swiftc")
     }
 
-    static func compileFake(source: String, into dir: URL) throws -> URL {
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let mainFile = dir.appendingPathComponent("main.swift")
-        try source.write(to: mainFile, atomically: true, encoding: .utf8)
-        return try compile(sourceFile: mainFile, binary: dir.appendingPathComponent("fake-ds4-server"))
-    }
-
     /// Compiles a committed Swift main file (e.g. the RangeFileServer) into a
     /// binary in the given directory.
     static func compileFile(at path: URL, into dir: URL) throws -> URL {
@@ -114,7 +96,7 @@ enum FakeServerHarness {
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
             let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            throw FakeServerHarnessError.compileFailed(status: process.terminationStatus, output: output)
+            throw FakeProcessHarnessError.compileFailed(status: process.terminationStatus, output: output)
         }
         return binary
     }
@@ -130,56 +112,5 @@ enum FakeServerHarness {
         process.standardError = err
         try process.run()
         return FakeProcess(process: process, stdout: out, stderr: err)
-    }
-
-    /// Reads the SSE stream from the fake server until `data: [DONE]`, feeding
-    /// the Kit parser. Retries the connect briefly (the fake may not have bound
-    /// yet) and reads in buffered chunks so the loop blocks rather than spins.
-    static func readEvents(port: Int, timeout: TimeInterval = 30) throws -> [SSEEvent] {
-        let s = socket(AF_INET, SOCK_STREAM, 0)
-        defer { close(s) }
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = in_port_t(port).bigEndian
-        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
-
-        var connected = false
-        let connectDeadline = Date().addingTimeInterval(5)
-        repeat {
-            let r = withUnsafePointer(to: &addr) { ptr in
-                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    connect(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                }
-            }
-            if r == 0 {
-                connected = true
-                break
-            }
-            if Date() >= connectDeadline {
-                throw FakeServerHarnessError.connectFailed(errno: errno)
-            }
-            usleep(50_000)
-        } while !connected
-
-        var parser = SSEParser()
-        var events: [SSEEvent] = []
-        let deadline = Date().addingTimeInterval(timeout)
-        var buffer = Data()
-        var chunk = [UInt8](repeating: 0, count: 4096)
-        while Date() < deadline {
-            let n = Darwin.read(s, &chunk, chunk.count)
-            if n == 0 { throw FakeServerHarnessError.unexpectedEOF }
-            if n < 0 { throw FakeServerHarnessError.connectFailed(errno: errno) }
-            buffer.append(contentsOf: chunk[0..<n])
-            while let nl = buffer.firstIndex(of: 0x0A) {
-                let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
-                buffer.removeSubrange(buffer.startIndex...nl)
-                if let event = parser.feed(line) {
-                    events.append(event)
-                    if event == .done { return events }
-                }
-            }
-        }
-        throw FakeServerHarnessError.timeout(eventCount: events.count)
     }
 }

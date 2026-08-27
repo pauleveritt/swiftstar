@@ -115,10 +115,9 @@ public enum AgentCommand {
 
     /// The full spawn environment: `DS4_METAL_*_SOURCE` (absolute shader paths,
     /// F1 — the engine chdir's to `--workspace`, so cwd-relative shaders would
-    /// not resolve) plus `DS4_LOCK_FILE` (the per-mode instance lock). The lock
-    /// is per-mode so Chat (`ds4-server`) and Agent (`ds4-agent`) can coexist,
-    /// while a duplicate of the SAME binary is still refused (the engine's
-    /// single-instance-lock intent). Merges into (and returns) `base`.
+    /// not resolve) plus `DS4_LOCK_FILE` (the per-mode instance lock — the
+    /// app's single Agent surface, with a distinct lock for dispatched
+    /// attempts). Merges into (and returns) `base`.
     public static func engineEnvironment(engineDir: URL, lockFile: String, base: [String: String]) -> [String: String] {
         var env = base
         let metalDir = engineDir.appendingPathComponent("metal", isDirectory: true)

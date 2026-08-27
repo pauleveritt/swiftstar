@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Stop the engine on quit (Cmd-Q) so it is not orphaned to launchd.
-        EngineController.shared?.stopEngine()
+        // Stop the agent on quit (Cmd-Q) so it is not orphaned to launchd.
+        AgentController.shared?.stopAgent()
     }
 }

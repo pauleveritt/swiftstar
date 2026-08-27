@@ -1,15 +1,12 @@
 import SwiftUI
 
 struct MainView: View {
-    @State private var engineController = EngineController()
     @State private var agentController = AgentController()
     @State private var metricsModel = MetricsModel()
     @State private var diagnosticsModel = DiagnosticsModel()
 
     var body: some View {
         TabView {
-            ChatView(controller: engineController)
-                .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
             AgentView(controller: agentController)
                 .tabItem { Label("Agent", systemImage: "person.crop.circle") }
             DispatchView(controller: agentController)
@@ -23,11 +20,11 @@ struct MainView: View {
         }
         .frame(minWidth: 800, minHeight: 560)
         .onAppear {
-            metricsModel.start(enginePid: engineController.runningPid)
+            metricsModel.start(agentPid: agentController.runningPid)
             diagnosticsModel.start()
         }
-        .onChange(of: engineController.runningPid) { _, newPid in
-            metricsModel.start(enginePid: newPid)
+        .onChange(of: agentController.runningPid) { _, newPid in
+            metricsModel.start(agentPid: newPid)
         }
     }
 }

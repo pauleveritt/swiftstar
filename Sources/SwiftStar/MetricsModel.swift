@@ -23,13 +23,13 @@ final class MetricsModel {
     private let collector = ProcessStatsCollector()
     private var collectTask: Task<Void, Never>?
     private var replayTask: Task<Void, Never>?
-    private var enginePid: pid_t?
+    private var agentPid: pid_t?
 
-    func start(enginePid: pid_t?) {
+    func start(agentPid: pid_t?) {
         // Idempotent: the collector reads the latest pid each tick, and each
         // task is started at most once — calling start again (e.g. on pid
         // change) must not duplicate the timer or restart the replay.
-        self.enginePid = enginePid
+        self.agentPid = agentPid
         if collectTask == nil {
             collectTask = Task { [weak self] in
                 while !Task.isCancelled {
@@ -60,14 +60,15 @@ final class MetricsModel {
         replayTask = nil
     }
 
-    /// Live boot-line budget wins over the replayed ready-event budget: a
-    /// recorded budget must never be paired with a live footprint on a
-    /// different machine.
+    /// The Metrics tab stays fixture-driven (D9): its memory budget comes from
+    /// the replayed capture. (The retired Chat engine contributed a live
+    /// boot-line override here; with one surface the replayed value is the
+    /// honest recorded figure.)
     var memoryBudgetPlannedBytes: Int64? {
-        EngineController.lastKnownPlannedBytes ?? state.memoryBudgetPlannedBytes
+        state.memoryBudgetPlannedBytes
     }
 
     private func tick() async {
-        machine = await collector.collect(pid: enginePid)
+        machine = await collector.collect(pid: agentPid)
     }
 }

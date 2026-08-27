@@ -12,6 +12,11 @@ import Darwin
 @MainActor
 @Observable
 final class AgentController {
+    /// Single reachable controller, so the app delegate can stop the agent on
+    /// quit even though the controller is owned by MainView (mirrors the
+    /// retired EngineController.shared pattern).
+    static weak var shared: AgentController?
+
     enum AgentState: Equatable {
         case stopped
         case starting
@@ -104,6 +109,7 @@ final class AgentController {
         } else {
             self.logHandle = nil
         }
+        AgentController.shared = self
     }
 
     deinit {

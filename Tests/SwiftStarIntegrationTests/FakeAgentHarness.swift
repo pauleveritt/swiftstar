@@ -46,7 +46,7 @@ enum FakeAgentHarness {
         let mainFile = dir.appendingPathComponent("main.swift")
         try source.write(to: mainFile, atomically: true, encoding: .utf8)
         let process = Process()
-        process.executableURL = try FakeServerHarness.resolveSwiftc()
+        process.executableURL = try FakeProcessHarness.resolveSwiftc()
         process.arguments = [mainFile.path, "-o", dir.appendingPathComponent("fake-ds4-agent").path]
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -120,7 +120,7 @@ enum FakeAgentHarness {
     /// Reads the fake's stdout, feeding `AgentWireParser`, until `until`
     /// returns true or the timeout elapses. The fake stays alive between
     /// prompts, so completion is a predicate, not EOF. Uses a blocking
-    /// `Darwin.read` loop (the same shape as `FakeServerHarness.readEvents`):
+    /// `Darwin.read` loop (the same shape as `FakeProcessHarness.readEvents`):
     /// `FileHandle.availableData` blocks with no way to honour the deadline,
     /// and conflates "quiet" with "EOF" — a slow fake would hang the test or
     /// fail it spuriously. Reading raw bytes keeps the deadline real. The
