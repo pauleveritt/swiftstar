@@ -194,6 +194,11 @@ Diagnostics, Help — plus a `Settings` scene with panes. Chat and Agent stay
 separate: they are different wires (SSE vs NDJSON), different consent models,
 and different products.
 
+> **Superseded 2026-08-26 (product decision):** the Chat surface was retired —
+> the app is now one Agent surface, one `ds4-agent` process. See the ROADMAP
+> Backlog entry "Chat as a separate surface — RETIRED" for the reopen
+> condition. The rest of this paragraph is kept as written.
+
 **Diagnostics computes deterministically; the model only phrases.** Swift
 computes the findings from a capture; the model's only job is turning a
 structured finding into a sentence. This follows the recorded result from
