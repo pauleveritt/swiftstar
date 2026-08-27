@@ -87,7 +87,7 @@ struct AgentWireParserTests {
         // The shared StatusSnapshot carries the wire's state string: D6's turn
         // end is inferred from state → idle, and the controller needs it.
         let line = #"{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":32768,"power":100,"error":"","ts":5}"#
-        #expect(p.feed(line) == .status(StatusSnapshot(ctxUsed: 0, ctxSize: 32768, prefillTPS: 0.0, genTPS: 0.0, ts: 5, generated: 0, state: "idle")))
+        #expect(p.feed(line) == .status(StatusSnapshot(ctxUsed: 0, ctxSize: 32768, prefillTPS: 0.0, genTPS: 0.0, ts: 5, generated: 0, state: "idle", power: 100, error: "")))
     }
 
     @Test func statusCarriesGeneratedCounter() {
@@ -96,7 +96,17 @@ struct AgentWireParserTests {
         // The monotonic generated-token counter feeds TurnSummary's decode
         // average (Δgenerated / Δts over a turn).
         let line = #"{"t":"status","state":"generating","prefill_done":1,"prefill_total":1,"prefill_tps":0.0,"generated":512,"gen_tps":41.2,"ctx_used":958,"ctx_size":32768,"power":80,"error":"","ts":6500000000000}"#
-        #expect(p.feed(line) == .status(StatusSnapshot(ctxUsed: 958, ctxSize: 32768, prefillTPS: 0.0, genTPS: 41.2, ts: 6_500_000_000_000, generated: 512, state: "generating")))
+        #expect(p.feed(line) == .status(StatusSnapshot(ctxUsed: 958, ctxSize: 32768, prefillTPS: 0.0, genTPS: 41.2, ts: 6_500_000_000_000, generated: 512, state: "generating", power: 80, error: "")))
+    }
+
+    @Test func statusCarriesEngineError() {
+        // The live path (this parser, via PoolWireParser) previously dropped
+        // `power`/`error` on the floor — the struct's zero-value defaults, not
+        // the wire's actual values. A non-empty engine error must round-trip.
+        var p = AgentWireParser()
+        _ = p.feed(Self.helloLine)
+        let line = #"{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":32768,"power":0,"error":"cuda: out of memory","ts":7}"#
+        #expect(p.feed(line) == .status(StatusSnapshot(ctxUsed: 0, ctxSize: 32768, prefillTPS: 0.0, genTPS: 0.0, ts: 7, generated: 0, state: "idle", power: 0, error: "cuda: out of memory")))
     }
 
     @Test func queuedAndReadyParse() {
