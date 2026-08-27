@@ -1,7 +1,7 @@
 # SwiftStar P13 — Laguna XS 2.1 as a first-class variant
 
 **Date:** 2026-08-26
-**Status:** spec + implementation (this overnight spike); live acceptance pending the scheduled headless run
+**Status:** implemented + accepted (2026-08-27) — live acceptance green on the real engine: both agentclinic evals pass (`roadmap` via `DS4_AGENT_TOOL_NUDGE=2`, `roadmap-user-story` on defaults). Official verdict + P22 status: [`2026-08-27-p22-laguna-xs-acceptance-verdict.md`](../../research/2026-08-27-p22-laguna-xs-acceptance-verdict.md).
 **Phase:** P13 — More models, Laguna XS arm (the "one more `Variant` instance next week" item deferred from `2026-08-25-p13-mellum-variant-design.md`).
 
 ## Problem
