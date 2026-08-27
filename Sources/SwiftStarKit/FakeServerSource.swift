@@ -48,9 +48,9 @@ public enum FakeServerSource {
             replay.append((delayMicros, String(line)))
         }
 
-        let argvLiteral = engineArgv.map(swiftStringLiteral).joined(separator: ", ")
+        let argvLiteral = engineArgv.map(FakeSourceLiteral.swiftStringLiteral).joined(separator: ", ")
         let replayLiteral = replay
-            .map { "    (\($0.0), \(swiftStringLiteral($0.1)))" }
+            .map { "    (\($0.0), \(FakeSourceLiteral.swiftStringLiteral($0.1)))" }
             .joined(separator: ",\n")
 
         // Raw string template: `\(...)` and `\n` inside are literal for the
@@ -158,29 +158,5 @@ do {
         return template
             .replacingOccurrences(of: "__ARGV__", with: argvLiteral)
             .replacingOccurrences(of: "__REPLAY__", with: replayLiteral)
-    }
-
-    /// Escapes a string for embedding as a Swift string literal in the
-    /// generated source (backslash, quote, newline, carriage return, tab,
-    /// and any other ASCII control character).
-    public static func swiftStringLiteral(_ s: String) -> String {
-        var out = "\""
-        for scalar in s.unicodeScalars {
-            switch scalar {
-            case "\\": out += "\\\\"
-            case "\"": out += "\\\""
-            case "\n": out += "\\n"
-            case "\r": out += "\\r"
-            case "\t": out += "\\t"
-            default:
-                if scalar.isASCII, CharacterSet.controlCharacters.contains(scalar) {
-                    out += "\\u{\(String(scalar.value, radix: 16))}"
-                } else {
-                    out.unicodeScalars.append(scalar)
-                }
-            }
-        }
-        out += "\""
-        return out
     }
 }

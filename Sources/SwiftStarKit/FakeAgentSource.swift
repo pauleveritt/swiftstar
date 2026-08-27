@@ -60,9 +60,9 @@ public enum FakeAgentSource {
             throw FakeAgentError.malformedCaptureLine(line: 0, content: "<empty capture>")
         }
 
-        let argvLiteral = engineArgv.map(FakeServerSource.swiftStringLiteral).joined(separator: ", ")
+        let argvLiteral = engineArgv.map(FakeSourceLiteral.swiftStringLiteral).joined(separator: ", ")
         let replayLiteral = replay
-            .map { "    (\($0.0), \(FakeServerSource.swiftStringLiteral($0.1)))" }
+            .map { "    (\($0.0), \(FakeSourceLiteral.swiftStringLiteral($0.1)))" }
             .joined(separator: ",\n")
 
         // Raw string template: `\(...)` inside is literal for the generated
@@ -262,9 +262,9 @@ while readPromptLine() != nil {
             throw FakeAgentError.malformedCaptureLine(line: 0, content: "<empty capture>")
         }
 
-        let argvLiteral = engineArgv.map(FakeServerSource.swiftStringLiteral).joined(separator: ", ")
+        let argvLiteral = engineArgv.map(FakeSourceLiteral.swiftStringLiteral).joined(separator: ", ")
         let replayLiteral = replay
-            .map { "    (\($0.0), \($0.1), \(FakeServerSource.swiftStringLiteral($0.2)))" }
+            .map { "    (\($0.0), \($0.1), \(FakeSourceLiteral.swiftStringLiteral($0.2)))" }
             .joined(separator: ",\n")
 
         // Raw string template: the host-tools replay. kind 0 emits a capture

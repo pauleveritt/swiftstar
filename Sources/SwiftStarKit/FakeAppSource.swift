@@ -10,7 +10,7 @@ import Foundation
 /// `tool_request` lines (the agent's hello/status/text/ready stream) are
 /// skipped — the app only owns the tool dispatch. Deterministic: answers are
 /// sorted by key and the refusal is fixed, so the same map yields the same
-/// source. Reuses `FakeServerSource.swiftStringLiteral` to embed the answers as
+/// source. Reuses `FakeSourceLiteral.swiftStringLiteral` to embed the answers as
 /// Swift string literals (the shared escaper for generated sources).
 public enum FakeAppSource {
 
@@ -32,12 +32,12 @@ public enum FakeAppSource {
             let body = answers
                 .sorted(by: { $0.key < $1.key })
                 .map {
-                    "\(FakeServerSource.swiftStringLiteral($0.key)): \(FakeServerSource.swiftStringLiteral($0.value))"
+                    "\(FakeSourceLiteral.swiftStringLiteral($0.key)): \(FakeSourceLiteral.swiftStringLiteral($0.value))"
                 }
                 .joined(separator: ", ")
             answersLiteral = "[\(body)]"
         }
-        let refusalLiteral = FakeServerSource.swiftStringLiteral(refusal)
+        let refusalLiteral = FakeSourceLiteral.swiftStringLiteral(refusal)
 
         let template = #"""
 import Foundation
