@@ -1,9 +1,8 @@
 import Foundation
 
-/// One wire-carried metrics sample from a `status` event. `power` (throttle %)
-/// and `error` are deliberately not extracted (Settings/supervisor concerns).
-/// `ts` is monotonic microseconds since boot (`clock_gettime(CLOCK_MONOTONIC)`);
-/// only deltas are meaningful (P5, fork divergence #7).
+/// One wire-carried metrics sample from a `status` event. `ts` is monotonic
+/// microseconds since boot (`clock_gettime(CLOCK_MONOTONIC)`); only deltas are
+/// meaningful (P5, fork divergence #7).
 public struct StatusSnapshot: Equatable, Sendable {
     public let ctxUsed: Int
     public let ctxSize: Int
@@ -17,6 +16,25 @@ public struct StatusSnapshot: Equatable, Sendable {
     /// Added in P7: the agent controller infers turn end from the `idle`
     /// transition (D6). Metrics and Diagnostics read only the numeric fields.
     public let state: String
+    /// The wire's `power` — the engine's throttle percent (0-100), NOT watts
+    /// (P21: exposed as the roadmap's stated gate for energy-aware pacing).
+    public let power: Double
+    /// The wire's `status.error` — the engine's own error string (empty when
+    /// healthy; P21: engine errors now surface in-app).
+    public let error: String
+
+    public init(ctxUsed: Int, ctxSize: Int, prefillTPS: Double, genTPS: Double,
+                ts: UInt64, generated: Int, state: String, power: Double = 0, error: String = "") {
+        self.ctxUsed = ctxUsed
+        self.ctxSize = ctxSize
+        self.prefillTPS = prefillTPS
+        self.genTPS = genTPS
+        self.ts = ts
+        self.generated = generated
+        self.state = state
+        self.power = power
+        self.error = error
+    }
 }
 
 /// One modelled event from the NDJSON telemetry wire. `.ignored` carries the
@@ -74,7 +92,9 @@ public struct WireEventParser: Sendable {
                 genTPS: (object["gen_tps"] as? NSNumber)?.doubleValue ?? 0,
                 ts: (object["ts"] as? NSNumber)?.uint64Value ?? 0,
                 generated: (object["generated"] as? NSNumber)?.intValue ?? 0,
-                state: (object["state"] as? String) ?? ""
+                state: (object["state"] as? String) ?? "",
+                power: (object["power"] as? NSNumber)?.doubleValue ?? 0,
+                error: (object["error"] as? String) ?? ""
             ))
         case "ready":
             return .ready(plannedBytes: (object["planned_bytes"] as? NSNumber)?.int64Value)

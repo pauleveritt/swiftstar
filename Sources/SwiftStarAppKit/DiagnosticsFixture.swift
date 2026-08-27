@@ -2,9 +2,10 @@ import Foundation
 import SwiftStarKit
 
 /// Loads the bundled `golden` capture (wire + trace) and runs it through the
-/// production parsers. Used by the Diagnostics tab's fixture replay until P7's
-/// live agent migration — the same relationship Metrics' `FixtureReplay` has to
-/// its live source.
+/// production parsers. The pre-spawn placeholder for the Diagnostics tab
+/// (P21: once a session is live, `DiagnosticsModel` analyzes the session's own
+/// capture instead — same relationship Metrics' `FixtureReplay` has to its
+/// live source).
 public struct DiagnosticsFixture: Sendable {
     public struct Input: Equatable, Sendable {
         public var events: [WireEvent]

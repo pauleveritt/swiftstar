@@ -67,11 +67,14 @@ struct MainView: View {
         .navigationSplitViewStyle(.prominentDetail)
         .frame(minWidth: 800, minHeight: 560)
         .onAppear {
-            metricsModel.start(agentPid: agentController.runningPid)
-            diagnosticsModel.start()
+            metricsModel.start(controller: agentController)
+            diagnosticsModel.start(controller: agentController)
         }
-        .onChange(of: agentController.runningPid) { _, newPid in
-            metricsModel.start(agentPid: newPid)
+        .onChange(of: agentController.runningPid) { _, _ in
+            // A new session = a new capture dir: re-point the live telemetry
+            // and re-analyze the diagnostics against the fresh session.
+            metricsModel.start(controller: agentController)
+            diagnosticsModel.start(controller: agentController)
         }
     }
 }

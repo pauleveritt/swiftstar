@@ -66,6 +66,10 @@ final class AgentController {
     /// P11 (D1): the pool scheduler state — enqueued workers, the running
     /// worker, and receipts awaiting delivery back into the orchestrator.
     private(set) var poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
+    /// P21: the Metrics tab's live source — fired on each status/ready wire
+    /// event (MainActor; consumeWire). A single observer slot (Metrics owns it;
+    /// the fixture replay is only the pre-spawn placeholder).
+    var onTelemetry: ((AgentEvent) -> Void)?
     /// P11 (D6): the rolling digest — the objective-independent reduced form
     /// of the session, maintained incrementally as host facts arrive.
     private(set) var rollingDigest = RollingDigest()
@@ -210,6 +214,14 @@ final class AgentController {
 
     func startIfNeeded() {
         if state == .stopped { startAgent() }
+    }
+
+    /// The current session's capture URLs (nil when capture is disabled or no
+    /// session has started): the wire + trace for Diagnostics' live analysis.
+    var liveCaptureURLs: (wire: URL, trace: URL)? {
+        guard let tracePath = settings.tracePath else { return nil }
+        let wire = tracePath.deletingLastPathComponent().appendingPathComponent("wire.ndjson")
+        return (wire, tracePath)
     }
 
     /// The configured subagent-pool size (one orchestrator + N−1 workers),
@@ -460,6 +472,7 @@ final class AgentController {
             // safe. The status event still feeds the outcome builder above.
             // It also feeds the bottom status bar: the snapshot is kept as-is
             // and its rates are ratcheted (never blanked by a zero).
+            onTelemetry?(.status(snapshot))
             lastStatus = snapshot
             // P21: the decode-average baseline is the first *generating*
             // snapshot of the turn (excludes prefill). Held once captured.
@@ -472,6 +485,7 @@ final class AgentController {
                 lastPlannedModel = settings.modelPath.lastPathComponent
                 lastPlannedBytes = plannedBytes
             }
+            onTelemetry?(.ready(plannedBytes: plannedBytes, stopReason: nil, generated: nil, ctxUsed: nil))
             if state == .starting { state = .ready }
             else if state == .generating { state = .ready }
             // D12: a turn-end ready finishes the record. The builder is nil
