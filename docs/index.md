@@ -4,7 +4,7 @@ A macOS application for running a large language model locally on Apple
 silicon. It supervises a local inference engine, downloads weights, shows what
 the machine is doing, and explains why a session got slow.
 
-This site is scaffolding. It gains content in phase P13, once there is a reader
+This site is scaffolding. It gains content in phase P14, once there is a reader
 who isn't the author — see [the roadmap](https://github.com/pauleveritt/swiftstar/blob/main/ROADMAP.md).
 
 For now, the durable documents are in the repository root:

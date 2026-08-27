@@ -7,7 +7,6 @@ struct SettingsView: View {
     @AppStorage("modelPath") private var modelPath = ""
     @AppStorage("selectedVariantID") private var selectedVariantID = ""
     @AppStorage("contextSize") private var contextSize = 51_200
-    @AppStorage("port") private var port = 0
     // Agent pane (2026-08-26): the shell toggle moved here from the Agent tab;
     // the transcript font size applies immediately.
     @AppStorage("agentShellAllowed") private var shellAllowed = false
@@ -16,7 +15,6 @@ struct SettingsView: View {
     // values; Settings holds the defaults.
     @AppStorage("subagentPoolSize") private var subagentPoolSize = 2
     @AppStorage("sessionCaptureEnabled") private var sessionCaptureEnabled = true
-    @AppStorage("defaultWorkspace") private var defaultWorkspace = ""
     @AppStorage("dispatchDumb") private var dispatchDumb = false
 
     // P19.1 D4: the engine lifecycle escape hatch, stashed here (not the main
@@ -46,8 +44,8 @@ struct SettingsView: View {
             return url
         }
     }
-    // The P1 model first; more targets arrive with P12. Source of the URL
-    // pattern: external/ds4/download_model.sh (laguna-q2-q3 target).
+    // The P1 model first; more targets arrive with P22 (Laguna XS). Source of
+    // the URL pattern: external/ds4/download_model.sh (laguna-q2-q3 target).
     static let targets: [DownloadTarget] = [
         DownloadTarget(
             name: "Laguna S 2.1 — Routed Q2/Q3 (48 GB)",
@@ -91,7 +89,6 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Stepper("Context size: \(contextSize)", value: $contextSize, in: 1024...262144, step: 1024)
-                Stepper("Port (0 = auto): \(port)", value: $port, in: 0...65535, step: 1)
                 Text("A selected variant is verified before launch; a custom file is not. Settings apply when the engine next starts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -141,7 +138,6 @@ struct SettingsView: View {
                 Stepper("Subagent pool: \(SubagentPoolSize.clamp(subagentPoolSize))", value: $subagentPoolSize, in: 2...8)
                 Toggle("Capture sessions to captures/live/", isOn: $sessionCaptureEnabled)
                 Toggle("Dispatch mode: Smart (off) / Dumb (on)", isOn: $dispatchDumb)
-                TextField("Default workspace (blank = repo root)", text: $defaultWorkspace)
             }
         }
         .formStyle(.grouped)

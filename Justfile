@@ -30,7 +30,7 @@ engine:
     make -C external/ds4 ds4-agent
 
 # Live capture against the real engine. Never part of CI; takes minutes.
-# Arrives in P5.
+# Landed 2026-08-26 (P21).
 capture:
     swift run swiftstar-drive
 

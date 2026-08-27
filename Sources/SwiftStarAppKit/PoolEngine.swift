@@ -22,22 +22,6 @@ public enum PoolEngine {
         let body = data.dropFirst(48)
         return String(decoding: body, as: UTF8.self)
     }
-
-    /// The deterministic file listing (D5): a sorted list of the repo's
-    /// tracked files, via `git ls-files` (falls back to an empty list on a
-    /// non-repo, which the packet-maker then treats as "no file list").
-    public static func listFiles(in repo: URL) -> [String] {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", repo.path, "ls-files"]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = Pipe()
-        do { try p.run(); p.waitUntilExit() } catch { return [] }
-        guard p.terminationStatus == 0,
-              let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) else { return [] }
-        return out.split(separator: "\n").map(String.init).sorted()
-    }
 }
 
 public enum PoolEngineError: Error, Equatable {

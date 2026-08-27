@@ -19,8 +19,8 @@ machine-readable.
 | Term | Meaning | In code |
 |---|---|---|
 | **agent** | The default mode. Reads, writes, plans, and *escalates to orchestration* when a task warrants it. The app's normal behavior. | `AgentController` + `AgentView`; the `dispatch` tool and the pool are its escalation paths. Not a named enum today — it is "the app." |
-| **chat** | Read-only conversation: answer, explain, propose — no mutation. Reached via `/chat`, or auto-detected when the prompt looks like a question rather than a task. | Predecessor: the current `/orchestrate` command's read-only worker (misnamed — `OrchestrateCommand`). Write-gating already exists: `ToolCallbackResponder` consent confines file tools and gates shell. |
-| **orchestrate** | The coordination loop: *plan → per-task handoff packets → dispatch implementers → validate → iterate → write files*. Escalated-to by agent mode, or forced via `/orchestrate`. | `PacketRole` (decompose/implement/repair), `DispatchPacketBuilder`, `DispatchReceipt`, `PoolOrchestrator` (headless). **Not** the current `OrchestrateCommand` — that thin read-only delegation is chat. |
+| **chat** | Read-only conversation: answer, explain, propose — no mutation. Reached via `/chat`, or auto-detected when the prompt looks like a question rather than a task. | Formerly the `/orchestrate` command's read-only worker (renamed when the glossary reserved "orchestrate" for the coordination loop). Write-gating already exists: `ToolCallbackResponder` consent confines file tools and gates shell. |
+| **orchestrate** | The coordination loop: *plan → per-task handoff packets → dispatch implementers → validate → iterate → write files*. Escalated-to by agent mode, or forced via `/orchestrate`. | `PacketRole` (decompose/implement/repair), `DispatchPacketBuilder`, `DispatchReceipt`, `PoolOrchestrator` (headless). **Not** the removed `OrchestrateCommand` — that thin read-only delegation is now chat. |
 | **fast reply** | A think-off, toolless per-turn control — the cheap quick answer. A sub-mode of a turn, not a verb. | None yet (P23, planned). |
 
 ## Roles
@@ -39,7 +39,7 @@ how expensive failure is — not by persona text.
 
 | Term | Meaning | In code |
 |---|---|---|
-| **dispatch** | The orchestrator's per-task verb: hand one bounded task to an implementer in an isolated worktree, get back a candidate ref or a typed receipt. Not a user surface. | `HandoffPacket`, `WorktreeDispatcher`/`WorktreeDispatch`, `DispatchOutcome`. The old GUI form (`DispatchView` + `AgentController.dispatchAttempt`) is being dissolved. |
+| **dispatch** | The orchestrator's per-task verb: hand one bounded task to an implementer in an isolated worktree, get back a candidate ref or a typed receipt. Not a user surface. | `HandoffPacket`, `WorktreeDispatcher`/`WorktreeDispatch`, `DispatchOutcome`. The old GUI form (`DispatchView` + `AgentController.dispatchAttempt`) was dissolved 2026-08-27. |
 | **handoff packet** | The typed per-task contract: objective, exact writable files, validation command, budgets. | `HandoffPacket`. |
 | **candidate ref / receipt** | An implementer's outcome: a reviewable commit, or a typed refusal naming why not. | `DispatchOutcome`, `DispatchReceipt`. |
 | **tool** | Deterministic host code — no model, millisecond Swift (P24 naming). Today: the host-executed file/shell tools; later P24's `test`/`scout`/`lint`. | `ToolCallbackResponder` (consent/respond); P24. |

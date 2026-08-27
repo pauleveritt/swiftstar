@@ -13,8 +13,9 @@ public struct PoolState: Equatable, Sendable {
     public var pendingDelivery: [WorkerId: DispatchReceipt] = [:]
     /// The free worker-session ids (`1...workerCapacity`), in ascending order.
     /// The engine hosts a FIXED number of worker sessions (N-1); ids must be
-    /// reused, never grown past that bound — an unbounded id would overflow the
-    /// engine's pool and be silently clamped to the orchestrator.
+    /// reused, never grown past that bound — an id the engine doesn't host is
+    /// dropped (never clamped to the orchestrator), so the capacity must match
+    /// the spawned pool exactly.
     public var freeIds: [WorkerId] = []
     public init(workerCapacity: Int = 64) {
         self.freeIds = (1...max(workerCapacity, 1)).map { WorkerId($0) }

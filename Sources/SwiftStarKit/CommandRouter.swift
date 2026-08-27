@@ -9,8 +9,8 @@ public enum Command: Equatable, Sendable {
     case orchestrate(task: String, writableFiles: [String])
 }
 
-/// Typed command parsing, replacing the ad-hoc `OrchestrateCommand` hasPrefix
-/// hack. A command must start the input and be a whole token (`/chatfoo` is not
+/// Typed command parsing (replaces the removed ad-hoc `/orchestrate` hasPrefix
+/// parse). A command must start the input and be a whole token (`/chatfoo` is not
 /// a command). `--files` (comma-separated, trimmed) is orchestrate-only.
 public enum CommandRouter {
     public static let filesFlag = "--files"
