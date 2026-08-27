@@ -1,0 +1,318 @@
+{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts","tool_request"],"ts":660262834436}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1678,"ctx_size":51200,"power":100,"error":"","ts":660290805893}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1692,"ctx_size":51200,"power":100,"error":"","ts":660291321793}
+{"t":"text","s":"\nI'll look for a roadmap ","ts":660291436578}
+{"t":"text","s":"file in the workspace.","ts":660291518559}
+{"t":"tool","phase":"start","idx":0,"ts":660291518562}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":13,"gen_tps":66.1,"ctx_used":1705,"ctx_size":51200,"power":100,"error":"","ts":660291534830}
+{"t":"tool","phase":"tool","idx":0,"name":"search","ts":660291600062}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"query","ts":660291731643}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":26,"gen_tps":63.4,"ctx_used":1718,"ctx_size":51200,"power":100,"error":"","ts":660291747935}
+{"t":"tool","phase":"param_value","idx":0,"s":"roadmap","ts":660291830614}
+{"t":"tool","phase":"param_end","idx":0,"ts":660291830616}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":40,"gen_tps":62.4,"ctx_used":1732,"ctx_size":51200,"power":100,"error":"","ts":660291962715}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":660292012023}
+{"t":"tool","phase":"param_value","idx":0,"s":".","ts":660292061188}
+{"t":"tool","phase":"param_end","idx":0,"ts":660292061190}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":53,"gen_tps":62.0,"ctx_used":1745,"ctx_size":51200,"power":100,"error":"","ts":660292176212}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"mode","ts":660292241774}
+{"t":"tool","phase":"param_value","idx":0,"s":"files","ts":660292324954}
+{"t":"tool","phase":"param_end","idx":0,"ts":660292324957}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":660292357921}
+{"t":"text","s":"\n","ts":660292357924}
+{"t":"text","s":"\n","ts":660292357924}
+{"t":"tool_request","idx":0,"name":"search","params":[{"name":"query","value":"roadmap"},{"name":"path","value":"."},{"name":"mode","value":"files"}],"ts":660292357927}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":63,"gen_tps":61.8,"ctx_used":5392,"ctx_size":51200,"power":100,"error":"","ts":660293327752}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":3639,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660293333927}
+{"t":"status","state":"prefill","prefill_done":75,"prefill_total":3639,"prefill_tps":358.2,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660293543321}
+{"t":"status","state":"prefill","prefill_done":227,"prefill_total":3639,"prefill_tps":463.0,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660293824206}
+{"t":"status","state":"prefill","prefill_done":379,"prefill_total":3639,"prefill_tps":455.4,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660294166162}
+{"t":"status","state":"prefill","prefill_done":530,"prefill_total":3639,"prefill_tps":483.3,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660294430503}
+{"t":"status","state":"prefill","prefill_done":682,"prefill_total":3639,"prefill_tps":474.4,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660294771668}
+{"t":"status","state":"prefill","prefill_done":833,"prefill_total":3639,"prefill_tps":489.3,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660295036207}
+{"t":"status","state":"prefill","prefill_done":985,"prefill_total":3639,"prefill_tps":481.5,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660295379665}
+{"t":"status","state":"prefill","prefill_done":1137,"prefill_total":3639,"prefill_tps":492.3,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660295643514}
+{"t":"status","state":"prefill","prefill_done":1288,"prefill_total":3639,"prefill_tps":486.0,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660295984329}
+{"t":"status","state":"prefill","prefill_done":1440,"prefill_total":3639,"prefill_tps":494.1,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660296248477}
+{"t":"status","state":"prefill","prefill_done":1592,"prefill_total":3639,"prefill_tps":488.5,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660296592889}
+{"t":"status","state":"prefill","prefill_done":1743,"prefill_total":3639,"prefill_tps":493.9,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660296862980}
+{"t":"status","state":"prefill","prefill_done":1895,"prefill_total":3639,"prefill_tps":489.1,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660297208765}
+{"t":"status","state":"prefill","prefill_done":2046,"prefill_total":3639,"prefill_tps":493.7,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660297478440}
+{"t":"status","state":"prefill","prefill_done":2198,"prefill_total":3639,"prefill_tps":488.5,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660297832998}
+{"t":"status","state":"prefill","prefill_done":2350,"prefill_total":3639,"prefill_tps":491.9,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660298111702}
+{"t":"status","state":"prefill","prefill_done":2501,"prefill_total":3639,"prefill_tps":484.7,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660298494003}
+{"t":"status","state":"prefill","prefill_done":2653,"prefill_total":3639,"prefill_tps":487.4,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660298776838}
+{"t":"status","state":"prefill","prefill_done":2805,"prefill_total":3639,"prefill_tps":483.1,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660299140180}
+{"t":"status","state":"prefill","prefill_done":2956,"prefill_total":3639,"prefill_tps":486.4,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660299411242}
+{"t":"status","state":"prefill","prefill_done":3108,"prefill_total":3639,"prefill_tps":482.4,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660299776444}
+{"t":"status","state":"prefill","prefill_done":3259,"prefill_total":3639,"prefill_tps":483.1,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660300080158}
+{"t":"status","state":"prefill","prefill_done":3411,"prefill_total":3639,"prefill_tps":478.6,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660300460971}
+{"t":"status","state":"prefill","prefill_done":3563,"prefill_total":3639,"prefill_tps":480.0,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660300757392}
+{"t":"status","state":"generating","prefill_done":3639,"prefill_total":3639,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":5394,"ctx_size":51200,"power":100,"error":"","ts":660300905398}
+{"t":"text","s":"\nI found several references ","ts":660301014697}
+{"t":"text","s":"to \"roadmap\" in ","ts":660301117079}
+{"t":"status","state":"generating","prefill_done":3639,"prefill_total":3639,"prefill_tps":0.0,"generated":12,"gen_tps":56.7,"ctx_used":5406,"ctx_size":51200,"power":100,"error":"","ts":660301117099}
+{"t":"text","s":"the workspace. Let me look ","ts":660301219063}
+{"t":"text","s":"for the actual roadmap file, ","ts":660301320800}
+{"t":"status","state":"generating","prefill_done":3639,"prefill_total":3639,"prefill_tps":0.0,"generated":24,"gen_tps":57.8,"ctx_used":5418,"ctx_size":51200,"power":100,"error":"","ts":660301320821}
+{"t":"text","s":"which might be a markdown file ","ts":660301422160}
+{"t":"text","s":"or similar document.","ts":660301489499}
+{"t":"tool","phase":"start","idx":0,"ts":660301489502}
+{"t":"status","state":"generating","prefill_done":3639,"prefill_total":3639,"prefill_tps":0.0,"generated":36,"gen_tps":58.3,"ctx_used":5430,"ctx_size":51200,"power":100,"error":"","ts":660301523233}
+{"t":"tool","phase":"tool","idx":0,"name":"search","ts":660301573580}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"mode","ts":660301707994}
+{"t":"status","state":"generating","prefill_done":3639,"prefill_total":3639,"prefill_tps":0.0,"generated":47,"gen_tps":58.6,"ctx_used":5441,"ctx_size":51200,"power":100,"error":"","ts":660301724672}
+{"t":"tool","phase":"param_value","idx":0,"s":"files","ts":660301792056}
+{"t":"tool","phase":"param_end","idx":0,"ts":660301792059}
+{"t":"status","state":"generating","prefill_done":3639,"prefill_total":3639,"prefill_tps":0.0,"generated":60,"gen_tps":58.8,"ctx_used":5454,"ctx_size":51200,"power":100,"error":"","ts":660301926383}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":660301977370}
+{"t":"tool","phase":"param_value","idx":0,"s":".","ts":660302029573}
+{"t":"tool","phase":"param_end","idx":0,"ts":660302029576}
+{"t":"status","state":"generating","prefill_done":3639,"prefill_total":3639,"prefill_tps":0.0,"generated":72,"gen_tps":58.7,"ctx_used":5466,"ctx_size":51200,"power":100,"error":"","ts":660302132406}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"query","ts":660302216168}
+{"t":"tool","phase":"param_value","idx":0,"s":"roadmap.md","ts":660302340255}
+{"t":"tool","phase":"param_end","idx":0,"ts":660302340261}
+{"t":"status","state":"generating","prefill_done":3639,"prefill_total":3639,"prefill_tps":0.0,"generated":84,"gen_tps":58.5,"ctx_used":5478,"ctx_size":51200,"power":100,"error":"","ts":660302340286}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":660302376615}
+{"t":"text","s":"\n","ts":660302376620}
+{"t":"text","s":"\n","ts":660302376620}
+{"t":"tool_request","idx":0,"name":"search","params":[{"name":"mode","value":"files"},{"name":"path","value":"."},{"name":"query","value":"roadmap.md"}],"ts":660302376624}
+{"t":"status","state":"generating","prefill_done":3639,"prefill_total":3639,"prefill_tps":0.0,"generated":85,"gen_tps":58.5,"ctx_used":7642,"ctx_size":51200,"power":100,"error":"","ts":660306978258}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":2165,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660306981859}
+{"t":"status","state":"prefill","prefill_done":45,"prefill_total":2165,"prefill_tps":84.6,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660307513996}
+{"t":"status","state":"prefill","prefill_done":180,"prefill_total":2165,"prefill_tps":229.6,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660307765788}
+{"t":"status","state":"prefill","prefill_done":270,"prefill_total":2165,"prefill_tps":255.7,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660308037917}
+{"t":"status","state":"prefill","prefill_done":405,"prefill_total":2165,"prefill_tps":288.2,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660308387309}
+{"t":"status","state":"prefill","prefill_done":541,"prefill_total":2165,"prefill_tps":327.9,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660308631564}
+{"t":"status","state":"prefill","prefill_done":631,"prefill_total":2165,"prefill_tps":328.3,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660308903707}
+{"t":"status","state":"prefill","prefill_done":766,"prefill_total":2165,"prefill_tps":337.0,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660309254718}
+{"t":"status","state":"prefill","prefill_done":902,"prefill_total":2165,"prefill_tps":358.4,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660309498710}
+{"t":"status","state":"prefill","prefill_done":992,"prefill_total":2165,"prefill_tps":355.7,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660309770866}
+{"t":"status","state":"prefill","prefill_done":1127,"prefill_total":2165,"prefill_tps":358.5,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660310125139}
+{"t":"status","state":"prefill","prefill_done":1262,"prefill_total":2165,"prefill_tps":372.1,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660310373159}
+{"t":"status","state":"prefill","prefill_done":1353,"prefill_total":2165,"prefill_tps":369.1,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660310647171}
+{"t":"status","state":"prefill","prefill_done":1488,"prefill_total":2165,"prefill_tps":369.8,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660311005924}
+{"t":"status","state":"prefill","prefill_done":1623,"prefill_total":2165,"prefill_tps":379.7,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660311256549}
+{"t":"status","state":"prefill","prefill_done":1713,"prefill_total":2165,"prefill_tps":376.0,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660311538007}
+{"t":"status","state":"prefill","prefill_done":1849,"prefill_total":2165,"prefill_tps":374.0,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660311925892}
+{"t":"status","state":"prefill","prefill_done":1939,"prefill_total":2165,"prefill_tps":376.9,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660312126457}
+{"t":"status","state":"prefill","prefill_done":2029,"prefill_total":2165,"prefill_tps":372.5,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660312429513}
+{"t":"status","state":"prefill","prefill_done":2164,"prefill_total":2165,"prefill_tps":379.7,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660312681498}
+{"t":"status","state":"generating","prefill_done":2165,"prefill_total":2165,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":7644,"ctx_size":51200,"power":100,"error":"","ts":660312682352}
+{"t":"text","s":"\nI found references to ","ts":660312784894}
+{"t":"text","s":"a roadmap file. Let me ","ts":660312888301}
+{"t":"status","state":"generating","prefill_done":2165,"prefill_total":2165,"prefill_tps":0.0,"generated":12,"gen_tps":58.3,"ctx_used":7656,"ctx_size":51200,"power":100,"error":"","ts":660312888321}
+{"t":"text","s":"search more specifically for the actual ","ts":660312991125}
+{"t":"text","s":"roadmap.md file in the workspace.","ts":660313093915}
+{"t":"status","state":"generating","prefill_done":2165,"prefill_total":2165,"prefill_tps":0.0,"generated":24,"gen_tps":58.3,"ctx_used":7668,"ctx_size":51200,"power":100,"error":"","ts":660313093934}
+{"t":"tool","phase":"start","idx":0,"ts":660313111216}
+{"t":"tool","phase":"tool","idx":0,"name":"search","ts":660313196865}
+{"t":"status","state":"generating","prefill_done":2165,"prefill_total":2165,"prefill_tps":0.0,"generated":36,"gen_tps":58.4,"ctx_used":7680,"ctx_size":51200,"power":100,"error":"","ts":660313299306}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"mode","ts":660313333452}
+{"t":"tool","phase":"param_value","idx":0,"s":"files","ts":660313418502}
+{"t":"tool","phase":"param_end","idx":0,"ts":660313418505}
+{"t":"status","state":"generating","prefill_done":2165,"prefill_total":2165,"prefill_tps":0.0,"generated":48,"gen_tps":58.4,"ctx_used":7692,"ctx_size":51200,"power":100,"error":"","ts":660313503899}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":660313607115}
+{"t":"tool","phase":"param_value","idx":0,"s":".","ts":660313658411}
+{"t":"tool","phase":"param_end","idx":0,"ts":660313658414}
+{"t":"status","state":"generating","prefill_done":2165,"prefill_total":2165,"prefill_tps":0.0,"generated":60,"gen_tps":58.3,"ctx_used":7704,"ctx_size":51200,"power":100,"error":"","ts":660313712005}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"glob","ts":660313849024}
+{"t":"status","state":"generating","prefill_done":2165,"prefill_total":2165,"prefill_tps":0.0,"generated":72,"gen_tps":58.3,"ctx_used":7716,"ctx_size":51200,"power":100,"error":"","ts":660313916728}
+{"t":"tool","phase":"param_value","idx":0,"s":"**/roadmap.md","ts":660313984445}
+{"t":"tool","phase":"param_end","idx":0,"ts":660313984447}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":660314018166}
+{"t":"text","s":"\n","ts":660314018168}
+{"t":"text","s":"\n","ts":660314018169}
+{"t":"tool_request","idx":0,"name":"search","params":[{"name":"mode","value":"files"},{"name":"path","value":"."},{"name":"glob","value":"**/roadmap.md"}],"ts":660314018171}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":24,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":7745,"ctx_size":51200,"power":100,"error":"","ts":660314019459}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":7745,"ctx_size":51200,"power":100,"error":"","ts":660314315174}
+{"t":"text","s":"\nLet me try a broader ","ts":660314419284}
+{"t":"text","s":"search for roadmap files with different ","ts":660314527807}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":13,"gen_tps":61.1,"ctx_used":7758,"ctx_size":51200,"power":100,"error":"","ts":660314527833}
+{"t":"text","s":"extensions.","ts":660314564887}
+{"t":"tool","phase":"start","idx":0,"ts":660314564891}
+{"t":"tool","phase":"tool","idx":0,"name":"search","ts":660314651861}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":25,"gen_tps":59.1,"ctx_used":7770,"ctx_size":51200,"power":100,"error":"","ts":660314738286}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"mode","ts":660314789961}
+{"t":"tool","phase":"param_value","idx":0,"s":"files","ts":660314875872}
+{"t":"tool","phase":"param_end","idx":0,"ts":660314875876}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":37,"gen_tps":58.8,"ctx_used":7782,"ctx_size":51200,"power":100,"error":"","ts":660314944812}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":660315065032}
+{"t":"tool","phase":"param_value","idx":0,"s":".","ts":660315117562}
+{"t":"tool","phase":"param_end","idx":0,"ts":660315117567}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":49,"gen_tps":58.5,"ctx_used":7794,"ctx_size":51200,"power":100,"error":"","ts":660315152236}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"glob","ts":660315306972}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":61,"gen_tps":58.4,"ctx_used":7806,"ctx_size":51200,"power":100,"error":"","ts":660315358949}
+{"t":"tool","phase":"param_value","idx":0,"s":"**/roadmap*","ts":660315430846}
+{"t":"tool","phase":"param_end","idx":0,"ts":660315430849}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":660315465992}
+{"t":"text","s":"\n","ts":660315465997}
+{"t":"text","s":"\n","ts":660315465998}
+{"t":"tool_request","idx":0,"name":"search","params":[{"name":"mode","value":"files"},{"name":"path","value":"."},{"name":"glob","value":"**/roadmap*"}],"ts":660315466001}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":24,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":7835,"ctx_size":51200,"power":100,"error":"","ts":660315468653}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":7835,"ctx_size":51200,"power":100,"error":"","ts":660315766215}
+{"t":"text","s":"\nLet me search more broadly ","ts":660315873062}
+{"t":"text","s":"for any roadmap-related files.","ts":660315977206}
+{"t":"tool","phase":"start","idx":0,"ts":660315977209}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":13,"gen_tps":61.6,"ctx_used":7848,"ctx_size":51200,"power":100,"error":"","ts":660315977224}
+{"t":"tool","phase":"tool","idx":0,"name":"search","ts":660316063872}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":25,"gen_tps":59.8,"ctx_used":7860,"ctx_size":51200,"power":100,"error":"","ts":660316184495}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"mode","ts":660316201720}
+{"t":"tool","phase":"param_value","idx":0,"s":"files","ts":660316287791}
+{"t":"tool","phase":"param_end","idx":0,"ts":660316287795}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":37,"gen_tps":59.2,"ctx_used":7872,"ctx_size":51200,"power":100,"error":"","ts":660316390767}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":660316476411}
+{"t":"tool","phase":"param_value","idx":0,"s":".","ts":660316527706}
+{"t":"tool","phase":"param_end","idx":0,"ts":660316527709}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":49,"gen_tps":59.0,"ctx_used":7884,"ctx_size":51200,"power":100,"error":"","ts":660316596395}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"normal","name":"glob","ts":660316716335}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":61,"gen_tps":58.9,"ctx_used":7896,"ctx_size":51200,"power":100,"error":"","ts":660316802547}
+{"t":"tool","phase":"param_value","idx":0,"s":"*.md","ts":660316819834}
+{"t":"tool","phase":"param_end","idx":0,"ts":660316819837}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":660316854376}
+{"t":"text","s":"\n","ts":660316854380}
+{"t":"text","s":"\n","ts":660316854380}
+{"t":"tool_request","idx":0,"name":"search","params":[{"name":"mode","value":"files"},{"name":"path","value":"."},{"name":"glob","value":"*.md"}],"ts":660316854384}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":24,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":7922,"ctx_size":51200,"power":100,"error":"","ts":660316861113}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":7922,"ctx_size":51200,"power":100,"error":"","ts":660317160785}
+{"t":"text","s":"\nLet me check the root ","ts":660317266069}
+{"t":"text","s":"directory structure to understand the workspace ","ts":660317371074}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":13,"gen_tps":61.8,"ctx_used":7935,"ctx_size":51200,"power":100,"error":"","ts":660317371093}
+{"t":"text","s":"better.","ts":660317405983}
+{"t":"tool","phase":"start","idx":0,"ts":660317405987}
+{"t":"tool","phase":"tool","idx":0,"name":"list","ts":660317492600}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":25,"gen_tps":59.8,"ctx_used":7947,"ctx_size":51200,"power":100,"error":"","ts":660317578925}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":660317631048}
+{"t":"tool","phase":"param_value","idx":0,"s":".","ts":660317682857}
+{"t":"tool","phase":"param_end","idx":0,"ts":660317682859}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":660317717836}
+{"t":"text","s":"\n","ts":660317717839}
+{"t":"text","s":"\n","ts":660317717840}
+{"t":"tool_request","idx":0,"name":"list","params":[{"name":"path","value":"."}],"ts":660317717843}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":112,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":8066,"ctx_size":51200,"power":100,"error":"","ts":660317728063}
+{"t":"status","state":"prefill","prefill_done":32,"prefill_total":112,"prefill_tps":159.8,"generated":0,"gen_tps":0.0,"ctx_used":8066,"ctx_size":51200,"power":100,"error":"","ts":660317928371}
+{"t":"status","state":"prefill","prefill_done":67,"prefill_total":112,"prefill_tps":164.5,"generated":0,"gen_tps":0.0,"ctx_used":8066,"ctx_size":51200,"power":100,"error":"","ts":660318135318}
+{"t":"status","state":"prefill","prefill_done":100,"prefill_total":112,"prefill_tps":164.6,"generated":0,"gen_tps":0.0,"ctx_used":8066,"ctx_size":51200,"power":100,"error":"","ts":660318335528}
+{"t":"status","state":"generating","prefill_done":112,"prefill_total":112,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":8066,"ctx_size":51200,"power":100,"error":"","ts":660318408568}
+{"t":"text","s":"\nI found the roadmap file!","ts":660318517456}
+{"t":"text","s":" It's called `ROADM","ts":660318625661}
+{"t":"status","state":"generating","prefill_done":112,"prefill_total":112,"prefill_tps":0.0,"generated":13,"gen_tps":59.9,"ctx_used":8079,"ctx_size":51200,"power":100,"error":"","ts":660318625681}
+{"t":"text","s":"AP.md` in the root ","ts":660318732981}
+{"t":"text","s":"directory. Let me read it ","ts":660318840066}
+{"t":"status","state":"generating","prefill_done":112,"prefill_total":112,"prefill_tps":0.0,"generated":25,"gen_tps":57.9,"ctx_used":8091,"ctx_size":51200,"power":100,"error":"","ts":660318840087}
+{"t":"text","s":"for you.","ts":660318893743}
+{"t":"tool","phase":"start","idx":0,"ts":660318893746}
+{"t":"tool","phase":"tool","idx":0,"name":"read","ts":660318982444}
+{"t":"status","state":"generating","prefill_done":112,"prefill_total":112,"prefill_tps":0.0,"generated":37,"gen_tps":57.4,"ctx_used":8103,"ctx_size":51200,"power":100,"error":"","ts":660319052952}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":660319123746}
+{"t":"tool","phase":"param_value","idx":0,"s":"ROADMAP.md","ts":660319246878}
+{"t":"tool","phase":"param_end","idx":0,"ts":660319246883}
+{"t":"status","state":"generating","prefill_done":112,"prefill_total":112,"prefill_tps":0.0,"generated":49,"gen_tps":57.3,"ctx_used":8115,"ctx_size":51200,"power":100,"error":"","ts":660319264047}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":660319281375}
+{"t":"text","s":"\n","ts":660319281379}
+{"t":"text","s":"\n","ts":660319281379}
+{"t":"tool_request","idx":0,"name":"read","params":[{"name":"path","value":"ROADMAP.md"}],"ts":660319281381}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":2234,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660319306179}
+{"t":"status","state":"prefill","prefill_done":46,"prefill_total":2234,"prefill_tps":166.2,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660319582977}
+{"t":"status","state":"prefill","prefill_done":139,"prefill_total":2234,"prefill_tps":289.5,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660319786302}
+{"t":"status","state":"prefill","prefill_done":232,"prefill_total":2234,"prefill_tps":257.3,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660320208005}
+{"t":"status","state":"prefill","prefill_done":325,"prefill_total":2234,"prefill_tps":289.7,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660320428050}
+{"t":"status","state":"prefill","prefill_done":418,"prefill_total":2234,"prefill_tps":271.1,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660320847951}
+{"t":"status","state":"prefill","prefill_done":511,"prefill_total":2234,"prefill_tps":292.4,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660321053863}
+{"t":"status","state":"prefill","prefill_done":605,"prefill_total":2234,"prefill_tps":281.1,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660321458143}
+{"t":"status","state":"prefill","prefill_done":698,"prefill_total":2234,"prefill_tps":296.4,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660321661103}
+{"t":"status","state":"prefill","prefill_done":791,"prefill_total":2234,"prefill_tps":288.0,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660322052566}
+{"t":"status","state":"prefill","prefill_done":930,"prefill_total":2234,"prefill_tps":305.6,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660322349389}
+{"t":"status","state":"prefill","prefill_done":977,"prefill_total":2234,"prefill_tps":291.2,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660322661044}
+{"t":"status","state":"prefill","prefill_done":1070,"prefill_total":2234,"prefill_tps":300.7,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660322864726}
+{"t":"status","state":"prefill","prefill_done":1163,"prefill_total":2234,"prefill_tps":292.6,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660323281558}
+{"t":"status","state":"prefill","prefill_done":1256,"prefill_total":2234,"prefill_tps":300.2,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660323489868}
+{"t":"status","state":"prefill","prefill_done":1349,"prefill_total":2234,"prefill_tps":292.9,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660323911368}
+{"t":"status","state":"prefill","prefill_done":1442,"prefill_total":2234,"prefill_tps":299.5,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660324120853}
+{"t":"status","state":"prefill","prefill_done":1535,"prefill_total":2234,"prefill_tps":293.2,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660324541199}
+{"t":"status","state":"prefill","prefill_done":1628,"prefill_total":2234,"prefill_tps":298.9,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660324753261}
+{"t":"status","state":"prefill","prefill_done":1722,"prefill_total":2234,"prefill_tps":293.3,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660325176566}
+{"t":"status","state":"prefill","prefill_done":1815,"prefill_total":2234,"prefill_tps":298.3,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660325390342}
+{"t":"status","state":"prefill","prefill_done":1908,"prefill_total":2234,"prefill_tps":292.9,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660325821276}
+{"t":"status","state":"prefill","prefill_done":2001,"prefill_total":2234,"prefill_tps":297.4,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660326034682}
+{"t":"status","state":"prefill","prefill_done":2094,"prefill_total":2234,"prefill_tps":292.5,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660326464929}
+{"t":"status","state":"prefill","prefill_done":2187,"prefill_total":2234,"prefill_tps":296.7,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660326678394}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":10349,"ctx_size":51200,"power":100,"error":"","ts":660326786430}
+{"t":"text","s":"\nI found the roadmap ","ts":660326900370}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":11,"gen_tps":53.9,"ctx_used":10360,"ctx_size":51200,"power":100,"error":"","ts":660326990482}
+{"t":"text","s":"file at `ROADMAP.md`","ts":660327008523}
+{"t":"text","s":" in the workspace root. ","ts":660327116956}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":23,"gen_tps":54.6,"ctx_used":10372,"ctx_size":51200,"power":100,"error":"","ts":660327207611}
+{"t":"text","s":"Here's a summary of what ","ts":660327225634}
+{"t":"text","s":"it contains:\n\n## Current ","ts":660327334762}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":35,"gen_tps":54.8,"ctx_used":10384,"ctx_size":51200,"power":100,"error":"","ts":660327425130}
+{"t":"text","s":"Phase (P18)\n","ts":660327443114}
+{"t":"text","s":"**Build `mellu","ts":660327551871}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":47,"gen_tps":54.9,"ctx_used":10396,"ctx_size":51200,"power":100,"error":"","ts":660327642808}
+{"t":"text","s":"m-fixture` — a ","ts":660327661099}
+{"t":"text","s":"small, one-shot benchmark** ","ts":660327769970}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":58,"gen_tps":54.9,"ctx_used":10407,"ctx_size":51200,"power":100,"error":"","ts":660327842864}
+{"t":"text","s":"focused on:\n- Fixture-","ts":660327879691}
+{"t":"text","s":"only, one task family per ","ts":660327991663}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":69,"gen_tps":54.6,"ctx_used":10418,"ctx_size":51200,"power":100,"error":"","ts":660328049401}
+{"t":"text","s":"run (repair visible files vs.","ts":660328103144}
+{"t":"text","s":" authoring from scratch as separate ","ts":660328211069}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":81,"gen_tps":54.8,"ctx_used":10430,"ctx_size":51200,"power":100,"error":"","ts":660328265253}
+{"t":"text","s":"benchmarks)\n- One attempt,","ts":660328319574}
+{"t":"text","s":" no repair rounds, no ","ts":660328432205}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":92,"gen_tps":54.7,"ctx_used":10441,"ctx_size":51200,"power":100,"error":"","ts":660328468794}
+{"t":"text","s":"prompt interventions\n- A flat ","ts":660328542041}
+{"t":"text","s":"oracle with 13 independently ","ts":660328652370}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":103,"gen_tps":54.7,"ctx_used":10452,"ctx_size":51200,"power":100,"error":"","ts":660328670676}
+{"t":"text","s":"evaluable requirements\n- Freeze ","ts":660328762072}
+{"t":"text","s":"the prompt and fixture manifest before ","ts":660328871608}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":114,"gen_tps":54.7,"ctx_used":10463,"ctx_size":51200,"power":100,"error":"","ts":660328871625}
+{"t":"text","s":"sampling\n- Only then test ","ts":660328981405}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":125,"gen_tps":54.7,"ctx_used":10474,"ctx_size":51200,"power":100,"error":"","ts":660329073291}
+{"t":"text","s":"rounds as a separate bounded comparison\n","ts":660329091727}
+{"t":"text","s":"\n## Recent Phases\n- ","ts":660329201673}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":136,"gen_tps":54.7,"ctx_used":10485,"ctx_size":51200,"power":100,"error":"","ts":660329274861}
+{"t":"text","s":"**P17**: Answered ","ts":660329311211}
+{"t":"text","s":"the repair-limit question - Mellu","ts":660329421510}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":147,"gen_tps":54.6,"ctx_used":10496,"ctx_size":51200,"power":100,"error":"","ts":660329476429}
+{"t":"text","s":"m's multi-file repair failure ","ts":660329531154}
+{"t":"text","s":"was predominantly a harness defect. ","ts":660329641044}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":158,"gen_tps":54.6,"ctx_used":10507,"ctx_size":51200,"power":100,"error":"","ts":660329677898}
+{"t":"text","s":"Mellum on 15/","ts":660329750758}
+{"t":"text","s":"17 editing cells is ","ts":660329861210}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":169,"gen_tps":54.6,"ctx_used":10518,"ctx_size":51200,"power":100,"error":"","ts":660329879716}
+{"t":"text","s":"a genuine result.\n- ","ts":660329971178}
+{"t":"text","s":"**P16**: Demo","ts":660330081148}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":180,"gen_tps":54.6,"ctx_used":10529,"ctx_size":51200,"power":100,"error":"","ts":660330081163}
+{"t":"text","s":"ted - was a proxy for ","ts":660330191572}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":191,"gen_tps":54.6,"ctx_used":10540,"ctx_size":51200,"power":100,"error":"","ts":660330283575}
+{"t":"text","s":"the repair-limit question\n- ","ts":660330301902}
+{"t":"text","s":"**P15**: Host-","ts":660330412359}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":202,"gen_tps":54.6,"ctx_used":10551,"ctx_size":51200,"power":100,"error":"","ts":660330486262}
+{"t":"text","s":"controlled action mode - proved Mellu","ts":660330522991}
+{"t":"text","s":"m is harness-addressable with ","ts":660330633716}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":213,"gen_tps":54.6,"ctx_used":10562,"ctx_size":51200,"power":100,"error":"","ts":660330689132}
+{"t":"text","s":"0 tool calls but successful ","ts":660330744478}
+{"t":"text","s":"file creation\n- **P1","ts":660330856867}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":224,"gen_tps":54.5,"ctx_used":10573,"ctx_size":51200,"power":100,"error":"","ts":660330893853}
+{"t":"text","s":"3**: More models - ","ts":660330967876}
+{"t":"text","s":"Mellum 2.1 ","ts":660331078682}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":235,"gen_tps":54.5,"ctx_used":10584,"ctx_size":51200,"power":100,"error":"","ts":660331097090}
+{"t":"text","s":"fails the tool-call initiation gate ","ts":660331189968}
+{"t":"text","s":"under the tested harness\n\n## ","ts":660331300888}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":246,"gen_tps":54.5,"ctx_used":10595,"ctx_size":51200,"power":100,"error":"","ts":660331300902}
+{"t":"text","s":"Workflow\nThe repository uses spec-","ts":660331411436}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":257,"gen_tps":54.5,"ctx_used":10606,"ctx_size":51200,"power":100,"error":"","ts":660331504092}
+{"t":"text","s":"driven development with committed design specs,","ts":660331522512}
+{"t":"text","s":" implementation plans, then code.","ts":660331633098}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":268,"gen_tps":54.5,"ctx_used":10617,"ctx_size":51200,"power":100,"error":"","ts":660331706825}
+{"t":"text","s":" The default test suite requires ","ts":660331743957}
+{"t":"text","s":"no model, no network, ","ts":660331855154}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":279,"gen_tps":54.4,"ctx_used":10628,"ctx_size":51200,"power":100,"error":"","ts":660331910592}
+{"t":"text","s":"and no subprocess.\n\nWould ","ts":660331966263}
+{"t":"text","s":"you like me to read more ","ts":660332077315}
+{"t":"status","state":"generating","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":290,"gen_tps":54.4,"ctx_used":10639,"ctx_size":51200,"power":100,"error":"","ts":660332114351}
+{"t":"text","s":"of the roadmap or explore any ","ts":660332188552}
+{"t":"text","s":"specific phase in detail?\n\n","ts":660332281806}
+{"t":"status","state":"idle","prefill_done":2234,"prefill_total":2234,"prefill_tps":0.0,"generated":298,"gen_tps":54.4,"ctx_used":10649,"ctx_size":51200,"power":100,"error":"","ts":660332281824}
+{"t":"ready","kv_bytes":2592079872,"scratch_bytes":6146969608,"model_bytes":48257070080,"planned_bytes":56996119560,"stop_reason":"eos","generated":298,"ctx_used":10647,"ts":660332281826}

@@ -14,14 +14,16 @@ How to answer "what happened in that session?" fast. The default workflow is
 From the checkout:
 
 ```bash
-swift run swiftstar-analyze list               # capture dirs, newest first, unusable ones flagged
+swift run swiftstar-analyze list               # capture dirs, newest first (mtime), unusable ones flagged
 swift run swiftstar-analyze summary --latest   # per-turn: decode avg, tokens, ctx, tools, Σsuffix
 swift run swiftstar-analyze trace  --latest    # prefill syncs + compactions
 swift run swiftstar-analyze diff A B           # paired-bill comparison (Σsuffix only)
 ```
 
 Grep raw NDJSON only when the CLI cannot answer (a field the CLI doesn't
-surface, a cross-tree question). The CLI reads all three trees.
+surface, a cross-tree question). The CLI reads all four trees below.
+`--latest` means the newest usable **live** capture (rescued evidence and
+agenttest cells do not shadow it).
 
 ## Where captures live and which shape each tree uses
 
@@ -30,7 +32,7 @@ surface, a cross-tree question). The CLI reads all three trees.
 | `captures/live/<ts>/` | the app (each session) | `wire.ndjson`, `agent.trace`, `agent.stderr`, `provenance.md`, `outcomes.ndjson` (one `TurnOutcome` JSON per finished turn) |
 | `captures/agenttest/<ts>-*/` | `swiftstar-agenttest` | `wire.ndjson` (fixture tier); `run-config.json` for provenance |
 | `captures/evidence/` | rescued `/tmp` evidence | the app's shape, copied verbatim |
-| `captures/` root | `swiftstar-drive` | `wire.trace` + `CaptureWriter` output |
+| `captures/` root | `swiftstar-drive` | `wire.ndjson`, `wire.stderr`, `wire.trace`, `provenance.md` (`CaptureWriter`) |
 
 `captures/` is gitignored — the evidence is on disk, not in the repo.
 
@@ -58,8 +60,19 @@ across syncs. So:
 
 - `TurnOutcome` is Codable; `outcomes.ndjson` is one JSON line per finished
   turn (appended at turn end, only when session capture is enabled).
-- The decode-average math (µs unit, first-`generating` baseline, prefill
-  excluded) is pinned by `TurnSummaryTests.goldenReplayDecodeAveragesTrackEngineRates`
-  — if it drifts from the engine's `gen_tps`, fix the math, not the test.
+- **A pooled capture interleaves subagent sessions on one wire**, each with its
+  own counters. Filter to the orchestrator (`PoolWireParser.worker(of:)`) before
+  reducing anything, or the numbers describe no session that ever ran. The CLI
+  does this and reports the subagent traffic it set aside.
+- The decode average comes from `DecodeAccumulator`, **not** from `ts` deltas:
+  the engine's `gen_tps` is cumulative per *generation segment* and its counters
+  reset at every prefill, so a turn with tool rounds is several segments. Wall
+  time between statuses includes prefill and tool-blocked time (the engine
+  reports `generating` while blocked on a tool result), so a Δ/Δ average reads
+  7.3 tok/s where the engine's own clock says 57. Pinned by
+  `TurnSummaryTests.toolRoundTurnTracksEngineRate` against
+  `fixtures/agent/tool-rounds.ndjson` — if it drifts, fix the math, not the test.
+- `ready.generated` is the final segment's count only; the turn's true total is
+  the accumulator's (measured: 298 reported against 714 generated).
 - Metrics/Diagnostics tabs are wired live from the session (the bundled golden
   capture is only the pre-spawn placeholder).

@@ -95,24 +95,29 @@ struct MetricsView: View {
     }
 
     private var gpuDial: some View {
+        // No agent pid = no sample taken. Rendering the zeroed snapshot as "0%"
+        // would present an absence of measurement as a measured idle machine.
         dialCard("GPU", severity: .healthy) {
-            Text(DialLogic.fixedWidth(String(format: "%.0f%%", model.machine.gpuUtilization), width: 6))
-                .font(.system(.body, design: .monospaced))
+            sampledText(String(format: "%.0f%%", model.machine.gpuUtilization), width: 6)
         }
     }
 
     private var cpuDial: some View {
         dialCard("CPU", severity: .healthy) {
-            Text(DialLogic.fixedWidth(String(format: "%.0f%%", model.machine.cpuUtilization), width: 6))
-                .font(.system(.body, design: .monospaced))
+            sampledText(String(format: "%.0f%%", model.machine.cpuUtilization), width: 6)
         }
     }
 
     private var powerDial: some View {
         dialCard("Power", severity: .healthy) {
-            Text(DialLogic.fixedWidth(String(format: "%.1f W", model.machine.watts), width: 8))
-                .font(.system(.body, design: .monospaced))
+            sampledText(String(format: "%.1f W", model.machine.watts), width: 8)
         }
+    }
+
+    @ViewBuilder
+    private func sampledText(_ value: String, width: Int) -> some View {
+        Text(model.sampling ? DialLogic.fixedWidth(value, width: width) : "—")
+            .font(.system(.body, design: .monospaced))
     }
 
     private func dialCard(_ title: String, severity: Severity, @ViewBuilder value: () -> some View) -> some View {

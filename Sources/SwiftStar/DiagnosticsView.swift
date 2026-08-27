@@ -11,7 +11,15 @@ struct DiagnosticsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if model.findings.isEmpty {
+            if model.awaitingCapture {
+                // Distinct from "analyzed, found nothing": the session is up but
+                // has not written an analyzable turn yet. Without this the empty
+                // list reads as a clean bill of health.
+                ContentUnavailableView(
+                    "Waiting for the first turn",
+                    systemImage: "hourglass",
+                    description: Text("This session's capture has nothing to analyze yet."))
+            } else if model.findings.isEmpty {
                 ContentUnavailableView(
                     "No findings",
                     systemImage: "stethoscope",

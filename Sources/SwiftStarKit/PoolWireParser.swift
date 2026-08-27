@@ -17,12 +17,17 @@ public struct PoolWireParser: Sendable {
     public init() {}
 
     public mutating func feed(_ line: String) -> PoolWireEvent? {
-        let worker = Self.extractWorker(line)
+        let worker = Self.worker(of: line)
         guard let event = inner.feed(line) else { return nil }
         return PoolWireEvent(worker: worker, event: event)
     }
 
-    private static func extractWorker(_ line: String) -> WorkerId {
+    /// The worker a raw wire line belongs to (`.orchestrator` when the field is
+    /// absent — a pre-pool single-session wire). Public so consumers that parse
+    /// with the single-session `WireEventParser` (Diagnostics, `swiftstar-analyze`)
+    /// can drop worker-tagged lines first: folding a subagent's counters into
+    /// the orchestrator's session produces a merged fiction, not a session.
+    public static func worker(of line: String) -> WorkerId {
         guard let data = line.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let worker = object["worker"] as? NSNumber else {

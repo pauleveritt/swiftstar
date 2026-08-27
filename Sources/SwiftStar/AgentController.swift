@@ -52,16 +52,20 @@ final class AgentController {
     /// `nonisolated(unsafe)`: mutated only on MainActor; deinit (nonisolated in
     /// Swift 6) reads it to cancel the poll.
     nonisolated(unsafe) private var memoryTask: Task<Void, Never>?
-    /// The `lastStatus` captured when a turn starts: the denominator of the
-    /// turn's decode-rate average (Δgenerated / Δts over the turn). nil when
-    /// the turn started before any status event (no fabricated average).
-    private var turnBaselineStatus: StatusSnapshot?
+    /// The in-flight turn's decode work, accumulated per generation segment on
+    /// the engine's own clock. Reset at each turn's start and end.
+    private var decodeAccumulator = DecodeAccumulator()
 
     /// The running agent's pid, if the child process is alive.
     var runningPid: pid_t? { process?.processIdentifier }
     /// The last completed turn's outcome record (D12); the full trail goes to
     /// the SWIFTSTAR_LOG file. Persistence beyond that is P9/P10 work.
     private(set) var lastTurnOutcome: TurnOutcome?
+    /// Finished orchestrator turns this process has seen. The signal Diagnostics
+    /// re-analyzes on: the session's capture only becomes analyzable once a turn
+    /// has been written to it, and a pid change alone fires too early (the wire
+    /// is empty and the engine has not opened its trace yet).
+    private(set) var completedTurns = 0
     /// The current session's outcomes.ndjson (nil when capture is disabled):
     /// one appended `TurnOutcome` line per finished turn (P21 — captures become
     /// self-contained evidence the CLI reads back).
@@ -299,13 +303,14 @@ final class AgentController {
         lastPlannedBytes = nil
         lastPlannedModel = nil
         lastFootprintBytes = nil
-        turnBaselineStatus = nil
+        decodeAccumulator = DecodeAccumulator()
         outcomeBuilder = nil
         sentInterrupt = false
         // A restart is a fresh engine = a fresh pool: stale pending workers and
         // consult bookkeeping must not survive into the new session.
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
         consultWorkers = []
+        workerWatchdogTask?.cancel()
         activeWorkerId = nil
         activeWorkerPacket = nil
         activeWorkerWorktree = nil
@@ -340,6 +345,10 @@ final class AgentController {
         if captureEnabled {
             FileManager.default.createFile(atPath: captureWireURL.path, contents: nil)
             FileManager.default.createFile(atPath: captureStderrURL.path, contents: nil)
+            // outcomes.ndjson is appended the same lazy way (appendOutcome opens
+            // it per turn), so it needs the same up-front create or every turn
+            // outcome is silently dropped for the whole session.
+            if let outcomesURL { FileManager.default.createFile(atPath: outcomesURL.path, contents: nil) }
         }
 
         // P8: stage the Superpowers skills into the workspace (progressive
@@ -495,9 +504,10 @@ final class AgentController {
             // and its rates are ratcheted (never blanked by a zero).
             onTelemetry?(.status(snapshot))
             lastStatus = snapshot
-            // P21: the decode-average baseline is the first *generating*
-            // snapshot of the turn (excludes prefill). Held once captured.
-            turnBaselineStatus = TurnSummary.baseline(for: snapshot, current: turnBaselineStatus)
+            // P21: the turn's decode work accumulates per generation segment on
+            // the engine's own clock (see DecodeAccumulator) — wall time between
+            // statuses includes prefill and tool round trips, which is not decode.
+            decodeAccumulator.apply(snapshot)
             lastPrefillTPS = AgentStatusText.ratchet(previous: lastPrefillTPS, new: snapshot.prefillTPS)
             lastGenTPS = AgentStatusText.ratchet(previous: lastGenTPS, new: snapshot.genTPS)
             break
@@ -520,23 +530,21 @@ final class AgentController {
                 let outcome = builder.finish(appStopReason: sentInterrupt ? .interrupt : nil)
                 outcomeBuilder = nil
                 lastTurnOutcome = outcome
+                completedTurns += 1
                 log("turn outcome: \(outcome)")
                 appendOutcome(outcome)
                 // Freeze the turn's summary onto its reply bubble: the decode
-                // average over the turn (Δgenerated/Δts) when the counters
-                // advanced, else the engine-reported rate — never a fabricated
-                // average. `promptTPS` is the turn-end ratchet, matching the
-                // status bar's readout.
-                let decodeTPS: Double?
-                if let first = turnBaselineStatus, let last = lastStatus {
-                    decodeTPS = TurnSummary.averageDecodeTPS(first: first, last: last)
-                } else {
-                    decodeTPS = nil
-                }
+                // average across the turn's generation segments, else the
+                // engine-reported rate — never a fabricated average.
+                // `promptTPS` is the turn-end ratchet, matching the status bar.
+                decodeAccumulator.finish(finalGenerated: outcome.generatedTokens)
                 let summary = TurnSummary(
                     promptTPS: lastPrefillTPS,
-                    decodeTPS: decodeTPS ?? lastGenTPS,
-                    generatedTokens: outcome.generatedTokens,
+                    decodeTPS: decodeAccumulator.tokensPerSecond ?? lastGenTPS,
+                    // The accumulator's total, not the outcome's: the engine
+                    // resets its counter per generation segment, so a turn with
+                    // tool rounds reports only its last segment on the wire.
+                    generatedTokens: decodeAccumulator.generatedTokens,
                     ctxUsed: outcome.ctxUsed)
                 transcript.attachSummary(summary)
                 // The status bar's Prompt/Decode readout resets at turn end: a
@@ -545,7 +553,7 @@ final class AgentController {
                 // turn's start — this covers the idle window).
                 lastPrefillTPS = 0
                 lastGenTPS = 0
-                turnBaselineStatus = nil
+                decodeAccumulator = DecodeAccumulator()
             }
             // P11 (D4): the orchestrator's turn ended — run any workers it
             // dispatched.
@@ -685,7 +693,48 @@ final class AgentController {
             pipe.fileHandleForWriting.write(
                 Data((PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n").utf8))
         }
+        armWorkerWatchdog(worker)
         log("worker \(worker.rawValue): turn started (worktree \(worktree.url.lastPathComponent))")
+    }
+
+    /// A worker turn ends on its `ready`; if that never arrives (engine wedged
+    /// mid-turn) the scheduler's `running` slot is never freed and every later
+    /// `/chat` and dispatch is refused "pool is busy" until a manual restart.
+    /// The watchdog is the only bound on that — delivery is edge-triggered, so
+    /// there is no poll left to notice.
+    private func armWorkerWatchdog(_ worker: WorkerId) {
+        workerWatchdogTask?.cancel()
+        let gen = generation
+        workerWatchdogTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Self.workerTurnTimeoutSeconds))
+            guard !Task.isCancelled, let self,
+                  self.generation == gen, self.activeWorkerId == worker else { return }
+            self.failActiveWorker(worker, reason: "worker turn timed out")
+        }
+    }
+
+    /// Fold a wedged worker turn into a failure receipt and free the pool — the
+    /// same bookkeeping `finishWorkerTurn` does, minus the outcome (there is no
+    /// `ready`, so there is nothing to finalize).
+    private func failActiveWorker(_ worker: WorkerId, reason: String) {
+        guard activeWorkerId == worker else { return }
+        let isConsult = consultWorkers.contains(worker)
+        if let worktree = activeWorkerWorktree {
+            WorktreeDispatcher.discard(worktree, in: Self.resolveRepoRoot(from: settings.workspace))
+        }
+        workerOutcomeBuilder = nil
+        activeWorkerId = nil
+        activeWorkerPacket = nil
+        activeWorkerWorktree = nil
+        let receipt = DispatchReceipt(worker: worker, ref: nil, reason: reason, summary: reason)
+        poolState = PoolScheduler.apply(poolState, .workerFailed(worker, receipt))
+        if isConsult {
+            consultWorkers.remove(worker)
+            poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+            transcript.appendSystem("→ chat failed: \(reason)")
+        }
+        log("worker \(worker.rawValue): \(reason)")
+        drainQueuedWorkers()
     }
 
     /// Route one worker-tagged event through the worker's turn (D4): answer its
@@ -730,6 +779,7 @@ final class AgentController {
     /// candidate *ref* (the worktree commit SHA) is produced by the P10
     /// `WorktreeDispatcher`, which the pooled path will reuse for the commit.
     private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome) {
+        workerWatchdogTask?.cancel()
         let isConsult = consultWorkers.contains(worker)
         let answerText: String? = isConsult ? outcome.text : nil
         let packet = activeWorkerPacket ?? HandoffPacket(
@@ -776,19 +826,30 @@ final class AgentController {
             }
         }
         poolState = PoolScheduler.apply(poolState, .workerFinished(worker, receipt))
-        rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
+        // A consult runs read-only (writableFiles is empty by construction), so
+        // its verdict is ALWAYS a refusal. Recording it would leave a phantom
+        // "Worker N refused: noChanges" in the facts a later dispatch is planned
+        // from — the digest gets implementer receipts only.
+        if !isConsult {
+            rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
+        }
         activeWorkerId = nil
         activeWorkerPacket = nil
         activeWorkerWorktree = nil
         if isConsult {
             consultWorkers.remove(worker)
             // Surface the answer directly; never deliver a consult's receipt as
-            // orchestrator prose — the answer IS the delivery.
-            let answer = receipt.answerText ?? "done"
-            if !sendConsulted(answer, worker: worker) {
+            // orchestrator prose — the answer IS the delivery. Clear the receipt
+            // only when the send lands (at-least-once, matching
+            // injectPendingReceipts): if the user started a turn mid-consult the
+            // send is refused, and leaving the receipt pending lets the next
+            // drain fold the answer in via `injectionPrompt()`.
+            let answer = receipt.answerText.flatMap { $0.isEmpty ? nil : $0 } ?? receipt.summary
+            if sendConsulted(answer, worker: worker) {
+                poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+            } else {
                 transcript.append(.consulted(worker, answer))
             }
-            poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
         }
         log("worker \(worker.rawValue): \(receipt.summary)")
         drainQueuedWorkers()
@@ -1079,7 +1140,7 @@ final class AgentController {
         // snapshot of this turn (the previous turn's trailing status was the
         // old baseline, which the engine's per-turn counter reset made garbage
         // from turn 2 on).
-        turnBaselineStatus = nil
+        decodeAccumulator = DecodeAccumulator()
         state = .generating
         sentInterrupt = false
         // D12: open the turn's outcome record with the app-known facts the
@@ -1183,6 +1244,12 @@ final class AgentController {
     /// text directly (not a receipt), and their receipt is never injected into
     /// the orchestrator (the text is the value, not a verdict).
     private var consultWorkers: Set<WorkerId> = []
+
+    /// How long a worker turn may run before the watchdog frees the pool. Well
+    /// above a real turn (a deep-context worker turn is tens of seconds); this
+    /// is a wedge-breaker, not a budget — the packet's budgets are the budget.
+    static let workerTurnTimeoutSeconds = 600.0
+    @ObservationIgnored private var workerWatchdogTask: Task<Void, Never>?
 
     /// The `/chat` path: run the task as a read-only pool worker and surface
     /// the answer (the glossary's **chat** — formerly the misnamed

@@ -36,6 +36,13 @@ public struct DispatchReceipt: Codable, Equatable, Sendable {
     /// refusal is named by its `reason`; a candidate by its `ref` (or, while
     /// the worktree commit is still pending, as a candidate without a ref).
     public func injectionPrompt() -> String {
+        // A consult's answer IS its delivery, so it wins over the verdict: a
+        // read-only worker's verdict is always a refusal, and folding
+        // "Worker N refused: noChanges" back would describe the contract rather
+        // than the answer. Only reached when the direct send was refused.
+        if let answerText, !answerText.isEmpty {
+            return "→ consulted (worker \(worker.rawValue)): \(answerText)"
+        }
         if let reason {
             return "Worker \(worker.rawValue) refused: \(reason)"
         }

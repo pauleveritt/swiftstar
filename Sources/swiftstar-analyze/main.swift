@@ -17,39 +17,57 @@ func captureRoot() -> URL {
     URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("captures")
 }
 
-struct CaptureDir: Comparable {
+struct CaptureDir {
     let name: String
     let dir: URL
     let kind: String
-    static func < (l: CaptureDir, r: CaptureDir) -> Bool { l.name < r.name }
+    let modified: Date
 }
 
+/// Every capture tree, newest first. Ordering is by mtime, not by directory
+/// name: the trees use three different naming conventions (the drive stamps the
+/// model into the name, rescued evidence is hand-named), so a lexical sort puts
+/// `evidence/20260826-spike-run` ahead of a live session captured hours later.
 func captureDirs() -> [CaptureDir] {
     var out: [CaptureDir] = []
-    for (kind, sub) in [("live", "live"), ("agenttest", "agenttest"), ("evidence", "evidence")] {
-        let base = captureRoot().appendingPathComponent(sub)
-        if let entries = try? FileManager.default.contentsOfDirectory(at: base, includingPropertiesForKeys: nil) {
-            for e in entries where e.hasDirectoryPath {
-                out.append(CaptureDir(name: e.lastPathComponent, dir: e, kind: kind))
-            }
+    func add(_ base: URL, kind: String, recurse: Bool) {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: base, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
+        for e in entries where e.hasDirectoryPath {
+            // The drive writes its dirs at the captures/ root, beside the
+            // per-producer subdirectories — skip those when scanning the root.
+            if !recurse, ["live", "agenttest", "evidence"].contains(e.lastPathComponent) { continue }
+            let modified = (try? e.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+            out.append(CaptureDir(name: e.lastPathComponent, dir: e, kind: kind, modified: modified))
         }
     }
-    return out.sorted(by: >)
+    for sub in ["live", "agenttest", "evidence"] {
+        add(captureRoot().appendingPathComponent(sub), kind: sub, recurse: true)
+    }
+    add(captureRoot(), kind: "drive", recurse: false)
+    return out.sorted { $0.modified > $1.modified }
 }
 
 func isUnusable(_ d: CaptureDir) -> Bool {
     let wire = d.dir.appendingPathComponent("wire.ndjson")
-    let size = (try? FileManager.default.attributesOfItem(atPath: wire.path)[.size] as? Int) ?? 0
-    return size == nil || size == 0
+    let size = (try? FileManager.default.attributesOfItem(atPath: wire.path)[.size]) as? Int
+    return (size ?? 0) == 0
 }
 
 func resolveDir(_ spec: String) -> URL {
     if spec == "--latest" {
-        guard let d = captureDirs().first else {
-            FileHandle.standardError.write(Data("no captures found under \(captureRoot().path)\n".utf8))
+        // "My last session" means the app's most recent usable capture, not
+        // whichever directory was written most recently — rescued evidence and
+        // agenttest cells would otherwise shadow it.
+        let all = captureDirs()
+        let candidate = all.first { $0.kind == "live" && !isUnusable($0) }
+            ?? all.first { !isUnusable($0) }
+        guard let candidate else {
+            FileHandle.standardError.write(Data("no usable captures found under \(captureRoot().path)\n".utf8))
             exit(2)
         }
-        return d.dir
+        return candidate.dir
     }
     if spec.hasPrefix("/") { return URL(fileURLWithPath: spec) }
     return captureRoot().appendingPathComponent(spec)
@@ -57,14 +75,32 @@ func resolveDir(_ spec: String) -> URL {
 
 // MARK: - parsing
 
+/// The orchestrator's own events. A pooled capture interleaves subagent
+/// sessions on one wire, each with its own independent counters — folding them
+/// together produces a merged fiction (measured: one agenttest capture reports a
+/// single 19,030-token "turn" that never happened).
 func parseWire(_ dir: URL) -> [WireEvent] {
     guard let text = try? String(contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8) else { return [] }
     var p = WireEventParser()
     var out: [WireEvent] = []
     for line in text.split(whereSeparator: \.isNewline) {
+        guard PoolWireParser.worker(of: String(line)) == .orchestrator else { continue }
         if let e = p.feed(String(line)) { out.append(e) }
     }
     return out
+}
+
+/// Per-worker status streams for a pooled capture, so a subagent's session can
+/// be summarized on its own terms instead of silently vanishing.
+func workerStatusCounts(_ dir: URL) -> [WorkerId: Int] {
+    guard let text = try? String(contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8) else { return [:] }
+    var counts: [WorkerId: Int] = [:]
+    for line in text.split(whereSeparator: \.isNewline) {
+        let worker = PoolWireParser.worker(of: String(line))
+        guard worker != .orchestrator else { continue }
+        counts[worker, default: 0] += 1
+    }
+    return counts
 }
 
 func parseTrace(_ dir: URL) -> [TraceEvent] {
@@ -109,13 +145,13 @@ func turns(_ events: [WireEvent]) -> [[StatusSnapshot]] {
     return out
 }
 
-/// The turn's decode average with the app's own (fixed) math: µs unit +
-/// first-generating baseline (prefill excluded).
-func decodeAverage(_ turn: [StatusSnapshot]) -> Double? {
-    var baseline: StatusSnapshot?
-    for s in turn { baseline = TurnSummary.baseline(for: s, current: baseline) }
-    guard let b = baseline, let last = turn.last else { return nil }
-    return TurnSummary.averageDecodeTPS(first: b, last: last)
+/// The turn's decode work with the app's own math (`DecodeAccumulator`): per
+/// generation segment, on the engine's clock.
+func decodeWork(_ turn: [StatusSnapshot], finalGenerated: Int?) -> DecodeAccumulator {
+    var acc = DecodeAccumulator()
+    for s in turn { acc.apply(s) }
+    acc.finish(finalGenerated: finalGenerated)
+    return acc
 }
 
 func suffixTotal(_ trace: [TraceEvent]) -> Int {
@@ -146,12 +182,26 @@ func cmdSummary(_ dir: URL) {
     let ts = turns(events)
     print("Session \(dir.lastPathComponent): \(ts.count) turn(s), \(outcomes.count) outcome(s), \(compactionCount(trace)) compaction(s), Σsuffix \(suffixTotal(trace))")
     for (i, t) in ts.enumerated() {
-        let avg = decodeAverage(t).map { String(format: "%.1f", $0) } ?? "-"
         let outcome = i < outcomes.count ? outcomes[i] : nil
-        let gen = outcome?.generatedTokens ?? t.last?.generated ?? 0
+        let work = decodeWork(t, finalGenerated: outcome?.generatedTokens)
+        let avg = work.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "-"
+        // The accumulator's total, not the outcome's: the engine's counter
+        // resets per generation segment, so a tool-heavy turn's `ready` reports
+        // only its last segment.
+        let gen = work.generatedTokens
         let ctx = outcome?.ctxUsed ?? t.last?.ctxUsed ?? 0
         let tools = outcome?.toolCalls.count ?? 0
         print(String(format: "  %2d  decode %@ tok/s  tokens %d  ctx %d  tools %d", i + 1, avg, gen, ctx, tools))
+    }
+    let workers = workerStatusCounts(dir)
+    if !workers.isEmpty {
+        // Never silently drop them: the turns above are the orchestrator's, and
+        // a reader who does not know this capture is pooled would miss that most
+        // of the session happened in a subagent.
+        let detail = workers.sorted { $0.key < $1.key }
+            .map { "worker \($0.key.rawValue): \($0.value) event(s)" }
+            .joined(separator: ", ")
+        print("  (pooled capture — subagent traffic not counted above: \(detail))")
     }
 }
 
@@ -164,7 +214,9 @@ func cmdTrace(_ dir: URL) {
     for e in trace {
         switch e {
         case .prefillSync(let prompt, let cached, let suffix, let rc, let ms):
-            print(String(format: "sync  prompt %d  cached %d  suffix %d  rc %d  %d ms", prompt, cached, suffix, rc, ms))
+            // `ms` is a Double — a %d here reinterprets its bits and prints
+            // garbage (a real 828.088 ms rendered as -1958505087).
+            print(String(format: "sync  prompt %d  cached %d  suffix %d  rc %d  %.1f ms", prompt, cached, suffix, rc, ms))
         case .compaction(let reason, let old, let new, _, let tail):
             print("compaction  \(reason): \(old) -> \(new)  tail \(tail)")
         case .ignored:
