@@ -22,11 +22,12 @@ let package = Package(
             revision: "d83032f91844e5365f49a174d9940036790e434c"),
     ],
     targets: [
-        .target(name: "SwiftStarKit"),
+        .target(name: "SwiftStarKit", swiftSettings: [.swiftLanguageMode(.v6)]),
         .target(
             name: "SwiftStarAppKit",
             dependencies: ["SwiftStarKit"],
             resources: [.process("Resources")],
+            swiftSettings: [.swiftLanguageMode(.v6)],
             linkerSettings: [
                 // Private dyld-cache lib for power (Apple Silicon); cited from
                 // ds4-control's Package.swift (facts cross, code does not).
@@ -41,18 +42,21 @@ let package = Package(
                 .product(name: "MarkdownView", package: "MarkdownView"),
                 .product(name: "MarkdownParser", package: "MarkdownView"),
             ],
-            resources: [.process("Resources")]
+            resources: [.process("Resources")],
+            swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
         ),
-        .executableTarget(name: "swiftstar-drive", dependencies: ["SwiftStarKit"]),
-        .executableTarget(name: "swiftstar-agenttest", dependencies: ["SwiftStarKit", "SwiftStarAppKit"]),
+        .executableTarget(name: "swiftstar-drive", dependencies: ["SwiftStarKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
+        .executableTarget(name: "swiftstar-agenttest", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "SwiftStarKitTests",
             dependencies: ["SwiftStarKit"],
+            swiftSettings: [.swiftLanguageMode(.v6)],
             plugins: ["FastTierGuard"]
         ),
         .testTarget(
             name: "SwiftStarIntegrationTests",
-            dependencies: ["SwiftStarKit", "SwiftStarAppKit"]
+            dependencies: ["SwiftStarKit", "SwiftStarAppKit"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(name: "FastTierGuardTool"),
         .plugin(
