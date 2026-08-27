@@ -281,6 +281,11 @@ final class AgentController {
         settings.tracePath = captureDir.appendingPathComponent("agent.trace")
         let captureWireURL = captureDir.appendingPathComponent("wire.ndjson")
         let captureStderrURL = captureDir.appendingPathComponent("agent.stderr")
+        // `FileHandle(forWritingAtPath:)` opens an existing file — it does not
+        // create one. The drains open it lazily, so create the empty files here
+        // or the tees silently write nothing for the whole session.
+        FileManager.default.createFile(atPath: captureWireURL.path, contents: nil)
+        FileManager.default.createFile(atPath: captureStderrURL.path, contents: nil)
 
         // P8: stage the Superpowers skills into the workspace (progressive
         // disclosure, D2/D3) and pass the deterministic bootstrap index via
