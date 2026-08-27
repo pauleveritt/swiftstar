@@ -54,6 +54,37 @@ struct VariantRegistryTests {
     @Test func allContainsLagunaXS() {
         #expect(VariantRegistry.all.map(\.id).contains("laguna-xs-2.1"))
     }
+
+    @Test func resolvesLagunaS() throws {
+        let variant = try #require(VariantRegistry.resolve("laguna-s-2.1"))
+        #expect(variant.id == "laguna-s-2.1")
+        #expect(variant.family == .lagunaS)
+        #expect(variant.contract.architecture == "laguna")
+        #expect(variant.contract.rope.scalingType == "yarn")
+        #expect(variant.contract.rope.freqBase == 500_000.0)
+        // The mixed "RoutedQ2_K-Last27Q3_K" layout, read from the real file:
+        // dense layer 0 skipped, Q2_K on 1..<21, Q3_K on the last 27 (21..<48).
+        #expect(variant.contract.quantLayout.segments.count == 2)
+        #expect(variant.contract.quantLayout.segments[0].downType == .q2_k)
+        #expect(variant.contract.quantLayout.segments[0].startLayer == 1)
+        #expect(variant.contract.quantLayout.segments[0].layerCount == 21)
+        #expect(variant.contract.quantLayout.segments[1].downType == .q3_k)
+        #expect(variant.contract.quantLayout.segments[1].startLayer == 21)
+        #expect(variant.contract.quantLayout.segments[1].layerCount == 48)
+        #expect(variant.contract.quantLayout.downTensorName(layer: 5) == "blk.5.ffn_down_exps.weight")
+        // Laguna family sampling defaults (engine-lines.md) — same as XS.
+        #expect(variant.sampler?.temperature == 0.7)
+        #expect(variant.sampler?.topK == 20)
+        #expect(variant.sampler?.topP == 0.95)
+        #expect(variant.sampler?.minP == 0.05)
+        // S was deliberately excluded from SSD streaming (ROADMAP P22 forward
+        // item) — no engine-flag runtime, unlike XS.
+        #expect(variant.runtime == nil)
+    }
+
+    @Test func allContainsLagunaS() {
+        #expect(VariantRegistry.all.map(\.id).contains("laguna-s-2.1"))
+    }
 }
 
 struct VariantContextInvariantTests {
@@ -150,6 +181,54 @@ struct LagunaXSMemoryBudgetTests {
         #expect(budget.totalBytes(at: 16_383) == nil)
         #expect(budget.totalBytes(at: 32_769) == nil)
         #expect(budget.totalBytes(at: 51_200) == nil)
+    }
+}
+
+struct LagunaSMemoryBudgetTests {
+    private let budget = VariantRegistry.lagunaS.contract.memoryBudget
+
+    @Test func rangeCoversTheAppDefaultContextWithoutClamping() {
+        // Unlike Mellum/XS, Laguna S's declared range must already cover the
+        // app's shipped default (51,200) — it is the app's default model.
+        #expect(budget.minContext <= 51_200)
+        #expect(budget.maxContext >= 51_200)
+        #expect(budget.clampContext(51_200) == 51_200)
+    }
+
+    @Test func kvAtAppDefaultContext() throws {
+        // KV(ctx) = 49,152 x ctx + 75,497,472 B (Correction 2, verified
+        // byte-exact against measured `ready` events at ctx 32,768/150,000).
+        let kv = try #require(budget.kvGiB(at: 51_200))
+        let expectedBytes = 49_152.0 * 51_200 + 75_497_472
+        #expect(abs(kv - expectedBytes / 1_073_741_824) < 0.0001)
+    }
+
+    @Test func kvAt150kMatchesTheDocCitedMeasurement() throws {
+        // "ctx 150,000 -> 7,448,297,472" (Correction 2) — Laguna S's own
+        // documented operating point ("the everyday ctx 150,000 setting",
+        // docs/harvest/telemetry-findings.md), inside the declared range.
+        let kv = try #require(budget.kvGiB(at: 150_000))
+        #expect(abs(kv - 7_448_297_472.0 / 1_073_741_824) < 0.0001)
+    }
+
+    @Test func kvAt32kMatchesTheDocCitedMeasurement() throws {
+        let kv = try #require(budget.kvGiB(at: 32_768))
+        #expect(abs(kv - 1_686_110_208.0 / 1_073_741_824) < 0.0001)
+    }
+
+    @Test func unsupportedContextIsRefused() {
+        #expect(budget.totalBytes(at: 16_383) == nil)
+        #expect(budget.totalBytes(at: 150_001) == nil)
+    }
+
+    @Test func totalAtAppDefaultIsSanityCheckedAgainstTheOnDiskFileSize() throws {
+        // The gguf is ~46 GiB on disk (48,260,803,968 bytes measured via
+        // `stat`); resident weights should be in that neighborhood, not an
+        // order of magnitude off.
+        let total = try #require(budget.totalBytes(at: 51_200))
+        let gib = Double(total) / 1_073_741_824
+        #expect(gib > 44, "resident total \(gib) GiB looks too small for a ~46 GiB weights file")
+        #expect(gib < 60, "resident total \(gib) GiB looks implausibly large")
     }
 }
 

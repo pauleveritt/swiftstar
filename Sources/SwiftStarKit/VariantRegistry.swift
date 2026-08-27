@@ -5,7 +5,7 @@ import Foundation
 /// registry is the single source of variant *identity*; `VariantResolver` is
 /// the single source of *modelPath resolution*.
 public enum VariantRegistry {
-    public static let all: [Variant] = [mellum, lagunaXS]
+    public static let all: [Variant] = [mellum, lagunaXS, lagunaS]
 
     public static func resolve(_ id: String) -> Variant? {
         all.first { $0.id == id }
@@ -107,6 +107,67 @@ public enum VariantRegistry {
                     kvGiBAt40k: 1.31,
                     minContext: 16_384,
                     maxContext: 32_768
+                )
+            )
+        )
+    }()
+
+    /// Laguna S 2.1 — the app's default model (~46 GiB on disk), given a real
+    /// `Variant` (P22) so it participates in `VariantGate`/`VariantVerifier`
+    /// like Mellum and Laguna XS instead of bypassing both via
+    /// `AgentController.defaultModelFallback`.
+    public static let lagunaS: Variant = {
+        let path = locateModel("laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf", envKey: "SWIFTSTAR_LAGUNA_S_MODEL")
+        return Variant(
+            id: "laguna-s-2.1",
+            displayName: "Laguna S 2.1",
+            modelFile: path,
+            family: .lagunaS,
+            // Laguna family sampling defaults (engine-lines.md): temp 0.7,
+            // top-k 20, top-p 0.95, min-p 0.05 — same family default as XS.
+            sampler: SamplerDefaults(temperature: 0.7, topK: 20, topP: 0.95, minP: 0.05),
+            // S was deliberately excluded from SSD streaming (engine-lines.md,
+            // ROADMAP P22 forward item) — nil runtime, same as Mellum.
+            contract: RuntimeContract(
+                architecture: "laguna",
+                rope: RopeContract(scalingType: "yarn", freqBase: 500_000.0),
+                // Read from the real file (GGUFMetadataReader): a dense leading
+                // layer 0 (not routed, like Laguna XS), then MIXED routed-expert
+                // quant across layers 1..<48 — Q2_K on 1..<21 (20 layers), Q3_K
+                // on 21..<48 (the last 27; "RoutedQ2_K-Last27Q3_K" in the
+                // filename, confirmed tensor-by-tensor against the file).
+                quantLayout: QuantContract(
+                    segments: [
+                        QuantContract.Segment(downType: .q2_k, startLayer: 1, layerCount: 21),
+                        QuantContract.Segment(downType: .q3_k, startLayer: 21, layerCount: 48),
+                    ],
+                    downTensorPattern: "blk.%d.ffn_down_exps.weight"
+                ),
+                // Resident footprint at three context anchors, all derived from
+                // formulas this project measured and documented against the
+                // real engine (docs/superpowers/research/
+                // 2026-08-22-p11-engine-constraints-and-corrections.md,
+                // "Correction 2"), cross-checked against the file's on-disk
+                // size (48,260,803,968 bytes = 44.9464 GiB) for sanity:
+                //   weights  ~= on-disk size (S is resident, not SSD-streamed)
+                //   scratch  = min(ctx,16384) x 375,156 B/row, constant for any
+                //              ctx >= 16,384 (the allocator's prefill_cap caps
+                //              at 16,384) = 6,146,555,904 B = 5.7244 GiB
+                //   KV(ctx)  = 49,152 x ctx + 75,497,472 B (reproduces the
+                //              doc's cited measured `ready` events byte-exact
+                //              at ctx 32,768 and ctx 150,000)
+                // maxContext 150,000 is the doc's own verified operating point
+                // (docs/harvest/telemetry-findings.md: "the everyday ctx
+                // 150,000 setting") and comfortably covers the app's shipped
+                // default context (51,200), unlike Mellum/XS's narrower ranges.
+                memoryBudget: MemoryBudget(
+                    weightsGiB: 44.9464,
+                    scratchGiB: 5.7244,
+                    kvGiBAt16k: 0.8203125,
+                    kvGiBAt32k: 1.5703125,
+                    kvGiBAt40k: 1.9453125,
+                    minContext: 16_384,
+                    maxContext: 150_000
                 )
             )
         )
