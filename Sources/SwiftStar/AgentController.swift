@@ -1074,21 +1074,22 @@ final class AgentController {
         }
     }
 
-    /// `/orchestrate <task>`: dispatch the text as a read-only subagent task
+    /// `/orchestrate <task> [--files …]`: dispatch the task as a subagent
     /// (fresh context, disposable worktree, shell off) and surface the worker's
-    /// answer back into the transcript — the main context stays untouched.
-    /// Writable files are empty, so the worker investigates/answers read-only
-    /// and the value is its final text, not a mutation. A watch task on the
-    /// main actor surfaces the outcome once `isDispatching` flips false (the
-    /// completion-crosses-a-detached-task shape fails Swift 6's sending rules;
-    /// observation of the flip is the race-free equivalent).
+    /// answer back into the transcript — the main context stays untouched. The
+    /// writable set is worktree-relative (the Dispatch tab's convention); empty
+    /// = read-only investigation, the value being the worker's final text. A
+    /// watch task on the main actor surfaces the outcome once `isDispatching`
+    /// flips false (a completion crossing the detached-task boundary fails
+    /// Swift 6's sending rules; observing the flip is the race-free
+    /// equivalent).
     @ObservationIgnored private var orchestrateWatchTask: Task<Void, Never>?
-    func orchestrate(_ task: String) {
+    func orchestrate(task: String, writableFiles: [String]) {
         let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isDispatching else { return }
         transcript.appendSystem("→ orchestrating: \(trimmed)")
         let packet = HandoffPacket(
-            taskText: trimmed, writableFiles: [], validationCommand: nil,
+            taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
             baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
         dispatchAttempt(packet: packet)
         orchestrateWatchTask?.cancel()
