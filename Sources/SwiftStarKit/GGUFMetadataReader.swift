@@ -14,6 +14,9 @@ public struct GGUFType: RawRepresentable, Equatable, Hashable, Sendable {
     public static let q5_0 = GGUFType(rawValue: 6)
     public static let q8_0 = GGUFType(rawValue: 8)
     public static let q8_1 = GGUFType(rawValue: 9)
+    /// Laguna S 2.1's routed experts on layers 1–20 (`RoutedQ2_K` in the
+    /// filename); GGUF v3 type id 10.
+    public static let q2_k = GGUFType(rawValue: 10)
     public static let q3_k = GGUFType(rawValue: 11)
     public static let q4_k = GGUFType(rawValue: 12)
 
@@ -23,6 +26,7 @@ public struct GGUFType: RawRepresentable, Equatable, Hashable, Sendable {
         case 6: return "q5_0"
         case 8: return "q8_0"
         case 9: return "q8_1"
+        case 10: return "q2_k"
         case 11: return "q3_k"
         case 12: return "q4_k"
         default: return "type(\(rawValue))"

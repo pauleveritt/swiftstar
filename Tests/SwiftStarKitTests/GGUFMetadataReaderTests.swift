@@ -46,6 +46,23 @@ struct GGUFMetadataReaderTests {
         #expect(meta.tensorTypes["blk.0.ffn_down_exps.weight"] == nil)
     }
 
+    @Test func parsesLagunaSMixedQuantLayout() throws {
+        // Laguna S 2.1's "RoutedQ2_K-Last27Q3_K": Q2_K on layers 1..<21, Q3_K
+        // on 21..<48 — the reader itself is quant-shape-agnostic (it just
+        // records whatever type id each tensor carries), but this pins that
+        // both type ids (10 and 11) round-trip correctly in the same file.
+        let data = GGUFBuilder.makeLaguna(tensors: GGUFBuilder.lagunaSTensors())
+        let url = try write(data)
+        let meta = try GGUFMetadataReader.parse(at: url)
+        #expect(meta.architecture == "laguna")
+        #expect(meta.tensorTypes.count == 47)
+        #expect(meta.tensorTypes["blk.1.ffn_down_exps.weight"] == .q2_k)
+        #expect(meta.tensorTypes["blk.20.ffn_down_exps.weight"] == .q2_k)
+        #expect(meta.tensorTypes["blk.21.ffn_down_exps.weight"] == .q3_k)
+        #expect(meta.tensorTypes["blk.47.ffn_down_exps.weight"] == .q3_k)
+        #expect(meta.tensorTypes["blk.0.ffn_down_exps.weight"] == nil)
+    }
+
     @Test func wrongVersionIsNamedRefusal() throws {
         let data = GGUFBuilder.make(tensors: GGUFBuilder.mellumTensors(), version: 2)
         let url = try write(data)

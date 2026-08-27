@@ -4,6 +4,7 @@ import Foundation
 public enum ModelFamily: String, Equatable, Sendable {
     case mellum
     case lagunaXS
+    case lagunaS
 }
 
 /// Declared sampling defaults for a variant. Optional per-field and as a whole:
@@ -88,23 +89,57 @@ public struct RopeContract: Equatable, Sendable {
 /// The quant layout a variant's file must honor. The enforced fact is the down
 /// projection's type (Q8_0 everywhere on Mellum); the engine's own admission
 /// owns the deeper gate/up agreement checks.
+///
+/// Mellum and Laguna XS each have one uniform down type over one layer range.
+/// Laguna S 2.1's `RoutedQ2_K-Last27Q3_K` file is a MIXED layout — Q2_K on
+/// most routed layers, Q3_K on the last 27 — so the contract is really a list
+/// of `(range, downType)` segments; the single-segment case is just a
+/// one-element list, kept as the primary initializer so Mellum/XS call sites
+/// (and the `downType`/`startLayer`/`layerCount` readers) are unchanged.
 public struct QuantContract: Equatable, Sendable {
-    public var downType: GGUFType
-    /// First layer index that carries the down tensor. Laguna XS 2.1 has a
-    /// dense leading layer (index 0) with no routed experts, so its contract
-    /// starts at 1; Mellum starts at 0.
-    public var startLayer: Int
-    /// Exclusive upper bound on the layer index (`startLayer..<layerCount`).
-    public var layerCount: Int
+    /// One contiguous run of layers sharing a down-projection type.
+    public struct Segment: Equatable, Sendable {
+        public var downType: GGUFType
+        /// First layer index in this segment.
+        public var startLayer: Int
+        /// Exclusive upper bound on the layer index (`startLayer..<layerCount`).
+        public var layerCount: Int
+
+        public init(downType: GGUFType, startLayer: Int, layerCount: Int) {
+            self.downType = downType
+            self.startLayer = startLayer
+            self.layerCount = layerCount
+        }
+    }
+
+    /// One or more layer ranges, each with its own down type. Verified in
+    /// declaration order; a real file's layers must not be covered by more
+    /// than one segment (overlap is a contract-authoring bug, not a file bug).
+    public var segments: [Segment]
     /// printf-style tensor-name pattern, e.g. `blk.%d.ffn_down_exps.weight`.
     public var downTensorPattern: String
 
+    /// The common single-segment case (Mellum: uniform Q8_0; Laguna XS:
+    /// uniform Q3_K with a dense leading layer skipped via `startLayer`).
     public init(downType: GGUFType, startLayer: Int = 0, layerCount: Int, downTensorPattern: String) {
-        self.downType = downType
-        self.startLayer = startLayer
-        self.layerCount = layerCount
+        self.segments = [Segment(downType: downType, startLayer: startLayer, layerCount: layerCount)]
         self.downTensorPattern = downTensorPattern
     }
+
+    /// The mixed-quant case (Laguna S 2.1: Q2_K then Q3_K over disjoint
+    /// layer ranges).
+    public init(segments: [Segment], downTensorPattern: String) {
+        self.segments = segments
+        self.downTensorPattern = downTensorPattern
+    }
+
+    /// The first segment's down type — meaningful only for a single-segment
+    /// contract (Mellum/XS); a mixed contract's callers should read `segments`.
+    public var downType: GGUFType { segments[0].downType }
+    /// The first segment's start layer — see `downType`.
+    public var startLayer: Int { segments[0].startLayer }
+    /// The first segment's layer count — see `downType`.
+    public var layerCount: Int { segments[0].layerCount }
 
     public func downTensorName(layer: Int) -> String {
         String(format: downTensorPattern, layer)

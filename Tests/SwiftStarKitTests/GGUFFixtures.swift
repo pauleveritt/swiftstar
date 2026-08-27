@@ -116,6 +116,27 @@ enum GGUFBuilder {
         return tensors
     }
 
+    /// A Laguna-S-shaped tensor directory: `blk.N.ffn_down_exps.weight` for N
+    /// in startLayer..<layerCount (1..<48 by default), Q2_K (10) on
+    /// `1..<q3StartLayer` and Q3_K (11) from `q3StartLayer` on — the mixed
+    /// "RoutedQ2_K-Last27Q3_K" layout read from the real file.
+    static func lagunaSTensors(
+        q2Type: UInt32 = 10,
+        q3Type: UInt32 = 11,
+        startLayer: Int = 1,
+        q3StartLayer: Int = 21,
+        layerCount: Int = 48,
+        dropLayer: Int? = nil
+    ) -> [(name: String, type: UInt32, dims: [UInt64])] {
+        var tensors: [(String, UInt32, [UInt64])] = []
+        for layer in startLayer..<layerCount {
+            if layer == dropLayer { continue }
+            let type = layer < q3StartLayer ? q2Type : q3Type
+            tensors.append(("blk.\(layer).ffn_down_exps.weight", type, [896, 2304, 64]))
+        }
+        return tensors
+    }
+
     static func write(_ data: Data, to url: URL) throws {
         try data.write(to: url)
     }
@@ -159,6 +180,35 @@ func makeLagunaMetadata(
     for layer in startLayer..<layerCount {
         if layer == dropLayer { continue }
         tensorTypes["blk.\(layer).ffn_down_exps.weight"] = downType
+    }
+    return GGUFMetadata(
+        architecture: architecture,
+        ropeScalingType: scalingType,
+        ropeFreqBase: freqBase,
+        tensorTypes: tensorTypes
+    )
+}
+
+/// A clean Laguna S 2.1 `GGUFMetadata` (architecture "laguna", rope yarn /
+/// 500000, routed down tensors Q2_K on layers 1..<21 then Q3_K on 21..<48 —
+/// dense layer 0 skipped, mirroring the real file's mixed
+/// "RoutedQ2_K-Last27Q3_K" layout).
+func makeLagunaSMetadata(
+    q2Type: GGUFType = .q2_k,
+    q3Type: GGUFType = .q3_k,
+    startLayer: Int = 1,
+    q3StartLayer: Int = 21,
+    layerCount: Int = 48,
+    dropLayer: Int? = nil,
+    architecture: String? = "laguna",
+    scalingType: String? = "yarn",
+    freqBase: Double? = 500_000.0
+) -> GGUFMetadata {
+    var tensorTypes: [String: GGUFType] = [:]
+    for layer in startLayer..<layerCount {
+        if layer == dropLayer { continue }
+        let type = layer < q3StartLayer ? q2Type : q3Type
+        tensorTypes["blk.\(layer).ffn_down_exps.weight"] = type
     }
     return GGUFMetadata(
         architecture: architecture,

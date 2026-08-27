@@ -49,16 +49,19 @@ public enum VariantVerifier {
             mismatches.append(.rope(expected: expectedRope, actual: actualRope))
         }
 
-        // 3. Down-quant on every routed layer. Iterate the layer range
+        // 3. Down-quant on every routed layer, across every declared segment
+        // (Laguna S 2.1 has two: Q2_K then Q3_K). Iterate each range
         // explicitly: a missing key is `.downQuant(actual: nil)`, never a
         // silent skip (I4). `startLayer` skips a dense leading layer with no
-        // routed experts (Laguna XS 2.1 layer 0).
+        // routed experts (Laguna XS 2.1 / Laguna S 2.1 layer 0).
         let layout = variant.contract.quantLayout
-        for layer in layout.startLayer..<layout.layerCount {
-            let name = layout.downTensorName(layer: layer)
-            let actual = metadata.tensorTypes[name]
-            if actual != layout.downType {
-                mismatches.append(.downQuant(layer: layer, expected: layout.downType, actual: actual))
+        for segment in layout.segments {
+            for layer in segment.startLayer..<segment.layerCount {
+                let name = layout.downTensorName(layer: layer)
+                let actual = metadata.tensorTypes[name]
+                if actual != segment.downType {
+                    mismatches.append(.downQuant(layer: layer, expected: segment.downType, actual: actual))
+                }
             }
         }
 
