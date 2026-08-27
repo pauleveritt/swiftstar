@@ -5,6 +5,9 @@ Command names, `PacketRole` cases, and UI copy must agree with this file; when
 they don't, the code is wrong, not the glossary. Code mappings are current as
 of 2026-08-27 and updated in the same commit that renames a symbol.
 
+**Naming rule (P24):** a **tool** is deterministic host code (no model); a
+**subagent** has a model in the loop. The same word must not describe both.
+
 This is the *domain* vocabulary. The *UI* vocabulary (component/region names
 for the shell — sidebar, toolbar, inspector, …) is the separate component/region
 registry defined by P19.1 (D5). Two vocabularies, one principle: names are
@@ -39,7 +42,9 @@ how expensive failure is — not by persona text.
 | **dispatch** | The orchestrator's per-task verb: hand one bounded task to an implementer in an isolated worktree, get back a candidate ref or a typed receipt. Not a user surface. | `HandoffPacket`, `WorktreeDispatcher`/`WorktreeDispatch`, `DispatchOutcome`. The old GUI form (`DispatchView` + `AgentController.dispatchAttempt`) is being dissolved. |
 | **handoff packet** | The typed per-task contract: objective, exact writable files, validation command, budgets. | `HandoffPacket`. |
 | **candidate ref / receipt** | An implementer's outcome: a reviewable commit, or a typed refusal naming why not. | `DispatchOutcome`, `DispatchReceipt`. |
-| **pool / subagent** | Context-isolated sessions sharing one locked engine; a worker is a session id on the pooled wire. | `PoolEngine`, `PoolScheduler`, `WorkerId`, `--subagent-pool`. |
+| **tool** | Deterministic host code — no model, millisecond Swift (P24 naming). Today: the host-executed file/shell tools; later P24's `test`/`scout`/`lint`. | `ToolCallbackResponder` (consent/respond); P24. |
+| **subagent** | A model-backed session (P24 naming) — the escalation that applies or summarizes when a tool's digest isn't decision-adequate. | pool workers, `PacketRole` roles. |
+| **pool** | Context-isolated sessions sharing one locked engine; a worker is a session id on the pooled wire. | `PoolEngine`, `PoolScheduler`, `WorkerId`, `--subagent-pool`. |
 | **pre-chewed context** | The condensed, RLM-digested context a worker receives (plus the ability to pull more relevant bits). Context *strategy*, not a user verb. | `RollingDigest`, `ContextAssembly`, the RLM lever (backlog). |
 
 ## Retired / renamed

@@ -94,6 +94,14 @@ description pipeline (backlog — consumes the vocabulary, does not ship here);
   `.inspector(isPresented:)` composes with it, and macOS toolbar customization
   is `.toolbar(id:)` + `ToolbarItem(id:)` + `.customizationBehavior` +
   `ToolbarCommands()` in the scene's `.commands`.
+- **Adjacent phases (2026-08-27):** P22 acceptance is done — variant +
+  engine-flag wiring shipped on the unmerged `p13-laguna-xs-variant` branch
+  (live acceptance green, 614 fast-tier tests on the branch); **model switching
+  is still P22's forward item**, so D4 ships the control only. P24 (digested
+  first-class tools) establishes the naming split **tool** = deterministic (no
+  model) vs **subagent** = model-backed, and retires the shell-on expedient via
+  **mediated bash** — the glossary carries the rule; nothing in this phase
+  re-introduces raw shell-on.
 
 ## Design
 
@@ -222,7 +230,8 @@ description pipeline (backlog — consumes the vocabulary, does not ship here);
   typed router replacing the ad-hoc `OrchestrateCommand` parse — hosts `/chat`
   and `/orchestrate`; the `/chat` prompt classifier (auto-detect "is this a
   question?") is a small, deferrable gate. Command names MUST agree with the
-  glossary.
+  glossary. The glossary also carries P24's **tool** (deterministic) /
+  **subagent** (model-backed) naming rule.
 
 ## Verification (done-when)
 
