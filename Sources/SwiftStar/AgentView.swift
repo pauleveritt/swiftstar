@@ -336,9 +336,18 @@ struct ModelMenu: View {
         Menu {
             ForEach(ModelChoice.list(variants: VariantRegistry.all)) { choice in
                 Button(choice.label) {
-                    // "" is the Settings picker's custom-file tag; "default"
-                    // is the implicit fallback (resolve fails -> Laguna S).
-                    selectedVariantID = choice.id == ModelChoice.customID ? "" : choice.id
+                    switch choice.id {
+                    case ModelChoice.defaultID:
+                        // The default is the *empty* state, not a persisted id:
+                        // "" + empty modelPath is the Laguna S fallback. Persisting
+                        // "default" was unrepresentable in Settings/VariantResolver.
+                        selectedVariantID = ""
+                        modelPath = ""
+                    case ModelChoice.customID:
+                        selectedVariantID = ""
+                    default:
+                        selectedVariantID = choice.id
+                    }
                 }
             }
         } label: {
@@ -349,8 +358,8 @@ struct ModelMenu: View {
     }
 
     private var currentLabel: String {
-        if selectedVariantID.isEmpty || selectedVariantID == ModelChoice.customID {
-            return modelPath.isEmpty ? "Custom model" : (modelPath as NSString).lastPathComponent
+        if selectedVariantID.isEmpty {
+            return modelPath.isEmpty ? "Laguna S (default)" : (modelPath as NSString).lastPathComponent
         }
         return VariantRegistry.resolve(selectedVariantID)?.displayName ?? "Laguna S"
     }

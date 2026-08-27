@@ -34,11 +34,12 @@ public struct MachineSnapshot: Equatable, Sendable {
 /// The harvest's widget learnings, as pure functions. Color mapping is a view
 /// concern — views map `Severity` to a color; Kit never does.
 public enum DialLogic {
-    // Provisional, absolute-anchored at the measured 150,000 everyday setting
-    // (telemetry-findings: ~7x degradation at ~92,500 ctx). Re-anchor before
-    // trusting on other hardware — keep these as named constants for that.
-    public static let contextWarningTokens = 37_500
-    public static let contextCriticalTokens = 75_000
+    // Re-anchored for the app's 51,200-token default context (P21 forward):
+    // warning at ~half, critical at ~73% — critical must be REACHABLE at 50k
+    // (the previous 37.5k/75k anchors were derived from a 150k setting, so
+    // critical never fired). Absolute-token curve (learning #1), not a fraction.
+    public static let contextWarningTokens = 25_000
+    public static let contextCriticalTokens = 37_500
     public static let memoryWarningFraction = 0.70
     public static let memoryCriticalFraction = 0.90
 

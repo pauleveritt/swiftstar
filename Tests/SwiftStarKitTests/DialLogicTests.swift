@@ -4,10 +4,10 @@ import Testing
 struct DialLogicTests {
     @Test func contextThresholdsAreAbsolute() {
         #expect(DialLogic.contextSeverity(ctxUsed: 10_000) == .healthy)
-        #expect(DialLogic.contextSeverity(ctxUsed: 37_500) == .warning)
-        #expect(DialLogic.contextSeverity(ctxUsed: 74_999) == .warning)
-        #expect(DialLogic.contextSeverity(ctxUsed: 75_000) == .critical)
-        #expect(DialLogic.contextSeverity(ctxUsed: 92_500) == .critical)  // the measured ~7x point
+        #expect(DialLogic.contextSeverity(ctxUsed: 25_000) == .warning)
+        #expect(DialLogic.contextSeverity(ctxUsed: 37_499) == .warning)
+        #expect(DialLogic.contextSeverity(ctxUsed: 37_500) == .critical)
+        #expect(DialLogic.contextSeverity(ctxUsed: 51_200) == .critical)  // the app's 50k — critical reachable
     }
 
     @Test func memoryThresholdsAreGeneric() {
