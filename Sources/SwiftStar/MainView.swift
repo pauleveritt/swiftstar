@@ -5,17 +5,66 @@ struct MainView: View {
     @State private var metricsModel = MetricsModel()
     @State private var diagnosticsModel = DiagnosticsModel()
 
-    var body: some View {
-        TabView {
-            AgentView(controller: agentController)
-                .tabItem { Label("Agent", systemImage: "person.crop.circle") }
-            MetricsView(model: metricsModel)
-                .tabItem { Label("Metrics", systemImage: "gauge") }
-            DiagnosticsView(model: diagnosticsModel)
-                .tabItem { Label("Diagnostics", systemImage: "stethoscope") }
-            PlaceholderView(title: "Help", phase: "P13")
-                .tabItem { Label("Help", systemImage: "questionmark.circle") }
+    private enum Section: String, CaseIterable, Identifiable {
+        case agent, metrics, diagnostics
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .agent: "Agent"
+            case .metrics: "Metrics"
+            case .diagnostics: "Diagnostics"
+            }
         }
+        var systemImage: String {
+            switch self {
+            case .agent: "person.crop.circle"
+            case .metrics: "gauge"
+            case .diagnostics: "stethoscope"
+            }
+        }
+    }
+
+    @State private var selection: Section = .agent
+    // Lean-by-default: first launch shows only the detail column; the user's
+    // choice persists across launches (P19.1 D1). `NavigationSplitViewVisibility`
+    // is not Codable, so persist the raw string and map it through a Binding.
+    @AppStorage("appShellColumnVisibility") private var columnVisibilityRaw = "detailOnly"
+
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: {
+                switch columnVisibilityRaw {
+                case "all": .all
+                case "doubleColumn": .doubleColumn
+                case "automatic": .automatic
+                default: .detailOnly
+                }
+            },
+            set: {
+                columnVisibilityRaw = switch $0 {
+                case .all: "all"
+                case .doubleColumn: "doubleColumn"
+                case .automatic: "automatic"
+                default: "detailOnly"
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: columnVisibility) {
+            List(Section.allCases, selection: $selection) { section in
+                Label(section.title, systemImage: section.systemImage).tag(section)
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 220)
+        } detail: {
+            switch selection {
+            case .agent: AgentView(controller: agentController)
+            case .metrics: MetricsView(model: metricsModel)
+            case .diagnostics: DiagnosticsView(model: diagnosticsModel)
+            }
+        }
+        .navigationSplitViewStyle(.prominentDetail)
         .frame(minWidth: 800, minHeight: 560)
         .onAppear {
             metricsModel.start(agentPid: agentController.runningPid)
@@ -24,21 +73,5 @@ struct MainView: View {
         .onChange(of: agentController.runningPid) { _, newPid in
             metricsModel.start(agentPid: newPid)
         }
-    }
-}
-
-struct PlaceholderView: View {
-    let title: String
-    let phase: String
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "hammer")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-            Text(title).font(.title2)
-            Text("\(title) arrives in \(phase).").foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
