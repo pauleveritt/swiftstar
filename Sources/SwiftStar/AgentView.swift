@@ -12,8 +12,6 @@ struct AgentView: View {
             Divider()
             transcriptView
             Divider()
-            consentControls
-            Divider()
             composer
             Divider()
             bottomStatusBar
@@ -131,20 +129,6 @@ struct AgentView: View {
         case .system(let text):
             Text(text).font(.caption).foregroundStyle(.tertiary)
         }
-    }
-
-    /// Spawn-time consent (D2): the workspace grant and the shell toggle apply
-    /// when the agent next starts; changing them never mutates a live child.
-    private var consentControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle("Allow shell commands", isOn: Binding(
-                get: { controller.settings.shellAllowed },
-                set: { controller.settings.shellAllowed = $0 }
-            ))
-            .font(.caption)
-            Text("Applied when the agent starts.").font(.caption2).foregroundStyle(.tertiary)
-        }
-        .padding(8)
     }
 
     private var composer: some View {

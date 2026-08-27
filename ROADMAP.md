@@ -340,6 +340,14 @@ Deferred, each with the condition that reopens it.
   no-think "quick reply" mode into the Agent, with `reasoning_effort`-style
   per-turn control on the agent wire (additive engine patch, fork-ledger
   row).*
+- **Shell toggle removed from the Agent tab — moves to Settings.**
+  `AgentView`'s "Allow shell commands" control was removed 2026-08-26 (the
+  agent now ships in its default deny posture, shell off, with no in-tab
+  override); `AgentSettings.shellAllowed` and the `--shell` argv stay. The
+  workspace picker remains in the Agent status bar. *Reopens as: a Settings
+  pane for spawn-time agent controls (shell toggle, workspace, context) when
+  the Settings scene is next touched — the Chat-retirement phase is the
+  natural home.*
 - **Golden agent capture predates the wire's `kind` field — the kind-driven
   tool card has no fixture test.** `fixtures/agent/golden-tools.ndjson` was
   captured before the engine's `param_begin` events carried `kind`
