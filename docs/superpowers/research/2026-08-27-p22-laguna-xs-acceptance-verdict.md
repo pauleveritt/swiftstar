@@ -3,7 +3,7 @@
 **Date:** 2026-08-27
 **Phase:** P22 — More models: Laguna XS + model switching (Laguna XS arm)
 **Status:** **acceptance done** — both agentclinic evals green on the real engine, `--ssd-streaming`
-**Implementation:** branch `p13-laguna-xs-variant` (8 commits; spec
+**Implementation:** branch `p13-laguna-xs-variant` (9 commits; spec
 `docs/superpowers/specs/2026-08-26-p13-laguna-xs-variant-design.md`)
 
 ## What this document is
@@ -97,7 +97,7 @@ Evidence per run: `captures/agenttest/20260827-074305-roadmap/` and
 - **XS golden recapture** (fixtures) — pending, per the standing recapture rule.
 - **Model switching** (P22's woven-in forward work: the "Apply this model"
   action, pre-admitted before stop, switch refused mid-generation) — not built.
-- **Branch unmerged** — `p13-laguna-xs-variant` (8 commits) is ready to merge;
+- **Branch unmerged** — `p13-laguna-xs-variant` (9 commits) is ready to merge;
   P22's forward items remain on the branch + this record.
 - **SSD support across the Laguna line (S arm, forward)** — Laguna S still
   refuses `--ssd-streaming` (the pin's gate, `ds4.c:62233`, admits XS21 only).
