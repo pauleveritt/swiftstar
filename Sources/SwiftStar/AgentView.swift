@@ -22,7 +22,7 @@ struct AgentView: View {
                 workspaceButton
             }
             ToolbarItem(id: "model", placement: .automatic) {
-                ModelMenuPlaceholder()
+                ModelMenu(isGenerating: controller.isGenerating)
             }
             ToolbarItem(id: "endSession", placement: .primaryAction) {
                 Button("End session") { controller.stopAgent() }
@@ -321,9 +321,34 @@ struct AgentView: View {
     }
 }
 
-/// Task 4 placeholder; Task 6 replaces this with the real model menu (D4).
-struct ModelMenuPlaceholder: View {
+/// The toolbar model menu (P19.1 D4): enumerates the effective model (Laguna S
+/// default + registry variants + custom), disabled mid-generation. A selection
+/// is a no-op for the same model; the actual switch behavior lands with P22.
+struct ModelMenu: View {
+    @AppStorage("selectedVariantID") private var selectedVariantID = ""
+    @AppStorage("modelPath") private var modelPath = ""
+    var isGenerating: Bool
+
     var body: some View {
-        Text("Model")
+        Menu {
+            ForEach(ModelChoice.list(variants: VariantRegistry.all)) { choice in
+                Button(choice.label) {
+                    // "" is the Settings picker's custom-file tag; "default"
+                    // is the implicit fallback (resolve fails -> Laguna S).
+                    selectedVariantID = choice.id == ModelChoice.customID ? "" : choice.id
+                }
+            }
+        } label: {
+            Label(currentLabel, systemImage: "cpu")
+        }
+        .disabled(isGenerating)
+        .help(isGenerating ? "Model switching is disabled while generating" : "Model switching lands with P22")
+    }
+
+    private var currentLabel: String {
+        if selectedVariantID.isEmpty || selectedVariantID == ModelChoice.customID {
+            return modelPath.isEmpty ? "Custom model" : (modelPath as NSString).lastPathComponent
+        }
+        return VariantRegistry.resolve(selectedVariantID)?.displayName ?? "Laguna S"
     }
 }
