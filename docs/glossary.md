@@ -45,6 +45,7 @@ how expensive failure is — not by persona text.
 | **tool** | Deterministic host code — no model, millisecond Swift (P24 naming). Today: the host-executed file/shell tools; later P24's `test`/`scout`/`lint`. | `ToolCallbackResponder` (consent/respond); P24. |
 | **subagent** | A model-backed session (P24 naming) — the escalation that applies or summarizes when a tool's digest isn't decision-adequate. | pool workers, `PacketRole` roles. |
 | **pool** | Context-isolated sessions sharing one locked engine; a worker is a session id on the pooled wire. | `PoolEngine`, `PoolScheduler`, `WorkerId`, `--subagent-pool`. |
+| **variant** | A first-class model the app can run: identity, model file, family, declared sampler, and an enforced **runtime contract** (architecture, rope, quant layout, memory budget) verified before any engine spawn. A variant is *not* a file path — a bare `modelPath` is the unverified escape hatch. | `Variant`, `VariantRegistry` (identity), `VariantResolver` (path resolution), `VariantGate.admit` (contract + memory admission), `VariantVerifier` (gguf metadata vs contract). Registered today: Mellum 2.1. Laguna S is the *default* but has no Variant, so it is ungated; Laguna XS's lives on `p13-laguna-xs-variant`. |
 | **pre-chewed context** | The condensed, RLM-digested context a worker receives (plus the ability to pull more relevant bits). Context *strategy*, not a user verb. | `RollingDigest`, `ContextAssembly`, the RLM lever (backlog). |
 
 ## Retired / renamed

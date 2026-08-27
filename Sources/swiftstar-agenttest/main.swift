@@ -263,14 +263,17 @@ func repairPacket(_ ctx: RepairContext, phaseScoped: Bool = false) -> HandoffPac
     // heading would be harvested in preference to the fix.
     // Which flavor of "how many files are wrong" to assert depends on what the
     // evidence RepairLoop is about to append actually shows (D-fix, 2026-08-26):
-    // the fixed "exactly one file is wrong" text below is well-calibrated for
-    // a build phase that wrote most of the app and left one real bug (P12.4's
-    // original design target, and still true whenever count <= 1) but was
-    // false, unconditionally, whenever 2+ writable files are missing or wrong
-    // -- the overnight matrix's dominant Mellum defect (39/40 cells): the
-    // model derived the correct multi-file fix and then cited this exact text
-    // back three times to justify not making it (verbatim in
-    // captures/agenttest/20260826-060458-roadmap's worker-2 transcript).
+    // the directive must never assert a count the harness cannot know. It once
+    // said "Exactly one file is wrong" unconditionally: well-calibrated for a
+    // build phase that left one real bug (P12.4's design target), but false
+    // whenever 2+ writable files are missing or wrong -- the overnight matrix's
+    // dominant Mellum defect (39/40 cells), where the model derived the correct
+    // multi-file fix and then cited that exact text back three times to justify
+    // not making it (verbatim in captures/agenttest/20260826-060458-roadmap's
+    // worker-2 transcript). P17 then showed the failure was predominantly this
+    // defect, not the model: with the claim removed, repair depth stopped
+    // predicting failure. The text below is hedged accordingly, and the startup
+    // tripwires (see `probe` below) exit 2 if the false phrasing ever returns.
     let missingCount = ctx.missingWritableFiles.count
     let scope = phaseScoped
         ? "The import check failed against the code written by this phase."

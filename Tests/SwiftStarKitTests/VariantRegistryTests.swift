@@ -29,6 +29,33 @@ struct VariantRegistryTests {
     }
 }
 
+struct VariantContextInvariantTests {
+    /// The app's shipped default context. Duplicated deliberately: a test that
+    /// reads the app's constant would move with it, and moving it is exactly
+    /// what broke this (the default went 32,768 -> 51,200 the day after the
+    /// budget ranges were pinned, putting every variant out of range).
+    static let appDefaultContext = 51_200
+
+    @Test func everyVariantCanServeTheAppDefaultContext() {
+        // Not "the range must contain 51,200" — the budgets are measured facts.
+        // The invariant is that selecting a variant and pressing Start resolves
+        // to a context the variant can actually be priced at.
+        for variant in VariantRegistry.all {
+            let budget = variant.contract.memoryBudget
+            let clamped = budget.clampContext(Self.appDefaultContext)
+            #expect(budget.kvGiB(at: clamped) != nil,
+                    "\(variant.id) cannot serve the app default context")
+            #expect(budget.totalBytes(at: clamped) != nil)
+        }
+    }
+
+    @Test func registryIdsAreUnique() {
+        // `resolve` is `first { $0.id == id }`, so a duplicate silently shadows.
+        let ids = VariantRegistry.all.map(\.id)
+        #expect(Set(ids).count == ids.count)
+    }
+}
+
 struct MemoryBudgetTests {
     @Test func clampsToTheDeclaredRange() {
         let b = VariantRegistry.mellum.contract.memoryBudget
