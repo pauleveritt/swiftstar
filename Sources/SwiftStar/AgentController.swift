@@ -351,6 +351,7 @@ final class AgentController {
         // SWIFTSTAR_LOG. The trace is written by the engine itself via
         // `--trace`; the wire/stderr are teed in the drain loops below.
         let captureEnabled = UserDefaults.standard.object(forKey: "sessionCaptureEnabled") as? Bool ?? true
+        pruneStaleCaptures()  // retention policy: see the AgentController extension below
         let captureDir = Self.captureDirectory()
         if captureEnabled {
             try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
@@ -1328,6 +1329,90 @@ final class AgentController {
             }
         } catch {}
         return workspace
+    }
+}
+
+// MARK: - Capture retention (pure decision in SwiftStarKit; this is the only
+// filesystem-touching side). Kept as its own extension, deliberately away
+// from `startAgent()`'s capture-setup block, so the two stay editable
+// independently; `startAgent()` itself only gains the single `pruneStaleCaptures()`
+// call.
+extension AgentController {
+    /// The default policy, overridable via `UserDefaults` (the `sessionCaptureEnabled`
+    /// pattern): keep the 20 most-recent capture directories per producer
+    /// tree, or anything from the last 14 days — see `CaptureRetentionPolicy`'s
+    /// doc comment for why those two numbers, combined by union, were chosen.
+    static func captureRetentionPolicy() -> CaptureRetentionPolicy {
+        let keepCount = UserDefaults.standard.object(forKey: "captureRetentionKeepCount") as? Int ?? 20
+        let keepDays = UserDefaults.standard.object(forKey: "captureRetentionKeepDays") as? Int ?? 14
+        return CaptureRetentionPolicy(keepCount: keepCount, keepDays: keepDays)
+    }
+
+    /// Prune stale session captures across every producer tree under
+    /// `captures/` — EXCEPT `captures/evidence/`, which is never enumerated
+    /// here (permanently exempt, structurally: this function does not know it
+    /// exists). Runs once per `startAgent()` call, before the new session's
+    /// capture directory is created. Non-fatal by construction: a missing
+    /// `captures/` directory (nothing captured yet) or a stat/delete failure
+    /// on one entry just skips that entry — this must never block a session
+    /// from starting.
+    func pruneStaleCaptures() {
+        guard let repo = Self.projectRoot() else { return }
+        let capturesRoot = repo.appendingPathComponent("captures", isDirectory: true)
+        let policy = Self.captureRetentionPolicy()
+        pruneCaptureTree(label: "live", at: capturesRoot.appendingPathComponent("live", isDirectory: true), policy: policy)
+        pruneCaptureTree(label: "agenttest", at: capturesRoot.appendingPathComponent("agenttest", isDirectory: true), policy: policy)
+        // swiftstar-drive writes directly into `captures/<timestamp>-<model>`
+        // (no subdirectory of its own) — treat captures/ itself as a third
+        // producer tree, excluding the two named subtrees above and `evidence`.
+        pruneCaptureTree(
+            label: "captures/ (drive root)", at: capturesRoot, policy: policy,
+            excludingNames: ["live", "agenttest", "evidence"])
+    }
+
+    /// Stat one producer tree's immediate subdirectories, run the pure
+    /// decision, delete what it says to delete, and log exactly what was
+    /// deleted (never silently).
+    private func pruneCaptureTree(
+        label: String, at dir: URL, policy: CaptureRetentionPolicy, excludingNames: Set<String> = []
+    ) {
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: dir.path) else { return }
+        var entries: [CaptureEntry] = []
+        for name in names {
+            guard !excludingNames.contains(name), !name.hasPrefix(".") else { continue }
+            let url = dir.appendingPathComponent(name, isDirectory: true)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { continue }
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+            entries.append(CaptureEntry(name: name, modified: modified, sizeBytes: Self.directorySizeBytes(url)))
+        }
+        let toDelete = CaptureRetention.directoriesToDelete(entries: entries, policy: policy)
+        guard !toDelete.isEmpty else { return }
+        for victim in toDelete {
+            try? fm.removeItem(at: dir.appendingPathComponent(victim.name, isDirectory: true))
+        }
+        let freedBytes = toDelete.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        log("capture retention: pruned \(toDelete.count) dir(s) from \(label)/ "
+            + "(\(ByteCountFormatter.string(fromByteCount: freedBytes, countStyle: .file)) freed): "
+            + toDelete.map(\.name).joined(separator: ", "))
+    }
+
+    /// Shallow-enough recursive size for a log line — capture directories are
+    /// a handful of NDJSON/text files, never a deep tree, so a full recursive
+    /// sum costs nothing meaningful at app-startup time.
+    private static func directorySizeBytes(_ url: URL) -> Int64 {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: url, includingPropertiesForKeys: [.fileSizeKey], options: [], errorHandler: nil)
+        else { return 0 }
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            total += Int64(size)
+        }
+        return total
     }
 }
 
