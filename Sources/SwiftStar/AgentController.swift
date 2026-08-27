@@ -1045,14 +1045,6 @@ final class AgentController {
     /// a turn-end `ready`). `cancelDispatch()` is the responsive path.
     private nonisolated static let dispatchTurnTimeout: TimeInterval = 600
 
-    /// Dispatch `packet` into a disposable worktree of the current workspace's
-    /// git repo (D2): the agent is spawned at `--workspace <worktree>` with
-    /// shell off and host-tools on (P9), the responder revision-checks each
-    /// `write`/`edit` against `packet.writableFiles` (an out-of-set mutation
-    /// is refused host-side, not executed), and the pure `WorktreeDispatch`
-    /// verdict returns a candidate ref (committed) or a typed receipt. Runs on
-    /// a detached task (the wire drain blocks); the outcome/error land on the
-    /// main actor for the Dispatch tab. The caller's tree is never touched.
     func dispatchAttempt(packet: HandoffPacket) {
         guard !isDispatching else { return }
         isDispatching = true
@@ -1079,6 +1071,47 @@ final class AgentController {
                     self?.isDispatching = false
                 }
             }
+        }
+    }
+
+    /// `/orchestrate <task>`: dispatch the text as a read-only subagent task
+    /// (fresh context, disposable worktree, shell off) and surface the worker's
+    /// answer back into the transcript — the main context stays untouched.
+    /// Writable files are empty, so the worker investigates/answers read-only
+    /// and the value is its final text, not a mutation. A watch task on the
+    /// main actor surfaces the outcome once `isDispatching` flips false (the
+    /// completion-crosses-a-detached-task shape fails Swift 6's sending rules;
+    /// observation of the flip is the race-free equivalent).
+    @ObservationIgnored private var orchestrateWatchTask: Task<Void, Never>?
+    func orchestrate(_ task: String) {
+        let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isDispatching else { return }
+        transcript.appendSystem("→ orchestrating: \(trimmed)")
+        let packet = HandoffPacket(
+            taskText: trimmed, writableFiles: [], validationCommand: nil,
+            baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
+        dispatchAttempt(packet: packet)
+        orchestrateWatchTask?.cancel()
+        orchestrateWatchTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while self.isDispatching && !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            guard !Task.isCancelled else { return }
+            let summary: String
+            if let outcome = self.dispatchOutcome {
+                switch outcome {
+                case .candidate(_, let turnOutcome, _):
+                    summary = turnOutcome.text.isEmpty
+                        ? "candidate: \(turnOutcome.mutations.count) mutation(s)"
+                        : turnOutcome.text
+                case .receipt(let receipt):
+                    summary = Self.receiptReason(receipt)
+                }
+            } else {
+                summary = "failed: \(self.dispatchError ?? "unknown")"
+            }
+            self.transcript.appendSystem("→ orchestrated: \(summary)")
         }
     }
 

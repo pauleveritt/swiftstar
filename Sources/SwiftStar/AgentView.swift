@@ -228,6 +228,15 @@ struct AgentView: View {
 
     private func send() {
         let message = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        // `/orchestrate <text>`: dispatch the text as a read-only subagent
+        // task — fresh context, worktree, shell off — and surface the answer
+        // back here. Stays in the chat; the main context is untouched.
+        // Manual, so it stays available in dumb mode (the user's own hand).
+        if let task = OrchestrateCommand.parse(message) {
+            input = ""
+            controller.orchestrate(task)
+            return
+        }
         guard controller.canSend, !message.isEmpty else { return }
         input = ""
         controller.send(message)
