@@ -16,14 +16,20 @@ public struct DispatchReceipt: Codable, Equatable, Sendable {
     public let ref: String?
     public let reason: String?
     public let summary: String
+    /// A consult (read-only) worker's full answer text — the value of the turn,
+    /// not a verdict. nil for implementer receipts (which carry a ref/reason).
+    /// Carried on the receipt so the answer survives where the verdict does and
+    /// the controller needs no separate per-worker text stash.
+    public let answerText: String?
 
     public init(worker: WorkerId, executor: DispatchExecutor = .fullContext,
-                ref: String?, reason: String?, summary: String) {
+                ref: String?, reason: String?, summary: String, answerText: String? = nil) {
         self.worker = worker
         self.executor = executor
         self.ref = ref
         self.reason = reason
         self.summary = summary
+        self.answerText = answerText
     }
 
     /// The prompt text injected into the orchestrator's next turn (D4). A

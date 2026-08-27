@@ -6,7 +6,10 @@ import Foundation
 public struct PoolState: Equatable, Sendable {
     public var pending: [WorkerId: HandoffPacket] = [:]
     public var running: WorkerId?
-    public var completed: [WorkerId: DispatchReceipt] = [:]
+    /// Receipts awaiting delivery back into the orchestrator. A consult worker's
+    /// receipt is delivered as the answer directly (never queued here); the
+    /// `completed` map was removed — it accumulated stale receipts that the
+    /// consult watch mistook for a fresh turn's result.
     public var pendingDelivery: [WorkerId: DispatchReceipt] = [:]
     /// The free worker-session ids (`1...workerCapacity`), in ascending order.
     /// The engine hosts a FIXED number of worker sessions (N-1); ids must be
@@ -56,7 +59,6 @@ public enum PoolScheduler {
             s.running = id
         case .workerFinished(let id, let receipt), .workerFailed(let id, let receipt):
             s.running = nil
-            s.completed[id] = receipt
             s.pendingDelivery[id] = receipt
             if !s.freeIds.contains(id) {
                 s.freeIds.append(id)

@@ -25,7 +25,7 @@ struct PoolSchedulerTests {
         s = PoolScheduler.apply(s, .workerStarted(first.0))
         let receipt = DispatchReceipt(worker: first.0, ref: "ref", reason: nil, summary: "done")
         s = PoolScheduler.apply(s, .workerFinished(first.0, receipt))
-        #expect(s.completed[first.0] == receipt)
+        #expect(s.pendingDelivery[first.0] == receipt)
         #expect(s.running == nil)
         #expect(PoolScheduler.canStart(s) == true)     // engine freed for the next worker
         #expect(PoolScheduler.nextWorker(s)?.1.taskText == "two")
@@ -37,7 +37,7 @@ struct PoolSchedulerTests {
         s = PoolScheduler.apply(s, .workerStarted(w.0))
         let receipt = DispatchReceipt(worker: w.0, ref: nil, reason: "noChanges", summary: "nothing")
         s = PoolScheduler.apply(s, .workerFinished(w.0, receipt))
-        #expect(s.completed[w.0]?.reason == "noChanges")
+        #expect(s.pendingDelivery[w.0]?.reason == "noChanges")
     }
     @Test func workerFailureFreesTheEngineAsAReceipt() {
         var s = PoolState()
@@ -47,7 +47,7 @@ struct PoolSchedulerTests {
         s = PoolScheduler.apply(s, .workerStarted(w.0))
         let failure = DispatchReceipt(worker: w.0, ref: nil, reason: "engine crash", summary: "crashed")
         s = PoolScheduler.apply(s, .workerFailed(w.0, failure))
-        #expect(s.completed[w.0]?.reason == "engine crash")
+        #expect(s.pendingDelivery[w.0]?.reason == "engine crash")
         #expect(s.running == nil)             // engine freed
         #expect(PoolScheduler.canStart(s))    // next worker can run
         #expect(PoolScheduler.nextWorker(s)?.1.taskText == "two")

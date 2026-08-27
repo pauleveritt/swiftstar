@@ -138,7 +138,7 @@ struct SettingsView: View {
                 }
             }
             Section("Delegation") {
-                Stepper("Subagent pool: \(SubagentPoolSize.clamp(subagentPoolSize))", value: $subagentPoolSize, in: 1...8)
+                Stepper("Subagent pool: \(SubagentPoolSize.clamp(subagentPoolSize))", value: $subagentPoolSize, in: 2...8)
                 Toggle("Capture sessions to captures/live/", isOn: $sessionCaptureEnabled)
                 Toggle("Dispatch mode: Smart (off) / Dumb (on)", isOn: $dispatchDumb)
                 TextField("Default workspace (blank = repo root)", text: $defaultWorkspace)

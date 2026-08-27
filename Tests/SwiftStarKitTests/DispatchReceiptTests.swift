@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import SwiftStarKit
 
 struct DispatchReceiptTests {
@@ -18,5 +19,18 @@ struct DispatchReceiptTests {
         let r = DispatchReceipt(worker: WorkerId(2), ref: nil, reason: nil, summary: "3 mutations")
         #expect(!r.injectionPrompt().contains("refused"))
         #expect(r.injectionPrompt().contains("candidate"))
+    }
+    @Test func answerTextDefaultsNilAndRoundTrips() throws {
+        let r = DispatchReceipt(worker: WorkerId(1), ref: nil, reason: nil, summary: "done")
+        #expect(r.answerText == nil)
+        let withAnswer = DispatchReceipt(worker: WorkerId(1), ref: nil, reason: nil, summary: "done", answerText: "the answer")
+        #expect(withAnswer.answerText == "the answer")
+        let json = try JSONEncoder().encode(withAnswer)
+        let decoded = try JSONDecoder().decode(DispatchReceipt.self, from: json)
+        #expect(decoded.answerText == "the answer")
+        // An absent answerText (an older receipt) decodes as nil.
+        let old = "{\"worker\":1,\"executor\":\"fullContext\",\"summary\":\"done\"}"
+        let oldDecoded = try JSONDecoder().decode(DispatchReceipt.self, from: Data(old.utf8))
+        #expect(oldDecoded.answerText == nil)
     }
 }

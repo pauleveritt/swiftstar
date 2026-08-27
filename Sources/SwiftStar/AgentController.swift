@@ -65,7 +65,7 @@ final class AgentController {
     var settings: AgentSettings
     /// P11 (D1): the pool scheduler state — enqueued workers, the running
     /// worker, and receipts awaiting delivery back into the orchestrator.
-    private(set) var poolState = PoolState(workerCapacity: 1)
+    private(set) var poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
     /// P11 (D6): the rolling digest — the objective-independent reduced form
     /// of the session, maintained incrementally as host facts arrive.
     private(set) var rollingDigest = RollingDigest()
@@ -212,6 +212,15 @@ final class AgentController {
         if state == .stopped { startAgent() }
     }
 
+    /// The configured subagent-pool size (one orchestrator + N−1 workers),
+    /// clamped; the single source of truth for both the spawn argv and the
+    /// scheduler's worker capacity (they must agree or the engine hosts fewer
+    /// sessions than the scheduler addresses).
+    private static func poolSize() -> Int {
+        let raw = UserDefaults.standard.integer(forKey: "subagentPoolSize")
+        return SubagentPoolSize.clamp(raw == 0 ? 2 : raw)
+    }
+
     func startAgent() {
         switch state {
         case .stopped, .failed: break
@@ -262,14 +271,10 @@ final class AgentController {
         turnBaselineStatus = nil
         outcomeBuilder = nil
         sentInterrupt = false
-        // A restart is a fresh engine = a fresh pool: stale pending workers,
-        // orchestrate bookkeeping, and an in-flight orchestrate watch must not
-        // survive into the new session (a watch on the old engine's worker id
-        // would wait forever).
-        poolState = PoolState(workerCapacity: 1)
-        orchestrateWorkers = []
-        workerAnswers = [:]
-        orchestrateWatchTask?.cancel()
+        // A restart is a fresh engine = a fresh pool: stale pending workers and
+        // consult bookkeeping must not survive into the new session.
+        poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
+        consultWorkers = []
         activeWorkerId = nil
         activeWorkerPacket = nil
         activeWorkerWorktree = nil
@@ -324,8 +329,7 @@ final class AgentController {
         // without a second model process. +1 session ≈ +8.7 GB at ctx 50k
         // (Correction 2: N × (KV + ~6.1 GB scratch)); the alternative — a
         // second 48 GB model load — is worse and was the orchestrate hang.
-        let poolRaw = UserDefaults.standard.integer(forKey: "subagentPoolSize")
-        let pool = SubagentPoolSize.clamp(poolRaw == 0 ? 2 : poolRaw)
+        let pool = AgentController.poolSize()
         process.arguments = AgentCommand.argv(settings: settings) + ["--subagent-pool", String(pool)]
         process.currentDirectoryURL = settings.engineDir
         // Metal shaders load cwd-relative, and the engine chdir's to
@@ -681,9 +685,8 @@ final class AgentController {
     /// candidate *ref* (the worktree commit SHA) is produced by the P10
     /// `WorktreeDispatcher`, which the pooled path will reuse for the commit.
     private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome) {
-        // Stash the worker's text: `/orchestrate` surfaces it as the answer
-        // (for a read-only worker the text IS the value, not the verdict).
-        workerAnswers[worker] = outcome.text
+        let isConsult = consultWorkers.contains(worker)
+        let answerText: String? = isConsult ? outcome.text : nil
         let packet = activeWorkerPacket ?? HandoffPacket(
             taskText: "", writableFiles: [], validationCommand: nil,
             baselines: [:], turnBudget: 0, toolCallBudget: 0)
@@ -699,14 +702,17 @@ final class AgentController {
                 switch dispatchOutcome {
                 case .candidate(let ref, _, _):
                     receipt = DispatchReceipt(worker: worker, ref: ref, reason: nil,
-                        summary: "candidate: \(relativized.mutations.count) mutation(s), \(relativized.generatedTokens) tokens")
+                        summary: "candidate: \(relativized.mutations.count) mutation(s), \(relativized.generatedTokens) tokens",
+                        answerText: answerText)
                 case .receipt(let r):
                     receipt = DispatchReceipt(worker: worker, ref: nil,
-                        reason: Self.receiptReason(r), summary: Self.receiptReason(r))
+                        reason: Self.receiptReason(r), summary: Self.receiptReason(r),
+                        answerText: answerText)
                 }
             } catch {
                 receipt = DispatchReceipt(worker: worker, ref: nil,
-                    reason: "infrastructure failure", summary: "\(error)")
+                    reason: "infrastructure failure", summary: "\(error)",
+                    answerText: answerText)
             }
             WorktreeDispatcher.discard(worktree, in: repo)
         } else {
@@ -716,10 +722,12 @@ final class AgentController {
                 turnOutcome: outcome, validation: nil) {
             case .candidate:
                 receipt = DispatchReceipt(worker: worker, ref: nil, reason: nil,
-                    summary: "candidate: \(outcome.mutations.count) mutation(s), \(outcome.generatedTokens) tokens")
+                    summary: "candidate: \(outcome.mutations.count) mutation(s), \(outcome.generatedTokens) tokens",
+                    answerText: answerText)
             case .receipt(let reason):
                 receipt = DispatchReceipt(worker: worker, ref: nil,
-                    reason: Self.receiptReason(reason), summary: Self.receiptReason(reason))
+                    reason: Self.receiptReason(reason), summary: Self.receiptReason(reason),
+                    answerText: answerText)
             }
         }
         poolState = PoolScheduler.apply(poolState, .workerFinished(worker, receipt))
@@ -727,19 +735,26 @@ final class AgentController {
         activeWorkerId = nil
         activeWorkerPacket = nil
         activeWorkerWorktree = nil
+        if isConsult {
+            consultWorkers.remove(worker)
+            // Surface the answer directly; never deliver a consult's receipt as
+            // orchestrator prose — the answer IS the delivery.
+            let answer = receipt.answerText ?? "done"
+            if !sendConsulted(answer, worker: worker) {
+                transcript.append(.consulted(worker, answer))
+            }
+            poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+        }
         log("worker \(worker.rawValue): \(receipt.summary)")
         drainQueuedWorkers()
     }
 
     /// Inject any undelivered receipts back into the orchestrator as its next
     /// turn's prompt (D4): the orchestrator sees only the bounded receipts, not
-    /// the worker transcripts.
+    /// the worker transcripts. Consult workers never reach here — their answer
+    /// is delivered directly in `finishWorkerTurn`.
     private func injectPendingReceipts() {
-        // Orchestrate-initiated workers surface their text directly (see
-        // `orchestrate`); skip their receipts so the orchestrator isn't sent
-        // both a verdict AND the text.
         let receipts = poolState.pendingDelivery.values
-            .filter { !orchestrateWorkers.contains($0.worker) }
             .sorted { $0.worker < $1.worker }
         guard !receipts.isEmpty else { return }
         let text = receipts.map { $0.injectionPrompt() }.joined(separator: "\n")
@@ -1028,7 +1043,12 @@ final class AgentController {
             sampler: "engine-defaults",
             task: wireText
         )
-        pipe.fileHandleForWriting.write(Data((wireText + "\n").utf8))
+        // Single escaping choke point: the engine splits stdin on newlines and
+        // parses each line as its own prompt (ds4_agent.c), so everything the
+        // orchestrator receives goes through PoolPrompt's JSON encoder — a
+        // multi-line prompt or consult answer becomes one escaped line.
+        let line = PoolPrompt(worker: .orchestrator, text: wireText).encode() + "\n"
+        pipe.fileHandleForWriting.write(Data(line.utf8))
         return true
     }
 
@@ -1111,13 +1131,10 @@ final class AgentController {
         lastFootprintBytes = snapshot.residentBytes
     }
 
-    @ObservationIgnored private var orchestrateWatchTask: Task<Void, Never>?
-    /// Workers enqueued by `/orchestrate`: their result is surfaced as the
-    /// worker's text (not a receipt), and their receipt is not auto-injected
-    /// into the orchestrator (the text is the value, not a verdict).
-    private var orchestrateWorkers: Set<WorkerId> = []
-    /// The worker's final text per completed turn, for orchestrate surfacing.
-    private var workerAnswers: [WorkerId: String] = [:]
+    /// Workers enqueued by `/chat`: their answer is surfaced as the worker's
+    /// text directly (not a receipt), and their receipt is never injected into
+    /// the orchestrator (the text is the value, not a verdict).
+    private var consultWorkers: Set<WorkerId> = []
 
     /// The `/chat` path: run the task as a read-only pool worker and surface
     /// the answer (the glossary's **chat** — formerly the misnamed
@@ -1139,28 +1156,12 @@ final class AgentController {
             taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
             baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
         poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
-        orchestrateWorkers.insert(workerId)
+        consultWorkers.insert(workerId)
         // Run the worker now in the SAME engine (a context-isolated session) —
         // no second model process, so the separate-process hang class is gone.
+        // The answer is surfaced in finishWorkerTurn when the worker's turn
+        // ends (no watch task — its completed-receipt poll read stale results).
         drainQueuedWorkers()
-        orchestrateWatchTask?.cancel()
-        orchestrateWatchTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            while self.poolState.completed[workerId] == nil && !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(250))
-            }
-            guard !Task.isCancelled else { return }
-            let answer = self.workerAnswers[workerId]
-                ?? self.poolState.completed[workerId]?.summary
-                ?? "done"
-            self.orchestrateWorkers.remove(workerId)
-            if self.poolState.pendingDelivery[workerId] != nil {
-                self.poolState = PoolScheduler.apply(self.poolState, .receiptInjected(workerId))
-            }
-            if !self.sendConsulted(answer, worker: workerId) {
-                self.transcript.append(.consulted(workerId, answer))
-            }
-        }
     }
 
     /// Resolve the git repo root for `workspace` (`git rev-parse --show-toplevel`)
