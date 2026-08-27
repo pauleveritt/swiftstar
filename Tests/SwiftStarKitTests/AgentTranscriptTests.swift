@@ -163,4 +163,27 @@ struct AgentTranscriptTests {
         #expect(cards.contains { $0.name == "read" })
         #expect(cards.contains { $0.name == "write" || $0.name == "edit" })
     }
+
+    @Test func goldenToolsKindsAreParsed() throws {
+        // The P21 "golden recapture" premise was wrong: the fixture already
+        // carries the `kind` fields across all five kinds — the gap was
+        // assertions, not a clean recapture run.
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("fixtures/agent/golden-tools.ndjson")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        var parser = AgentWireParser()
+        var t = AgentTranscript()
+        for line in text.split(whereSeparator: \.isNewline) {
+            if let e = parser.feed(String(line)) { t.apply(e) }
+        }
+        let cards = t.rows.compactMap { if case .tool(let card) = $0 { return card } else { return nil } }
+        let params = cards.flatMap(\.params)
+        #expect(params.contains { $0.kind == "path" })
+        #expect(cards.contains { $0.path != nil })
+        #expect(params.contains { $0.kind == "content" })
+        #expect(params.contains { $0.kind == "bash_command" })
+        #expect(params.contains { $0.kind == "diff_old" })
+        #expect(params.contains { $0.kind == "diff_new" })
+    }
 }
