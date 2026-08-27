@@ -62,6 +62,10 @@ final class AgentController {
     /// The last completed turn's outcome record (D12); the full trail goes to
     /// the SWIFTSTAR_LOG file. Persistence beyond that is P9/P10 work.
     private(set) var lastTurnOutcome: TurnOutcome?
+    /// The current session's outcomes.ndjson (nil when capture is disabled):
+    /// one appended `TurnOutcome` line per finished turn (P21 — captures become
+    /// self-contained evidence the CLI reads back).
+    private var outcomesURL: URL?
     var settings: AgentSettings
     /// P11 (D1): the pool scheduler state — enqueued workers, the running
     /// worker, and receipts awaiting delivery back into the orchestrator.
@@ -194,13 +198,15 @@ final class AgentController {
 
     /// The P5-provenance shape, written once at spawn (the manifest that lets a
     /// reader trust and reproduce the capture).
-    private static func renderLiveProvenance(model: String, build: String, workspace: String, at dir: URL) throws {
+    private static func renderLiveProvenance(model: String, build: String, workspace: String, contextSize: Int, sampler: String, at dir: URL) throws {
         let iso = ISO8601DateFormatter().string(from: Date())
         let text = """
         # Live session provenance
 
         - Model: `\(model)`
         - Build (`external/ds4` SHA): `\(build)`
+        - Context: \(contextSize)
+        - Sampler: \(sampler)
         - Workspace: `\(workspace)`
         - Started (wall-clock): \(iso)
 
@@ -222,6 +228,19 @@ final class AgentController {
         guard let tracePath = settings.tracePath else { return nil }
         let wire = tracePath.deletingLastPathComponent().appendingPathComponent("wire.ndjson")
         return (wire, tracePath)
+    }
+
+    /// Persist one finished turn's outcome as an appended line in the session's
+    /// outcomes.ndjson (P21): captures become self-contained evidence.
+    private func appendOutcome(_ outcome: TurnOutcome) {
+        guard let url = outcomesURL,
+              let data = try? JSONEncoder().encode(outcome) else { return }
+        let line = String(decoding: data, as: UTF8.self) + "\n"
+        if let handle = FileHandle(forWritingAtPath: url.path) {
+            defer { try? handle.close() }
+            try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data(line.utf8))
+        }
     }
 
     /// The configured subagent-pool size (one orchestrator + N−1 workers),
@@ -306,9 +325,11 @@ final class AgentController {
             try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
             try? Self.renderLiveProvenance(
                 model: settings.modelPath.lastPathComponent, build: buildSHA,
-                workspace: settings.workspace.path, at: captureDir)
+                workspace: settings.workspace.path, contextSize: settings.contextSize,
+                sampler: "engine-defaults", at: captureDir)
             settings.tracePath = captureDir.appendingPathComponent("agent.trace")
         }
+        outcomesURL = captureEnabled ? captureDir.appendingPathComponent("outcomes.ndjson") : nil
         let captureWireURL = captureDir.appendingPathComponent("wire.ndjson")
         let captureStderrURL = captureDir.appendingPathComponent("agent.stderr")
         // `FileHandle(forWritingAtPath:)` opens an existing file — it does not
@@ -500,6 +521,7 @@ final class AgentController {
                 outcomeBuilder = nil
                 lastTurnOutcome = outcome
                 log("turn outcome: \(outcome)")
+                appendOutcome(outcome)
                 // Freeze the turn's summary onto its reply bubble: the decode
                 // average over the turn (Δgenerated/Δts) when the counters
                 // advanced, else the engine-reported rate — never a fabricated

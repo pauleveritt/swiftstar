@@ -47,6 +47,7 @@ let package = Package(
         ),
         .executableTarget(name: "swiftstar-drive", dependencies: ["SwiftStarKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .executableTarget(name: "swiftstar-agenttest", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
+        .executableTarget(name: "swiftstar-analyze", dependencies: ["SwiftStarKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "SwiftStarKitTests",
             dependencies: ["SwiftStarKit"],

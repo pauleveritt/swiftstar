@@ -8,8 +8,9 @@ import SwiftStarKit
 // MARK: - Knobs
 
 let env = ProcessInfo.processInfo.environment
-guard let ggufPath = env["CAPTURE_GGUF"], !ggufPath.isEmpty else {
-    FileHandle.standardError.write(Data("swiftstar-drive: CAPTURE_GGUF is required (absolute path to the gguf)\n".utf8))
+let ggufPath = env["CAPTURE_GGUF"] ?? env["SWIFTSTAR_MODEL"] ?? ""
+guard !ggufPath.isEmpty else {
+    FileHandle.standardError.write(Data("swiftstar-drive: CAPTURE_GGUF (or SWIFTSTAR_MODEL) is required (absolute path to the gguf)\n".utf8))
     exit(2)
 }
 let ctx = Int(env["CAPTURE_CTX"] ?? "32768") ?? 32768

@@ -5,11 +5,11 @@ import Foundation
 /// rejected (the block closed with a status — invalid, interrupted, or
 /// failed; the vocabulary has no finer case), executed (dispatch ran; bash
 /// additionally shows it via `output`).
-public enum ToolLifecycle: String, Equatable, Sendable, CaseIterable {
+public enum ToolLifecycle: String, Equatable, Sendable, CaseIterable, Codable {
     case emitted, parsed, rejected, executed
 }
 
-public struct ToolCallOutcome: Equatable, Sendable {
+public struct ToolCallOutcome: Equatable, Sendable, Codable {
     public let name: String
     public let transitions: [ToolLifecycle]
 }
@@ -17,7 +17,7 @@ public struct ToolCallOutcome: Equatable, Sendable {
 /// Why a turn ended. `timeout` is app-side by definition — the app's own turn
 /// budget — and exists so the record's vocabulary is complete; P7's controller
 /// imposes no timeout policy (D12).
-public enum TurnStopReason: String, Equatable, Sendable, CaseIterable {
+public enum TurnStopReason: String, Equatable, Sendable, CaseIterable, Codable {
     case eos
     case limit
     case interrupt
@@ -30,7 +30,7 @@ public enum TurnStopReason: String, Equatable, Sendable, CaseIterable {
 /// final token/context figures, the stop reason, and every tool call's
 /// lifecycle. P10's handoff packets consume these facts rather than inferring
 /// success from the transcript.
-public struct TurnOutcome: Equatable, Sendable {
+public struct TurnOutcome: Equatable, Sendable, Codable {
     public let model: String
     public let build: String
     public let sampler: String
