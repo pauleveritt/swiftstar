@@ -358,6 +358,15 @@ Deferred, each with the condition that reopens it.
   complete clean agent run against the real binary (submodule-pinned), a
   fresh `golden-tools` recapture with provenance, and a fixture test
   asserting `kind`/`path`/`finished` populate from it.*
+- **Small-ctx worker sessions for the pool (the RLM lever).** The app's
+  `/orchestrate` now runs its worker as a context-isolated session in the one
+  engine, but at the *full* `-c` ctx — ~2.5 GB KV + ~6.15 GB scratch at 50k
+  (`agent_worker_effective_ctx_size` reads the session ctx; there is no
+  per-worker override). Correction 2 names the lever: a 4k worker is ~1.7 GB,
+  not ~8.7 GB. *Reopens as: a small engine patch (fork divergence) giving pool
+  workers their own ctx, or a kept-alive `rewind`-ed small-ctx template
+  session — with a fork-ledger row and golden recapture, per the submodule
+  rules.*
 - **~~Phase-level recovery~~ — LANDED as P12.8 (2026-08-25); live confirmation
   arrived 2026-08-26, and it is bad news, not good.** The wiring shipped
   (`commitForRepair`, `adoptRepairedPhase`, `PhaseRepair`, build-loop
