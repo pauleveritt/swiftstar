@@ -35,7 +35,7 @@ let variantID = argValue("--variant") ?? env["SWIFTSTAR_VARIANT"]
 let resolvedVariant = variantID.flatMap { VariantRegistry.resolve($0) }
 let gguf: String
 if let v = resolvedVariant {
-    switch VariantGate.admit(v, contextSize: 32_768, availableBytes: MemorySnapshot.availableBytes()) {
+    switch VariantGate.admit(v, contextSize: 32_768, availableBytes: VariantAdmissionSource.availableBytes()) {
     case .admitted:
         break
     case .contractMismatch(let mismatches):
