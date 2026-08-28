@@ -95,12 +95,19 @@ public enum AgentDefaultSettings {
         }
         // D2: the app's default posture is deny — shell off until granted.
         let shellAllowed = defaults.bool(forKey: "agentShellAllowed")
+        // P23: a standing guardrail against a runaway think loop. The
+        // 2026-08-28 probe reproduced a turn that spent 15,873 of 16,384
+        // tokens reasoning and never answered (the failure P20's closure
+        // verdict also recorded). An ordinary round spends ~25 think tokens,
+        // so 2,048 never fires normally. 0 disables the flag.
+        let thinkBudget = defaults.object(forKey: "agentThinkBudget") as? Int ?? 2_048
         return AgentSettings(
             engineDir: engineDir,
             modelPath: modelPath,
             contextSize: contextSize,
             workspace: workspace,
             shellAllowed: shellAllowed,
+            thinkBudget: thinkBudget,
             runtime: variant?.runtime
         )
     }

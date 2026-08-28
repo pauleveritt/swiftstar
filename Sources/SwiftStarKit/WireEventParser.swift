@@ -95,24 +95,17 @@ public struct WireEventParser: Sendable {
         switch t {
         case "hello":
             return .ignored(trimmed)  // a second handshake is not an error, just unmodelled
+        // P23: shared with `AgentWireParser` via `WireStatusDecoder` — see that
+        // type's doc comment for why the field lists must not be duplicated.
         case "status":
-            return .status(StatusSnapshot(
-                ctxUsed: (object["ctx_used"] as? NSNumber)?.intValue ?? 0,
-                ctxSize: (object["ctx_size"] as? NSNumber)?.intValue ?? 0,
-                prefillTPS: (object["prefill_tps"] as? NSNumber)?.doubleValue ?? 0,
-                genTPS: (object["gen_tps"] as? NSNumber)?.doubleValue ?? 0,
-                ts: (object["ts"] as? NSNumber)?.uint64Value ?? 0,
-                generated: (object["generated"] as? NSNumber)?.intValue ?? 0,
-                state: (object["state"] as? String) ?? "",
-                power: (object["power"] as? NSNumber)?.doubleValue ?? 0,
-                error: (object["error"] as? String) ?? ""
-            ))
+            return .status(WireStatusDecoder.status(from: object))
         case "ready":
+            let r = WireStatusDecoder.ready(from: object)
             return .ready(
-                plannedBytes: (object["planned_bytes"] as? NSNumber)?.int64Value,
-                stopReason: object["stop_reason"] as? String,
-                generated: (object["generated"] as? NSNumber)?.intValue,
-                ctxUsed: (object["ctx_used"] as? NSNumber)?.intValue
+                plannedBytes: r.plannedBytes,
+                stopReason: r.stopReason,
+                generated: r.generated,
+                ctxUsed: r.ctxUsed
             )
         default:
             return .ignored(trimmed)

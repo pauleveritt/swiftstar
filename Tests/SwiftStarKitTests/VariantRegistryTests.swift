@@ -208,10 +208,15 @@ struct LagunaXSMemoryBudgetTests {
         #expect(abs(gib - 5.91) < 0.01)
     }
 
+    /// The refusal side of the declared range. P23 raised this variant's
+    /// ceiling 32,768 → 51,200, so the above-max probes moved with it; the
+    /// behaviour pinned here (a context outside [minContext, maxContext] is
+    /// refused) is unchanged. Sibling success test:
+    /// `lagunaXSAdmitsTheAppDefaultContext`.
     @Test func unsupportedContextIsRefused() {
         #expect(budget.totalBytes(at: 16_383) == nil)
-        #expect(budget.totalBytes(at: 32_769) == nil)
-        #expect(budget.totalBytes(at: 51_200) == nil)
+        #expect(budget.totalBytes(at: 51_201) == nil)
+        #expect(budget.totalBytes(at: 262_144) == nil)
     }
 }
 
@@ -390,5 +395,42 @@ struct ModelLocationTests {
                                               envKey: "SWIFTSTAR_NO_SUCH_KEY")
         #expect(url.path.hasSuffix(".gguf"))
         #expect(url.pathComponents.count > 2)
+    }
+
+    // MARK: - memory-budget anchors (P23)
+
+    /// Every variant's 40k KV anchor must lie on the line its own 16k and 32k
+    /// anchors define. `MemoryBudget.kvGiB(at:)` extrapolates above ctx 32,768
+    /// from the 32k→40k slope, so an anchor copied from the 32k value makes KV
+    /// plan flat at any larger context — under-planning memory the moment a
+    /// variant's `maxContext` rises above 32,768.
+    @Test func everyVariantsKVAnchorsLieOnOneLine() {
+        for variant in VariantRegistry.all {
+            let b = variant.contract.memoryBudget
+            let slopePerToken = (b.kvGiBAt32k - b.kvGiBAt16k) / Double(32_768 - 16_384)
+            let implied40k = b.kvGiBAt32k + slopePerToken * Double(40_960 - 32_768)
+            #expect(
+                abs(b.kvGiBAt40k - implied40k) < 0.01,
+                """
+                \(variant.id): kvGiBAt40k is \(b.kvGiBAt40k) but its own \
+                16k→32k slope implies \(implied40k). A 40k anchor copied from \
+                the 32k value makes kvGiB(at:) extrapolate flat above 32,768.
+                """
+            )
+        }
+    }
+
+    /// Laguna XS admits the app's own default context (51,200). Its GGUF
+    /// declares context_length 262,144; the previous 32,768 cap was a 32 GB
+    /// memory-tier budget, and running the main agent under it forced the
+    /// compaction cliff measured in the 2026-08-27 capture.
+    @Test func lagunaXSAdmitsTheAppDefaultContext() {
+        let budget = VariantRegistry.lagunaXS.contract.memoryBudget
+        #expect(budget.maxContext >= 51_200)
+        #expect(budget.clampContext(51_200) == 51_200)
+        let kv = budget.kvGiB(at: 51_200)
+        #expect(kv != nil)
+        // Linear from the corrected anchors: 1.31 + (51200-32768) * (0.31/8192)
+        #expect(abs((kv ?? 0) - 2.0077) < 0.01)
     }
 }

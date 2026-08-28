@@ -60,4 +60,23 @@ struct PoolEngineArgvTests {
         #expect(Array(argv[..<poolIdx].suffix(5)) == flags)
         #expect(Array(argv.suffix(2)) == ["--subagent-pool", "3"])
     }
+
+    /// The app's spawn argv must come from `PoolEngine.argv`, not a copy of it.
+    /// `PoolOrchestrator` already used the seam; `AgentController` inlined the
+    /// same expression, so every test in this file covered a path the shipping
+    /// app did not take — and a flag added to the seam would have reached the
+    /// harness and silently missed the app (P23).
+    @Test func poolEngineArgvIsTheOnlyPooledArgvBuilder() throws {
+        // `FakeAgentHarness.repoRoot` is built from `#filePath`, so this does
+        // not depend on the test process's working directory.
+        let controller = try String(
+            contentsOf: FakeAgentHarness.repoRoot
+                .appendingPathComponent("Sources/SwiftStar/AgentController.swift"),
+            encoding: .utf8)
+        #expect(
+            !controller.contains(#"["--subagent-pool", String(pool)]"#),
+            "AgentController still inlines the pooled argv instead of calling PoolEngine.argv"
+        )
+        #expect(controller.contains("PoolEngine.argv("))
+    }
 }
