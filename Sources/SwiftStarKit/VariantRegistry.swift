@@ -139,8 +139,6 @@ public enum VariantRegistry {
             // (the laguna-s21-ssd branch's deliberate scope).
             runtime: EngineRuntimeConfig(
                 ssdStreaming: true, ssdStreamingCacheExperts: 3200, prefillChunk: nil),
-            // S was deliberately excluded from SSD streaming (engine-lines.md,
-            // ROADMAP P22 forward item) — the runtime above ships the forward item.
             contract: RuntimeContract(
                 architecture: "laguna",
                 rope: RopeContract(scalingType: "yarn", freqBase: 500_000.0),
@@ -156,26 +154,22 @@ public enum VariantRegistry {
                     ],
                     downTensorPattern: "blk.%d.ffn_down_exps.weight"
                 ),
-                // Resident footprint at three context anchors, all derived from
-                // formulas this project measured and documented against the
-                // real engine (docs/superpowers/research/
-                // 2026-08-22-p11-engine-constraints-and-corrections.md,
-                // "Correction 2"), cross-checked against the file's on-disk
-                // size (48,260,803,968 bytes = 44.9464 GiB) for sanity:
-                //   weights  ~= on-disk size (S is resident, not SSD-streamed)
-                //   scratch  = min(ctx,16384) x 375,156 B/row, constant for any
-                //              ctx >= 16,384 (the allocator's prefill_cap caps
-                //              at 16,384) = 6,146,555,904 B = 5.7244 GiB
-                //   KV(ctx)  = 49,152 x ctx + 75,497,472 B (reproduces the
-                //              doc's cited measured `ready` events byte-exact
-                //              at ctx 32,768 and ctx 150,000)
-                // maxContext 150,000 is the doc's own verified operating point
-                // (docs/harvest/telemetry-findings.md: "the everyday ctx
-                // 150,000 setting") and comfortably covers the app's shipped
-                // default context (51,200), unlike Mellum/XS's narrower ranges.
+                // Resident footprint under SSD streaming (P22 divergence #13;
+                // GLM review fix 2026-08-28 — the budget previously modeled the
+                // resident path S no longer uses, over-estimating the gate's
+                // need ~2.6×). Measured live at ctx 51200 on the pinned engine:
+                //   weights  ~= expert cache 12.09 + resident slice 0.31
+                //              = 12.40 GiB (the ~46 GiB file streams from SSD)
+                //   scratch  = 6,146,969,608 B = 5.72 GiB (same as resident)
+                //   KV(ctx)  = 49,152 x ctx + 75,497,472 B — unchanged from the
+                //              resident path (the wire's kv_bytes at 51200
+                //              reproduces the formula byte-exact)
+                // planned at 51200 = 20.53 GiB vs 53.08 GiB resident.
+                // The 3,200-expert cache mirrors XS's tuned value; a future
+                // tuning pass can re-measure it against S's larger experts.
                 memoryBudget: MemoryBudget(
-                    weightsGiB: 44.9464,
-                    scratchGiB: 5.7244,
+                    weightsGiB: 12.40,
+                    scratchGiB: 5.72,
                     kvGiBAt16k: 0.8203125,
                     kvGiBAt32k: 1.5703125,
                     kvGiBAt40k: 1.9453125,

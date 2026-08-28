@@ -67,8 +67,8 @@ is recorded because it is genuine evidence:
   new session `captures/live/20260828-110927/provenance.md` names the
   DeepSeek file.
 - **Live proof of the P25 Cycle 4b denominator through the app:** the gate
-  admitted the 98.8 GiB load (`ready planned_bytes 98812439616`) under the
-  Metal working-set ceiling (107.52 GiB). The pre-4b denominator
+  admitted the 92.03 GiB DeepSeek load (`ready planned_bytes 98812439616`)
+  under the Metal working-set ceiling (107.52 GiB). The pre-4b denominator
   (free+inactive pages, measured 82.71 GiB) would have **refused** this launch.
 - One turn: `Reply with only: ok` → `turn outcome: ...
   model=DeepSeek-...-fixed-0731.gguf ... tokens=27`.

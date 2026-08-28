@@ -252,14 +252,16 @@ struct LagunaSMemoryBudgetTests {
         #expect(budget.totalBytes(at: 150_001) == nil)
     }
 
-    @Test func totalAtAppDefaultIsSanityCheckedAgainstTheOnDiskFileSize() throws {
-        // The gguf is ~46 GiB on disk (48,260,803,968 bytes measured via
-        // `stat`); resident weights should be in that neighborhood, not an
-        // order of magnitude off.
+    @Test func totalAtAppDefaultIsSanityCheckedAgainstTheSsdStreamingFootprint() throws {
+        // S now SSD-streams (P22 divergence #13): the budget models the
+        // streaming path, not residency — the ~46 GiB on-disk weights file no
+        // longer sits in RAM. Measured live 2026-08-28 at ctx 51200 on the
+        // pinned engine: planned_bytes 22,042,726,408 = 20.53 GiB (expert
+        // cache 12.09 + resident slice 0.31 + scratch 5.72 + KV 2.41).
         let total = try #require(budget.totalBytes(at: 51_200))
         let gib = Double(total) / 1_073_741_824
-        #expect(gib > 44, "resident total \(gib) GiB looks too small for a ~46 GiB weights file")
-        #expect(gib < 60, "resident total \(gib) GiB looks implausibly large")
+        #expect(gib > 18, "ssd-streaming total \(gib) GiB looks too small for the measured 20.53 GiB footprint")
+        #expect(gib < 26, "ssd-streaming total \(gib) GiB looks implausibly large")
     }
 }
 

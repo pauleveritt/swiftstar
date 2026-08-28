@@ -28,16 +28,16 @@ DFlash interplay are live-validated on the pinned engine. Engine divergence
 
 | Check | Result |
 |---|---|
-| S spawns with `--ssd-streaming --ssd-streaming-cache-experts 3200` | admitted; **22.04 GiB resident** vs 56.9 GiB resident (~35 GiB saved) at ctx 51200 |
+| S spawns with `--ssd-streaming --ssd-streaming-cache-experts 3200` | admitted; **20.53 GiB resident** vs 53.08 GiB resident (~32.5 GiB saved) at ctx 51200 |
 | DFlash × SSD streaming | **loud refusal, exit 1**: "--ssd-streaming is not compatible with support models yet" — the exclusion composes (load-bearing for correctness) |
-| DFlash alone (resident path) | admitted; 58.18 GiB plan incl. the Q8_0 draft; DFlash graph built; generated a turn |
+| DFlash alone (resident path) | admitted; 54.18 GiB plan incl. the Q8_0 draft; DFlash graph built; generated a turn |
 
 ## Binding items
 
 - The ROADMAP P22 row's SSD forward item: **shipped** — Laguna S spawns with
   `--ssd-streaming` (variant runtime → argv, pinned by
   `AgentCommandTests.argvAppendsVariantRuntimeFlags` and proven live by the
-  engine probe), footprint validated (22.04 GiB), fork-ledger row written,
+  engine probe), footprint validated (20.53 GiB), fork-ledger row written,
   DFlash interplay validated both directions.
 - Standing recapture rule: divergence #13 is wire-neutral (admission gate
   only) — no golden recapture owed, recorded in the ledger row and here. The
@@ -46,7 +46,7 @@ DFlash interplay are live-validated on the pinned engine. Engine divergence
 ## Open items (recorded, not blocking)
 
 - The S-ssd expert-cache count (3200) mirrors XS's tuned value; the first
-  footprint measurement (cache ≈ 12.97 GiB) is the baseline a future tuning
+  footprint measurement (cache ≈ 12.09 GiB) is the baseline a future tuning
   pass re-measures against S's larger experts.
 - 16 GB hardware acceptance — **skipped by decision 2026-08-27**, never
   scheduled.
@@ -58,3 +58,17 @@ declaration + test updates); the GLM review of the same session's
 model-switching work (approve-with-minor, folds at `8d62c10`) covered the
 shared wiring. The engine patch itself is a faithful re-application of a
 previously-reviewed local commit (`2613723`), re-verified live here.
+
+**Second GLM 5.3 review (2026-08-28, `8d62c10..7838700`) — approve with one
+Important folded:** the reviewer caught that `lagunaS.memoryBudget` still
+modeled the resident path (weightsGiB 44.9464, "S is resident, not
+SSD-streamed") while the runtime now streams — the gate over-estimated S's
+need ~2.6×, undercutting the footprint feature itself. Fixed: the budget is
+re-anchored to the measured S-ssd footprint (weights 12.40 GiB = expert cache
+12.09 + resident slice 0.31, scratch 5.72, KV anchors unchanged — total 20.53
+GiB at ctx 51200, matching the live `planned_bytes` byte-for-byte), the
+sanity test now pins the streaming footprint, and the ledger row notes the
+`2613723` source verification (auditability). The reviewer's Minor items: the
+stale "deliberately excluded" comment (fixed), ROADMAP wording (recorded
+above), and the absence of an app-side DFlash lever (accepted — the exclusion
+is engine-side today, which is where the load-bearing check must live).

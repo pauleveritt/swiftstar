@@ -44,7 +44,7 @@ Commits: `6c6f1fe`, `d299fa8`, `c450e60`, `8d62c10`. Fast tier: 741 tests,
   4096`, `--subagent-pool 2`; new provenance names the XS file; XS turn's
   outcome model = XS file; XS `ready` plan 6.53 GiB (the declared budget).
 - **XS → DeepSeek** (accidental but real; the refusal lever was mathematically
-  wrong — see evidence §4): admitted at 98.8 GiB under the Metal ceiling —
+  wrong — see evidence §4): admitted at 92.03 GiB under the Metal ceiling —
   **live proof of the P25 Cycle 4b denominator through the app** (the old
   free+inactive-pages denominator would have refused it). Turn completed;
   transcript preserved.

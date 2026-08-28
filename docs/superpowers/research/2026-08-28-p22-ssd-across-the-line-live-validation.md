@@ -20,12 +20,12 @@ ds4-agent -m .../laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf -c 51200 ...
 ```
 - No refusal (pre-divergence, the gate rejected S21 with "only supported for
   Laguna XS 2.1").
-- `ready`: `kv_bytes 2,592,078,872` (2.59 GiB), `scratch_bytes 6,146,969,608`
-  (6.15 GiB), `model_bytes 327,548,928` (0.33 GiB resident model — the rest
-  streams from SSD), **`planned_bytes 22,042,726,408` = 22.04 GiB resident**.
+- `ready`: `kv_bytes 2,592,078,872` (2.41 GiB), `scratch_bytes 6,146,969,608`
+  (5.72 GiB), `model_bytes 327,548,928` (0.31 GiB resident model — the rest
+  streams from SSD), **`planned_bytes 22,042,726,408` = 20.53 GiB resident**.
 - Resident comparison (same ctx 51200, measured in the same session): S
-  resident = `planned_bytes 56,996,119,560` = 56.9 GiB. **SSD streaming saves
-  ~34.9 GiB of resident footprint.**
+  resident = `planned_bytes 56,996,119,560` = 53.08 GiB. **SSD streaming saves
+  ~32.5 GiB of resident footprint.**
 
 ### 2. DFlash × SSD streaming exclusion composes loudly (load-bearing)
 
@@ -44,25 +44,26 @@ ds4-agent -m .../laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf -c 51200 ...
 ```
 ... --dflash .../laguna-s-2.1-DFlash-Q8_0.gguf   (no --ssd-streaming)
 ```
-- Admitted; `ready`: **`planned_bytes 58,180,968,456` = 58.18 GiB** (S
-  resident 56.9 GiB + the Q8_0 draft ≈ 1.3 GiB).
+- Admitted; `ready`: **`planned_bytes 58,180,968,456` = 54.18 GiB** (S
+  resident 53.08 GiB + the Q8_0 draft ≈ 1.1 GiB).
 - stderr: `DFlash graph: block=16, history=512, KV 12.00 MiB, scratch 68.88
   MiB` — the speculative-decoding graph built.
 - Generated a turn ("pong") — the draft path loads and the agent answers.
 
 ## Evidence artifacts
 
-- `/tmp/ssd-probe-wire.jsonl` — the S-ssd `ready` plan (22.04 GiB).
+- `/tmp/ssd-probe-wire.jsonl` — the S-ssd `ready` plan (20.53 GiB).
 - `/tmp/ssd-probe2-stderr.txt` — the DFlash × SSD loud refusal.
 - `/tmp/ssd-probe3-wire.jsonl` + `/tmp/ssd-probe3-stderr.txt` — the DFlash
-  resident run (58.18 GiB plan, DFlash graph, generated turn).
+  resident run (54.18 GiB plan, DFlash graph, generated turn).
 - S resident baseline: the 2026-08-28 model-switching live run's
-  `captures/live/20260828-110319/` wire (`planned_bytes 56996119560`).
+  `captures/live/20260828-110319/` wire (`planned_bytes 56996119560` =
+  53.08 GiB).
 
 ## Notes / open
 
 - The 3,200-expert cache mirrors XS's tuned value; the S-ssd footprint above
-  (22.04 GiB, of which expert cache ≈ 12.97 GiB = 22.04 − 2.59 − 6.15 − 0.33)
+  (20.53 GiB, of which expert cache ≈ 12.09 GiB = 20.53 − 2.41 − 5.72 − 0.31)
   is the first measurement — a future tuning pass can re-measure the cache
   size against S's larger experts.
 - DFlash engagement under stochastic sampling still falls back automatically
