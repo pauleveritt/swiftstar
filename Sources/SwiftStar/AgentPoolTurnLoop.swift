@@ -44,11 +44,14 @@ extension AgentController {
         poolState = PoolScheduler.apply(poolState, .workerStarted(worker))
         workerTurn.start(
             id: worker, packet: packet, worktree: worktree,
+            // P23: Task 9 threads the packet's declared think through here;
+            // until then a dispatched worker sends no override, so
+            // "think=default" is the truth rather than a placeholder.
             outcomeBuilder: TurnOutcomeBuilder(
                 model: settings.modelPath.lastPathComponent,
                 build: buildSHA,
-                sampler: "engine-defaults",
-                task: packet.taskText))
+                task: packet.taskText,
+                think: nil))
         if let pipe = process?.standardInput as? Pipe {
             pipe.fileHandleForWriting.write(
                 Data((PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n").utf8))

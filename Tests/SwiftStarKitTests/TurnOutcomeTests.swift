@@ -12,7 +12,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func builderAccumulatesText() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.text("Hello "))
         b.apply(.text("world."))
         let o = b.finish()
@@ -20,7 +20,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func cleanReadCallIsEmittedParsedExecuted() {
-        var b = TurnOutcomeBuilder(model: "m.gguf", build: "abc123", sampler: "engine-defaults", task: "read it")
+        var b = TurnOutcomeBuilder(model: "m.gguf", build: "abc123", task: "read it")
         for e in [Self.hello, tool(.start), tool(.tool, name: "read"), tool(.paramBegin),
                   tool(.paramValue, value: "seed.txt"), tool(.paramEnd), tool(.finish, calls: 1),
                   .ready(plannedBytes: nil, stopReason: "eos", generated: 12, ctxUsed: 120)] {
@@ -33,12 +33,13 @@ struct TurnOutcomeTests {
         #expect(outcome.ctxUsed == 120)
         #expect(outcome.model == "m.gguf")
         #expect(outcome.build == "abc123")
-        #expect(outcome.sampler == "engine-defaults")
+        // P23: the sampler records the think decision, not a fixed literal.
+        #expect(outcome.sampler == "think=default")
         #expect(outcome.task == "read it")
     }
 
     @Test func bashOutputExecutesOnce() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         for e in [tool(.start), tool(.tool, name: "bash"), tool(.finish, calls: 1),
                   tool(.output, value: "hello-world\n"),
                   .ready(plannedBytes: nil, stopReason: "eos", generated: 3, ctxUsed: 9)] {
@@ -49,7 +50,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func interruptedFinishRejectsEveryCallInTheBlock() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         for e in [tool(.start), tool(.tool, idx: 0, name: "read"), tool(.tool, idx: 1, name: "bash"),
                   tool(.finish, idx: 1, status: "[tool call interrupted]\n", calls: 2),
                   .ready(plannedBytes: nil, stopReason: "interrupt", generated: 5, ctxUsed: 20)] {
@@ -64,7 +65,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func multipleBlocksAccumulateWithinATurn() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         for e in [tool(.start), tool(.tool, name: "read"), tool(.finish, calls: 1),
                   tool(.start), tool(.tool, name: "edit"), tool(.finish, calls: 1),
                   .ready(plannedBytes: nil, stopReason: "limit", generated: 99, ctxUsed: 32768)] {
@@ -75,7 +76,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func appOverrideBeatsWireReason() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 1, ctxUsed: 2))
         // The app sent ETX; the wire may have already reported a stale reason.
         #expect(b.finish(appStopReason: .interrupt).stopReason == .interrupt)
@@ -85,13 +86,13 @@ struct TurnOutcomeTests {
     }
 
     @Test func wireWithoutStopReasonDefaultsToEOS() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.ready(plannedBytes: 4, stopReason: nil, generated: nil, ctxUsed: nil))
         #expect(b.finish().stopReason == .eos)
     }
 
     @Test func contextFullMapsFromWire() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.ready(plannedBytes: nil, stopReason: "context_full", generated: 0, ctxUsed: 32768))
         #expect(b.finish().stopReason == .contextFull)
     }
@@ -102,7 +103,7 @@ struct TurnOutcomeTests {
             .appendingPathComponent("fixtures/agent/golden-tools.ndjson")
         let text = try String(contentsOf: url, encoding: .utf8)
         var parser = AgentWireParser()
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "whole capture")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "whole capture")
         for line in text.split(whereSeparator: \.isNewline) {
             if let e = parser.feed(String(line)) { b.apply(e) }
         }
@@ -129,7 +130,6 @@ struct TurnOutcomeTests {
         // round trip, and it never contains a raw newline (that would split one
         // turn across two records).
         var builder = TurnOutcomeBuilder(model: "laguna-s.gguf", build: "abc123",
-                                         sampler: "engine-defaults",
                                          task: "multi\nline\ntask")
         builder.apply(.text("an answer\nwith newlines"))
         let outcome = builder.finish()
@@ -143,7 +143,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func hostFactFieldsDefaultInBuilderFinish() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 1, ctxUsed: 2))
         let outcome = b.finish()
         #expect(outcome.mutations == [])
@@ -153,7 +153,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func hostFactFieldsAreSettable() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 7, ctxUsed: 9))
         var outcome = b.finish()
         outcome.mutations = ["/tmp/a", "/tmp/b"]
@@ -181,7 +181,7 @@ struct TurnOutcomeTests {
     // blocks, so the builder keys host calls by arrival order, not by idx.
 
     @Test func hostModeToolRequestRecordsEmitted() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.toolRequest(idx: 0, name: "read",
                              params: [ToolParam(name: "path", value: "seed.txt")]))
         let outcome = b.finish()
@@ -192,7 +192,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func recordHostVerdictOkExecutesAndCarriesFacts() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.toolRequest(idx: 0, name: "bash", params: []))
         b.recordHostVerdict(idx: 0, ok: true,
                             mutations: ["/tmp/a"], exitStatus: 0,
@@ -206,7 +206,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func recordHostVerdictRefusedRejects() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.toolRequest(idx: 2, name: "bash", params: []))
         b.recordHostVerdict(idx: 2, ok: false,
                             mutations: [], exitStatus: nil,
@@ -222,7 +222,7 @@ struct TurnOutcomeTests {
         // Each block resets idx; the builder keys by arrival order, so two
         // requests both carrying idx 0 (one per block) become two distinct
         // tool calls in the outcome.
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.toolRequest(idx: 0, name: "read", params: []))
         b.recordHostVerdict(idx: 0, ok: true,
                             mutations: [], exitStatus: nil,
@@ -245,7 +245,7 @@ struct TurnOutcomeTests {
         // Mutations accumulate across the turn; exitStatus/outputDigest keep
         // the last set (a turn with several bash calls records the last one's
         // command facts).
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         b.apply(.toolRequest(idx: 0, name: "bash", params: []))
         b.recordHostVerdict(idx: 0, ok: true,
                             mutations: ["/tmp/a"], exitStatus: 1,
@@ -264,7 +264,7 @@ struct TurnOutcomeTests {
     }
 
     @Test func hostToolsModeDoesNotDoubleCount() {
-        var b = TurnOutcomeBuilder(model: "m", build: "b", sampler: "s", task: "t")
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
         // The transcript view (`.tool`) AND the execution view (`.toolRequest`)
         // describe the SAME call; finish() must count it once.
         b.apply(.tool(AgentToolEvent(phase: .tool, idx: 0, name: "write",
@@ -280,5 +280,25 @@ struct TurnOutcomeTests {
         #expect(outcome.toolCalls.count == 1)   // not 2
         #expect(outcome.toolCalls.first?.name == "write")
         #expect(outcome.toolCalls.first?.transitions.contains(.executed) == true)
+    }
+
+    // MARK: - P23 sampler truth
+
+    @Test func samplerCarriesTheEffortActuallyUsed() throws {
+        // The "engine-defaults" literal was false the moment the app started
+        // sending overrides; the outcome must record the effort the builder was
+        // given, and it must survive the Codable round-trip (outcomes.ndjson
+        // replays).
+        let builder = TurnOutcomeBuilder(model: "m", build: "b", task: "t", think: .off)
+        let outcome = builder.finish()
+        #expect(outcome.sampler == "think=none")
+        let data = try JSONEncoder().encode(outcome)
+        let decoded = try JSONDecoder().decode(TurnOutcome.self, from: data)
+        #expect(decoded.sampler == "think=none")
+    }
+
+    @Test func defaultThinkRendersAsThinkDefault() {
+        let outcome = TurnOutcomeBuilder(model: "m", build: "b", task: "t").finish()
+        #expect(outcome.sampler == "think=default")
     }
 }

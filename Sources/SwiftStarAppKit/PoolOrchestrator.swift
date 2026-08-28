@@ -59,7 +59,13 @@ public final class PoolOrchestrator {
     public func runPhase(worker: WorkerId, packet: HandoffPacket, worktree: URL,
                          capture: FileHandle? = nil) throws -> TurnOutcome {
         var builder = TurnOutcomeBuilder(
-            model: model, build: "pooled", sampler: "engine-defaults", task: packet.taskText)
+            // P23: the harness targets the pinned engine, so the cap is
+            // assumed present and the packet's declared think is honored —
+            // the capture-integrity fix for SamplingPolicy.think, which was
+            // written, validated, asserted, and read by nothing.
+            model: model, build: "pooled",
+            task: packet.taskText,
+            think: TurnThinkPolicy.effort(for: packet.sampling.think))
         var toolCallCount = 0
         var lastRefusedSignature: String?
         var refusedStreak = 0
@@ -184,7 +190,8 @@ public final class PoolOrchestrator {
         buildDispatchPacket: @escaping ([ToolParam]) -> HandoffPacket?
     ) throws -> (outcome: TurnOutcome, dispatched: [HandoffPacket]) {
         var builder = TurnOutcomeBuilder(
-            model: model, build: "pooled", sampler: "engine-defaults", task: prompt)
+            // The orchestrator's own turn is a normal agent turn: no override.
+            model: model, build: "pooled", task: prompt)
         var dispatched: [HandoffPacket] = []
         var toolCallCount = 0
         var lastRefusedSignature: String?

@@ -33,6 +33,9 @@ public enum TurnStopReason: String, Equatable, Sendable, CaseIterable, Codable {
 public struct TurnOutcome: Equatable, Sendable, Codable {
     public let model: String
     public let build: String
+    /// The per-turn think decision actually used (P23):
+    /// `think=default|none|high|max|refused`. Was a hardcoded
+    /// `"engine-defaults"` until the app could send per-turn overrides.
     public let sampler: String
     public let task: String
     public let generatedTokens: Int
@@ -109,11 +112,16 @@ public struct TurnOutcomeBuilder {
     private var generated = 0
     private var ctxUsed = 0
 
-    public init(model: String, build: String, sampler: String, task: String) {
+    /// P23: the builder derives the sampler record from the effort actually
+    /// used. nil = engine default (`"think=default"`); the hardcoded
+    /// `"engine-defaults"` literal is retired — it was false the moment the
+    /// app started sending per-turn overrides.
+    public init(model: String, build: String, task: String, think: ThinkEffort? = nil) {
         self.model = model
         self.build = build
-        self.sampler = sampler
         self.task = task
+        self.sampler = TurnThinkPolicy.samplerRecord(
+            think.map { TurnThinkDecision.override($0) } ?? .useDefault)
     }
 
     public mutating func apply(_ event: AgentEvent) {

@@ -398,7 +398,10 @@ final class AgentController {
             try? Self.renderLiveProvenance(
                 model: settings.modelPath.lastPathComponent, build: buildSHA,
                 workspace: settings.workspace.path, contextSize: settings.contextSize,
-                sampler: "engine-defaults", at: captureDir)
+                // P23: provenance is a per-SPAWN fact, and no override can have
+                // gone out yet at spawn time — the per-turn efforts live in
+                // outcomes.ndjson, which is where a per-turn fact belongs.
+                sampler: TurnThinkPolicy.samplerRecord(.useDefault), at: captureDir)
             settings.tracePath = captureDir.appendingPathComponent("agent.trace")
         }
         outcomesURL = captureEnabled ? captureDir.appendingPathComponent("outcomes.ndjson") : nil
@@ -896,12 +899,14 @@ final class AgentController {
             effort = nil
         }
         // D12: open the turn's outcome record with the app-known facts the
-        // wire cannot carry.
+        // wire cannot carry. The sampler records the think decision actually
+        // used (P23): think=default when no override went out, think=none|
+        // high|max when one did.
         outcomeBuilder = TurnOutcomeBuilder(
             model: settings.modelPath.lastPathComponent,
             build: buildSHA,
-            sampler: TurnThinkPolicy.samplerRecord(decision),
-            task: wireText
+            task: wireText,
+            think: effort
         )
         // Single escaping choke point: the engine splits stdin on newlines and
         // parses each line as its own prompt (ds4_agent.c), so everything the
