@@ -303,7 +303,8 @@ final class AgentController {
             selectedVariantID: AgentController.effectiveSelectedVariantID()) {
             let admission = VariantGate.admit(
                 variant, contextSize: settings.contextSize,
-                availableBytes: VariantAdmissionSource.availableBytes())
+                availableBytes: VariantAdmissionSource.availableBytes(),
+                wiredLimitAdvisoryBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes())
             switch admission {
             case .admitted:
                 break

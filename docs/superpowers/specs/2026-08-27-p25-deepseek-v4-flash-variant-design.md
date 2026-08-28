@@ -68,6 +68,15 @@ across the full range:
 | 524,288 | 107.4898 | 107.4898 | 0.0 MiB |
 | 1,000,000 | 118.3877 | 118.3922 | +4.5 MiB (+0.004%) |
 
+**Correction (2026-08-28, Fable review):** the "20 MiB" figure below was the
+max delta across this table's six hand-picked sample points, not an
+exhaustive sweep — it undersold the real worst case. A full step-1 sweep of
+`[16k, 1M]` finds the true peak at ctx 983,023: **31.93 MiB, 0.115%**, still
+always on the conservative side. Still noise against a 91 GiB model — the
+correction matters for Cycle 3's oracle tolerance (fixed to 40 MiB), not for
+this claim's substance — but the original "20 MiB, 0.02%" wording below,
+and everywhere it was repeated (ROADMAP.md, commit messages), is stale.
+
 **Worst error across the whole 16k–1M range: 20 MiB, 0.02%, always on the
 conservative side.** Against a 91 GiB model on a 128 GiB machine, that is
 noise — three orders of magnitude below the decision margin.
@@ -296,7 +305,10 @@ oracle test that ports ds4's four Metal formulas (`metalContextBytes`,
 `metalSharedGraphWorkspaceBytes`, `metalSessionGraphBytes`,
 `metalIndexerScratchBytes`) as **test-side reference code** and asserts the
 shipped three-constant budget agrees across a context sweep.
-**Gate:** the oracle test, tolerance 25 MiB (measured worst case: 20 MiB).
+**Gate:** the oracle test, tolerance 40 MiB (true worst case, full step-1
+sweep of the declared range: 31.93 MiB at ctx 983,023 — see the correction
+above; a prior 25 MiB tolerance based on sparse sampling missed this and one
+of the shipped test's own sample points, 450,000, failed against it).
 **Why this shape:** this is where "faithful" actually happens — the exact
 allocator math is written down and checkable — while the shipped code stays
 three numbers in the same shape as every other variant. If a future engine pin
@@ -394,6 +406,19 @@ from landing *after* there is a concrete second consumer proving it matters.
    model's capability; the first never asks the user for a sysctl. Leaning
    **524,288** for the first landing, with 1M reachable once 4b's advisory is
    proven in practice.
+
+   **Correction (2026-08-28, Fable review of Cycle 4b):** 524,288 shipped
+   initially, but it clears the OS-default Metal limit by only ~30 MiB —
+   indistinguishable from Cycle 3's own oracle tolerance, and with zero
+   allowance for other GPU-wired usage (WindowServer, another Metal client,
+   a not-yet-exited prior engine during model switching). Since Cycle 5 (the
+   live 91 GiB run) is skipped by decision, that margin was never validated
+   against reality — admitting this close to the edge is exactly the
+   "hang, not test failure" risk this document names above. **Corrected to
+   450,000**, which leaves ~1.76 GiB of real headroom under the same
+   107.52 GiB ceiling (oracle-confirmed). 1,000,000 remains reachable once
+   4b's advisory is proven in practice; nothing else about the design
+   changes.
 2. **Which artifact path wins?** The `-0731` copy under `~/Library/Application
    Support/DS4 Control/gguf/` is the current published name and matches the
    upstream SHA-256; the `external/ds4/gguf/` copy carries the legacy name.

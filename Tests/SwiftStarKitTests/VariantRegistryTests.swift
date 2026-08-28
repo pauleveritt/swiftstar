@@ -270,7 +270,7 @@ struct DeepSeekV4FlashMemoryBudgetTests {
 
     @Test func unsupportedContextIsRefused() {
         #expect(budget.totalBytes(at: 16_383) == nil)
-        #expect(budget.totalBytes(at: 524_289) == nil)
+        #expect(budget.totalBytes(at: 450_001) == nil)
     }
 
     @Test func totalAtAppDefaultIsSanityCheckedAgainstTheOnDiskFileSize() throws {

@@ -35,7 +35,11 @@ let variantID = argValue("--variant") ?? env["SWIFTSTAR_VARIANT"]
 let resolvedVariant = variantID.flatMap { VariantRegistry.resolve($0) }
 let gguf: String
 if let v = resolvedVariant {
-    switch VariantGate.admit(v, contextSize: 32_768, availableBytes: VariantAdmissionSource.availableBytes()) {
+    switch VariantGate.admit(
+        v, contextSize: 32_768,
+        availableBytes: VariantAdmissionSource.availableBytes(),
+        wiredLimitAdvisoryBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes()
+    ) {
     case .admitted:
         break
     case .contractMismatch(let mismatches):
@@ -790,12 +794,16 @@ func runOnce(_ index: Int) throws -> RunOutcome {
         "repairThink": env["AGENTTEST_THINK"] == "1" ? "on" : "nothink",
         "repairMaxRounds": String(repairMaxRounds),
         // P13: record the variant + sampler source + available memory so the
-        // capture is self-describing (I2/I7).
+        // capture is self-describing (I2/I7). P25 Cycle 4b: this must match
+        // whatever VariantAdmissionSource.availableBytes() actually admitted
+        // against (the Metal working-set ceiling, not MemorySnapshot's
+        // free+inactive pages) — otherwise a captured refusal/admission can't
+        // be reproduced from its own capture.
         "variant": resolvedVariant?.id ?? "custom-unverified",
         "sampler": (resolvedVariant?.sampler?.description ?? "").isEmpty
             ? "engine-family-default"
             : (resolvedVariant?.sampler?.description ?? ""),
-        "availableBytesGiB": String(format: "%.1f", Double(MemorySnapshot.availableBytes()) / 1_073_741_824),
+        "availableBytesGiB": String(format: "%.1f", Double(VariantAdmissionSource.availableBytes()) / 1_073_741_824),
         // A seed of 0 does NOT mean "seeded with 0": `AgentCommand` omits --seed
         // entirely when seed == 0, so the engine picks a time-derived seed and the
         // run is not reproducible. Recording a bare "0" read as a pinned seed and

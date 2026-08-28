@@ -188,7 +188,11 @@ struct DeepSeekV4FlashMemoryOracleTests {
     /// Exact GGUF bytes for the q2-q4-imatrix artifact (measured via `stat`,
     /// matches the published Hugging Face SHA-256 per `antirez/ds4#635`).
     private static let ggufBytes: Int64 = 97_591_747_456
-    private static let tolerance: Int64 = 25 * 1_024 * 1_024  // 25 MiB — measured worst case is 20 MiB
+    // 40 MiB — a full step-1 sweep of [16k, 1M] (not the sparse sampling an
+    // earlier "20 MiB" claim was based on) finds the true worst case at
+    // 31.93 MiB (ctx 983,023); this leaves real margin above that, corrected
+    // 2026-08-28 after a 25 MiB tolerance failed against ctx 450,000 (29 MiB).
+    private static let tolerance: Int64 = 40 * 1_024 * 1_024
 
     private var variant: Variant { VariantRegistry.deepSeekV4Flash }
 
@@ -209,7 +213,7 @@ struct DeepSeekV4FlashMemoryOracleTests {
     @Test func shippedBudgetAgreesWithTheOracleAcrossTheExtrapolatedRange() throws {
         // Every context the variant declares as supported, not just the three
         // anchors — this is what actually tests the affine claim.
-        let samples = [51_200, 65_536, 150_000, 262_144, 393_216, 524_288]
+        let samples = [51_200, 65_536, 150_000, 262_144, 393_216, 450_000]
         for ctx in samples {
             let shipped = try #require(variant.contract.memoryBudget.totalBytes(at: ctx),
                                         "ctx \(ctx) should be within the declared range")
@@ -220,14 +224,21 @@ struct DeepSeekV4FlashMemoryOracleTests {
         }
     }
 
-    @Test func oracleWeightsPlusAllocFitsWithinTheOSDefaultMetalLimitAtMaxContext() {
+    @Test func oracleWeightsPlusAllocFitsWithinTheOSDefaultMetalLimitAtMaxContextWithRealMargin() {
         // The design doc's measured envelope on a 128 GiB M5 Max:
         // recommendedMaxWorkingSetSize = 115,448,725,504 B (107.52 GiB).
-        // maxContext (524,288) was chosen to sit just inside that with no
-        // sysctl — this pins the choice against the oracle, not just intuition.
+        // maxContext (450,000) was deliberately chosen to leave real headroom
+        // below that, not to sit just inside it — a Fable review (2026-08-28)
+        // found the original 524,288 choice cleared the ceiling by only
+        // ~30 MiB, indistinguishable from this very oracle's own tolerance
+        // and with zero allowance for other GPU-wired usage. This pins both
+        // the fit AND the margin, so a future maxContext change can't silently
+        // reintroduce a razor-thin crossing.
         let metalDefaultLimit: Int64 = 115_448_725_504
-        let atMax = oracleTotalBytes(at: 524_288)
-        #expect(atMax <= metalDefaultLimit,
-                "524,288 was chosen to fit the OS-default Metal limit; oracle says \(atMax) > \(metalDefaultLimit)")
+        let minimumMargin: Int64 = 1 * 1_073_741_824  // 1 GiB — well above measurement noise
+        let atMax = oracleTotalBytes(at: 450_000)
+        let margin = metalDefaultLimit - atMax
+        #expect(margin >= minimumMargin,
+                "450,000 should leave real headroom under the OS-default Metal limit; oracle says only \(margin) bytes margin")
     }
 }

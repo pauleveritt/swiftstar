@@ -154,3 +154,92 @@ struct LagunaSGateTests {
         #expect(reason.message.contains("Laguna S"))
     }
 }
+
+/// P25 Cycle 4b: `wiredLimitAdvisoryBytes` is `VariantAdmissionSource`'s
+/// second injected value — the RAM-based ceiling raising `iogpu.wired_limit_mb`
+/// could reach. Table-driven over both regimes: the default (nil, every
+/// pre-Cycle-4b call site including every test above) must keep the exact
+/// legacy message; a caller that supplies it gets one of two GPU-appropriate
+/// messages depending on whether raising the limit would actually help.
+struct WiredLimitAdvisoryTests {
+    private func mellum(modelFile: URL) -> Variant {
+        let base = VariantRegistry.mellum
+        return Variant(
+            id: base.id, displayName: base.displayName, modelFile: modelFile,
+            family: base.family, sampler: base.sampler, contract: base.contract)
+    }
+
+    private func writeMellumGGUF() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("advisory-test-\(UUID().uuidString).gguf")
+        try GGUFBuilder.make(tensors: GGUFBuilder.mellumTensors()).write(to: url)
+        return url
+    }
+
+    @Test func noAdvisoryKeepsTheLegacyCloseAppsMessage() throws {
+        let url = try writeMellumGGUF()
+        let result = VariantGate.admit(mellum(modelFile: url), contextSize: 40_960, availableBytes: 1)
+        guard case .infeasible(let reason) = result else {
+            Issue.record("expected infeasible, got \(result)")
+            return
+        }
+        #expect(reason.message.contains("Close memory-heavy apps"))
+        #expect(!reason.message.contains("sysctl"))
+    }
+
+    @Test func advisoryProvidedAndRaisingTheLimitWouldHelpNamesTheSysctl() throws {
+        let url = try writeMellumGGUF()
+        let variant = mellum(modelFile: url)
+        let totalBytes = try #require(variant.contract.memoryBudget.totalBytes(at: 40_960))
+        // availableBytes is short; the advisory ceiling comfortably covers it,
+        // deliberately +1 GiB above totalBytes so the two candidate MB values
+        // a buggy implementation might print never collide.
+        let advisory = totalBytes + 1_073_741_824
+        let result = VariantGate.admit(
+            variant, contextSize: 40_960, availableBytes: 1,
+            wiredLimitAdvisoryBytes: advisory)
+        guard case .infeasible(let reason) = result else {
+            Issue.record("expected infeasible, got \(result)")
+            return
+        }
+        #expect(!reason.message.contains("Close memory-heavy apps"))
+        // The suggested sysctl value must be the advisory ceiling (RAM minus
+        // the OS reserve) — NOT the launch's bare requirement. Setting the
+        // system-wide GPU limit to exactly one launch's footprint leaves zero
+        // room for anything else sharing it, which is the hang this cycle
+        // exists to avoid. Regression: this bug shipped once already and no
+        // test caught it because only the command's presence was checked.
+        let advisoryMB = Int(Double(advisory) / 1_048_576)
+        let totalBytesMB = Int((Double(totalBytes) / 1_048_576).rounded(.up))
+        #expect(reason.message.contains("sudo sysctl -w iogpu.wired_limit_mb=\(advisoryMB)"))
+        #expect(!reason.message.contains("sudo sysctl -w iogpu.wired_limit_mb=\(totalBytesMB)"))
+    }
+
+    @Test func advisoryProvidedButEvenRaisingIsNotEnoughSaysSoInstead() throws {
+        let url = try writeMellumGGUF()
+        let variant = mellum(modelFile: url)
+        let totalBytes = try #require(variant.contract.memoryBudget.totalBytes(at: 40_960))
+        // The advisory ceiling is itself below what's needed — raising the
+        // sysctl wouldn't fix this; a smaller context is the only lever.
+        let result = VariantGate.admit(
+            variant, contextSize: 40_960, availableBytes: 1,
+            wiredLimitAdvisoryBytes: totalBytes - 1)
+        guard case .infeasible(let reason) = result else {
+            Issue.record("expected infeasible, got \(result)")
+            return
+        }
+        #expect(reason.message.contains("pick a smaller context size"))
+        #expect(!reason.message.contains("sudo sysctl"))
+    }
+
+    @Test func admissionStillSucceedsRegardlessOfAdvisoryWhenThereIsEnoughRoom() {
+        let url = try? writeMellumGGUF()
+        guard let url else { Issue.record("failed to write fixture"); return }
+        let variant = mellum(modelFile: url)
+        let plentyOfBytes: Int64 = 256 * 1024 * 1024 * 1024
+        let result = VariantGate.admit(
+            variant, contextSize: 40_960, availableBytes: plentyOfBytes,
+            wiredLimitAdvisoryBytes: plentyOfBytes)
+        #expect(result == .admitted)
+    }
+}

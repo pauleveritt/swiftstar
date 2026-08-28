@@ -214,10 +214,16 @@ public enum VariantRegistry {
                 // formulas): weights = exact GGUF bytes (97,591,747,456);
                 // scratch = shared + session graph workspace, constant above
                 // the 4,096-token prefill cap; KV anchors include the
-                // context-dependent indexer scratch. maxContext 524,288 is
-                // just inside the OS-default Metal working-set ceiling
-                // (ctx 526,267 on a 128 GiB M5 Max) — the full 1,000,000
-                // ceiling needs Cycle 4b's wired-limit advisory first.
+                // context-dependent indexer scratch. maxContext 450,000
+                // leaves ~1.76 GiB of real headroom below the OS-default
+                // Metal working-set ceiling (107.52 GiB on a 128 GiB M5 Max)
+                // — deliberately not "just inside" it (526,267 was the exact
+                // crossover; a Fable review flagged that margin as
+                // indistinguishable from the oracle's own error tolerance,
+                // with zero allowance for other GPU-wired usage, and Cycle 5's
+                // live validation is skipped by decision so it was never
+                // proven in practice). The full 1,000,000 ceiling still needs
+                // the wired limit raised (Cycle 4b's advisory).
                 memoryBudget: MemoryBudget(
                     weightsGiB: 90.8894,
                     scratchGiB: 4.2179,
@@ -225,7 +231,7 @@ public enum VariantRegistry {
                     kvGiBAt32k: 1.117839,
                     kvGiBAt40k: 1.305583,
                     minContext: 16_384,
-                    maxContext: 524_288
+                    maxContext: 450_000
                 )
             )
         )
