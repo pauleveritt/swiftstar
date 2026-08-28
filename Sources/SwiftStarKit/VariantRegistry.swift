@@ -123,6 +123,19 @@ public enum VariantRegistry {
     /// `AgentController.defaultModelFallback`.
     public static let lagunaS: Variant = {
         let path = locateModel("laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf", envKey: "SWIFTSTAR_LAGUNA_S_MODEL")
+        // The expert cache size feeds both argv (`--ssd-streaming-cache-
+        // experts`) and the memory budget below — a single source so tuning
+        // the cache can't silently leave the admission gate's weightsGiB
+        // stale (code-review finding 2026-08-28: they used to be two
+        // disconnected literals that happened to agree).
+        let ssdStreamingCacheExperts = 3200
+        // GiB per cached expert, measured live at cacheExperts=3200 (12.09
+        // GiB / 3200) — a property of the model's expert tensor shape, not
+        // of the cache size, so it holds if the cache is retuned. The 0.31
+        // GiB resident slice (buffers outside the cache) is likewise
+        // measured, not cache-size-dependent.
+        let perExpertGiB = 12.09 / 3200.0
+        let residentSliceGiB = 0.31
         return Variant(
             id: "laguna-s-2.1",
             displayName: "Laguna S 2.1",
@@ -138,7 +151,7 @@ public enum VariantRegistry {
             // XS-tuned, and the engine's --prefill-chunk gate stays XS21-only
             // (the laguna-s21-ssd branch's deliberate scope).
             runtime: EngineRuntimeConfig(
-                ssdStreaming: true, ssdStreamingCacheExperts: 3200, prefillChunk: nil),
+                ssdStreaming: true, ssdStreamingCacheExperts: ssdStreamingCacheExperts, prefillChunk: nil),
             contract: RuntimeContract(
                 architecture: "laguna",
                 rope: RopeContract(scalingType: "yarn", freqBase: 500_000.0),
@@ -158,23 +171,36 @@ public enum VariantRegistry {
                 // GLM review fix 2026-08-28 — the budget previously modeled the
                 // resident path S no longer uses, over-estimating the gate's
                 // need ~2.6×). Measured live at ctx 51200 on the pinned engine:
-                //   weights  ~= expert cache 12.09 + resident slice 0.31
-                //              = 12.40 GiB (the ~46 GiB file streams from SSD)
+                //   weights  = cacheExperts x perExpertGiB + residentSliceGiB
+                //              ~= 3200 x 0.0037781 + 0.31 = 12.40 GiB (the
+                //              ~46 GiB file streams from SSD; see above)
                 //   scratch  = 6,146,969,608 B = 5.72 GiB (same as resident)
                 //   KV(ctx)  = 49,152 x ctx + 75,497,472 B — unchanged from the
                 //              resident path (the wire's kv_bytes at 51200
                 //              reproduces the formula byte-exact)
                 // planned at 51200 = 20.53 GiB vs 53.08 GiB resident.
-                // The 3,200-expert cache mirrors XS's tuned value; a future
-                // tuning pass can re-measure it against S's larger experts.
+                //
+                // maxContext is capped at the measured point (51200), not the
+                // model's own 150,000 ceiling (validated for the *resident*
+                // path only — the old comment's byte-exact KV cross-check at
+                // ctx 150,000 predates this streaming budget). The streaming
+                // path's non-KV terms (expert cache, scratch) have not been
+                // observed above 51200, and S passes no `--prefill-chunk` cap
+                // the way XS does, so nothing bounds a long-prefill streaming
+                // buffer from growing with context (code-review finding
+                // 2026-08-28: the prior 150,000 ceiling was pure extrapolation
+                // from one datapoint — the "sparse sampling undersold a
+                // worst-case claim" trap this project has hit before). Raise
+                // it again once a live measurement at a higher context
+                // confirms the streaming path stays flat.
                 memoryBudget: MemoryBudget(
-                    weightsGiB: 12.40,
+                    weightsGiB: Double(ssdStreamingCacheExperts) * perExpertGiB + residentSliceGiB,
                     scratchGiB: 5.72,
                     kvGiBAt16k: 0.8203125,
                     kvGiBAt32k: 1.5703125,
                     kvGiBAt40k: 1.9453125,
                     minContext: 16_384,
-                    maxContext: 150_000
+                    maxContext: 51_200
                 )
             )
         )

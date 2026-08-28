@@ -234,11 +234,21 @@ struct LagunaSMemoryBudgetTests {
         #expect(abs(kv - expectedBytes / 1_073_741_824) < 0.0001)
     }
 
-    @Test func kvAt150kMatchesTheDocCitedMeasurement() throws {
-        // "ctx 150,000 -> 7,448,297,472" (Correction 2) — Laguna S's own
-        // documented operating point ("the everyday ctx 150,000 setting",
-        // docs/harvest/telemetry-findings.md), inside the declared range.
-        let kv = try #require(budget.kvGiB(at: 150_000))
+    @Test func kvFormulaMatchesTheDocCitedMeasurementAt150k() throws {
+        // "ctx 150,000 -> 7,448,297,472" (Correction 2) — the KV formula
+        // itself (49,152 x ctx + 75,497,472 B) is unchanged by the SSD-
+        // streaming switch and still reproduces this resident-path
+        // measurement byte-exact. Verified against a scratch budget sharing
+        // lagunaS's KV anchors rather than `budget` itself, because the
+        // declared variant's own `maxContext` is now capped below 150,000
+        // (code review 2026-08-28: the non-KV streaming terms were never
+        // measured that high — see the maxContext test below).
+        let kvOnlyFormula = MemoryBudget(
+            weightsGiB: budget.weightsGiB, scratchGiB: budget.scratchGiB,
+            kvGiBAt16k: budget.kvGiBAt16k, kvGiBAt32k: budget.kvGiBAt32k,
+            kvGiBAt40k: budget.kvGiBAt40k, minContext: budget.minContext,
+            maxContext: 150_000)
+        let kv = try #require(kvOnlyFormula.kvGiB(at: 150_000))
         #expect(abs(kv - 7_448_297_472.0 / 1_073_741_824) < 0.0001)
     }
 
@@ -247,9 +257,23 @@ struct LagunaSMemoryBudgetTests {
         #expect(abs(kv - 1_686_110_208.0 / 1_073_741_824) < 0.0001)
     }
 
+    @Test func maxContextIsCappedAtTheMeasuredStreamingPointNotTheModelsOwnCeiling() {
+        // The model architecture supports ctx up to 150,000 (validated on the
+        // *resident* path); the SSD-streaming budget's non-KV terms (expert
+        // cache, scratch) have only been measured live at ctx 51,200, and S
+        // passes no --prefill-chunk cap the way XS does. Admitting up to
+        // 150,000 on unmeasured streaming behavior was flagged in code review
+        // (2026-08-28) as the project's own "sparse sampling undersold a
+        // worst-case claim" trap — the cap stays at the measured point until
+        // a live measurement at higher context confirms the streaming path
+        // stays flat.
+        #expect(VariantRegistry.lagunaS.contract.memoryBudget.maxContext == 51_200)
+    }
+
     @Test func unsupportedContextIsRefused() {
         #expect(budget.totalBytes(at: 16_383) == nil)
-        #expect(budget.totalBytes(at: 150_001) == nil)
+        #expect(budget.totalBytes(at: 51_201) == nil)
+        #expect(budget.totalBytes(at: 150_000) == nil)
     }
 
     @Test func totalAtAppDefaultIsSanityCheckedAgainstTheSsdStreamingFootprint() throws {
@@ -262,6 +286,19 @@ struct LagunaSMemoryBudgetTests {
         let gib = Double(total) / 1_073_741_824
         #expect(gib > 18, "ssd-streaming total \(gib) GiB looks too small for the measured 20.53 GiB footprint")
         #expect(gib < 26, "ssd-streaming total \(gib) GiB looks implausibly large")
+    }
+
+    @Test func weightsGiBStaysCoupledToTheDeclaredExpertCacheSize() throws {
+        // Code review (2026-08-28): weightsGiB used to be a disconnected
+        // literal that happened to agree with the runtime's
+        // ssdStreamingCacheExperts. This pins the derived relationship so a
+        // future retune of the cache size (changing the runtime flag without
+        // updating this test) fails loudly instead of silently under-
+        // planning the gate.
+        let cacheExperts = try #require(VariantRegistry.lagunaS.runtime?.ssdStreamingCacheExperts)
+        let perExpertGiB = 12.09 / 3200.0
+        let expected = Double(cacheExperts) * perExpertGiB + 0.31
+        #expect(abs(budget.weightsGiB - expected) < 0.0001)
     }
 }
 

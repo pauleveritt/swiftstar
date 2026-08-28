@@ -75,9 +75,11 @@ public enum AgentDefaultSettings {
         )
         // Clamp to the resolved variant's declared range. The app default
         // (51,200) is above Mellum's/Laguna XS's `maxContext` (40,960 /
-        // 32,768) but within Laguna S's (150,000), so the common case (no
-        // variant ever chosen, hence Laguna S by default) clamps to a no-op;
-        // explicitly selecting Mellum or XS still clamps as before.
+        // 32,768) but exactly at Laguna S's (51,200 — capped there pending a
+        // live measurement of the SSD-streaming budget above that point), so
+        // the common case (no variant ever chosen, hence Laguna S by
+        // default) clamps to a no-op; explicitly selecting Mellum or XS
+        // still clamps as before.
         let requestedContext = defaults.object(forKey: "contextSize") as? Int ?? 51_200
         let contextSize = variant?.contract.memoryBudget.clampContext(requestedContext)
             ?? requestedContext

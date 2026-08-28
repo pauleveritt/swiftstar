@@ -163,8 +163,8 @@ struct AgentDefaultSettingsTests {
     }
 
     @Test func contextSizeIsANoOpClampAtTheAppDefaultWithNoSelectedVariant() {
-        // Nothing-selected resolves to Laguna S (maxContext 150,000), which
-        // comfortably covers the app's shipped default of 51,200 — the common
+        // Nothing-selected resolves to Laguna S (maxContext 51,200), which
+        // exactly covers the app's shipped default of 51,200 — the common
         // case clamps to itself.
         let (defaults, scratchName) = scratchDefaults()
         defer { cleanUp(defaults, scratchName) }

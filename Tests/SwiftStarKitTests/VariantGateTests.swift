@@ -112,7 +112,7 @@ struct LagunaSGateTests {
     @Test func admitsACleanLagunaSVariantAtTheAppDefaultContext() throws {
         let url = try writeLagunaSGGUF()
         // The app's shipped default context (51,200) — Laguna S's declared
-        // range (16,384–150,000) must actually cover it (unlike Mellum/XS).
+        // range (16,384–51,200) must actually cover it (unlike Mellum/XS).
         let result = VariantGate.admit(variant(modelFile: url), contextSize: 51_200, availableBytes: plentyOfBytes)
         #expect(result == .admitted)
     }
