@@ -42,19 +42,41 @@ extension AgentController {
             return
         }
         poolState = PoolScheduler.apply(poolState, .workerStarted(worker))
+        // P23: the worker's per-turn think comes from its packet's declared
+        // sampling — the capture-integrity fix, since SamplingPolicy.think was
+        // written, validated, asserted, and read by nothing at dispatch time
+        // (ROADMAP:452) — gated on the advertised cap (D3). Its context is
+        // clamped to [4096, parent] so a worker can never bypass admission (D8).
+        let thinkDecision = TurnThinkPolicy.decide(
+            requested: TurnThinkPolicy.effort(for: packet.sampling.think),
+            family: AgentController.familyOf(settings.modelPath),
+            capAdvertised: advertisedCaps.contains(TurnThinkPolicy.overrideCap))
+        let effort: ThinkEffort?
+        switch thinkDecision {
+        case .useDefault: effort = nil
+        case .override(let e): effort = e
+        case .refused(let reason):
+            log("worker \(worker.rawValue): think override refused: \(reason)")
+            effort = nil
+        }
+        // Sent only when the cap is advertised: an engine that never claimed
+        // the ctx key would treat the envelope's extra field as unknown and
+        // run at the parent's context, which is a silent budget overrun.
+        let workerCtx: Int? = advertisedCaps.contains(TurnThinkPolicy.overrideCap)
+            ? WorkerContextPolicy.clamp(requested: settings.workerContextSize,
+                                        parentContext: settings.contextSize)
+            : nil
         workerTurn.start(
             id: worker, packet: packet, worktree: worktree,
-            // P23: Task 9 threads the packet's declared think through here;
-            // until then a dispatched worker sends no override, so
-            // "think=default" is the truth rather than a placeholder.
             outcomeBuilder: TurnOutcomeBuilder(
                 model: settings.modelPath.lastPathComponent,
                 build: buildSHA,
                 task: packet.taskText,
-                think: nil))
+                think: effort))
         if let pipe = process?.standardInput as? Pipe {
             pipe.fileHandleForWriting.write(
-                Data((PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n").utf8))
+                Data((PoolPrompt(worker: worker, text: packet.taskText,
+                                 think: effort, contextSize: workerCtx).encode() + "\n").utf8))
         }
         armWorkerWatchdog(worker)
         log("worker \(worker.rawValue): turn started (worktree \(worktree.url.lastPathComponent))")

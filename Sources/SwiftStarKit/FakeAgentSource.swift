@@ -25,7 +25,14 @@ public enum FakeAgentError: Error, Equatable, Sendable {
 /// unchanged — the bidirectional wire is opt-in.
 public enum FakeAgentSource {
 
-    public static func generate(capture: Data, engineArgv: [String], hostTools: Bool = false) throws -> String {
+    /// `promptGuard` (P23) is Swift source spliced into the fake's prompt loop,
+    /// where `promptLine` is the raw line the app just wrote to stdin. It lets
+    /// a test assert what actually reached the engine — the only way to prove
+    /// the cap gate (D3) from outside the app target. Empty by default, so
+    /// every existing fake is byte-for-byte unchanged.
+    public static func generate(capture: Data, engineArgv: [String],
+                                hostTools: Bool = false,
+                                promptGuard: String = "") throws -> String {
         guard
             let captureText = String(data: capture, encoding: .utf8)?
                 .replacingOccurrences(of: "\r\n", with: "\n")
@@ -146,7 +153,9 @@ func replayOnce() {
     }
 }
 
-while readPromptLine() != nil {
+while let promptLine = readPromptLine() {
+    _ = promptLine
+__PROMPT_GUARD__
     replayOnce()
 }
 """#
@@ -154,6 +163,7 @@ while readPromptLine() != nil {
         return template
             .replacingOccurrences(of: "__ARGV__", with: argvLiteral)
             .replacingOccurrences(of: "__REPLAY__", with: replayLiteral)
+            .replacingOccurrences(of: "__PROMPT_GUARD__", with: promptGuard)
     }
 
     /// Extracts the monotonic µs `ts` from a wire line. `ts` is the last field
