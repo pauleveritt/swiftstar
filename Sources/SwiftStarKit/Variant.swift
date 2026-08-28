@@ -6,6 +6,12 @@ public enum ModelFamily: String, Equatable, Sendable {
     case lagunaXS
     case lagunaS
     case deepSeekV4Flash
+    /// P23: the policy's GLM refusal family. No GLM `Variant` ships in the
+    /// registry, so no runtime path constructs this — it exists so the
+    /// `TurnThinkPolicy` refusal matrix is complete and tested (D4: on GLM a
+    /// per-turn think flip changes a system message at the front of the
+    /// transcript and busts the `sysprompt.kv` memcmp).
+    case glm
 }
 
 /// Declared sampling defaults for a variant. Optional per-field and as a whole:
