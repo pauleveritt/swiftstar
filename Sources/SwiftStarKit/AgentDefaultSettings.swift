@@ -35,7 +35,9 @@ public enum AgentDefaultSettings {
     public static func effectiveSelectedVariantID(
         defaults: UserDefaults, environment: [String: String]
     ) -> String? {
-        if let stored = defaults.string(forKey: "selectedVariantID") { return stored }
+        if let stored = defaults.string(forKey: "selectedVariantID"), !stored.isEmpty {
+            return stored
+        }
         let modelPath = defaults.string(forKey: "modelPath")
         let envModel = environment["SWIFTSTAR_MODEL"]
         guard (modelPath?.isEmpty ?? true), (envModel?.isEmpty ?? true) else { return nil }

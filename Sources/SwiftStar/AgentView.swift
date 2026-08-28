@@ -24,8 +24,11 @@ struct AgentView: View {
             ToolbarItem(id: "model", placement: .automatic) {
                 ModelMenu(
                     isGenerating: controller.isGenerating,
+                    isConsulting: controller.isConsulting,
                     isUp: controller.isUp,
-                    onApply: { controller.applyModelSelection() })
+                    isFailed: controller.isFailed,
+                    onApply: { controller.applyModelSelection() },
+                    onStart: { controller.startAgent() })
             }
             ToolbarItem(id: "endSession", placement: .primaryAction) {
                 Button("End session") { controller.stopAgent() }
@@ -384,11 +387,22 @@ struct ModelMenu: View {
     @AppStorage("selectedVariantID") private var selectedVariantID = ""
     @AppStorage("modelPath") private var modelPath = ""
     var isGenerating: Bool
+    /// True while a `/chat` consult worker turn is running. `state` stays
+    /// `.ready` for the whole turn (see `AgentController.isConsulting`), so
+    /// this is checked separately from `isGenerating` to keep "Apply this
+    /// model" from killing an in-flight consult with no refusal.
+    var isConsulting: Bool
     /// The agent is up (ready or generating) — a live session exists to switch.
     var isUp: Bool
+    /// A spawn refusal landed `.failed` — no process to switch away from, but
+    /// picking a different model should still be startable from here.
+    var isFailed: Bool
     /// Runs `AgentController.applyModelSelection()`: the pure decision gates
     /// the stop; refusals/no-ops surface as transcript system rows.
     var onApply: () -> Void
+    /// Runs `AgentController.startAgent()` directly — the `.failed` recovery
+    /// path, since `startIfNeeded()` only fires once for `.stopped`.
+    var onStart: () -> Void
 
     var body: some View {
         Menu {
@@ -411,14 +425,19 @@ struct ModelMenu: View {
             if isUp {
                 Divider()
                 Button("Apply this model") { onApply() }
+            } else if isFailed {
+                Divider()
+                Button("Start with this model") { onStart() }
             }
         } label: {
             Label(currentLabel, systemImage: "cpu")
         }
-        .disabled(isGenerating)
+        .disabled(isGenerating || isConsulting)
         .help(isGenerating
             ? "Model switching is disabled while generating"
-            : "Pick a model for the next session, or choose Apply this model to switch the running session now.")
+            : isConsulting
+                ? "Model switching is disabled while a /chat consult is running"
+                : "Pick a model for the next session, or choose Apply this model to switch the running session now.")
     }
 
     /// The model the next spawn will actually load. Resolved through

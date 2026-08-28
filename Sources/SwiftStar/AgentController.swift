@@ -145,6 +145,16 @@ final class AgentController {
     /// The agent is up and serving — the state in which the bottom bar's
     /// telemetry readout (rates, rings) is meaningful.
     var isUp: Bool { state == .ready || state == .generating }
+    /// A spawn refusal landed `.failed` — no process is running. The
+    /// toolbar's model menu offers a direct start from here so picking a
+    /// different (feasible) model has a recovery path outside Settings
+    /// (P22 GLM review fix: `.failed` was otherwise a main-window dead end —
+    /// `startIfNeeded()` only fires once for `.stopped`, and "Apply this
+    /// model" is hidden because `isUp` is false).
+    var isFailed: Bool {
+        if case .failed = state { return true }
+        return false
+    }
     /// True only while a `/chat` consult worker is running (item 2 of the
     /// P22 cleanup). `consult()`'s worker turn runs via `drainQueuedWorkers()`
     /// without ever touching `state` — it stays `.ready` for the whole turn,
@@ -306,14 +316,21 @@ final class AgentController {
             wiredLimitAdvisoryBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes())
     }
 
-    func startAgent() {
+    /// `pinnedSettings` locks the spawn to a target already resolved and
+    /// admitted by a caller (P22 `applyModelSelection`) instead of
+    /// re-resolving from live `UserDefaults`/env — without it, a selection
+    /// change during `restartAgent()`'s async stop window could spawn a
+    /// different target than the one that justified stopping the previous
+    /// session. The admission gate still re-runs (below) so a memory fact
+    /// that changed during the stop window is still caught.
+    func startAgent(pinnedSettings: AgentSettings? = nil) {
         switch state {
         case .stopped, .failed: break
         default: return
         }
         // P13: refresh settings so a selected variant applies (mirrors
         // EngineController), then admit it before spawn (C1).
-        settings = AgentController.defaultSettings()
+        settings = pinnedSettings ?? AgentController.defaultSettings()
         switch AgentController.admitStagedVariant(contextSize: settings.contextSize) {
         case .admitted, nil:
             break
@@ -1122,42 +1139,67 @@ final class AgentController {
     /// restart cannot call it directly after `stopAgent()` (state is still
     /// `.stopping`); it waits on the transition. The Settings escape hatch
     /// (P19.1 D4): the engine lifecycle stays implicit in the main surface.
-    func restartAgent() {
+    func restartAgent(pinnedSettings: AgentSettings? = nil) {
         switch state {
         case .stopped, .failed:
-            startAgent()
+            startAgent(pinnedSettings: pinnedSettings)
         default:
             stopAgent()
             restartTask?.cancel()
             restartTask = Task { @MainActor [weak self] in
-                while self?.state != .stopped && !Task.isCancelled {
+                // A wedged child that ignores stdin-EOF and SIGTERM would
+                // otherwise poll forever with the UI silently stuck in
+                // .stopping and no signal a switch was even attempted.
+                let deadline = 100
+                var waited = 0
+                while self?.state != .stopped && !Task.isCancelled && waited < deadline {
                     try? await Task.sleep(for: .milliseconds(100))
+                    waited += 1
                 }
                 guard !Task.isCancelled, let self else { return }
-                self.startAgent()
+                guard self.state == .stopped else {
+                    self.state = .failed("the previous session did not stop in time")
+                    self.transcript.appendSystem(
+                        "→ restart failed: the previous session did not stop in time")
+                    return
+                }
+                self.startAgent(pinnedSettings: pinnedSettings)
             }
         }
     }
 
     /// P22 model switching — the "Apply this model" action. Resolves the staged
     /// selection exactly as the next spawn would, runs the pure switch decision
-    /// (admission × generating × changed), and stops + re-spawns only when the
-    /// decision says apply. Refusals and no-ops surface as transcript system
-    /// rows; a working session is never killed for an infeasible target (the
-    /// admission gate runs before any stop).
+    /// (admission × generating × consulting × changed), and stops + re-spawns
+    /// only when the decision says apply. Refusals and no-ops surface as
+    /// transcript system rows; a working session is never killed for an
+    /// infeasible or missing target — the admission gate runs before any stop,
+    /// and a custom/unverified path (which skips the admission gate entirely —
+    /// Settings contract) is still checked to exist. `targetSettings` is
+    /// threaded through `restartAgent` so the eventual spawn respawns the
+    /// exact target this decision admitted, not whatever
+    /// `AgentDefaultSettings.resolve` would return after the async stop
+    /// window (D2/TOCTOU fix).
     func applyModelSelection() {
-        let targetSettings = AgentDefaultSettings.resolve(
-            defaults: .standard,
-            environment: ProcessInfo.processInfo.environment,
-            projectRoot: AgentController.projectRoot())
+        let targetSettings = AgentController.defaultSettings()
+        let admission = AgentController.admitStagedVariant(contextSize: targetSettings.contextSize)
+        if admission == nil,
+           !FileManager.default.fileExists(atPath: targetSettings.modelPath.path) {
+            transcript.appendSystem(
+                "→ apply model refused: model file not found at \(targetSettings.modelPath.path)")
+            return
+        }
         switch ModelSwitchEvaluator.decide(
             isGenerating: isGenerating,
-            runningModelFile: settings.modelPath,
-            targetModelFile: targetSettings.modelPath,
-            admission: AgentController.admitStagedVariant(contextSize: targetSettings.contextSize)
+            isConsulting: isConsulting,
+            runningSettings: settings,
+            targetSettings: targetSettings,
+            admission: admission
         ) {
         case .apply:
-            restartAgent()
+            transcript.appendSystem(
+                "→ apply model: switching to \(targetSettings.modelPath.lastPathComponent)")
+            restartAgent(pinnedSettings: targetSettings)
         case .noChange:
             transcript.appendSystem(
                 "→ apply model: already running \(targetSettings.modelPath.lastPathComponent)")
