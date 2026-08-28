@@ -1,0 +1,52 @@
+{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts","think_override"],"ts":822010288254}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":16384,"power":100,"error":"","ts":822010288503}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":951,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822010289771}
+{"t":"status","state":"prefill","prefill_done":59,"prefill_total":951,"prefill_tps":258.2,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822010518311}
+{"t":"status","state":"prefill","prefill_done":178,"prefill_total":951,"prefill_tps":398.1,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822010736934}
+{"t":"status","state":"prefill","prefill_done":297,"prefill_total":951,"prefill_tps":444.8,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822010957444}
+{"t":"status","state":"prefill","prefill_done":416,"prefill_total":951,"prefill_tps":470.4,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822011174215}
+{"t":"status","state":"prefill","prefill_done":534,"prefill_total":951,"prefill_tps":480.0,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822011402219}
+{"t":"status","state":"prefill","prefill_done":653,"prefill_total":951,"prefill_tps":489.6,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822011623637}
+{"t":"status","state":"prefill","prefill_done":772,"prefill_total":951,"prefill_tps":495.5,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822011847878}
+{"t":"status","state":"prefill","prefill_done":891,"prefill_total":951,"prefill_tps":500.9,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822012068673}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822012221406}
+{"t":"ready","kv_bytes":880803840,"scratch_bytes":6146969608,"model_bytes":48257070080,"planned_bytes":55284843528,"ts":822012223042}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":16384,"power":100,"error":"","ts":822012515234}
+{"t":"status","state":"prefill","prefill_done":28,"prefill_total":66,"prefill_tps":134.3,"generated":0,"gen_tps":0.0,"ctx_used":1017,"ctx_size":16384,"power":100,"error":"","ts":822012724890}
+{"t":"status","state":"prefill","prefill_done":65,"prefill_total":66,"prefill_tps":157.9,"generated":0,"gen_tps":0.0,"ctx_used":1017,"ctx_size":16384,"power":100,"error":"","ts":822012928154}
+{"t":"status","state":"generating","prefill_done":66,"prefill_total":66,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1017,"ctx_size":16384,"power":100,"error":"","ts":822012929069}
+{"t":"text","s":"\nA KV cache (K","ts":822013040552}
+{"t":"status","state":"generating","prefill_done":66,"prefill_total":66,"prefill_tps":0.0,"generated":11,"gen_tps":52.5,"ctx_used":1028,"ctx_size":16384,"power":100,"error":"","ts":822013138757}
+{"t":"text","s":"ey-Value cache) is a ","ts":822013156621}
+{"t":"text","s":"mechanism used in transformer models during inference ","ts":822013269228}
+{"t":"status","state":"generating","prefill_done":66,"prefill_total":66,"prefill_tps":0.0,"generated":24,"gen_tps":57.1,"ctx_used":1041,"ctx_size":16384,"power":100,"error":"","ts":822013349030}
+{"t":"text","s":"that stores previously computed attention keys and ","ts":822013381002}
+{"t":"text","s":"values for each token, allowing the ","ts":822013492649}
+{"t":"status","state":"generating","prefill_done":66,"prefill_total":66,"prefill_tps":0.0,"generated":37,"gen_tps":58.9,"ctx_used":1054,"ctx_size":16384,"power":100,"error":"","ts":822013556755}
+{"t":"text","s":"model to avoid recomputing them for ","ts":822013604533}
+{"t":"text","s":"subsequent tokens and significantly speeding up generation ","ts":822013716358}
+{"t":"status","state":"generating","prefill_done":66,"prefill_total":66,"prefill_tps":0.0,"generated":50,"gen_tps":59.9,"ctx_used":1067,"ctx_size":16384,"power":100,"error":"","ts":822013764185}
+{"t":"text","s":"by only processing the new token at ","ts":822013828232}
+{"t":"text","s":"each step.\n\n","ts":822013876138}
+{"t":"status","state":"idle","prefill_done":66,"prefill_total":66,"prefill_tps":0.0,"generated":56,"gen_tps":60.1,"ctx_used":1075,"ctx_size":16384,"power":100,"error":"","ts":822013876153}
+{"t":"ready","kv_bytes":880803840,"scratch_bytes":6146969608,"model_bytes":48257070080,"planned_bytes":55284843528,"stop_reason":"eos","generated":56,"ctx_used":1073,"ts":822013876155}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1075,"ctx_size":16384,"power":100,"error":"","ts":822014147695}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1089,"ctx_size":16384,"power":100,"error":"","ts":822014280239}
+{"t":"text","s":"2, 3, 5","ts":822014393044}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":12,"gen_tps":59.4,"ctx_used":1101,"ctx_size":16384,"power":100,"error":"","ts":822014482237}
+{"t":"text","s":", 7, 1","ts":822014498515}
+{"t":"text","s":"1, 13, ","ts":822014611875}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":25,"gen_tps":60.5,"ctx_used":1114,"ctx_size":16384,"power":100,"error":"","ts":822014693763}
+{"t":"text","s":"17, and 19","ts":822014726481}
+{"t":"text","s":" are all prime numbers under twenty.","ts":822014840364}
+{"t":"text","s":"\n\n","ts":822014856387}
+{"t":"status","state":"idle","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":34,"gen_tps":60.7,"ctx_used":1125,"ctx_size":16384,"power":100,"error":"","ts":822014856405}
+{"t":"ready","kv_bytes":880803840,"scratch_bytes":6146969608,"model_bytes":48257070080,"planned_bytes":55284843528,"stop_reason":"eos","generated":34,"ctx_used":1123,"ts":822014856407}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1125,"ctx_size":16384,"power":100,"error":"","ts":822015168535}
+{"t":"status","state":"generating","prefill_done":20,"prefill_total":20,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1143,"ctx_size":16384,"power":100,"error":"","ts":822015340381}
+{"t":"text","s":"\n2 to the 8","ts":822015441432}
+{"t":"text","s":"th power is 2","ts":822015543225}
+{"t":"status","state":"generating","prefill_done":20,"prefill_total":20,"prefill_tps":0.0,"generated":11,"gen_tps":54.2,"ctx_used":1154,"ctx_size":16384,"power":100,"error":"","ts":822015543265}
+{"t":"text","s":"56.\n\n","ts":822015612978}
+{"t":"status","state":"idle","prefill_done":20,"prefill_total":20,"prefill_tps":0.0,"generated":14,"gen_tps":54.6,"ctx_used":1159,"ctx_size":16384,"power":100,"error":"","ts":822015612995}
+{"t":"ready","kv_bytes":880803840,"scratch_bytes":6146969608,"model_bytes":48257070080,"planned_bytes":55284843528,"stop_reason":"eos","generated":14,"ctx_used":1157,"ts":822015612996}

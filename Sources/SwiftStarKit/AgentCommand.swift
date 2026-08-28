@@ -111,6 +111,11 @@ public enum AgentCommand {
             // P9: the app owns tool execution — always pass `--host-tools` so the
             // agent emits `tool_request` and blocks on `tool_result` (D1).
             "--host-tools",
+            // P23: per-turn think overrides (think/ctx on the prompt envelope).
+            // Unconditional like --host-tools: the app pins the engine (the
+            // submodule bump in this phase shipped the flag); a DS4_DIR build
+            // without it fails loudly at option-parse, never silently.
+            "--per-turn-think",
         ]
         if settings.maxTokens > 0 {
             argv.append(contentsOf: ["-n", String(settings.maxTokens)])

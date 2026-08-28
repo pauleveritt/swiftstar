@@ -134,6 +134,11 @@ var args: [String] = [
     "--json-events",
     "--trace", tracePath.path,
 ]
+// P23: the per-turn think wire shape (CAPTURE_PER_TURN_THINK=1 appends the
+// flag so a prompts file can carry {"t":"prompt",...,"think":"none"} lines).
+if env["CAPTURE_PER_TURN_THINK"] != nil {
+    args += ["--per-turn-think"]
+}
 // P7 consent flags appended after `--trace` (nil = P5 shape, absent).
 // NOTE: `Process.arguments` is a Foundation `copy` property — appending via
 // `process.arguments?.append(...)` mutates a throwaway copy and does not persist

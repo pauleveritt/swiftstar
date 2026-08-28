@@ -126,15 +126,17 @@ struct TraceSummaryTests {
     }
 
     /// golden.trace has exactly two `prefill sync done` lines (grepped
-    /// directly from the fixture):
-    ///   prompt=1026 cached=958  suffix=68
-    ///   prompt=1150 cached=1132 suffix=18
-    /// so the whole-run totals are 1026+1150=2176, 958+1132=2090, 68+18=86.
+    /// directly from the fixture, P23 recapture):
+    ///   prompt=1017 cached=951  suffix=66
+    ///   prompt=1119 cached=1103 suffix=16
+    /// so the whole-run totals are 1017+1119=2136, 951+1103=2054, 66+16=82.
+    /// These counts drift on every recapture (generation cadence varies
+    /// run-to-run — the P7/P9 precedent), unlike `planned_bytes` above.
     @Test func goldenTraceSumsBothPrefillSyncLines() throws {
         let url = Self.fixturesRoot.appendingPathComponent("golden.trace")
         let text = try String(contentsOf: url, encoding: .utf8)
         let totals = TraceSummary.sum(traceText: text)
-        #expect(totals == TraceTokenTotals(sumPrompt: 2176, sumCached: 2090, sumSuffix: 86))
+        #expect(totals == TraceTokenTotals(sumPrompt: 2136, sumCached: 2054, sumSuffix: 82))
     }
 
     @Test func emptyTraceSumsToZero() {

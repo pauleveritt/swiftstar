@@ -182,6 +182,63 @@ argv — no `--subagent-pool`, so `num_workers == 1`. Verified against the prior
 Captured by `swiftstar-drive` (`CAPTURE_GGUF=<laguna-s-2.1 gguf> CAPTURE_CTX=32768 swift run
 swiftstar-drive`), the same P5 spawn shape (no `CAPTURE_WORKSPACE`/`CAPTURE_SHELL`).
 
+## P23 recapture (2026-08-28) — submodule `1a2dddf`
+
+Recaptured against the rebuilt binary at submodule
+`1a2dddff899e202914b15ea8ff35787b48045735` (P23 bump — divergence #14, per-turn
+think + per-worker ctx). Same P5 spawn shape, same model, same `CAPTURE_CTX=32768`,
+same two prompts, no `--per-turn-think` (the flag was deliberately **not**
+passed — this fixture proves the cap stays absent when the flag is off).
+
+**`hello` unchanged mod `ts`** (the recapture gate): `caps` =
+`["status","ready","text","think","tool","queued","ts"]` — no `think_override`,
+confirming the cap is flag-gated. **`golden.trace`'s sysprompt path is now
+ctx-qualified** (`sysprompt-32768.kv`, was the fixed `sysprompt.kv`) — the
+owed, expected diff from the ctx half of divergence #14 (D8).
+
+**This recapture retires the P11 scratch under-report.** The memory-budget
+table below (from the "scratch under-report" section above) is now:
+
+| field | `ready` bytes | bytes / 1024³ (2 dp) | boot-line figure | match |
+|---|---:|---:|---:|:---:|
+| `kv_bytes` | 1,686,110,208 | 1.57 GiB | KV **1.57** GiB | yes |
+| `scratch_bytes` | 6,146,969,608 | 5.72 GiB | buffers **5.72** GiB | yes |
+| `model_bytes` | 48,257,070,080 | 44.94 GiB | resident model **44.94** GiB | yes |
+| `planned_bytes` | 56,090,149,896 | 52.24 GiB | **52.24** GiB planned | yes |
+
+`kv_bytes` and `model_bytes` are byte-identical to the P9 capture; only
+`scratch_bytes`/`planned_bytes` moved, and `scratch_bytes` now agrees with the
+boot line's `Laguna GPU graph: ... scratch 5862.21 MiB` figure — the exact
+figure the P9 section above flagged the wire as **under-reporting** (784,752
+bytes vs. the boot line's ~6.1 GB). Traced to submodule commit `0e13e14`
+("Enable chunked Laguna XS prefill", 2026-07-27) — a `laguna-s2.1` fix,
+unrelated to P23, that landed between the P9 capture SHA and this pin and
+corrected the prefill-graph scratch estimator (previously "a one-token
+scratch" regardless of the real prefill-chunk width, per that commit's own
+message). **This is not a P23 config mismatch** — the fixture was simply never
+recaptured since that fix landed. `planned_bytes` is `56_090_149_896` in
+`FixtureReplayTests.replayYieldsStatusAndReadyThroughReducer`'s pinned
+assertion as of this recapture (was `49_943_965_040`).
+
+Copied to the bundled `Sources/SwiftStarAppKit/Resources/golden.{ndjson,trace}`
+per the recapture rule.
+
+**Two capture passes.** The first pass (this same session) hit
+`sysprompt-32768.kv` cold — no file existed yet under the new ctx-qualified
+name for this model — so the sysprompt load was a full re-prefill (a third
+`prefill sync done` line, `cached=0`), one-time fallout from D8's path
+rename, not a wire-shape change. The committed fixture is the **second**
+pass, run once the cache was warm: back to the original two-sync shape (one
+per prompt), `sysprompt kv hit` on `sysprompt-32768.kv`. `kv_bytes`/
+`scratch_bytes`/`model_bytes`/`planned_bytes` are identical across both
+passes (the memory plan is fixed at model load, before either sysprompt path
+is taken). `golden.trace`'s two `prefill sync done` lines: `prompt=1017
+cached=951 suffix=66` and `prompt=1119 cached=1103 suffix=16` — totals
+2136/2054/82, the value now pinned by
+`TraceParserTests.goldenTraceSumsBothPrefillSyncLines` (was 2176/2090/86;
+count/band drift only, same as every prior recapture — see "Count/band
+drift" above).
+
 ## `pool.ndjson` — first real 2-worker capture (2026-08-23)
 
 `fixtures/agent/pool.ndjson` is a **verbatim** capture of `ds4-agent -c 16384 --metal

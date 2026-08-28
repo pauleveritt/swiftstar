@@ -18,7 +18,8 @@ struct AgentCommandTests {
         let ws = URL(fileURLWithPath: "/Users/me/Work")
         let argv = AgentCommand.argv(settings: makeSettings(workspace: ws))
         // The app always passes both consent flags explicitly (D2), shell
-        // defaulting to off, plus `--host-tools` (P9: the app owns execution).
+        // defaulting to off, plus `--host-tools` (P9: the app owns execution)
+        // and `--per-turn-think` (P23: the app pins the engine).
         #expect(argv == [
             "-m", "/tmp/model.gguf",
             "-c", "16384",
@@ -28,6 +29,7 @@ struct AgentCommandTests {
             "--workspace", "/Users/me/Work",
             "--shell", "off",
             "--host-tools",
+            "--per-turn-think",
         ])
     }
 
@@ -41,8 +43,8 @@ struct AgentCommandTests {
     @Test func argvAppendsSystemPromptAfterHostTools() {
         let ws = URL(fileURLWithPath: "/Users/me/Work")
         let argv = AgentCommand.argv(settings: makeSettings(workspace: ws, systemPrompt: "You have Superpowers."))
-        // -sys + text arrive after --host-tools (P9); the default-order test
-        // pins the nil case.
+        // -sys + text arrive after --host-tools/--per-turn-think (P9/P23);
+        // the default-order test pins the nil case.
         #expect(argv == [
             "-m", "/tmp/model.gguf",
             "-c", "16384",
@@ -52,6 +54,7 @@ struct AgentCommandTests {
             "--workspace", "/Users/me/Work",
             "--shell", "off",
             "--host-tools",
+            "--per-turn-think",
             "-sys", "You have Superpowers.",
         ])
     }
