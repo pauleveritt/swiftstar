@@ -394,7 +394,12 @@ final class AgentController {
         } catch {
             log("skill staging failed (non-fatal): \(error)")
         }
+        // P20 (D4): the dispatch-preference rule is appended after the skills
+        // bootstrap so every agent spawn (agent mode and /orchestrate alike)
+        // carries it — it is the always-on counterpart to the orchestrate
+        // directive's dispatch guidance.
         settings.systemPrompt = SuperpowersBootstrap.build(skillsDir: skillsDir).indexPrompt
+            + "\n\n" + DispatchPreferenceRule.text
 
         let process = Process()
         process.executableURL = binary
@@ -1125,8 +1130,17 @@ final class AgentController {
         }
     }
 
-    func orchestrateStub() {
-        transcript.appendSystem("→ orchestrate: the coordination loop lands with P20 (P19.1 ships the command, not the loop)")
+    /// The `/orchestrate` command (P20): run the task as the model-driven
+    /// coordination loop. The directive (built from the task + writable scope)
+    /// is sent as one user turn through the normal `send` path — the model
+    /// decomposes, dispatches phases via the `dispatch` tool, reads receipts,
+    /// validates, and writes files; the host's pool/validation machinery is
+    /// the substrate. One-shot-first: no host repair loop (D2).
+    func orchestrate(task: String, writableFiles: [String]) {
+        let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let directive = OrchestrateDirective.build(task: trimmed, writableFiles: writableFiles)
+        send(directive, asUser: true)
     }
 
     @ObservationIgnored private var restartTask: Task<Void, Never>?

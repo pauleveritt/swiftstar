@@ -168,6 +168,110 @@ public final class PoolOrchestrator {
         return result
     }
 
+    /// P20: run the orchestrator (worker 0) turn for the model-driven
+    /// coordination loop. The orchestrator reads/writes the shared worktree and
+    /// dispatches phases via the `dispatch` tool. A `dispatch` call is answered
+    /// inline ("dispatched as worker N") and its packet is collected into the
+    /// returned `dispatched` array — the CALLER runs those phases after this
+    /// turn ends, because the engine's pool mutex serializes generation and a
+    /// worker cannot run while the orchestrator is mid-turn. Receipts are then
+    /// injected as the next orchestrator prompt (the app's D4 shape).
+    public func runOrchestrator(
+        prompt: String,
+        worktree: URL,
+        capture: FileHandle? = nil,
+        buildDispatchPacket: @escaping ([ToolParam]) -> HandoffPacket?
+    ) throws -> (outcome: TurnOutcome, dispatched: [HandoffPacket]) {
+        var builder = TurnOutcomeBuilder(
+            model: model, build: "pooled", sampler: "engine-defaults", task: prompt)
+        var dispatched: [HandoffPacket] = []
+        var toolCallCount = 0
+        // The orchestrator is the agent's own role: full bash (`.app` policy),
+        // matching the app's shell-on agent tab — not the pool worker's
+        // vetted-only commands. The caller validates the final result.
+        hostToolExecutor = HostToolExecutor(policy: .app)
+        let promptLine = PoolPrompt(worker: .orchestrator, text: prompt).encode() + "\n"
+        stdin.write(Data(promptLine.utf8))
+
+        var parser = PoolWireParser()
+        var result: TurnOutcome?
+        var buffer = Data()
+        var chunk = [UInt8](repeating: 0, count: 4096)
+        let turnTimeout = Double(ProcessInfo.processInfo.environment["AGENTTEST_TURN_TIMEOUT"] ?? "1800") ?? 1800
+        let deadline = Date().addingTimeInterval(turnTimeout)
+
+        loop: while Date() < deadline {
+            var pfd = pollfd(fd: stdoutFD, events: Int16(POLLIN), revents: 0)
+            let pr = Darwin.poll(&pfd, 1, 1000)
+            guard pr >= 0 else { continue }
+            guard (pfd.revents & Int16(POLLIN)) != 0 || (pfd.revents & Int16(POLLHUP)) != 0 else { continue }
+            let n = Darwin.read(stdoutFD, &chunk, chunk.count)
+            if n <= 0 { break loop }
+            buffer.append(contentsOf: chunk[0..<n])
+            while let nl = buffer.firstIndex(of: 0x0A) {
+                let text = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
+                buffer.removeSubrange(buffer.startIndex...nl)
+                if let capture { try? capture.write(contentsOf: Data((text + "\n").utf8)) }
+                guard let poolEvent = parser.feed(text), poolEvent.worker == .orchestrator else { continue }
+                let event = poolEvent.event
+                builder.apply(event)
+                switch event {
+                case .toolRequest(let idx, let name, let params):
+                    toolCallCount += 1
+                    if name == "dispatch" {
+                        if let packet = buildDispatchPacket(params) {
+                            dispatched.append(packet)
+                            let r = ToolCallbackResponse(idx: idx, ok: true,
+                                s: ToolResultCondenser.condense("dispatched as worker 1"))
+                            stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
+                            builder.recordHostVerdict(
+                                idx: idx, ok: true, mutations: [], exitStatus: nil,
+                                outputDigest: nil, validationRan: false)
+                        } else {
+                            let r = ToolCallbackResponse(idx: idx, ok: false,
+                                s: ToolResultCondenser.condense("refused: malformed dispatch (needs taskText)"))
+                            stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
+                            builder.recordHostVerdict(
+                                idx: idx, ok: false, mutations: [], exitStatus: nil,
+                                outputDigest: nil, validationRan: false)
+                        }
+                    } else {
+                        let response = ToolCallbackResponder.respond(
+                            idx: idx, name: name, params: params,
+                            workspace: worktree, shellAllowed: true,
+                            writableFiles: nil,
+                            execute: hostToolExecutor.execute)
+                        stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
+                        builder.recordHostVerdict(
+                            idx: idx, ok: response.ok, mutations: response.mutations,
+                            exitStatus: response.exitStatus,
+                            outputDigest: response.outputDigest,
+                            validationRan: response.validationRan)
+                    }
+                case .toolRequestRefused(let idx, let reason):
+                    let r = ToolCallbackResponse(idx: idx, ok: false, s: ToolResultCondenser.condense(reason))
+                    stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
+                case .ready(_, let stopReason, _, _):
+                    // The STARTUP ready (worker 0, carrying the memory plan's
+                    // `planned_bytes` and NO `stop_reason`) is not a turn end —
+                    // skip it. Only the turn-end ready (D12: `stop_reason`/
+                    // `generated`/`ctx_used`) finishes the turn. Note the
+                    // turn-end ready ALSO carries `planned_bytes`, so
+                    // `planned_bytes` cannot discriminate the two.
+                    if stopReason == nil { continue }
+                    result = WorktreeDispatch.relativize(outcome: builder.finish(), worktree: worktree)
+                    break loop
+                default:
+                    break
+                }
+            }
+        }
+        guard let result else {
+            throw PoolOrchestratorError.turnDidNotEnd
+        }
+        return (result, dispatched)
+    }
+
     public func stop() {
         try? stdin.close()
         process.terminate()

@@ -234,9 +234,9 @@ struct AgentView: View {
         case .chat(let task):
             input = ""
             controller.consult(task: task, writableFiles: [])
-        case .orchestrate:
+        case .orchestrate(let task, let writableFiles):
             input = ""
-            controller.orchestrateStub()
+            controller.orchestrate(task: task, writableFiles: writableFiles)
         case nil:
             guard controller.canSend, !message.isEmpty else { return }
             input = ""

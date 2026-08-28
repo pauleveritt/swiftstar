@@ -1183,6 +1183,115 @@ func runOnce(_ index: Int) throws -> RunOutcome {
                       elapsed: elapsed)
 }
 
+// MARK: - directive driver (P20 live validation)
+
+/// P20 live validation: the model-driven orchestrate loop. The orchestrator
+/// (worker 0) receives `OrchestrateDirective.build(task: specText, ...)` and
+/// drives: it decomposes, dispatches phases via the `dispatch` tool (answered
+/// inline; the packets run AFTER the turn — the pool mutex serializes
+/// generation), reads the receipts we inject at the next turn boundary, and
+/// writes the result. One shared worktree: orchestrator and dispatched workers
+/// both write into it, so the result integrates without ref plumbing (the app's
+/// worktree-per-worker + candidate-ref integration is a follow-up, noted in the
+/// spec). Pass bar: >=1 dispatch AND acceptance exit 0.
+func runDirectiveOnce() throws {
+    let runStart = Date()
+
+    let repoURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("agenttest-directive-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
+    git(repoURL, ["init", "-q"])
+    git(repoURL, ["config", "user.email", "agenttest@local"])
+    git(repoURL, ["config", "user.name", "AgentTest"])
+    try "".write(to: repoURL.appendingPathComponent(".gitkeep"), atomically: true, encoding: .utf8)
+    git(repoURL, ["add", ".gitkeep"])
+    git(repoURL, ["commit", "-q", "-m", "seed"])
+
+    let df = DateFormatter(); df.dateFormat = "yyyyMMdd-HHmmss"
+    let captureDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("captures/agenttest/\(df.string(from: Date()))-\(specName)-directive")
+    try FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
+    let wireFile = captureDir.appendingPathComponent("wire.ndjson")
+    let captureHandle = SafeAppendFile.ensureAndOpen(wireFile.path)
+    let tracePath = captureDir.appendingPathComponent("wire.trace")
+
+    // Shell on: the orchestrator needs to run the vetted import/pytest commands
+    // to validate (the `.pool` executor allowlists them, so nothing else runs).
+    let settings = AgentSettings(
+        engineDir: engineDir, modelPath: URL(fileURLWithPath: gguf),
+        contextSize: 32768, workspace: repoURL, shellAllowed: true,
+        maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192,
+        noThink: false,  // the orchestrator role reasons (decompose + dispatch)
+        thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0,
+        seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0,
+        tracePath: tracePath,
+        runtime: resolvedVariant?.runtime)
+
+    let orch = try PoolOrchestrator(settings: settings, workers: 2)  // orchestrator 0 + worker 1
+    defer { orch.stop() }
+
+    let wt = try WorktreeDispatcher.prepare(
+        packet: HandoffPacket(taskText: "", writableFiles: writableFiles,
+                              validationCommand: nil, baselines: [:],
+                              turnBudget: 100_000, toolCallBudget: 30),
+        in: repoURL)
+    defer { WorktreeDispatcher.discard(wt, in: repoURL) }
+
+    let acceptanceSource = try String(
+        contentsOf: fixtureDir.appendingPathComponent("acceptance/test_acceptance.py"),
+        encoding: .utf8)
+
+    var prompt = OrchestrateDirective.build(task: specText, writableFiles: writableFiles)
+    var totalDispatches = 0
+    var rounds = 0
+    let maxRounds = max(1, Int(env["AGENTTEST_DIRECTIVE_ROUNDS"] ?? "4") ?? 4)
+
+    while rounds < maxRounds {
+        rounds += 1
+        print("[agenttest] directive: orchestrator turn \(rounds) …")
+        let (outcome, dispatched) = try orch.runOrchestrator(
+            prompt: prompt, worktree: wt.url,
+            capture: captureHandle) { params in
+                guard let task = params.first(where: { $0.name == "taskText" })?.value,
+                      !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                return phasePacket(task)
+            }
+        totalDispatches += dispatched.count
+        print("[agenttest] directive: orchestrator turn \(rounds) ended (stop \(outcome.stopReason.rawValue)), dispatched \(dispatched.count) phase(s)")
+
+        guard !dispatched.isEmpty else { break }
+
+        var receipts: [String] = []
+        for (i, packet) in dispatched.enumerated() {
+            let workerOutcome = try orch.runPhase(
+                worker: WorkerId(1), packet: packet, worktree: wt.url, capture: captureHandle)
+            let grade = try AcceptanceGrader.grade(
+                worktree: wt.url, acceptanceSource: acceptanceSource, pyProject: pyProject)
+            let status = grade.exit == 0 ? "passed" : "failed (exit \(grade.exit))"
+            receipts.append("Worker 1 (phase \(i + 1)): \(workerOutcome.mutations.count) mutation(s), validation \(status)")
+            print("[agenttest] directive: phase \(i + 1) — \(workerOutcome.mutations.count) mutation(s), \(status)")
+        }
+        prompt = "The dispatched phases finished. Receipts:\n"
+            + receipts.joined(separator: "\n")
+            + "\n\nContinue: integrate, fix, and validate the whole result. Use the `dispatch` tool again only if a phase remains."
+    }
+
+    let finalGrade = try AcceptanceGrader.grade(
+        worktree: wt.url, acceptanceSource: acceptanceSource, pyProject: pyProject)
+    let passed = finalGrade.exit == 0 && totalDispatches >= 1
+    print("[agenttest] directive: \(passed ? "PASS" : "FAIL") — \(totalDispatches) dispatch(es), \(rounds) orchestrator turn(s), acceptance exit \(finalGrade.exit), \(Int(Date().timeIntervalSince(runStart)))s")
+    if !passed { exit(1) }
+}
+
+if env["AGENTTEST_ORCHESTRATE_DIRECTIVE"] == "1" || args.contains("--directive") {
+    do { try runDirectiveOnce() } catch {
+        print("[agenttest] directive run failed: \(error)")
+        exit(1)
+    }
+    print("[agenttest] done")
+    exit(0)
+}
+
 // MARK: - fixture driver (D10)
 
 if let fixtureName {
