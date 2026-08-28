@@ -1131,6 +1131,41 @@ final class AgentController {
         }
     }
 
+    /// P22 model switching — the "Apply this model" action. Resolves the staged
+    /// selection exactly as the next spawn would, runs the pure switch decision
+    /// (admission × generating × changed), and stops + re-spawns only when the
+    /// decision says apply. Refusals and no-ops surface as transcript system
+    /// rows; a working session is never killed for an infeasible target (the
+    /// admission gate runs before any stop).
+    func applyModelSelection() {
+        let targetSettings = AgentDefaultSettings.resolve(
+            defaults: .standard,
+            environment: ProcessInfo.processInfo.environment,
+            projectRoot: AgentController.projectRoot())
+        let variant = VariantResolver.resolveVariant(
+            selectedVariantID: AgentController.effectiveSelectedVariantID())
+        let admission: VariantAdmission? = variant.map {
+            VariantGate.admit(
+                $0, contextSize: targetSettings.contextSize,
+                availableBytes: VariantAdmissionSource.availableBytes(),
+                wiredLimitAdvisoryBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes())
+        }
+        switch ModelSwitchEvaluator.decide(
+            isGenerating: isGenerating,
+            runningModelFile: settings.modelPath,
+            targetModelFile: targetSettings.modelPath,
+            admission: admission
+        ) {
+        case .apply:
+            restartAgent()
+        case .noChange:
+            transcript.appendSystem(
+                "→ apply model: already running \(targetSettings.modelPath.lastPathComponent)")
+        case .refused(let reason):
+            transcript.appendSystem("→ apply model refused: \(reason)")
+        }
+    }
+
     /// The `/orchestrate` command (P20): run the task as the model-driven
     /// coordination loop. The directive (built from the task + writable scope)
     /// is sent as one user turn through the normal `send` path — the model
