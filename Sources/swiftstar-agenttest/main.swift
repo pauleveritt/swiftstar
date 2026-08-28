@@ -103,10 +103,14 @@ let repairMaxRounds = max(1, Int(env["AGENTTEST_REPAIR_ROUNDS"] ?? "2") ?? 2)
 
 /// The temperature the engine actually samples at.
 ///
-/// `AgentSettings` carries no temperature field and `PoolOrchestrator` records
-/// every turn's sampler as `"engine-defaults"` — the harness never transmits one,
-/// so the engine samples at its own family defaults, which for a resolved variant
-/// are exactly the values that variant declares. Meanwhile
+/// `AgentSettings` carries no temperature field, so the engine samples at its
+/// own family defaults, which for a resolved variant are exactly the values
+/// that variant declares. (P23: `PoolOrchestrator` no longer records a
+/// hardcoded `"engine-defaults"` sampler literal — it records the effort
+/// actually used via `TurnThinkPolicy.samplerRecord`, currently always
+/// `"think=default"` here since this harness sends no per-turn override; the
+/// underlying point stands unchanged — the harness never transmits a
+/// temperature.) Meanwhile
 /// `SamplingPolicy.temperature` defaults to 0, so every stored packet claimed
 /// *greedy* decoding for runs that were not greedy: found 2026-08-25, when
 /// `run-config.json` said `temp 0.6` and `repair-packet-1.json` said
@@ -565,6 +569,12 @@ func runFixtureOnce(_ name: String) throws {
         engineDir: engineDir, modelPath: URL(fileURLWithPath: gguf),
         contextSize: 32768, workspace: repo, shellAllowed: false,
         maxTokens: Int(env["AGENTTEST_MAX_TOKENS"] ?? "8192") ?? 8192,
+        // P23 (D12): the harness deliberately defaults to noThink while the
+        // app ships think=high (the app's think cost is a property of its
+        // task, not the flag — see the 2026-08-28 sysprompt-think-cost
+        // measurement). This is a deterministic-testing choice, not an
+        // accident; per-packet think is now available via the wire override
+        // (divergence #14) if a fixture ever needs to match the app exactly.
         noThink: env["AGENTTEST_THINK"] != "1",
         thinkBudget: Int(env["AGENTTEST_THINK_BUDGET"] ?? "0") ?? 0,
         seed: UInt64(env["AGENTTEST_SEED"] ?? "0") ?? 0,

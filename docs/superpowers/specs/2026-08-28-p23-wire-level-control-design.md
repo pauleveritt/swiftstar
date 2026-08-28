@@ -1,7 +1,7 @@
 # SwiftStar P23 design: wire-level control (per-turn think + per-worker context)
 
 **Date:** 2026-08-28
-**Status:** proposed
+**Status:** implemented
 **Phase:** P23 — Wire-level control
 
 This spec is the authority on P23. It supersedes the ROADMAP P23 row
