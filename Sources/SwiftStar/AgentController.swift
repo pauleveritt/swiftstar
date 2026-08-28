@@ -26,7 +26,7 @@ final class AgentController {
     }
 
     private(set) var state: AgentState = .stopped
-    private(set) var transcript = AgentTranscript()
+    var transcript = AgentTranscript()
     private(set) var stderrTail: [String] = []
     /// Latest wire `status` snapshot, for the bottom status bar's readout
     /// (activity line + context ring). nil before the first status event.
@@ -74,14 +74,14 @@ final class AgentController {
     var settings: AgentSettings
     /// P11 (D1): the pool scheduler state — enqueued workers, the running
     /// worker, and receipts awaiting delivery back into the orchestrator.
-    private(set) var poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
+    var poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
     /// P21: the Metrics tab's live source — fired on each status/ready wire
     /// event (MainActor; consumeWire). A single observer slot (Metrics owns it;
     /// the fixture replay is only the pre-spawn placeholder).
     var onTelemetry: ((AgentEvent) -> Void)?
     /// P11 (D6): the rolling digest — the objective-independent reduced form
     /// of the session, maintained incrementally as host facts arrive.
-    private(set) var rollingDigest = RollingDigest()
+    var rollingDigest = RollingDigest()
 
     /// Mutated only on MainActor; the nonisolated `deinit` terminates it. No
     /// isolation opt-out is needed on this toolchain (the compiler reports
@@ -89,12 +89,12 @@ final class AgentController {
     /// is illegal on a mutable stored property. Must stay observation-TRACKED:
     /// `runningPid` is computed over it, and `MainView` re-points
     /// Metrics/Diagnostics when that changes.
-    private var process: Process?
+    var process: Process?
     private var parser = PoolWireParser()
     private var stdoutTask: Task<Void, Never>?
     private var stderrTask: Task<Void, Never>?
     private var startupTimeoutTask: Task<Void, Never>?
-    private var generation = 0
+    var generation = 0
     // D12 turn-outcome state.
     private var outcomeBuilder: TurnOutcomeBuilder?
     // P11 (D4) worker-turn state: everything that exists only while one
@@ -112,9 +112,9 @@ final class AgentController {
     // reads it, and Observation only notifies a view when the property it
     // read is tracked. Same treatment as `outcomeBuilder`, which is mutated
     // just as often (per wire event) and stays tracked.
-    private var workerTurn = ActiveWorkerTurn()
+    var workerTurn = ActiveWorkerTurn()
     private var sentInterrupt = false
-    private var buildSHA = "unknown"
+    var buildSHA = "unknown"
     private let logHandle: FileHandle?
 
     init(settings: AgentSettings = AgentController.defaultSettings()) {
@@ -725,7 +725,7 @@ final class AgentController {
         }
     }
 
-    private func log(_ s: String) {
+    func log(_ s: String) {
         guard let logHandle else { return }
         let data = Data((s + "\n").utf8)
         _ = try? logHandle.seekToEnd()
@@ -744,241 +744,16 @@ final class AgentController {
     /// call is in flight. `stopAgent()` does not bump `generation` (only a
     /// restart does), so the caller's post-await generation guard does not
     /// catch a plain Stop; this write must tolerate a closed pipe on its own.
-    private func writeToolResult(_ response: ToolCallbackResponse) {
+    func writeToolResult(_ response: ToolCallbackResponse) {
         guard let pipe = process?.standardInput as? Pipe else { return }
         try? pipe.fileHandleForWriting.write(
             contentsOf: Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
     }
 
-    // MARK: - P11 worker-turn loop (D4)
-
-    /// Start the next queued worker's turn in the pooled engine (D4): send the
-    /// `PoolPrompt` for worker N, open its outcome builder, and mark it running.
-    private func drainQueuedWorkers() {
-        guard let (worker, packet) = PoolScheduler.nextWorker(poolState) else {
-            injectPendingReceipts()
-            return
-        }
-        // Prepare the worker's disposable worktree (P10 isolation): its file
-        // mutations land here, never in the caller's tree.
-        let repo = Self.resolveRepoRoot(from: settings.workspace)
-        let worktree: WorktreeDispatcher.Worktree
-        do {
-            worktree = try WorktreeDispatcher.prepare(packet: packet, in: repo)
-        } catch {
-            let receipt = DispatchReceipt(worker: worker, ref: nil,
-                reason: "worktree preparation failed", summary: "\(error)")
-            poolState = PoolScheduler.apply(poolState, .workerFailed(worker, receipt))
-            rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
-            log("worker \(worker.rawValue): worktree prepare failed: \(error)")
-            drainQueuedWorkers()
-            return
-        }
-        poolState = PoolScheduler.apply(poolState, .workerStarted(worker))
-        workerTurn.start(
-            id: worker, packet: packet, worktree: worktree,
-            outcomeBuilder: TurnOutcomeBuilder(
-                model: settings.modelPath.lastPathComponent,
-                build: buildSHA,
-                sampler: "engine-defaults",
-                task: packet.taskText))
-        if let pipe = process?.standardInput as? Pipe {
-            pipe.fileHandleForWriting.write(
-                Data((PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n").utf8))
-        }
-        armWorkerWatchdog(worker)
-        log("worker \(worker.rawValue): turn started (worktree \(worktree.url.lastPathComponent))")
-    }
-
-    /// A worker turn ends on its `ready`; if that never arrives (engine wedged
-    /// mid-turn) the scheduler's `running` slot is never freed and every later
-    /// `/chat` and dispatch is refused "pool is busy" until a manual restart.
-    /// The watchdog is the only bound on that — delivery is edge-triggered, so
-    /// there is no poll left to notice.
-    private func armWorkerWatchdog(_ worker: WorkerId) {
-        workerTurn.watchdog?.cancel()
-        let gen = generation
-        workerTurn.watchdog = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(Self.workerTurnTimeoutSeconds))
-            guard !Task.isCancelled, let self,
-                  self.generation == gen, self.workerTurn.activeId == worker else { return }
-            self.failActiveWorker(worker, reason: "worker turn timed out")
-        }
-    }
-
-    /// Fold a wedged worker turn into a failure receipt and free the pool — the
-    /// same bookkeeping `finishWorkerTurn` does, minus the outcome (there is no
-    /// `ready`, so there is nothing to finalize).
-    private func failActiveWorker(_ worker: WorkerId, reason: String) {
-        guard workerTurn.activeId == worker else { return }
-        let isConsult = workerTurn.isConsult(worker)
-        if let worktree = workerTurn.worktree {
-            WorktreeDispatcher.discard(worktree, in: Self.resolveRepoRoot(from: settings.workspace))
-        }
-        workerTurn.clearActive()
-        let receipt = DispatchReceipt(worker: worker, ref: nil, reason: reason, summary: reason)
-        poolState = PoolScheduler.apply(poolState, .workerFailed(worker, receipt))
-        if isConsult {
-            workerTurn.removeConsult(worker)
-            poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
-            transcript.appendSystem("→ chat failed: \(reason)")
-        }
-        log("worker \(worker.rawValue): \(reason)")
-        drainQueuedWorkers()
-    }
-
-    /// Route one worker-tagged event through the worker's turn (D4): answer its
-    /// tool requests (revision-checked against its packet's writableFiles), and
-    /// finish the turn on its `ready`. `generation` is the wire generation this
-    /// event was read under (threaded from `consumeWire`); item 3 (P22
-    /// cleanup) made the tool executor and `finishWorkerTurn`'s validation
-    /// genuinely async, so this — like `consumeWire` — re-checks it after
-    /// every await before touching shared controller state.
-    private func handleWorkerEvent(worker: WorkerId, event: AgentEvent, generation: Int) async {
-        workerTurn.outcomeBuilder?.apply(event)
-        switch event {
-        case .toolRequest(let idx, let name, let params):
-            let response = await ToolCallbackResponder.respond(
-                idx: idx, name: name, params: params,
-                workspace: workerTurn.worktree?.url ?? settings.workspace,
-                shellAllowed: false,
-                writableFiles: workerTurn.activePacket?.writableFiles,
-                execute: Self.executeHostTool)
-            guard generation == self.generation else { return }
-            writeToolResult(response)
-            workerTurn.outcomeBuilder?.recordHostVerdict(
-                idx: idx, ok: response.ok, mutations: response.mutations,
-                exitStatus: response.exitStatus, outputDigest: response.outputDigest,
-                validationRan: response.validationRan)
-            rollingDigest = RollingDigestReducer.recordHostVerdict(
-                rollingDigest, mutations: response.mutations,
-                exitStatus: response.exitStatus, validationRan: response.validationRan)
-        case .toolRequestRefused(let idx, let reason):
-            writeToolResult(ToolCallbackResponse(idx: idx, ok: false,
-                s: ToolResultCondenser.condense(reason)))
-        case .ready:
-            if let builder = workerTurn.outcomeBuilder {
-                let outcome = builder.finish()
-                workerTurn.outcomeBuilder = nil
-                await finishWorkerTurn(worker: worker, outcome: outcome, generation: generation)
-            }
-        default:
-            break
-        }
-    }
-
-    /// Fold a finished worker turn into a `DispatchReceipt`, record it in the
-    /// rolling digest (D9) and the scheduler, and run the next worker (or inject
-    /// the receipts back into the orchestrator when the queue empties, D4). The
-    /// candidate-vs-receipt verdict is the pure `WorktreeDispatch.verdict`; the
-    /// candidate *ref* (the worktree commit SHA) is produced by the P10
-    /// `WorktreeDispatcher`, which the pooled path will reuse for the commit.
-    private func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome, generation: Int) async {
-        workerTurn.watchdog?.cancel()
-        let isConsult = workerTurn.isConsult(worker)
-        let answerText: String? = isConsult ? outcome.text : nil
-        let packet = workerTurn.activePacket ?? HandoffPacket(
-            taskText: "", writableFiles: [], validationCommand: nil,
-            baselines: [:], turnBudget: 0, toolCallBudget: 0)
-        let receipt: DispatchReceipt
-        if let worktree = workerTurn.worktree {
-            let repo = Self.resolveRepoRoot(from: settings.workspace)
-            let relativized = WorktreeDispatch.relativize(outcome: outcome, worktree: worktree.url)
-            do {
-                // Item 3 (P22 cleanup): async, off the MainActor — this used to
-                // freeze the whole app's UI for as long as the validation
-                // command ran. `finalize` itself stays sync (no subprocess).
-                let validation = try await WorktreeDispatcher.runValidation(packet.validationCommand, in: worktree.url)
-                let dispatchOutcome = try WorktreeDispatcher.finalize(
-                    worktree, packet: packet, turnOutcome: relativized,
-                    validation: validation, in: repo)
-                switch dispatchOutcome {
-                case .candidate(let ref, _, _):
-                    receipt = DispatchReceipt(worker: worker, ref: ref, reason: nil,
-                        summary: "candidate: \(relativized.mutations.count) mutation(s), \(relativized.generatedTokens) tokens",
-                        answerText: answerText)
-                case .receipt(let r):
-                    receipt = DispatchReceipt(worker: worker, ref: nil,
-                        reason: Self.receiptReason(r), summary: Self.receiptReason(r),
-                        answerText: answerText)
-                }
-            } catch {
-                receipt = DispatchReceipt(worker: worker, ref: nil,
-                    reason: "infrastructure failure", summary: "\(error)",
-                    answerText: answerText)
-            }
-            WorktreeDispatcher.discard(worktree, in: repo)
-        } else {
-            // No worktree (prepare failed earlier): fall back to the pure verdict.
-            switch WorktreeDispatch.verdict(
-                packet: packet, allowedMutations: outcome.mutations,
-                turnOutcome: outcome, validation: nil) {
-            case .candidate:
-                receipt = DispatchReceipt(worker: worker, ref: nil, reason: nil,
-                    summary: "candidate: \(outcome.mutations.count) mutation(s), \(outcome.generatedTokens) tokens",
-                    answerText: answerText)
-            case .receipt(let reason):
-                receipt = DispatchReceipt(worker: worker, ref: nil,
-                    reason: Self.receiptReason(reason), summary: Self.receiptReason(reason),
-                    answerText: answerText)
-            }
-        }
-        // Reentrancy guard (item 3): the worktree above is discarded either
-        // way — no leak — but a restart during the `await` above (bumping
-        // `generation`) already reset poolState/workerTurn/rollingDigest for a
-        // brand-new session; folding this stale turn's receipt into that state
-        // (or writing to the new session's wire) would corrupt it, so bail
-        // once cleanup is done.
-        guard generation == self.generation else { return }
-        poolState = PoolScheduler.apply(poolState, .workerFinished(worker, receipt))
-        // A consult runs read-only (writableFiles is empty by construction), so
-        // its verdict is ALWAYS a refusal. Recording it would leave a phantom
-        // "Worker N refused: noChanges" in the facts a later dispatch is planned
-        // from — the digest gets implementer receipts only.
-        if !isConsult {
-            rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
-        }
-        workerTurn.clearActive()
-        if isConsult {
-            workerTurn.removeConsult(worker)
-            // Surface the answer directly; never deliver a consult's receipt as
-            // orchestrator prose — the answer IS the delivery. Clear the receipt
-            // only when the send lands (at-least-once, matching
-            // injectPendingReceipts): if the user started a turn mid-consult the
-            // send is refused, and leaving the receipt pending lets the next
-            // drain fold the answer in via `injectionPrompt()`.
-            let answer = receipt.answerText.flatMap { $0.isEmpty ? nil : $0 } ?? receipt.summary
-            if sendConsulted(answer, worker: worker) {
-                poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
-            } else {
-                transcript.append(.consulted(worker, answer))
-            }
-        }
-        log("worker \(worker.rawValue): \(receipt.summary)")
-        drainQueuedWorkers()
-    }
-
-    /// Inject any undelivered receipts back into the orchestrator as its next
-    /// turn's prompt (D4): the orchestrator sees only the bounded receipts, not
-    /// the worker transcripts. Consult workers never reach here — their answer
-    /// is delivered directly in `finishWorkerTurn`.
-    private func injectPendingReceipts() {
-        let receipts = poolState.pendingDelivery.values
-            .sorted { $0.worker < $1.worker }
-        guard !receipts.isEmpty else { return }
-        let text = receipts.map { $0.injectionPrompt() }.joined(separator: "\n")
-        // Send first, clear only on success — at-least-once delivery (a dropped
-        // send must not silently lose the receipts).
-        if send(text, asUser: false) {
-            for worker in Array(poolState.pendingDelivery.keys) {
-                poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
-            }
-        }
-    }
 
     /// A stable string for a `Receipt` (D10: the reason folds back into the
     /// orchestrator's context as prose, not a debug dump).
-    private static func receiptReason(_ receipt: Receipt) -> String {
+    static func receiptReason(_ receipt: Receipt) -> String {
         switch receipt {
         case .refusedTool(let path): return "refusedTool: \(path)"
         case .budgetExceeded: return "budgetExceeded"
@@ -1044,7 +819,7 @@ final class AgentController {
     /// responsive while it waits.
     nonisolated private static let hostToolExecutor = HostToolExecutor(policy: .app)
 
-    nonisolated private static func executeHostTool(
+    nonisolated static func executeHostTool(
         _ request: ToolExecutionRequest
     ) async -> ToolExecutionResult {
         await hostToolExecutor.execute(request)
