@@ -179,12 +179,16 @@ public final class PoolOrchestrator {
     public func runOrchestrator(
         prompt: String,
         worktree: URL,
+        toolCallBudget: Int = 64,
         capture: FileHandle? = nil,
         buildDispatchPacket: @escaping ([ToolParam]) -> HandoffPacket?
     ) throws -> (outcome: TurnOutcome, dispatched: [HandoffPacket]) {
         var builder = TurnOutcomeBuilder(
             model: model, build: "pooled", sampler: "engine-defaults", task: prompt)
         var dispatched: [HandoffPacket] = []
+        var toolCallCount = 0
+        var lastRefusedSignature: String?
+        var refusedStreak = 0
         // The orchestrator is the agent's own role: full bash (`.app` policy),
         // matching the app's shell-on agent tab — not the pool worker's
         // vetted-only commands. The caller validates the final result.
@@ -202,7 +206,10 @@ public final class PoolOrchestrator {
         loop: while Date() < deadline {
             var pfd = pollfd(fd: stdoutFD, events: Int16(POLLIN), revents: 0)
             let pr = Darwin.poll(&pfd, 1, 1000)
-            guard pr >= 0 else { continue }
+            if pr < 0 {
+                if errno == EINTR { continue }
+                break loop  // persistent poll error: give up, don't busy-spin
+            }
             guard (pfd.revents & Int16(POLLIN)) != 0 || (pfd.revents & Int16(POLLHUP)) != 0 else { continue }
             let n = Darwin.read(stdoutFD, &chunk, chunk.count)
             if n <= 0 { break loop }
@@ -216,6 +223,16 @@ public final class PoolOrchestrator {
                 builder.apply(event)
                 switch event {
                 case .toolRequest(let idx, let name, let params):
+                    toolCallCount += 1
+                    if toolCallCount > toolCallBudget {
+                        // Enforce the budget (D8, mirrors runPhase): refuse the
+                        // call so a thrashing orchestrator is cut off instead of
+                        // burning the whole turn timeout.
+                        let r = ToolCallbackResponse(idx: idx, ok: false,
+                            s: ToolResultCondenser.condense("tool budget exceeded"))
+                        stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
+                        continue
+                    }
                     if name == "dispatch" {
                         if let packet = buildDispatchPacket(params) {
                             dispatched.append(packet)
@@ -234,11 +251,35 @@ public final class PoolOrchestrator {
                                 outputDigest: nil, validationRan: false)
                         }
                     } else {
-                        let response = ToolCallbackResponder.respond(
+                        var response = ToolCallbackResponder.respond(
                             idx: idx, name: name, params: params,
                             workspace: worktree, shellAllowed: true,
                             writableFiles: nil,
                             execute: hostToolExecutor.execute)
+                        // Repeat-refusal guard (mirrors runPhase): a repeated
+                        // identical refusal gets a hint after the third repeat
+                        // so the orchestrator breaks the loop instead of
+                        // burning the budget.
+                        if !response.ok {
+                            let signature = name + "|"
+                                + params.map { "\($0.name)=\($0.value)" }.joined(separator: "\u{1e}")
+                            if signature == lastRefusedSignature {
+                                refusedStreak += 1
+                                if refusedStreak >= 3 {
+                                    let hint = "(hint: you have repeated this identical request \(refusedStreak) times and it was refused each time; it will not be allowed.)"
+                                    response = ToolCallbackResponse(
+                                        idx: response.idx, ok: false, s: response.s + " " + hint,
+                                        mutations: response.mutations, exitStatus: response.exitStatus,
+                                        outputDigest: response.outputDigest, validationRan: response.validationRan)
+                                }
+                            } else {
+                                lastRefusedSignature = signature
+                                refusedStreak = 1
+                            }
+                        } else {
+                            lastRefusedSignature = nil
+                            refusedStreak = 0
+                        }
                         stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
                         builder.recordHostVerdict(
                             idx: idx, ok: response.ok, mutations: response.mutations,

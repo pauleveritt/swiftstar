@@ -208,3 +208,82 @@ struct LagunaSVerifierTests {
         #expect(actual2 == nil)
     }
 }
+
+struct DeepSeekV4FlashVerifierTests {
+    private let deepSeek = VariantRegistry.deepSeekV4Flash
+
+    @Test func cleanDeepSeekIsAdmitted() {
+        let mismatches = VariantVerifier.verify(deepSeek, metadata: makeDeepSeekMetadata())
+        #expect(mismatches.isEmpty)
+    }
+
+    @Test func wrongArchitectureIsNamed() {
+        let meta = makeDeepSeekMetadata(architecture: "laguna")
+        let mismatches = VariantVerifier.verify(deepSeek, metadata: meta)
+        #expect(mismatches.count == 1)
+        guard case .architecture(let expected, let actual) = mismatches[0] else {
+            Issue.record("expected .architecture, got \(mismatches)")
+            return
+        }
+        #expect(expected == "deepseek4")
+        #expect(actual == "laguna")
+    }
+
+    /// The mixed layout's whole point: layers 0..<37 must be Q2_K, and layers
+    /// 37..<43 must be Q4_K — swapping either segment's type is named across
+    /// exactly that segment's layers, not the other one.
+    @Test func wrongQ2SegmentTypeIsNamedOnlyOnQ2Layers() {
+        let meta = makeDeepSeekMetadata(q2Type: .q4_k)
+        let mismatches = VariantVerifier.verify(deepSeek, metadata: meta)
+        #expect(mismatches.count == 37)  // layers 0..<37
+        let layers = Set(mismatches.compactMap { mismatch -> Int? in
+            guard case .downQuant(let layer, _, _) = mismatch else { return nil }
+            return layer
+        })
+        #expect(layers == Set(0..<37))
+    }
+
+    @Test func wrongQ4SegmentTypeIsNamedOnlyOnQ4Layers() {
+        let meta = makeDeepSeekMetadata(q4Type: .q2_k)
+        let mismatches = VariantVerifier.verify(deepSeek, metadata: meta)
+        #expect(mismatches.count == 6)  // layers 37..<43
+        let layers = Set(mismatches.compactMap { mismatch -> Int? in
+            guard case .downQuant(let layer, _, _) = mismatch else { return nil }
+            return layer
+        })
+        #expect(layers == Set(37..<43))
+    }
+
+    @Test func layerZeroIsCheckedUnlikeLaguna() {
+        // DeepSeek has no dense leading layer — layer 0 is already MoE, so
+        // (unlike Laguna) it must be verified like every other routed layer.
+        let meta = makeDeepSeekMetadata()
+        #expect(meta.tensorTypes["blk.0.ffn_down_exps.weight"] == .q2_k)
+        let mismatches = VariantVerifier.verify(deepSeek, metadata: meta)
+        #expect(mismatches.isEmpty)
+    }
+
+    @Test func missingLayerInEitherSegmentIsAMismatchNotASkip() {
+        let metaQ2 = makeDeepSeekMetadata(dropLayer: 5)
+        let mismatchesQ2 = VariantVerifier.verify(deepSeek, metadata: metaQ2)
+        #expect(mismatchesQ2.count == 1)
+        guard case .downQuant(let layer, let expected, let actual) = mismatchesQ2[0] else {
+            Issue.record("expected .downQuant, got \(mismatchesQ2)")
+            return
+        }
+        #expect(layer == 5)
+        #expect(expected == .q2_k)
+        #expect(actual == nil)
+
+        let metaQ4 = makeDeepSeekMetadata(dropLayer: 40)
+        let mismatchesQ4 = VariantVerifier.verify(deepSeek, metadata: metaQ4)
+        #expect(mismatchesQ4.count == 1)
+        guard case .downQuant(let layer2, let expected2, let actual2) = mismatchesQ4[0] else {
+            Issue.record("expected .downQuant, got \(mismatchesQ4)")
+            return
+        }
+        #expect(layer2 == 40)
+        #expect(expected2 == .q4_k)
+        #expect(actual2 == nil)
+    }
+}

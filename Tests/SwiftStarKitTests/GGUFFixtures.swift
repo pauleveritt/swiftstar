@@ -239,6 +239,34 @@ func makeLagunaMetadata(
     )
 }
 
+/// A clean DeepSeek V4 Flash `GGUFMetadata` (architecture "deepseek4", rope
+/// yarn / 10000, routed down tensors Q2_K on layers 0..<37 then Q4_K on
+/// 37..<43 — no dense leading layer, mirroring the real q2-q4-imatrix file's
+/// "Layers37-42Q4KExperts" layout).
+func makeDeepSeekMetadata(
+    q2Type: GGUFType = .q2_k,
+    q4Type: GGUFType = .q4_k,
+    q4StartLayer: Int = 37,
+    layerCount: Int = 43,
+    dropLayer: Int? = nil,
+    architecture: String? = "deepseek4",
+    scalingType: String? = "yarn",
+    freqBase: Double? = 10_000.0
+) -> GGUFMetadata {
+    var tensorTypes: [String: GGUFType] = [:]
+    for layer in 0..<layerCount {
+        if layer == dropLayer { continue }
+        let type = layer < q4StartLayer ? q2Type : q4Type
+        tensorTypes["blk.\(layer).ffn_down_exps.weight"] = type
+    }
+    return GGUFMetadata(
+        architecture: architecture,
+        ropeScalingType: scalingType,
+        ropeFreqBase: freqBase,
+        tensorTypes: tensorTypes
+    )
+}
+
 /// A clean Laguna S 2.1 `GGUFMetadata` (architecture "laguna", rope yarn /
 /// 500000, routed down tensors Q2_K on layers 1..<21 then Q3_K on 21..<48 —
 /// dense layer 0 skipped, mirroring the real file's mixed

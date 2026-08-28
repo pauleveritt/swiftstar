@@ -5,6 +5,7 @@ public enum ModelFamily: String, Equatable, Sendable {
     case mellum
     case lagunaXS
     case lagunaS
+    case deepSeekV4Flash
 }
 
 /// Declared sampling defaults for a variant. Optional per-field and as a whole:

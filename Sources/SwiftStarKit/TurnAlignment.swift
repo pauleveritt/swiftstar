@@ -24,12 +24,13 @@ public struct AlignedTurn: Equatable, Sendable {
 /// `ready` (the app itself records no outcome for it either).
 public enum TurnAlignment {
     public static func align(events: [WireEvent], outcomes: [TurnOutcome]) -> [AlignedTurn] {
-        // Pass 1: segment statuses into turns (idle ends a turn, matching the
-        // replay test's shape) and mark each turn whose terminal ready carries
-        // turn data. A ready arriving while a turn is open belongs to it; a
-        // ready arriving right after a closing idle belongs to the just-closed
-        // turn (the observed startup shape) — but never unsets a real turn's
-        // mark (a real turn's ready precedes its idle).
+        // Pass 1: segment statuses into turns (idle ends a turn and is
+        // appended as its LAST status — the settled ctx) and mark each turn
+        // whose terminal ready carries turn data. A ready arriving while a
+        // turn is open belongs to it; a ready arriving right after a closing
+        // idle belongs to the just-closed turn (the observed startup shape) —
+        // but never unsets a real turn's mark (a real turn's ready precedes its
+        // idle).
         struct Turn {
             var statuses: [StatusSnapshot] = []
             var readyCarriesData = false
@@ -43,6 +44,12 @@ public enum TurnAlignment {
             case .status(let s):
                 if s.state == "idle" {
                     if !current.statuses.isEmpty {
+                        // The closing idle settles the turn's context (compaction
+                        // lands at idle), so it must be the turn's LAST status —
+                        // otherwise `cmdSummary`'s outcome-less fallback reads the
+                        // pre-settle ctx (observed: idle differs from the preceding
+                        // status in 4 places on captures/live/20260827-200648).
+                        current.statuses.append(s)
                         turns.append(current)
                         lastClosedIndex = turns.count - 1
                         current = Turn()

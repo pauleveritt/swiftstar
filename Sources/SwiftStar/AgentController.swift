@@ -1138,7 +1138,14 @@ final class AgentController {
     /// the substrate. One-shot-first: no host repair loop (D2).
     func orchestrate(task: String, writableFiles: [String]) {
         let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else {
+            transcript.appendSystem("→ orchestrate: no task given")
+            return
+        }
+        guard canSend else {
+            transcript.appendSystem("→ orchestrate: agent not idle")
+            return
+        }
         let directive = OrchestrateDirective.build(task: trimmed, writableFiles: writableFiles)
         send(directive, asUser: true)
     }

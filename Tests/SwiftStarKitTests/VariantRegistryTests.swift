@@ -85,6 +85,33 @@ struct VariantRegistryTests {
     @Test func allContainsLagunaS() {
         #expect(VariantRegistry.all.map(\.id).contains("laguna-s-2.1"))
     }
+
+    @Test func resolvesDeepSeekV4Flash() throws {
+        let variant = try #require(VariantRegistry.resolve("deepseek-v4-flash"))
+        #expect(variant.id == "deepseek-v4-flash")
+        #expect(variant.family == .deepSeekV4Flash)
+        #expect(variant.contract.architecture == "deepseek4")
+        #expect(variant.contract.rope.scalingType == "yarn")
+        #expect(variant.contract.rope.freqBase == 10_000.0)
+        // The q2-q4-imatrix mixed layout, read from the real file: Q2_K on
+        // 0..<37, Q4_K on 37..<43 — no dense leading layer, unlike Laguna.
+        #expect(variant.contract.quantLayout.segments.count == 2)
+        #expect(variant.contract.quantLayout.segments[0].downType == .q2_k)
+        #expect(variant.contract.quantLayout.segments[0].startLayer == 0)
+        #expect(variant.contract.quantLayout.segments[0].layerCount == 37)
+        #expect(variant.contract.quantLayout.segments[1].downType == .q4_k)
+        #expect(variant.contract.quantLayout.segments[1].startLayer == 37)
+        #expect(variant.contract.quantLayout.segments[1].layerCount == 43)
+        #expect(variant.contract.quantLayout.downTensorName(layer: 40) == "blk.40.ffn_down_exps.weight")
+        // No published sampler defaults or SSD-streaming runtime for this
+        // family (resident only — that's the Laguna XS story).
+        #expect(variant.sampler == nil)
+        #expect(variant.runtime == nil)
+    }
+
+    @Test func allContainsDeepSeekV4Flash() {
+        #expect(VariantRegistry.all.map(\.id).contains("deepseek-v4-flash"))
+    }
 }
 
 struct VariantContextInvariantTests {
@@ -229,6 +256,31 @@ struct LagunaSMemoryBudgetTests {
         let gib = Double(total) / 1_073_741_824
         #expect(gib > 44, "resident total \(gib) GiB looks too small for a ~46 GiB weights file")
         #expect(gib < 60, "resident total \(gib) GiB looks implausibly large")
+    }
+}
+
+struct DeepSeekV4FlashMemoryBudgetTests {
+    private let budget = VariantRegistry.deepSeekV4Flash.contract.memoryBudget
+
+    @Test func rangeCoversTheAppDefaultContextWithoutClamping() {
+        #expect(budget.minContext <= 51_200)
+        #expect(budget.maxContext >= 51_200)
+        #expect(budget.clampContext(51_200) == 51_200)
+    }
+
+    @Test func unsupportedContextIsRefused() {
+        #expect(budget.totalBytes(at: 16_383) == nil)
+        #expect(budget.totalBytes(at: 524_289) == nil)
+    }
+
+    @Test func totalAtAppDefaultIsSanityCheckedAgainstTheOnDiskFileSize() throws {
+        // The gguf is ~90.9 GiB on disk (97,591,747,456 bytes); resident total
+        // (weights + scratch + KV) should be a shade above that, not an order
+        // of magnitude off.
+        let total = try #require(budget.totalBytes(at: 51_200))
+        let gib = Double(total) / 1_073_741_824
+        #expect(gib > 90, "resident total \(gib) GiB looks too small for a ~90.9 GiB weights file")
+        #expect(gib < 100, "resident total \(gib) GiB looks implausibly large")
     }
 }
 

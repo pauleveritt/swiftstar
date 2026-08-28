@@ -110,4 +110,21 @@ struct TurnAlignmentTests {
         #expect(aligned[0].outcome == nil)
         #expect(aligned[0].statuses.last?.ctxUsed == 1240)
     }
+
+    @Test func closingIdleIsTheTurnsLastStatus() {
+        // The closing idle settles the turn's ctx (compaction lands at idle),
+        // so it must be the turn's LAST status — the outcome-less fallback in
+        // `cmdSummary` reads `statuses.last`. A fixture where idle DIFFERS from
+        // the preceding status (13728 -> 13730, observed live) is what pins this;
+        // every pre-fix fixture had them equal, so the regression was invisible.
+        let events: [WireEvent] = [
+            Self.status("prefill", ctx: 1179),
+            Self.status("generating", ctx: 13728, gen: 6),
+            Self.status("idle", ctx: 13730),
+        ]
+        let aligned = TurnAlignment.align(events: events, outcomes: [])
+        #expect(aligned.count == 1)
+        #expect(aligned[0].statuses.last?.ctxUsed == 13730)
+        #expect(aligned[0].statuses.first?.ctxUsed == 1179)
+    }
 }

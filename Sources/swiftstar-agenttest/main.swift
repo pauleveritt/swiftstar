@@ -1270,9 +1270,20 @@ func runDirectiveOnce() throws {
         for (i, packet) in dispatched.enumerated() {
             let workerOutcome = try orch.runPhase(
                 worker: WorkerId(1), packet: packet, worktree: wt.url, capture: captureHandle)
-            let grade = try AcceptanceGrader.grade(
-                worktree: wt.url, acceptanceSource: acceptanceSource, pyProject: pyProject)
-            let status = grade.exit == 0 ? "passed" : "failed (exit \(grade.exit))"
+            // The receipt reflects the PHASE's own validation (the packet's
+            // validationCommand — the vetted import check), not the whole-task
+            // acceptance suite. A first-of-N phase that did its job must not be
+            // told it "failed" because phases 2..N are unwritten. The whole-task
+            // acceptance grade runs once, after the loop (finalGrade), and its
+            // test_acceptance.py is only written then — so the orchestrator can
+            // never read the acceptance suite it is graded on.
+            let validation = try WorktreeDispatcher.runValidation(packet.validationCommand, in: wt.url)
+            let status: String
+            if let validation {
+                status = validation.passed ? "passed" : "failed (exit \(validation.exit))"
+            } else {
+                status = "not validated (no validation command)"
+            }
             receipts.append("Worker 1 (phase \(i + 1)): \(workerOutcome.mutations.count) mutation(s), validation \(status)")
             print("[agenttest] directive: phase \(i + 1) — \(workerOutcome.mutations.count) mutation(s), \(status)")
         }

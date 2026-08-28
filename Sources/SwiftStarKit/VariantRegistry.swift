@@ -5,7 +5,7 @@ import Foundation
 /// registry is the single source of variant *identity*; `VariantResolver` is
 /// the single source of *modelPath resolution*.
 public enum VariantRegistry {
-    public static let all: [Variant] = [mellum, lagunaXS, lagunaS]
+    public static let all: [Variant] = [mellum, lagunaXS, lagunaS, deepSeekV4Flash]
 
     public static func resolve(_ id: String) -> Variant? {
         all.first { $0.id == id }
@@ -173,6 +173,59 @@ public enum VariantRegistry {
                     kvGiBAt40k: 1.9453125,
                     minContext: 16_384,
                     maxContext: 150_000
+                )
+            )
+        )
+    }()
+
+    /// DeepSeek V4 Flash — the 128 GB flagship rung (P25), the reference the
+    /// other three are measured against (`docs/laptop-ai.md`). Resident only
+    /// (no SSD streaming; that is the 32 GB Laguna XS story). Weights are
+    /// local — no download; the only artifact copy under the expected `-0731`
+    /// filename lives in DS4 Control's own download directory.
+    public static let deepSeekV4Flash: Variant = {
+        let path = locateModel(
+            "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed-0731.gguf",
+            envKey: "SWIFTSTAR_DEEPSEEK_V4_FLASH_MODEL")
+        return Variant(
+            id: "deepseek-v4-flash",
+            displayName: "DeepSeek V4 Flash",
+            modelFile: path,
+            family: .deepSeekV4Flash,
+            // No published sampler defaults for this family (unlike Mellum's
+            // JetBrains numbers or the Laguna family default) — nil means
+            // "engine defaults apply", same convention as an undeclared field.
+            contract: RuntimeContract(
+                architecture: "deepseek4",
+                rope: RopeContract(scalingType: "yarn", freqBase: 10_000.0),
+                // q2-q4-imatrix expert layout, read tensor-by-tensor from the
+                // real 0731 file: Q2_K down-projection on layers 0..<37, Q4_K
+                // on 37..<43 ("Layers37-42Q4KExperts" in the filename) — no
+                // dense leading layer, unlike Laguna (layer 0 is already MoE).
+                quantLayout: QuantContract(
+                    segments: [
+                        QuantContract.Segment(downType: .q2_k, startLayer: 0, layerCount: 37),
+                        QuantContract.Segment(downType: .q4_k, startLayer: 37, layerCount: 43),
+                    ],
+                    downTensorPattern: "blk.%d.ffn_down_exps.weight"
+                ),
+                // Derived offline from ds4-control's Metal-allocator formulas
+                // (P25 Cycle 3 pins this against a test-side port of those
+                // formulas): weights = exact GGUF bytes (97,591,747,456);
+                // scratch = shared + session graph workspace, constant above
+                // the 4,096-token prefill cap; KV anchors include the
+                // context-dependent indexer scratch. maxContext 524,288 is
+                // just inside the OS-default Metal working-set ceiling
+                // (ctx 526,267 on a 128 GiB M5 Max) — the full 1,000,000
+                // ceiling needs Cycle 4b's wired-limit advisory first.
+                memoryBudget: MemoryBudget(
+                    weightsGiB: 90.8894,
+                    scratchGiB: 4.2179,
+                    kvGiBAt16k: 0.742351,
+                    kvGiBAt32k: 1.117839,
+                    kvGiBAt40k: 1.305583,
+                    minContext: 16_384,
+                    maxContext: 524_288
                 )
             )
         )
