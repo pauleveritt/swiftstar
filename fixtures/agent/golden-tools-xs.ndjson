@@ -1,0 +1,189 @@
+{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":796065250387}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":0,"ctx_size":32768,"power":100,"error":"","ts":796065250680}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":951,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":32768,"power":100,"error":"","ts":796065251425}
+{"t":"status","state":"prefill","prefill_done":95,"prefill_total":951,"prefill_tps":471.8,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":32768,"power":100,"error":"","ts":796065452795}
+{"t":"status","state":"prefill","prefill_done":309,"prefill_total":951,"prefill_tps":756.0,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":32768,"power":100,"error":"","ts":796065660156}
+{"t":"status","state":"prefill","prefill_done":523,"prefill_total":951,"prefill_tps":842.7,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":32768,"power":100,"error":"","ts":796065872068}
+{"t":"status","state":"prefill","prefill_done":737,"prefill_total":951,"prefill_tps":885.6,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":32768,"power":100,"error":"","ts":796066083597}
+{"t":"status","state":"prefill","prefill_done":950,"prefill_total":951,"prefill_tps":912.6,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":32768,"power":100,"error":"","ts":796066292444}
+{"t":"status","state":"idle","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":32768,"power":100,"error":"","ts":796066329432}
+{"t":"ready","kv_bytes":1405091840,"scratch_bytes":4267130888,"model_bytes":15718681600,"planned_bytes":21390904328,"ts":796066331132}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":951,"ctx_size":32768,"power":100,"error":"","ts":796066590812}
+{"t":"status","state":"generating","prefill_done":73,"prefill_total":73,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1024,"ctx_size":32768,"power":100,"error":"","ts":796066780420}
+{"t":"think","s":"The user wants me to write a file named `seed.","ts":796066885147}
+{"t":"status","state":"generating","prefill_done":73,"prefill_total":73,"prefill_tps":0.0,"generated":22,"gen_tps":109.8,"ctx_used":1046,"ctx_size":32768,"power":100,"error":"","ts":796066980793}
+{"t":"think","s":"txt` in the current directory with the content \"hello ","ts":796066990213}
+{"t":"think","s":"from golden-tools\". Let me use the write tool to ","ts":796067095171}
+{"t":"think","s":"create this file.","ts":796067136355}
+{"t":"text","s":"\n\n","ts":796067146132}
+{"t":"tool","phase":"start","idx":0,"ts":796067146136}
+{"t":"status","state":"generating","prefill_done":73,"prefill_total":73,"prefill_tps":0.0,"generated":43,"gen_tps":106.4,"ctx_used":1067,"ctx_size":32768,"power":100,"error":"","ts":796067184585}
+{"t":"tool","phase":"tool","idx":0,"name":"write","ts":796067193875}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":796067270401}
+{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":796067327783}
+{"t":"tool","phase":"param_end","idx":0,"ts":796067327787}
+{"t":"status","state":"generating","prefill_done":73,"prefill_total":73,"prefill_tps":0.0,"generated":64,"gen_tps":105.7,"ctx_used":1088,"ctx_size":32768,"power":100,"error":"","ts":796067385841}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"content","name":"content","ts":796067433094}
+{"t":"tool","phase":"param_value","idx":0,"s":"hello from golden-tools","ts":796067508551}
+{"t":"tool","phase":"param_end","idx":0,"ts":796067508554}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":796067527337}
+{"t":"text","s":"\n","ts":796067527342}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":39,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1141,"ctx_size":32768,"power":100,"error":"","ts":796067527823}
+{"t":"status","state":"generating","prefill_done":39,"prefill_total":39,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1141,"ctx_size":32768,"power":100,"error":"","ts":796067648654}
+{"t":"think","s":"The file has been written successfully. Let me verify it ","ts":796067755234}
+{"t":"think","s":"was created correctly by reading it.","ts":796067822677}
+{"t":"text","s":"\n\n","ts":796067832057}
+{"t":"tool","phase":"start","idx":0,"ts":796067832060}
+{"t":"status","state":"generating","prefill_done":39,"prefill_total":39,"prefill_tps":0.0,"generated":22,"gen_tps":108.5,"ctx_used":1163,"ctx_size":32768,"power":100,"error":"","ts":796067851354}
+{"t":"tool","phase":"tool","idx":0,"name":"read","ts":796067879561}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":796067955686}
+{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":796068013059}
+{"t":"tool","phase":"param_end","idx":0,"ts":796068013062}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":796068031831}
+{"t":"text","s":"\n","ts":796068031835}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":46,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1227,"ctx_size":32768,"power":100,"error":"","ts":796068032155}
+{"t":"status","state":"generating","prefill_done":46,"prefill_total":46,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1227,"ctx_size":32768,"power":100,"error":"","ts":796068167988}
+{"t":"think","s":"The file was created successfully with the correct content. Let ","ts":796068272601}
+{"t":"think","s":"me confirm the current directory as well.","ts":796068348296}
+{"t":"status","state":"generating","prefill_done":46,"prefill_total":46,"prefill_tps":0.0,"generated":23,"gen_tps":110.1,"ctx_used":1250,"ctx_size":32768,"power":100,"error":"","ts":796068376891}
+{"t":"text","s":"\n\nThe file `seed.txt` has been created in ","ts":796068452353}
+{"t":"text","s":"the current directory with the content \"hello from golden-tools\"","ts":796068556383}
+{"t":"text","s":".","ts":796068565581}
+{"t":"tool","phase":"start","idx":0,"ts":796068565584}
+{"t":"status","state":"generating","prefill_done":46,"prefill_total":46,"prefill_tps":0.0,"generated":45,"gen_tps":107.9,"ctx_used":1272,"ctx_size":32768,"power":100,"error":"","ts":796068585157}
+{"t":"tool","phase":"tool","idx":0,"name":"bash","ts":796068613253}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"bash_command","name":"command","ts":796068688416}
+{"t":"tool","phase":"param_value","idx":0,"s":"pwd","ts":796068735563}
+{"t":"tool","phase":"param_end","idx":0,"ts":796068735566}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":796068754703}
+{"t":"text","s":"\n","ts":796068754706}
+{"t":"text","s":"\n","ts":796068754707}
+{"t":"tool","phase":"output","idx":0,"s":"/private/tmp/swiftstar-xs-workspace\n","ts":796068772798}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":66,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1355,"ctx_size":32768,"power":100,"error":"","ts":796068773195}
+{"t":"status","state":"generating","prefill_done":66,"prefill_total":66,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1355,"ctx_size":32768,"power":100,"error":"","ts":796068952118}
+{"t":"text","s":"\nDone! I've created `seed.txt` in ","ts":796069057292}
+{"t":"status","state":"generating","prefill_done":66,"prefill_total":66,"prefill_tps":0.0,"generated":22,"gen_tps":109.7,"ctx_used":1377,"ctx_size":32768,"power":100,"error":"","ts":796069152740}
+{"t":"text","s":"`/private/tmp/swiftstar-xs-workspace` with the exact ","ts":796069162212}
+{"t":"text","s":"content \"hello from golden-tools\".\n\n","ts":796069229036}
+{"t":"status","state":"idle","prefill_done":66,"prefill_total":66,"prefill_tps":0.0,"generated":29,"gen_tps":108.4,"ctx_used":1386,"ctx_size":32768,"power":100,"error":"","ts":796069229061}
+{"t":"ready","kv_bytes":1405091840,"scratch_bytes":4267130888,"model_bytes":15718681600,"planned_bytes":21390904328,"stop_reason":"eos","generated":29,"ctx_used":1384,"ts":796069229063}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1386,"ctx_size":32768,"power":100,"error":"","ts":796069446494}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1400,"ctx_size":32768,"power":100,"error":"","ts":796069519994}
+{"t":"think","s":"The user wants me to read the file seed.","ts":796069622552}
+{"t":"think","s":"txt. I already read it in my previous response, ","ts":796069728812}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":21,"gen_tps":100.6,"ctx_used":1421,"ctx_size":32768,"power":100,"error":"","ts":796069728831}
+{"t":"think","s":"but let me read it again to show them the contents.","ts":796069833363}
+{"t":"text","s":"\n\n","ts":796069852734}
+{"t":"tool","phase":"start","idx":0,"ts":796069852737}
+{"t":"tool","phase":"tool","idx":0,"name":"read","ts":796069899975}
+{"t":"status","state":"generating","prefill_done":16,"prefill_total":16,"prefill_tps":0.0,"generated":43,"gen_tps":102.8,"ctx_used":1443,"ctx_size":32768,"power":100,"error":"","ts":796069938151}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":796069976308}
+{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":796070033134}
+{"t":"tool","phase":"param_end","idx":0,"ts":796070033137}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":796070052380}
+{"t":"text","s":"\n","ts":796070052384}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":46,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1500,"ctx_size":32768,"power":100,"error":"","ts":796070052718}
+{"t":"status","state":"generating","prefill_done":46,"prefill_total":46,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1500,"ctx_size":32768,"power":100,"error":"","ts":796070192287}
+{"t":"think","s":"The file seed.txt contains:\n\"hello from golden-","ts":796070295909}
+{"t":"think","s":"tools\"\n\nThis matches what the user asked for.","ts":796070399743}
+{"t":"status","state":"generating","prefill_done":46,"prefill_total":46,"prefill_tps":0.0,"generated":23,"gen_tps":110.9,"ctx_used":1523,"ctx_size":32768,"power":100,"error":"","ts":796070399763}
+{"t":"text","s":"\n\nThe file `seed.txt` contains:\n\n```\n","ts":796070504179}
+{"t":"text","s":"hello from golden-tools\n```\n\n","ts":796070570591}
+{"t":"status","state":"idle","prefill_done":46,"prefill_total":46,"prefill_tps":0.0,"generated":40,"gen_tps":108.4,"ctx_used":1542,"ctx_size":32768,"power":100,"error":"","ts":796070570608}
+{"t":"ready","kv_bytes":1405091840,"scratch_bytes":4267130888,"model_bytes":15718681600,"planned_bytes":21390904328,"stop_reason":"eos","generated":40,"ctx_used":1540,"ts":796070570609}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1542,"ctx_size":32768,"power":100,"error":"","ts":796070872605}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1564,"ctx_size":32768,"power":100,"error":"","ts":796070971930}
+{"t":"think","s":"The user wants me to edit seed.txt to replace ","ts":796071078991}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":21,"gen_tps":103.0,"ctx_used":1585,"ctx_size":32768,"power":100,"error":"","ts":796071175896}
+{"t":"think","s":"\"hello\" with \"hi\". I need to use ","ts":796071185747}
+{"t":"think","s":"the edit tool to do this.","ts":796071253297}
+{"t":"text","s":"\n\n","ts":796071262626}
+{"t":"tool","phase":"start","idx":0,"ts":796071262630}
+{"t":"tool","phase":"tool","idx":0,"name":"edit","ts":796071310391}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":42,"gen_tps":103.6,"ctx_used":1606,"ctx_size":32768,"power":100,"error":"","ts":796071377443}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":796071387045}
+{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":796071444264}
+{"t":"tool","phase":"param_end","idx":0,"ts":796071444268}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"diff_old","name":"old","ts":796071550068}
+{"t":"status","state":"generating","prefill_done":24,"prefill_total":24,"prefill_tps":0.0,"generated":62,"gen_tps":103.9,"ctx_used":1626,"ctx_size":32768,"power":100,"error":"","ts":796071578078}
+{"t":"tool","phase":"param_value","idx":0,"s":"hello","ts":796071597352}
+{"t":"tool","phase":"param_end","idx":0,"ts":796071597356}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"diff_new","name":"new","ts":796071692968}
+{"t":"tool","phase":"param_value","idx":0,"s":"hi","ts":796071740799}
+{"t":"tool","phase":"param_end","idx":0,"ts":796071740803}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":796071760433}
+{"t":"text","s":"\n","ts":796071760437}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":83,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1728,"ctx_size":32768,"power":100,"error":"","ts":796071761000}
+{"t":"status","state":"prefill","prefill_done":80,"prefill_total":83,"prefill_tps":396.8,"generated":0,"gen_tps":0.0,"ctx_used":1728,"ctx_size":32768,"power":100,"error":"","ts":796071962618}
+{"t":"status","state":"generating","prefill_done":83,"prefill_total":83,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1728,"ctx_size":32768,"power":100,"error":"","ts":796071968565}
+{"t":"think","s":"The edit was successful. The file now contains \"hi ","ts":796072075557}
+{"t":"status","state":"generating","prefill_done":83,"prefill_total":83,"prefill_tps":0.0,"generated":22,"gen_tps":107.8,"ctx_used":1750,"ctx_size":32768,"power":100,"error":"","ts":796072172743}
+{"t":"think","s":"from golden-tools\" instead of \"hello from golden-tools\"","ts":796072182509}
+{"t":"think","s":". Let me verify the change by reading the file.","ts":796072287699}
+{"t":"status","state":"generating","prefill_done":83,"prefill_total":83,"prefill_tps":0.0,"generated":43,"gen_tps":106.0,"ctx_used":1771,"ctx_size":32768,"power":100,"error":"","ts":796072374321}
+{"t":"text","s":"\n\nThe file `seed.txt` has been edited. ","ts":796072393764}
+{"t":"text","s":"The word \"hello\" has been replaced with \"hi\"","ts":796072498759}
+{"t":"text","s":".","ts":796072508435}
+{"t":"tool","phase":"start","idx":0,"ts":796072508439}
+{"t":"tool","phase":"tool","idx":0,"name":"read","ts":796072556820}
+{"t":"status","state":"generating","prefill_done":83,"prefill_total":83,"prefill_tps":0.0,"generated":64,"gen_tps":105.4,"ctx_used":1792,"ctx_size":32768,"power":100,"error":"","ts":796072575739}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":796072633436}
+{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":796072690856}
+{"t":"tool","phase":"param_end","idx":0,"ts":796072690860}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":796072710192}
+{"t":"text","s":"\n","ts":796072710195}
+{"t":"text","s":"\n","ts":796072710196}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":46,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1851,"ctx_size":32768,"power":100,"error":"","ts":796072710536}
+{"t":"status","state":"generating","prefill_done":46,"prefill_total":46,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1851,"ctx_size":32768,"power":100,"error":"","ts":796072854911}
+{"t":"text","s":"\nDone! The file `seed.txt` now contains:","ts":796072960584}
+{"t":"text","s":"\n\n```\nhi from golden-tools\n```\n\n","ts":796073057298}
+{"t":"status","state":"idle","prefill_done":46,"prefill_total":46,"prefill_tps":0.0,"generated":21,"gen_tps":108.9,"ctx_used":1874,"ctx_size":32768,"power":100,"error":"","ts":796073057314}
+{"t":"ready","kv_bytes":1405091840,"scratch_bytes":4267130888,"model_bytes":15718681600,"planned_bytes":21390904328,"stop_reason":"eos","generated":21,"ctx_used":1872,"ts":796073057315}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1874,"ctx_size":32768,"power":100,"error":"","ts":796073307778}
+{"t":"status","state":"generating","prefill_done":14,"prefill_total":14,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1886,"ctx_size":32768,"power":100,"error":"","ts":796073385336}
+{"t":"think","s":"The user wants me to list the current directory.","ts":796073486374}
+{"t":"think","s":" I should use the `list` function to ","ts":796073593418}
+{"t":"status","state":"generating","prefill_done":14,"prefill_total":14,"prefill_tps":0.0,"generated":20,"gen_tps":96.1,"ctx_used":1906,"ctx_size":32768,"power":100,"error":"","ts":796073593437}
+{"t":"think","s":"do this.","ts":796073622597}
+{"t":"text","s":"\n\n","ts":796073631969}
+{"t":"tool","phase":"start","idx":0,"ts":796073631973}
+{"t":"tool","phase":"tool","idx":0,"name":"list","ts":796073679527}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":796073755418}
+{"t":"tool","phase":"param_value","idx":0,"s":".","ts":796073784558}
+{"t":"tool","phase":"param_end","idx":0,"ts":796073784560}
+{"t":"status","state":"generating","prefill_done":14,"prefill_total":14,"prefill_tps":0.0,"generated":41,"gen_tps":100.4,"ctx_used":1927,"ctx_size":32768,"power":100,"error":"","ts":796073793846}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":796073803280}
+{"t":"text","s":"\n","ts":796073803284}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":40,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1967,"ctx_size":32768,"power":100,"error":"","ts":796073803582}
+{"t":"status","state":"generating","prefill_done":40,"prefill_total":40,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":1967,"ctx_size":32768,"power":100,"error":"","ts":796073937564}
+{"t":"think","s":"The current directory contains only one file: seed.txt.","ts":796074042351}
+{"t":"status","state":"generating","prefill_done":40,"prefill_total":40,"prefill_tps":0.0,"generated":22,"gen_tps":109.3,"ctx_used":1989,"ctx_size":32768,"power":100,"error":"","ts":796074138853}
+{"t":"text","s":"\n\nThe current directory `/private/tmp/swiftstar-xs-workspace`","ts":796074148750}
+{"t":"text","s":" contains:\n\n- `seed.txt` (20","ts":796074255802}
+{"t":"text","s":" bytes)\n\n","ts":796074285202}
+{"t":"status","state":"idle","prefill_done":40,"prefill_total":40,"prefill_tps":0.0,"generated":36,"gen_tps":106.6,"ctx_used":2005,"ctx_size":32768,"power":100,"error":"","ts":796074285224}
+{"t":"ready","kv_bytes":1405091840,"scratch_bytes":4267130888,"model_bytes":15718681600,"planned_bytes":21390904328,"stop_reason":"eos","generated":36,"ctx_used":2003,"ts":796074285225}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":0,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":2005,"ctx_size":32768,"power":100,"error":"","ts":796074527172}
+{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":2021,"ctx_size":32768,"power":100,"error":"","ts":796074626229}
+{"t":"think","s":"The user wants me to run a simple shell ","ts":796074726510}
+{"t":"think","s":"command: `echo hello-world`. Let me use ","ts":796074829643}
+{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":20,"gen_tps":98.3,"ctx_used":2041,"ctx_size":32768,"power":100,"error":"","ts":796074829664}
+{"t":"think","s":"the bash function to execute this.","ts":796074896970}
+{"t":"text","s":"\n\n","ts":796074906543}
+{"t":"tool","phase":"start","idx":0,"ts":796074906548}
+{"t":"tool","phase":"tool","idx":0,"name":"bash","ts":796074954266}
+{"t":"tool","phase":"param_begin","idx":0,"kind":"bash_command","name":"command","ts":796075030343}
+{"t":"status","state":"generating","prefill_done":18,"prefill_total":18,"prefill_tps":0.0,"generated":41,"gen_tps":101.5,"ctx_used":2062,"ctx_size":32768,"power":100,"error":"","ts":796075030364}
+{"t":"tool","phase":"param_value","idx":0,"s":"echo hello-world","ts":796075097075}
+{"t":"tool","phase":"param_end","idx":0,"ts":796075097078}
+{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":796075116297}
+{"t":"text","s":"\n","ts":796075116301}
+{"t":"tool","phase":"output","idx":0,"s":"hello-world\n","ts":796075134882}
+{"t":"status","state":"prefill","prefill_done":0,"prefill_total":62,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":2132,"ctx_size":32768,"power":100,"error":"","ts":796075135139}
+{"t":"status","state":"generating","prefill_done":62,"prefill_total":62,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":2132,"ctx_size":32768,"power":100,"error":"","ts":796075314633}
+{"t":"think","s":"The command executed successfully and printed \"hello-world\".","ts":796075413083}
+{"t":"text","s":"\n\nThe command `echo hello-world` executed successfully and ","ts":796075522545}
+{"t":"status","state":"generating","prefill_done":62,"prefill_total":62,"prefill_tps":0.0,"generated":22,"gen_tps":105.8,"ctx_used":2154,"ctx_size":32768,"power":100,"error":"","ts":796075522564}
+{"t":"text","s":"printed:\n\n```\nhello-world\n```\n\n","ts":796075612603}
+{"t":"status","state":"idle","prefill_done":62,"prefill_total":62,"prefill_tps":0.0,"generated":30,"gen_tps":104.1,"ctx_used":2164,"ctx_size":32768,"power":100,"error":"","ts":796075612626}
+{"t":"ready","kv_bytes":1405091840,"scratch_bytes":4267130888,"model_bytes":15718681600,"planned_bytes":21390904328,"stop_reason":"eos","generated":30,"ctx_used":2162,"ts":796075612627}
