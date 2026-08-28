@@ -142,6 +142,16 @@ public enum GGUFMetadataReader {
                     throw ReadError(path: url.path, reason: "laguna.rope.freq_base is not f32")
                 }
                 ropeFreqBase = try r.readF32()
+            case "deepseek4.rope.scaling.type":
+                guard type == string else {
+                    throw ReadError(path: url.path, reason: "deepseek4.rope.scaling.type is not a string")
+                }
+                ropeScalingType = try r.readString()
+            case "deepseek4.rope.freq_base":
+                guard type == float32 else {
+                    throw ReadError(path: url.path, reason: "deepseek4.rope.freq_base is not f32")
+                }
+                ropeFreqBase = try r.readF32()
             default:
                 try r.skipValue(type: type)
             }

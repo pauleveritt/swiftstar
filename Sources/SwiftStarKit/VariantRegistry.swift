@@ -35,6 +35,11 @@ public enum VariantRegistry {
         }
         directories.append(home.appending(path: "models"))
         directories.append(home.appending(path: "projects/ds4/gguf"))
+        // DeepSeek V4 Flash's artifact (P25): lives only under DS4 Control's
+        // download dir under its current `-0731` filename — the legacy copy in
+        // the ds4 submodule's gguf/ carries a different (pre-`-0731`) filename,
+        // so it would never match here regardless.
+        directories.append(home.appending(path: "Library/Application Support/DS4 Control/gguf"))
 
         let candidates = directories.map { $0.appending(path: fileName) }
         return candidates.first { FileManager.default.isReadableFile(atPath: $0.path) }

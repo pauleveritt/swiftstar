@@ -137,6 +137,56 @@ enum GGUFBuilder {
         return tensors
     }
 
+    /// A DeepSeek-V4-Flash-shaped byte stream: same as `make` but with
+    /// `deepseek4.rope.*` metadata keys (arch `deepseek4`).
+    static func makeDeepSeek(
+        architecture: String = "deepseek4",
+        scalingType: String = "yarn",
+        freqBase: Float = 10_000.0,
+        tensors: [(name: String, type: UInt32, dims: [UInt64])],
+        version: UInt32 = 3
+    ) -> Data {
+        let kv: [Data] = [
+            str("general.architecture") + u32(stringType) + str(architecture),
+            str("deepseek4.rope.scaling.type") + u32(stringType) + str(scalingType),
+            str("deepseek4.rope.freq_base") + u32(float32Type) + f32(freqBase),
+        ]
+        var body = Data()
+        body.append(u32(0x4655_4747))       // "GGUF"
+        body.append(u32(version))
+        body.append(u64(UInt64(tensors.count)))
+        body.append(u64(UInt64(kv.count)))
+        for k in kv { body.append(k) }
+        for t in tensors {
+            body.append(str(t.name))
+            body.append(u32(UInt32(t.dims.count)))
+            for dim in t.dims { body.append(u64(dim)) }
+            body.append(u32(t.type))
+            body.append(u64(0))
+        }
+        return body
+    }
+
+    /// A DeepSeek-V4-Flash-shaped tensor directory (q2-q4-imatrix layout, read
+    /// from the real 0731 file): `blk.N.ffn_down_exps.weight` for N in
+    /// 0..<layerCount (43), Q2_K (10) on 0..<q4StartLayer, Q4_K (12) from
+    /// `q4StartLayer` on — no dense leading layer, unlike Laguna.
+    static func deepSeekTensors(
+        q2Type: UInt32 = 10,
+        q4Type: UInt32 = 12,
+        q4StartLayer: Int = 37,
+        layerCount: Int = 43,
+        dropLayer: Int? = nil
+    ) -> [(name: String, type: UInt32, dims: [UInt64])] {
+        var tensors: [(String, UInt32, [UInt64])] = []
+        for layer in 0..<layerCount {
+            if layer == dropLayer { continue }
+            let type = layer < q4StartLayer ? q2Type : q4Type
+            tensors.append(("blk.\(layer).ffn_down_exps.weight", type, [2048, 4096, 256]))
+        }
+        return tensors
+    }
+
     static func write(_ data: Data, to url: URL) throws {
         try data.write(to: url)
     }

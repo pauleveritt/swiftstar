@@ -63,6 +63,22 @@ struct GGUFMetadataReaderTests {
         #expect(meta.tensorTypes["blk.0.ffn_down_exps.weight"] == nil)
     }
 
+    @Test func parsesDeepSeekRopeKeysAndMixedQuant() throws {
+        // DeepSeek V4 Flash q2-q4-imatrix: Q2_K on layers 0..<37, Q4_K on
+        // 37..<43, read from the real 0731 file (P25 Cycle 1).
+        let data = GGUFBuilder.makeDeepSeek(tensors: GGUFBuilder.deepSeekTensors())
+        let url = try write(data)
+        let meta = try GGUFMetadataReader.parse(at: url)
+        #expect(meta.architecture == "deepseek4")
+        #expect(meta.ropeScalingType == "yarn")
+        #expect(meta.ropeFreqBase == 10_000.0)
+        #expect(meta.tensorTypes.count == 43)
+        #expect(meta.tensorTypes["blk.0.ffn_down_exps.weight"] == .q2_k)
+        #expect(meta.tensorTypes["blk.36.ffn_down_exps.weight"] == .q2_k)
+        #expect(meta.tensorTypes["blk.37.ffn_down_exps.weight"] == .q4_k)
+        #expect(meta.tensorTypes["blk.42.ffn_down_exps.weight"] == .q4_k)
+    }
+
     @Test func wrongVersionIsNamedRefusal() throws {
         let data = GGUFBuilder.make(tensors: GGUFBuilder.mellumTensors(), version: 2)
         let url = try write(data)
