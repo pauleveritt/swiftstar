@@ -435,7 +435,7 @@ final class AgentController {
         // (Correction 2: N × (KV + ~6.1 GB scratch)); the alternative — a
         // second 48 GB model load — is worse and was the orchestrate hang.
         let pool = AgentController.poolSize()
-        process.arguments = AgentCommand.argv(settings: settings) + ["--subagent-pool", String(pool)]
+        process.arguments = PoolEngine.argv(settings: settings, workers: pool)
         process.currentDirectoryURL = settings.engineDir
         // Metal shaders load cwd-relative, and the engine chdir's to
         // `--workspace`; point them at absolute paths (F1) so Metal resolves.
