@@ -30,4 +30,31 @@ struct PoolPromptTests {
         #expect(encoded.contains(#"\"hi\""#))
         #expect(encoded.contains(#"\\"#))
     }
+
+    // MARK: - P23 per-turn fields
+
+    @Test func nilFieldsKeepTodayBytes() {
+        // The byte-identical contract: every existing fixture and fake was
+        // encoded with these two fields absent; a nil field must not add a
+        // byte.
+        #expect(PoolPrompt(worker: .orchestrator, text: "go").encode()
+                == #"{"s":"go","t":"prompt","worker":0}"#)
+    }
+
+    @Test func thinkFieldEncodesOnlyWhenSet() {
+        #expect(PoolPrompt(worker: .orchestrator, text: "go", think: .off).encode()
+                == #"{"s":"go","t":"prompt","think":"none","worker":0}"#)
+        #expect(PoolPrompt(worker: .orchestrator, text: "go", think: .max).encode()
+                == #"{"s":"go","t":"prompt","think":"max","worker":0}"#)
+    }
+
+    @Test func contextFieldEncodesOnlyWhenSet() {
+        #expect(PoolPrompt(worker: WorkerId(1), text: "do it", contextSize: 8192).encode()
+                == #"{"ctx":8192,"s":"do it","t":"prompt","worker":1}"#)
+    }
+
+    @Test func bothFieldsSortedWithEverythingElse() {
+        #expect(PoolPrompt(worker: WorkerId(1), text: "do it", think: .off, contextSize: 8192).encode()
+                == #"{"ctx":8192,"s":"do it","t":"prompt","think":"none","worker":1}"#)
+    }
 }
