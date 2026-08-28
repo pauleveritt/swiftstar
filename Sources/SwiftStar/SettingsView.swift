@@ -10,6 +10,7 @@ struct SettingsView: View {
     // Agent pane (2026-08-26): the shell toggle moved here from the Agent tab;
     // the transcript font size applies immediately.
     @AppStorage("agentShellAllowed") private var shellAllowed = false
+    @AppStorage("agentThinkBudget") private var agentThinkBudget = 2048
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
     // P19.1 D3: delegation defaults — the toolbar holds the active session's
     // values; Settings holds the defaults.
@@ -119,6 +120,11 @@ struct SettingsView: View {
             Section("Agent") {
                 Toggle("Allow shell commands", isOn: $shellAllowed)
                 Text("Applies when the agent next starts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Stepper("Think budget: \(agentThinkBudget == 0 ? "off" : "\(agentThinkBudget) tokens")",
+                        value: $agentThinkBudget, in: 0...8192, step: 256)
+                Text("Caps one round's reasoning. The engine forces a close at the ceiling and bans reopening for that round. 0 disables it; the default never fires on an ordinary turn.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Slider(value: fontSliderValue, in: 0...3, step: 1) {

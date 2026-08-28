@@ -245,4 +245,46 @@ struct AgentDefaultSettingsTests {
         let settings = AgentDefaultSettings.resolve(defaults: defaults, environment: [:], projectRoot: nil)
         #expect(settings.shellAllowed == true)
     }
+
+    // MARK: - think budget (P23)
+
+    /// The app sets a think budget by default. It is a guardrail, not a tuning
+    /// knob: an ordinary round spends ~25 think tokens, so 2,048 never fires
+    /// normally — but the 2026-08-28 probe reproduced a run that spent 15,873
+    /// of 16,384 tokens reasoning and never answered.
+    @Test func thinkBudgetDefaultsToTheRunawayGuardrail() {
+        let (defaults, scratchName) = scratchDefaults()
+        defer { cleanUp(defaults, scratchName) }
+        let settings = AgentDefaultSettings.resolve(defaults: defaults, environment: [:], projectRoot: nil)
+        #expect(settings.thinkBudget == 2048)
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(argv.contains("--think-budget"))
+        #expect(argv.contains("2048"))
+    }
+
+    /// Zero disables the flag entirely rather than passing `--think-budget 0`,
+    /// which the engine would read as a live ceiling of zero. Sibling refusal
+    /// case for the default above (binding rule 4).
+    @Test func aZeroThinkBudgetOmitsTheFlag() {
+        let (defaults, scratchName) = scratchDefaults()
+        defer { cleanUp(defaults, scratchName) }
+        defaults.set(0, forKey: "agentThinkBudget")
+        let settings = AgentDefaultSettings.resolve(defaults: defaults, environment: [:], projectRoot: nil)
+        #expect(settings.thinkBudget == 0)
+        #expect(!AgentCommand.argv(settings: settings).contains("--think-budget"))
+    }
+
+    /// `thinkBudget` must stay below `maxTokens` or the forced `</think>` lands
+    /// with no room left to act (AgentCommand's own doc comment). The app sets
+    /// no `maxTokens`, so the pair only binds when a caller sets both — the
+    /// agent test does.
+    @Test func thinkBudgetIsClampedBelowAnExplicitMaxTokens() {
+        let (defaults, scratchName) = scratchDefaults()
+        defer { cleanUp(defaults, scratchName) }
+        defaults.set(4096, forKey: "agentThinkBudget")
+        var settings = AgentDefaultSettings.resolve(defaults: defaults, environment: [:], projectRoot: nil)
+        #expect(AgentSettings.clampThinkBudget(settings) == 4096)  // maxTokens unset
+        settings.maxTokens = 2048
+        #expect(AgentSettings.clampThinkBudget(settings) == 1024)  // min(4096, 2048/2)
+    }
 }

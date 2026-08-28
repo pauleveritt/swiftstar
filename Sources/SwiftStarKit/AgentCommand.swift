@@ -31,6 +31,19 @@ public struct AgentSettings: Equatable, Sendable {
     /// default (time-derived). Non-zero pins the run so a stochastic cell can
     /// be replicated or swept.
     public var seed: UInt64
+
+    /// The think budget to actually pass, honouring `thinkBudget`'s own
+    /// constraint that it stay below `maxTokens` — otherwise the engine's
+    /// forced `</think>` lands with no room left to act. The app sets no
+    /// `maxTokens` (0 = engine default), so this only binds when a caller sets
+    /// both; `swiftstar-agenttest` does. Returns 0 when the flag should be
+    /// omitted entirely, since `--think-budget 0` reads as a live ceiling of
+    /// zero rather than "disabled".
+    public static func clampThinkBudget(_ settings: AgentSettings) -> Int {
+        guard settings.thinkBudget > 0 else { return 0 }
+        guard settings.maxTokens > 0 else { return settings.thinkBudget }
+        return Swift.min(settings.thinkBudget, settings.maxTokens / 2)
+    }
     /// The system prompt (D1): passed inline as `-sys <text>` after `--shell`.
     /// nil omits the flag. The app passes the Superpowers bootstrap (P8).
     public var systemPrompt: String?
@@ -98,8 +111,9 @@ public enum AgentCommand {
         if settings.noThink {
             argv.append("--nothink")
         }
-        if settings.thinkBudget > 0 {
-            argv.append(contentsOf: ["--think-budget", String(settings.thinkBudget)])
+        let budget = AgentSettings.clampThinkBudget(settings)
+        if budget > 0 {
+            argv.append(contentsOf: ["--think-budget", String(budget)])
         }
         if settings.seed > 0 {
             argv.append(contentsOf: ["--seed", String(settings.seed)])
