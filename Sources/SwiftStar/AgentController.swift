@@ -91,6 +91,11 @@ final class AgentController {
     /// Metrics/Diagnostics when that changes.
     var process: Process?
     private var parser = PoolWireParser()
+    /// The capabilities the engine's `hello` advertised (P23, D3): the app
+    /// records what was advertised so it can gate outbound feature fields.
+    /// `"think_override"` gates per-turn think sends; `/quick` is refused
+    /// without it. Reset per spawn alongside the parser.
+    private(set) var advertisedCaps: Set<String> = []
     private var stdoutTask: Task<Void, Never>?
     private var stderrTask: Task<Void, Never>?
     private var startupTimeoutTask: Task<Void, Never>?
@@ -848,7 +853,8 @@ final class AgentController {
         return inject(wireText, row: .consulted(worker, trimmed))
     }
 
-    private func inject(_ wireText: String, row: AgentTranscriptRow) -> Bool {
+    private func inject(_ wireText: String, row: AgentTranscriptRow,
+                        think: ThinkEffort? = nil) -> Bool {
         guard canSend, !wireText.isEmpty, let process,
               let pipe = process.standardInput as? Pipe else { return false }
         transcript.append(row)
@@ -864,20 +870,38 @@ final class AgentController {
         decodeAccumulator = DecodeAccumulator()
         state = .generating
         sentInterrupt = false
+        // P23: the decision authority resolves the request against the family
+        // and the advertised caps. The outcome record carries the effort
+        // actually used — the old "engine-defaults" literal became false the
+        // moment the app could send an override.
+        let decision = TurnThinkPolicy.decide(
+            requested: think,
+            family: AgentController.familyOf(settings.modelPath),
+            capAdvertised: advertisedCaps.contains(TurnThinkPolicy.overrideCap))
+        let effort: ThinkEffort?
+        switch decision {
+        case .useDefault:
+            effort = nil
+        case .override(let e):
+            effort = e
+        case .refused(let reason):
+            log("think override refused: \(reason)")
+            effort = nil
+        }
         // D12: open the turn's outcome record with the app-known facts the
-        // wire cannot carry. sampler is "engine-defaults": the app passes no
-        // sampler flags (D10's think default is the engine's too).
+        // wire cannot carry.
         outcomeBuilder = TurnOutcomeBuilder(
             model: settings.modelPath.lastPathComponent,
             build: buildSHA,
-            sampler: "engine-defaults",
+            sampler: TurnThinkPolicy.samplerRecord(decision),
             task: wireText
         )
         // Single escaping choke point: the engine splits stdin on newlines and
         // parses each line as its own prompt (ds4_agent.c), so everything the
         // orchestrator receives goes through PoolPrompt's JSON encoder — a
         // multi-line prompt or consult answer becomes one escaped line.
-        let line = PoolPrompt(worker: .orchestrator, text: wireText).encode() + "\n"
+        let line = PoolPrompt(worker: .orchestrator, text: wireText,
+                              think: effort).encode() + "\n"
         pipe.fileHandleForWriting.write(Data(line.utf8))
         return true
     }
@@ -1033,6 +1057,42 @@ final class AgentController {
     /// above a real turn (a deep-context worker turn is tens of seconds); this
     /// is a wedge-breaker, not a budget — the packet's budgets are the budget.
     static let workerTurnTimeoutSeconds = 600.0
+
+    /// `/quick` (P23): one no-think turn. D3 — the app does not offer `/quick`
+    /// when the engine did not advertise `think_override`: sending the field
+    /// to an engine that does not claim it would be a silent degrade, and a
+    /// no-think turn without engine support is not quick at all.
+    func quick(task: String) {
+        let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            transcript.appendSystem("→ quick: no task given")
+            return
+        }
+        guard canSend else {
+            transcript.appendSystem("→ quick: agent not idle")
+            return
+        }
+        guard advertisedCaps.contains(TurnThinkPolicy.overrideCap) else {
+            transcript.appendSystem(
+                "→ /quick unavailable: this engine build does not advertise \(TurnThinkPolicy.overrideCap)")
+            return
+        }
+        _ = inject(trimmed, row: .user(trimmed), think: .off)
+    }
+
+    /// The running model's `ModelFamily` for `TurnThinkPolicy` (P23): from the
+    /// staged variant when one exists, else Laguna S's family — the
+    /// nothing-configured default. A custom/unverified model path resolves to
+    /// the default family's policy (no app-side refusal); the engine's own
+    /// loud refusal (D4) is the backstop for a prefix-busting family the app
+    /// cannot identify. `internal`, not `private`: `AgentPoolTurnLoop` (a
+    /// separate file extension of this type) consults it at dispatch time, and
+    /// Swift's `private` is file-scoped.
+    static func familyOf(_ modelPath: URL) -> ModelFamily {
+        VariantResolver.resolveVariant(
+            selectedVariantID: AgentController.effectiveSelectedVariantID())?.family
+            ?? VariantRegistry.lagunaS.family
+    }
 
     /// The `/chat` path: run the task as a read-only pool worker and surface
     /// the answer (the glossary's **chat** — formerly the misnamed

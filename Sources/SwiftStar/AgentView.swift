@@ -243,6 +243,9 @@ struct AgentView: View {
         case .orchestrate(let task, let writableFiles):
             input = ""
             controller.orchestrate(task: task, writableFiles: writableFiles)
+        case .quick(let task):
+            input = ""
+            controller.quick(task: task)
         case nil:
             guard controller.canSend, !message.isEmpty else { return }
             input = ""

@@ -23,4 +23,16 @@ struct CommandRouterTests {
     @Test func commandMustBeWholeToken() {
         #expect(CommandRouter.parse("/chatfoo") == nil)
     }
+
+    // MARK: - /quick (P23)
+
+    @Test func quickParsesWithBody() {
+        #expect(CommandRouter.parse("/quick sum 2 and 2") == .quick(task: "sum 2 and 2"))
+        #expect(CommandRouter.parse("/quick") == .quick(task: ""))
+    }
+
+    @Test func quickRequiresAWholeToken() {
+        #expect(CommandRouter.parse("/quickly go") == nil)
+        #expect(CommandRouter.parse("/quickx") == nil)
+    }
 }

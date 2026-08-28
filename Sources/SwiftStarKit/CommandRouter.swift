@@ -7,6 +7,10 @@ import Foundation
 public enum Command: Equatable, Sendable {
     case chat(task: String)
     case orchestrate(task: String, writableFiles: [String])
+    /// P23: one no-think turn. The explicit per-turn choice (D6) — distinct
+    /// from `/chat` (a read-only worker) and from the standing think budget
+    /// (which only fires on a runaway).
+    case quick(task: String)
 }
 
 /// Typed command parsing (replaces the removed ad-hoc `/orchestrate` hasPrefix
@@ -19,6 +23,7 @@ public enum CommandRouter {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("/") else { return nil }
         if let chat = match(trimmed, command: "/chat") { return .chat(task: chat) }
+        if let quick = match(trimmed, command: "/quick") { return .quick(task: quick) }
         if let orch = match(trimmed, command: "/orchestrate") {
             let (task, files) = splitFiles(orch)
             return .orchestrate(task: task, writableFiles: files)
