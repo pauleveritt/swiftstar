@@ -46,10 +46,28 @@ public enum MetalWorkingSet {
         Int64(Double(systemMemoryBytes()) * 0.75)
     }
 
-    /// The effective GPU wired ceiling right now: the user's raised sysctl
-    /// when set, else Metal's advertised default, else the RAM-based
-    /// fallback if Metal reports no device.
+    /// Test/debug override: when `SWIFTSTAR_EMULATE_WIRED_LIMIT_MB` is a
+    /// positive integer, `effectiveLimitBytes()` reports that instead of the
+    /// real sysctl — so the sysctl-override-wins precedence can be exercised
+    /// without touching the real `iogpu.wired_limit_mb` (no sudo needed).
+    /// Mirrors ds4-control's `DS4_EMULATE_WIRED_LIMIT_MB`.
+    public static func emulatedWiredLimitMB() -> Int? {
+        #if DEBUG
+            guard let raw = ProcessInfo.processInfo.environment["SWIFTSTAR_EMULATE_WIRED_LIMIT_MB"],
+                let mb = Int(raw), mb > 0
+            else { return nil }
+            return mb
+        #else
+            return nil
+        #endif
+    }
+
+    /// The effective GPU wired ceiling right now: the emulated override when
+    /// set (debug builds only), else the user's raised sysctl, else Metal's
+    /// advertised default, else the RAM-based fallback if Metal reports no
+    /// device.
     public static func effectiveLimitBytes() -> Int64 {
+        if let emulated = emulatedWiredLimitMB() { return Int64(emulated) * 1_048_576 }
         let setMB = currentWiredLimitMB()
         if setMB > 0 { return Int64(setMB) * 1_048_576 }
         return metalDefaultLimitBytes > 0 ? metalDefaultLimitBytes : fallbackLimitBytes()
