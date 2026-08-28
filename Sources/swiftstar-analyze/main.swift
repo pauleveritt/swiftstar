@@ -125,24 +125,6 @@ func parseOutcomes(_ dir: URL) -> [TurnOutcome] {
     return out
 }
 
-/// Segment the wire's statuses into turns (idle ends a turn) — the same shape
-/// the golden-replay test uses.
-func turns(_ events: [WireEvent]) -> [[StatusSnapshot]] {
-    var statuses: [StatusSnapshot] = []
-    for e in events { if case .status(let s) = e { statuses.append(s) } }
-    var out: [[StatusSnapshot]] = []
-    var current: [StatusSnapshot] = []
-    for s in statuses {
-        if s.state == "idle", !current.isEmpty {
-            current.append(s); out.append(current); current = []
-        } else if s.state != "idle" {
-            current.append(s)
-        }
-    }
-    if !current.isEmpty { out.append(current) }
-    return out
-}
-
 /// The turn's decode work with the app's own math (`DecodeAccumulator`): per
 /// generation segment, on the engine's clock.
 func decodeWork(_ turn: [StatusSnapshot], finalGenerated: Int?) -> DecodeAccumulator {
@@ -173,21 +155,26 @@ func cmdList() {
     }
 }
 
+/// Pair each outcome with the turn that produced it, segmenting statuses the
+/// same way the CLI used to — now production code (`TurnAlignment`) with real
+/// unit coverage: the app writes outcomes only for turns whose terminal ready
+/// carries data, so the startup prefill's phantom turn no longer borrows the
+/// first outcome's ctx/tools.
 func cmdSummary(_ dir: URL) {
     let events = parseWire(dir)
     let outcomes = parseOutcomes(dir)
     let trace = parseTrace(dir)
-    let ts = turns(events)
-    print("Session \(dir.lastPathComponent): \(ts.count) turn(s), \(outcomes.count) outcome(s), \(compactionCount(trace)) compaction(s), Σsuffix \(suffixTotal(trace))")
-    for (i, t) in ts.enumerated() {
-        let outcome = i < outcomes.count ? outcomes[i] : nil
-        let work = decodeWork(t, finalGenerated: outcome?.generatedTokens)
+    let rows = TurnAlignment.align(events: events, outcomes: outcomes)
+    print("Session \(dir.lastPathComponent): \(rows.count) turn(s), \(outcomes.count) outcome(s), \(compactionCount(trace)) compaction(s), Σsuffix \(suffixTotal(trace))")
+    for (i, row) in rows.enumerated() {
+        let outcome = row.outcome
+        let work = decodeWork(row.statuses, finalGenerated: outcome?.generatedTokens)
         let avg = work.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "-"
         // The accumulator's total, not the outcome's: the engine's counter
         // resets per generation segment, so a tool-heavy turn's `ready` reports
         // only its last segment.
         let gen = work.generatedTokens
-        let ctx = outcome?.ctxUsed ?? t.last?.ctxUsed ?? 0
+        let ctx = outcome?.ctxUsed ?? row.statuses.last?.ctxUsed ?? 0
         let tools = outcome?.toolCalls.count ?? 0
         print(String(format: "  %2d  decode %@ tok/s  tokens %d  ctx %d  tools %d", i + 1, avg, gen, ctx, tools))
     }

@@ -109,7 +109,7 @@ final class MetricsModel {
             // blank a good budget, matching the controller's own guard.
             guard plannedBytes != nil else { break }
             plannedModel = controller?.settings.modelPath.lastPathComponent
-            reducer.reduce(&state, .ready(plannedBytes: plannedBytes))
+            reducer.reduce(&state, .ready(plannedBytes: plannedBytes, stopReason: nil, generated: nil, ctxUsed: nil))
         default:
             break
         }

@@ -53,7 +53,7 @@ struct MetricsReducerTests {
     @Test func readySetsBudget() {
         var state = MetricsState()
         var reducer = MetricsReducer()
-        reducer.reduce(&state, .ready(plannedBytes: 49_943_965_040))
+        reducer.reduce(&state, .ready(plannedBytes: 49_943_965_040, stopReason: nil, generated: nil, ctxUsed: nil))
         #expect(state.memoryBudgetPlannedBytes == 49_943_965_040)
     }
 

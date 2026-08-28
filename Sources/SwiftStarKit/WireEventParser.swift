@@ -50,7 +50,12 @@ public struct StatusSnapshot: Equatable, Sendable {
 public enum WireEvent: Equatable, Sendable {
     case hello(version: Int, capabilities: [String])
     case status(StatusSnapshot)
-    case ready(plannedBytes: Int64?)
+    /// The turn-closing `ready`. `plannedBytes` is the memory-plan denominator;
+    /// `stopReason`/`generated`/`ctxUsed` are the turn data the app folds into
+    /// its `TurnOutcome` — a startup ready (no user turn) carries all three as
+    /// nil, which is exactly how `TurnAlignment` tells a real turn from the
+    /// phantom startup prefill.
+    case ready(plannedBytes: Int64?, stopReason: String?, generated: Int?, ctxUsed: Int?)
     case ignored(String)
     case refused(String)
 }
@@ -103,7 +108,12 @@ public struct WireEventParser: Sendable {
                 error: (object["error"] as? String) ?? ""
             ))
         case "ready":
-            return .ready(plannedBytes: (object["planned_bytes"] as? NSNumber)?.int64Value)
+            return .ready(
+                plannedBytes: (object["planned_bytes"] as? NSNumber)?.int64Value,
+                stopReason: object["stop_reason"] as? String,
+                generated: (object["generated"] as? NSNumber)?.intValue,
+                ctxUsed: (object["ctx_used"] as? NSNumber)?.intValue
+            )
         default:
             return .ignored(trimmed)
         }

@@ -32,7 +32,7 @@ public struct MetricsReducer: Sendable {
             if s.prefillTPS != 0 { state.prefillTPS = s.prefillTPS }
             if s.genTPS != 0 { state.genTPS = s.genTPS }
             if s.power != 0 { state.throttlePercent = s.power }
-        case .ready(let plannedBytes):
+        case .ready(let plannedBytes, _, _, _):
             state.memoryBudgetPlannedBytes = plannedBytes
         case .hello, .refused, .ignored:
             break

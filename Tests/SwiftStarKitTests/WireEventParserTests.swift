@@ -57,17 +57,17 @@ struct WireEventParserTests {
         #expect(parser.feed(line) == .status(StatusSnapshot(ctxUsed: 0, ctxSize: 32768, prefillTPS: 0, genTPS: 0, ts: 1, generated: 0, state: "idle", power: 87, error: "engine failure")))
     }
 
-    @Test func readyLineParsesPlannedBytes() {
+    @Test func readyLineParsesPlannedBytesAndTurnData() {
         var parser = WireEventParser()
         _ = parser.feed(Self.handshake)
-        let line = #"{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"ts":1}"#
-        #expect(parser.feed(line) == .ready(plannedBytes: 49_943_965_040))
+        let line = #"{"t":"ready","kv_bytes":1686110208,"scratch_bytes":784752,"model_bytes":48257070080,"planned_bytes":49943965040,"stop_reason":"eos","generated":12,"ctx_used":120,"ts":1}"#
+        #expect(parser.feed(line) == .ready(plannedBytes: 49_943_965_040, stopReason: "eos", generated: 12, ctxUsed: 120))
     }
 
-    @Test func bareReadyHasNilBudget() {
+    @Test func bareReadyHasNilPlannedBytesAndNilTurnData() {
         var parser = WireEventParser()
         _ = parser.feed(Self.handshake)
-        #expect(parser.feed(#"{"t":"ready","ts":1}"#) == .ready(plannedBytes: nil))
+        #expect(parser.feed(#"{"t":"ready","ts":1}"#) == .ready(plannedBytes: nil, stopReason: nil, generated: nil, ctxUsed: nil))
     }
 
     @Test func otherKindsAreIgnoredNotRefused() {
