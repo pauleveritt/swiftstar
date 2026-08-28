@@ -101,6 +101,10 @@ public enum AgentDefaultSettings {
         // verdict also recorded). An ordinary round spends ~25 think tokens,
         // so 2,048 never fires normally. 0 disables the flag.
         let thinkBudget = defaults.object(forKey: "agentThinkBudget") as? Int ?? 2_048
+        // P23 (D8): the per-worker context setting (default 8,192; 0 = inherit
+        // the parent). Clamped to [4096, parent] at dispatch time so it can
+        // never bypass admission.
+        let workerContextSize = WorkerContextPolicy.resolve(defaults: defaults)
         return AgentSettings(
             engineDir: engineDir,
             modelPath: modelPath,
@@ -108,6 +112,7 @@ public enum AgentDefaultSettings {
             workspace: workspace,
             shellAllowed: shellAllowed,
             thinkBudget: thinkBudget,
+            workerContextSize: workerContextSize,
             runtime: variant?.runtime
         )
     }

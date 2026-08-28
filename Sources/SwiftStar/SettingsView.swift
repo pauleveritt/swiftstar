@@ -11,6 +11,7 @@ struct SettingsView: View {
     // the transcript font size applies immediately.
     @AppStorage("agentShellAllowed") private var shellAllowed = false
     @AppStorage("agentThinkBudget") private var agentThinkBudget = 2048
+    @AppStorage("workerContextSize") private var workerContextSize = WorkerContextPolicy.defaultContext
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
     // P19.1 D3: delegation defaults — the toolbar holds the active session's
     // values; Settings holds the defaults.
@@ -125,6 +126,11 @@ struct SettingsView: View {
                 Stepper("Think budget: \(agentThinkBudget == 0 ? "off" : "\(agentThinkBudget) tokens")",
                         value: $agentThinkBudget, in: 0...8192, step: 256)
                 Text("Caps one round's reasoning. The engine forces a close at the ceiling and bans reopening for that round. 0 disables it; the default never fires on an ordinary turn.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Stepper("Worker context: \(workerContextSize == 0 ? "inherit parent" : "\(workerContextSize) tokens")",
+                        value: $workerContextSize, in: 0...16384, step: 1024)
+                Text("Context for subagent-pool workers. Smaller means less prefill and scratch per worker; 0 inherits the parent's context. Clamped to at least 4096 and never above the parent.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Slider(value: fontSliderValue, in: 0...3, step: 1) {

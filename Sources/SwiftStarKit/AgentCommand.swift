@@ -31,6 +31,11 @@ public struct AgentSettings: Equatable, Sendable {
     /// default (time-derived). Non-zero pins the run so a stochastic cell can
     /// be replicated or swept.
     public var seed: UInt64
+    /// P23 (D8): the context size for subagent-pool workers, clamped to
+    /// [4,096, parent] at dispatch time. 0 = inherit the parent's context.
+    /// Not an argv flag — it rides the per-turn prompt envelope's `ctx` key,
+    /// so a worker's context is chosen per dispatch rather than per spawn.
+    public var workerContextSize: Int
 
     /// The think budget to actually pass, honouring `thinkBudget`'s own
     /// constraint that it stay below `maxTokens` — otherwise the engine's
@@ -69,10 +74,12 @@ public struct AgentSettings: Equatable, Sendable {
         noThink: Bool = false,
         thinkBudget: Int = 0,
         seed: UInt64 = 0,
+        workerContextSize: Int = WorkerContextPolicy.defaultContext,
         systemPrompt: String? = nil,
         tracePath: URL? = nil,
         runtime: EngineRuntimeConfig? = nil
     ) {
+        self.workerContextSize = workerContextSize
         self.engineDir = engineDir
         self.modelPath = modelPath
         self.contextSize = contextSize
