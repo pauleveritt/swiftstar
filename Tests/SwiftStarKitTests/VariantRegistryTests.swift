@@ -208,10 +208,15 @@ struct LagunaXSMemoryBudgetTests {
         #expect(abs(gib - 5.91) < 0.01)
     }
 
+    /// The refusal side of the declared range. P23 raised this variant's
+    /// ceiling 32,768 → 51,200, so the above-max probes moved with it; the
+    /// behaviour pinned here (a context outside [minContext, maxContext] is
+    /// refused) is unchanged. Sibling success test:
+    /// `lagunaXSAdmitsTheAppDefaultContext`.
     @Test func unsupportedContextIsRefused() {
         #expect(budget.totalBytes(at: 16_383) == nil)
-        #expect(budget.totalBytes(at: 32_769) == nil)
-        #expect(budget.totalBytes(at: 51_200) == nil)
+        #expect(budget.totalBytes(at: 51_201) == nil)
+        #expect(budget.totalBytes(at: 262_144) == nil)
     }
 }
 
@@ -413,5 +418,19 @@ struct ModelLocationTests {
                 """
             )
         }
+    }
+
+    /// Laguna XS admits the app's own default context (51,200). Its GGUF
+    /// declares context_length 262,144; the previous 32,768 cap was a 32 GB
+    /// memory-tier budget, and running the main agent under it forced the
+    /// compaction cliff measured in the 2026-08-27 capture.
+    @Test func lagunaXSAdmitsTheAppDefaultContext() {
+        let budget = VariantRegistry.lagunaXS.contract.memoryBudget
+        #expect(budget.maxContext >= 51_200)
+        #expect(budget.clampContext(51_200) == 51_200)
+        let kv = budget.kvGiB(at: 51_200)
+        #expect(kv != nil)
+        // Linear from the corrected anchors: 1.31 + (51200-32768) * (0.31/8192)
+        #expect(abs((kv ?? 0) - 2.0077) < 0.01)
     }
 }

@@ -117,7 +117,17 @@ public enum VariantRegistry {
                     // dormant only while `maxContext` was 32,768 (P23).
                     kvGiBAt40k: 1.62,
                     minContext: 16_384,
-                    maxContext: 32_768
+                    // Raised from 32,768 (P23). The old cap was the 16/32 GB
+                    // shipping budget — the comment above reads "Measured on
+                    // 32 GB M1 Pro" — not a model limit: the GGUF declares
+                    // laguna.context_length = 262144. Running the main agent
+                    // at 32,768 forced five compactions in 24 minutes in the
+                    // 2026-08-27 capture, manufacturing 37.5% of its
+                    // Σsuffix. Capped at the app's own default (51,200)
+                    // rather than the model ceiling, so the raise stays
+                    // inside a measured envelope; VariantGate still admits
+                    // against real memory.
+                    maxContext: 51_200
                 )
             )
         )
