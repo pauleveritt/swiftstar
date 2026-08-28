@@ -96,31 +96,18 @@ public struct AgentWireParser: Sendable {
         switch t {
         case "hello":
             return .ignored(trimmed)  // a second handshake is not an error, just unmodelled
+        // P23: both field lists live in `WireStatusDecoder` so this parser and
+        // `WireEventParser` cannot drift again — the `power`/`error` drop was
+        // exactly that drift.
         case "status":
-            return .status(StatusSnapshot(
-                ctxUsed: (object["ctx_used"] as? NSNumber)?.intValue ?? 0,
-                ctxSize: (object["ctx_size"] as? NSNumber)?.intValue ?? 0,
-                prefillTPS: (object["prefill_tps"] as? NSNumber)?.doubleValue ?? 0,
-                genTPS: (object["gen_tps"] as? NSNumber)?.doubleValue ?? 0,
-                ts: (object["ts"] as? NSNumber)?.uint64Value ?? 0,
-                generated: (object["generated"] as? NSNumber)?.intValue ?? 0,
-                state: (object["state"] as? String) ?? "",
-                // Previously dropped on the live path (this parser feeds the
-                // running app via PoolWireParser; WireEventParser, used only by
-                // Diagnostics/swiftstar-analyze, already parsed these): the
-                // wire carries both on every status line (see the golden
-                // fixtures), so a live consumer that reads `.power`/`.error`
-                // off `AgentController.lastStatus` was always reading the
-                // struct's zero-value defaults, never the engine's own values.
-                power: (object["power"] as? NSNumber)?.doubleValue ?? 0,
-                error: (object["error"] as? String) ?? ""
-            ))
+            return .status(WireStatusDecoder.status(from: object))
         case "ready":
+            let r = WireStatusDecoder.ready(from: object)
             return .ready(
-                plannedBytes: (object["planned_bytes"] as? NSNumber)?.int64Value,
-                stopReason: object["stop_reason"] as? String,
-                generated: (object["generated"] as? NSNumber)?.intValue,
-                ctxUsed: (object["ctx_used"] as? NSNumber)?.intValue
+                plannedBytes: r.plannedBytes,
+                stopReason: r.stopReason,
+                generated: r.generated,
+                ctxUsed: r.ctxUsed
             )
         case "queued":
             return .queued
