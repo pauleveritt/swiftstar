@@ -77,9 +77,13 @@ struct VariantRegistryTests {
         #expect(variant.sampler?.topK == 20)
         #expect(variant.sampler?.topP == 0.95)
         #expect(variant.sampler?.minP == 0.05)
-        // S was deliberately excluded from SSD streaming (ROADMAP P22 forward
-        // item) — no engine-flag runtime, unlike XS.
-        #expect(variant.runtime == nil)
+        // S gained SSD streaming with the Laguna line (ROADMAP P22 forward
+        // item, engine divergence #13): the shared EngineRuntimeConfig carries
+        // --ssd-streaming + the expert cache; no prefill chunk (XS's 4096 is
+        // XS-tuned — the branch's gate widening left --prefill-chunk XS-only).
+        #expect(variant.runtime?.ssdStreaming == true)
+        #expect(variant.runtime?.ssdStreamingCacheExperts == 3200)
+        #expect(variant.runtime?.prefillChunk == nil)
     }
 
     @Test func allContainsLagunaS() {

@@ -131,8 +131,16 @@ public enum VariantRegistry {
             // Laguna family sampling defaults (engine-lines.md): temp 0.7,
             // top-k 20, top-p 0.95, min-p 0.05 — same family default as XS.
             sampler: SamplerDefaults(temperature: 0.7, topK: 20, topP: 0.95, minP: 0.05),
+            // P22 SSD-across-the-line (engine divergence #13): S now rides the
+            // same routed-expert streaming path as XS — --ssd-streaming with a
+            // 3,200-expert resident cache (XS's tuned value; the S-ssd footprint
+            // validation re-measures it). No prefill chunk: XS's 4096 is
+            // XS-tuned, and the engine's --prefill-chunk gate stays XS21-only
+            // (the laguna-s21-ssd branch's deliberate scope).
+            runtime: EngineRuntimeConfig(
+                ssdStreaming: true, ssdStreamingCacheExperts: 3200, prefillChunk: nil),
             // S was deliberately excluded from SSD streaming (engine-lines.md,
-            // ROADMAP P22 forward item) — nil runtime, same as Mellum.
+            // ROADMAP P22 forward item) — the runtime above ships the forward item.
             contract: RuntimeContract(
                 architecture: "laguna",
                 rope: RopeContract(scalingType: "yarn", freqBase: 500_000.0),

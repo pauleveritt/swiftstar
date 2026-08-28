@@ -114,10 +114,11 @@ struct AgentDefaultSettingsTests {
         defer { cleanUp(defaults, scratchName) }
         let settings = AgentDefaultSettings.resolve(defaults: defaults, environment: [:], projectRoot: nil)
         #expect(settings.modelPath == VariantRegistry.lagunaS.modelFile)
-        // Laguna S was deliberately excluded from SSD streaming (engine-lines.md),
-        // so its own Variant declares a nil runtime too — this is NOT evidence
-        // that no Variant was resolved.
-        #expect(settings.runtime == nil)
+        // Laguna S now declares the SSD-streaming runtime (P22 SSD-across-the-
+        // line, engine divergence #13), so the default settings carry it — this
+        // IS evidence the Variant was resolved.
+        #expect(settings.runtime == VariantRegistry.lagunaS.runtime)
+        #expect(settings.runtime?.ssdStreaming == true)
     }
 
     @Test func modelPathFallsBackToTheLiteralWhenAnExplicitModelPathIsSet() {
