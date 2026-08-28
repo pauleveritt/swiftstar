@@ -58,13 +58,10 @@ final class DiagnosticsModel {
             guard PoolWireParser.worker(of: String(line)) == .orchestrator else { continue }
             if let e = wireParser.feed(String(line)) { events.append(e) }
         }
-        var trace: [TraceEvent] = []
-        if let traceText = try? String(contentsOf: urls.trace, encoding: .utf8) {
-            var traceParser = TraceParser()
-            for line in traceText.split(whereSeparator: \.isNewline) {
-                if let e = traceParser.feed(String(line)) { trace.append(e) }
-            }
-        }
+        // Lossy read: the engine's token-dump lines embed raw bytes, and a
+        // truncated multibyte sequence (real occurrence in a live capture)
+        // made the strict read return nil and drop every compaction finding.
+        let trace = TraceParser.read(url: urls.trace)
         return DiagnosticsFixture.Input(events: events, trace: trace)
     }
 }

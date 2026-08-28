@@ -58,6 +58,60 @@ struct TraceParserTests {
     }
 }
 
+/// The engine's `--trace` token dumps embed raw bytes, and a truncated
+/// multibyte sequence is a real occurrence, not a hypothetical: in
+/// `captures/live/20260827-200648/agent.trace` the engine wrote
+/// `text=" \xe2\x8c"` (an incomplete 3-byte lead) at byte 246,007, which made
+/// the strict all-or-nothing `String(contentsOf:encoding:.utf8)` read of the
+/// whole 2.3 MB file return nil — the analyzer then reported "no trace" and
+/// Σsuffix 0 for a session with 28 real prefill syncs. The read must be
+/// lossy: malformed subsequences become U+FFFD, every other line still parses.
+struct TraceLossyReadTests {
+    /// sync + token-dump-with-truncated-multibyte + sync, exactly the shape
+    /// of the failing live trace: valid lines on both sides of the bad byte.
+    private static func traceDataWithTruncatedSequence() -> Data {
+        let sync1 = "2026-08-22 14:41:10.704 prefill sync done prompt=1026 cached=958 suffix=68 rc=0 575.820 ms"
+        let sync2 = "2026-08-22 14:41:11.001 prefill sync done tool_round=1 prompt=1150 cached=1132 suffix=18 rc=0 164.369 ms"
+        let bad: [UInt8] = [0x32, 0x30, 0x32, 0x36, 0x2D, 0x30, 0x38, 0x2D, 0x32, 0x32, 0x20, 0x31, 0x34, 0x3A, 0x34, 0x31, 0x3A, 0x31, 0x30, 0x2E, 0x37, 0x30, 0x35, 0x20, 0x74, 0x6F, 0x6B, 0x65, 0x6E, 0x20, 0x69, 0x6E, 0x64, 0x65, 0x78, 0x3D, 0x30, 0x20, 0x69, 0x64, 0x3D, 0x32, 0x20, 0x62, 0x79, 0x74, 0x65, 0x73, 0x3D, 0x33, 0x20, 0x74, 0x65, 0x78, 0x74, 0x3D, 0x22, 0x20, 0xE2, 0x8C, 0x22, 0x20, 0x68, 0x65, 0x78, 0x3D, 0x32, 0x30, 0x65, 0x32, 0x38, 0x63, 0x0A]
+        var data = Data((sync1 + "\n").utf8)
+        data.append(contentsOf: bad)
+        data.append(Data((sync2 + "\n").utf8))
+        return data
+    }
+
+    /// The fixture itself must be genuinely invalid UTF-8 — this guard keeps
+    /// the test honest if someone "fixes" it by making the bad byte valid.
+    @Test func fixtureIsGenuinelyInvalidUtf8() {
+        #expect(String(data: Self.traceDataWithTruncatedSequence(), encoding: .utf8) == nil)
+    }
+
+    @Test func lossyDecodeKeepsPrefillSyncsAroundInvalidTokenBytes() {
+        let events = TraceParser.parse(data: Self.traceDataWithTruncatedSequence())
+        let syncs = events.compactMap { e -> (prompt: Int, suffix: Int)? in
+            if case .prefillSync(let prompt, _, let suffix, _, _) = e { return (prompt, suffix) }
+            return nil
+        }
+        #expect(syncs.map(\.prompt) == [1026, 1150])
+        #expect(syncs.map(\.suffix) == [68, 18])
+    }
+
+    /// The call-site path (`swiftstar-analyze` and the app both read a URL):
+    /// a file read through the same lossy decode yields the syncs too.
+    @Test func lossyFileReadKeepsPrefillSyncs() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("trace-lossy-read-\(UUID().uuidString).trace")
+        try Self.traceDataWithTruncatedSequence().write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let events = TraceParser.read(url: url)
+        let syncs = events.compactMap { e -> Int? in
+            if case .prefillSync(_, _, let suffix, _, _) = e { return suffix }
+            return nil
+        }
+        #expect(syncs == [68, 18])
+    }
+}
+
 /// P12.7 piece 2: `TraceSummary.sum` — whole-run Σprompt/Σcached/Σsuffix,
 /// summing the engine's own reported fields verbatim (never deriving suffix
 /// as prompt - cached). Pure and isolated from `main.swift` so it has real

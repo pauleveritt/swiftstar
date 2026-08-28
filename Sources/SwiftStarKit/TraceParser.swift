@@ -102,6 +102,34 @@ public struct TraceParser: Sendable {
         }
         return Double(String(v.reversed()))
     }
+
+    /// Parse a `--trace` file's bytes lossily. The engine's token-dump lines
+    /// embed raw bytes, and a truncated multibyte sequence is a real
+    /// occurrence (verified: `captures/live/20260827-200648/agent.trace`
+    /// carries `text=" \xe2\x8c"` at byte 246,007), so an all-or-nothing
+    /// `String(contentsOf:encoding:.utf8)` read returns nil and the whole file
+    /// is silently dropped — the analyzer reports "no trace" and Σsuffix 0 for
+    /// a session with 28 real prefill syncs. Malformed subsequences become
+    /// U+FFFD; every other line still parses.
+    public static func parse(data: Data) -> [TraceEvent] {
+        let text = String(decoding: data, as: UTF8.self)
+        var parser = TraceParser()
+        var events: [TraceEvent] = []
+        for line in text.split(whereSeparator: \.isNewline) {
+            let s = String(line)
+            guard !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            if let event = parser.feed(s) { events.append(event) }
+        }
+        return events
+    }
+
+    /// Convenience over a trace file URL (the `swiftstar-analyze` CLI and the
+    /// app's Diagnostics both read from disk): missing/unreadable files yield
+    /// an empty array, never a crash.
+    public static func read(url: URL) -> [TraceEvent] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        return parse(data: data)
+    }
 }
 
 /// Whole-run token totals from every `.prefillSync` event in a `--trace` file

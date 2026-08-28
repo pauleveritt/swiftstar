@@ -104,15 +104,13 @@ func workerStatusCounts(_ dir: URL) -> [WorkerId: Int] {
 }
 
 func parseTrace(_ dir: URL) -> [TraceEvent] {
+    // `TraceParser.read` decodes lossily: the engine's token-dump lines embed
+    // raw bytes, and a truncated multibyte sequence (real occurrence —
+    // `captures/live/20260827-200648`) made the old all-or-nothing UTF-8 read
+    // return nil, reporting "no trace" for a session with 28 prefill syncs.
     for name in ["agent.trace", "wire.trace"] {
-        if let text = try? String(contentsOf: dir.appendingPathComponent(name), encoding: .utf8) {
-            var p = TraceParser()
-            var out: [TraceEvent] = []
-            for line in text.split(whereSeparator: \.isNewline) {
-                if let e = p.feed(String(line)) { out.append(e) }
-            }
-            return out
-        }
+        let events = TraceParser.read(url: dir.appendingPathComponent(name))
+        if !events.isEmpty { return events }
     }
     return []
 }
