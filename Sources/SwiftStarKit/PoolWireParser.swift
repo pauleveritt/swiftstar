@@ -14,6 +14,9 @@ public struct PoolWireEvent: Equatable, Sendable {
 /// delegating. The handshake is worker 0.
 public struct PoolWireParser: Sendable {
     private var inner = AgentWireParser()
+    /// P23 (D3): the inner parser's advertised caps, forwarded so the
+    /// controller can gate outbound feature fields after the handshake.
+    public var optionalCaps: Set<String> { inner.optionalCaps }
     public init() {}
 
     public mutating func feed(_ line: String) -> PoolWireEvent? {

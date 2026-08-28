@@ -362,6 +362,10 @@ final class AgentController {
         // like EngineController); stderrTail is reset so a failure message
         // never pairs a new session with a stale tail.
         parser = PoolWireParser()
+        // P23 (D3): caps are a property of the spawned engine build, so a
+        // re-spawn (including a model switch to a different engine dir) must
+        // not carry the previous session's advertisement forward.
+        advertisedCaps = []
         stderrTail = []
         lastStatus = nil
         lastPrefillTPS = 0
@@ -562,6 +566,9 @@ final class AgentController {
         outcomeBuilder?.apply(event)
         switch event {
         case .hello:
+            // P23 (D3): record what the engine advertised so per-turn feature
+            // fields are gated on the send, never assumed.
+            advertisedCaps = parser.optionalCaps
             if state == .starting { state = .ready }
         case .status(let snapshot):
             // D6: the status line carries the worker's state, but it is NOT

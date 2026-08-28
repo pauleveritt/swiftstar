@@ -235,4 +235,23 @@ struct AgentWireParserTests {
         let readyReasons = events.compactMap { if case .ready(_, let stop, _, _) = $0 { return stop } else { return nil } }
         #expect(readyReasons.contains { $0 != nil })
     }
+
+    // MARK: - advertised caps (P23, D3)
+
+    @Test func optionalCapsRecordsWhatHelloAdvertised() {
+        var p = AgentWireParser()
+        _ = p.feed(#"{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts","think_override"],"ts":1}"#)
+        #expect(p.optionalCaps.contains("think_override"))
+        #expect(p.optionalCaps.contains("text"))
+        #expect(p.optionalCaps.count == 8)
+    }
+
+    @Test func optionalCapsStaysEmptyWithoutACapableHello() {
+        // The base-7 caps (no think_override) is the pre-bump engine's hello;
+        // the app must keep running against it and simply not send overrides.
+        var p = AgentWireParser()
+        _ = p.feed(#"{"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":1}"#)
+        #expect(p.optionalCaps == ["status", "ready", "text", "think", "tool", "queued", "ts"])
+        #expect(!p.optionalCaps.contains("think_override"))
+    }
 }

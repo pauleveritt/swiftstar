@@ -67,6 +67,13 @@ public enum AgentEvent: Equatable, Sendable {
 public struct AgentWireParser: Sendable {
     private var sawHandshake = false
     private static let requiredCaps: Set<String> = ["text", "tool", "status", "ts"]
+    /// P23 (D3): every capability the handshake advertised, recorded so the
+    /// app can gate outbound feature fields. Deliberately NOT part of
+    /// `requiredCaps`: the required set governs what the app must be able to
+    /// PARSE to read the wire safely; `optionalCaps` records what an older
+    /// engine may not offer, and an absent feature field must not refuse
+    /// startup — only the send.
+    public private(set) var optionalCaps: Set<String> = []
 
     public init() {}
 
@@ -88,6 +95,7 @@ public struct AgentWireParser: Sendable {
                let v = (object["v"] as? NSNumber)?.intValue, v == 1,
                let caps = object["caps"] as? [String],
                Self.requiredCaps.isSubset(of: Set(caps)) {
+                optionalCaps = Set(caps)
                 return .hello(version: v, capabilities: caps)
             }
             return .refused(trimmed)
