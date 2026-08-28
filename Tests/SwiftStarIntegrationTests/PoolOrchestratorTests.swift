@@ -42,4 +42,46 @@ struct PoolOrchestratorTests {
         let outcome = try orch.runPhase(worker: WorkerId(1), packet: packet, worktree: worktree)
         #expect(outcome.stopReason == .eos)
     }
+
+    /// P23 review follow-up: `runPhase` never sends a `think` field on the
+    /// wire — `PoolPrompt` here carries no override, and `--per-turn-think`
+    /// is not yet in this harness's argv — so the recorded outcome must not
+    /// claim one happened. Before this fix, a packet's declared `.on`
+    /// (mapping to `.high`) was recorded verbatim in `outcome.sampler` while
+    /// the wire silently ran the harness's fixed default: a capture-integrity
+    /// lie identical in kind to the one this phase exists to retire.
+    @Test func runPhaseRecordsDefaultThinkRegardlessOfPacketSampling() throws {
+        let fakeDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("orch-fake-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: fakeDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fakeDir) }
+
+        let settings = AgentSettings(
+            engineDir: fakeDir,
+            modelPath: URL(fileURLWithPath: "/tmp/model.gguf"),
+            contextSize: 16384,
+            workspace: URL(fileURLWithPath: "/tmp/w"),
+            shellAllowed: false)
+        let argv = PoolEngine.argv(settings: settings, workers: 3)
+
+        let capture = try Data(contentsOf: FakeAgentHarness.fixture("pool.ndjson"))
+        let source = try FakeAgentSource.generate(capture: capture, engineArgv: argv, hostTools: false)
+        let binary = try FakeAgentHarness.compileFake(source: source, into: fakeDir)
+        try FileManager.default.moveItem(at: binary, to: fakeDir.appendingPathComponent("ds4-agent"))
+
+        let orch = try PoolOrchestrator(settings: settings)
+        defer { orch.stop() }
+
+        let worktree = FileManager.default.temporaryDirectory
+            .appendingPathComponent("orch-wt-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: worktree) }
+
+        let packet = HandoffPacket(
+            taskText: "do the thing", writableFiles: [], validationCommand: nil,
+            baselines: [:], turnBudget: 1000, toolCallBudget: 8,
+            sampling: SamplingPolicy(think: .on))
+        let outcome = try orch.runPhase(worker: WorkerId(1), packet: packet, worktree: worktree)
+        #expect(outcome.sampler == "think=default")
+    }
 }
