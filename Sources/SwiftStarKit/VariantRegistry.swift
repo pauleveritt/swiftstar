@@ -109,7 +109,13 @@ public enum VariantRegistry {
                     scratchGiB: 0.0,
                     kvGiBAt16k: 0.69,
                     kvGiBAt32k: 1.31,
-                    kvGiBAt40k: 1.31,
+                    // Derived from this variant's own 16k→32k slope
+                    // (+0.62 GiB per 16,384 tokens → +0.31 per 8,192), not
+                    // copied from the 32k anchor. `MemoryBudget.kvGiB(at:)`
+                    // extrapolates above 32,768 from the 32k→40k slope, so a
+                    // copied anchor plans KV flat at any larger context —
+                    // dormant only while `maxContext` was 32,768 (P23).
+                    kvGiBAt40k: 1.62,
                     minContext: 16_384,
                     maxContext: 32_768
                 )

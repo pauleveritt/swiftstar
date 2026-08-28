@@ -391,4 +391,27 @@ struct ModelLocationTests {
         #expect(url.path.hasSuffix(".gguf"))
         #expect(url.pathComponents.count > 2)
     }
+
+    // MARK: - memory-budget anchors (P23)
+
+    /// Every variant's 40k KV anchor must lie on the line its own 16k and 32k
+    /// anchors define. `MemoryBudget.kvGiB(at:)` extrapolates above ctx 32,768
+    /// from the 32k→40k slope, so an anchor copied from the 32k value makes KV
+    /// plan flat at any larger context — under-planning memory the moment a
+    /// variant's `maxContext` rises above 32,768.
+    @Test func everyVariantsKVAnchorsLieOnOneLine() {
+        for variant in VariantRegistry.all {
+            let b = variant.contract.memoryBudget
+            let slopePerToken = (b.kvGiBAt32k - b.kvGiBAt16k) / Double(32_768 - 16_384)
+            let implied40k = b.kvGiBAt32k + slopePerToken * Double(40_960 - 32_768)
+            #expect(
+                abs(b.kvGiBAt40k - implied40k) < 0.01,
+                """
+                \(variant.id): kvGiBAt40k is \(b.kvGiBAt40k) but its own \
+                16k→32k slope implies \(implied40k). A 40k anchor copied from \
+                the 32k value makes kvGiB(at:) extrapolate flat above 32,768.
+                """
+            )
+        }
+    }
 }
