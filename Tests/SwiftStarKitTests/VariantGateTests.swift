@@ -185,6 +185,8 @@ struct WiredLimitAdvisoryTests {
         }
         #expect(reason.message.contains("Close memory-heavy apps"))
         #expect(!reason.message.contains("sysctl"))
+        #expect(reason.wiredLimitAdvisoryBytes == nil)
+        #expect(reason.wiredLimitFixBytes == nil)
     }
 
     @Test func advisoryProvidedAndRaisingTheLimitWouldHelpNamesTheSysctl() throws {
@@ -213,6 +215,10 @@ struct WiredLimitAdvisoryTests {
         let totalBytesMB = Int((Double(totalBytes) / 1_048_576).rounded(.up))
         #expect(reason.message.contains("sudo sysctl -w iogpu.wired_limit_mb=\(advisoryMB)"))
         #expect(!reason.message.contains("sudo sysctl -w iogpu.wired_limit_mb=\(totalBytesMB)"))
+        // The machine-readable form must agree with the prose: a UI reading
+        // wiredLimitFixBytes instead of parsing message gets the same value.
+        #expect(reason.wiredLimitAdvisoryBytes == advisory)
+        #expect(reason.wiredLimitFixBytes == advisory)
     }
 
     @Test func advisoryProvidedButEvenRaisingIsNotEnoughSaysSoInstead() throws {
@@ -230,6 +236,11 @@ struct WiredLimitAdvisoryTests {
         }
         #expect(reason.message.contains("pick a smaller context size"))
         #expect(!reason.message.contains("sudo sysctl"))
+        // An advisory was supplied but is insufficient — this is the case a
+        // naive "wiredLimitAdvisoryBytes != nil means show a Raise button"
+        // check would get wrong. wiredLimitFixBytes reads nil, correctly.
+        #expect(reason.wiredLimitAdvisoryBytes == totalBytes - 1)
+        #expect(reason.wiredLimitFixBytes == nil)
     }
 
     @Test func admissionStillSucceedsRegardlessOfAdvisoryWhenThereIsEnoughRoom() {
@@ -241,5 +252,44 @@ struct WiredLimitAdvisoryTests {
             variant, contextSize: 40_960, availableBytes: plentyOfBytes,
             wiredLimitAdvisoryBytes: plentyOfBytes)
         #expect(result == .admitted)
+    }
+}
+
+/// `FeasibilityReason.wiredLimitFixBytes` as a pure formula, independent of
+/// `VariantGate`/GGUF fixtures — the fact a UI would actually read, so it
+/// gets its own direct coverage rather than only exercising it incidentally
+/// through admission tests (Fable review, 2026-08-28).
+struct FeasibilityReasonWiredLimitFixTests {
+    private func reason(plannedBytes: Int64, advisory: Int64?) -> FeasibilityReason {
+        FeasibilityReason(
+            message: "irrelevant for this test", deficitBytes: 0, availableBytes: 0,
+            plannedBytes: plannedBytes, wiredLimitAdvisoryBytes: advisory)
+    }
+
+    @Test func nilAdvisoryIsNilFix() {
+        #expect(reason(plannedBytes: 100, advisory: nil).wiredLimitFixBytes == nil)
+    }
+
+    @Test func advisoryAtExactlyPlannedBytesIsAFix() {
+        // <= , not < — the boundary itself counts as "would help".
+        #expect(reason(plannedBytes: 100, advisory: 100).wiredLimitFixBytes == 100)
+    }
+
+    @Test func advisoryOneByteBelowPlannedBytesIsNotAFix() {
+        #expect(reason(plannedBytes: 100, advisory: 99).wiredLimitFixBytes == nil)
+    }
+
+    @Test func fixValueIsTheAdvisoryNotThePlannedBytes() {
+        // The whole point of this cycle's fix: the suggested value must be
+        // the RAM-based ceiling, never the launch's bare requirement.
+        let fix = reason(plannedBytes: 100, advisory: 500).wiredLimitFixBytes
+        #expect(fix == 500)
+        #expect(fix != 100)
+    }
+
+    @Test func equatableIncludesTheNewFieldSoADifferingAdvisoryIsADifferentReason() {
+        let a = reason(plannedBytes: 100, advisory: 500)
+        let b = reason(plannedBytes: 100, advisory: 600)
+        #expect(a != b)
     }
 }

@@ -62,7 +62,8 @@ public enum VariantGate {
                     deficit: deficit, wiredLimitAdvisoryBytes: wiredLimitAdvisoryBytes),
                 deficitBytes: deficit,
                 availableBytes: availableBytes,
-                plannedBytes: totalBytes
+                plannedBytes: totalBytes,
+                wiredLimitAdvisoryBytes: wiredLimitAdvisoryBytes
             ))
         }
 
@@ -91,13 +92,16 @@ public enum VariantGate {
         "\(variant.displayName)" needs \(gib(totalBytes)) GiB, but the GPU's current wired-memory \
         ceiling is \(gib(availableBytes)) GiB (short \(gib(deficit)) GiB).
         """
-        if totalBytes <= advisory {
+        // The same formula FeasibilityReason.wiredLimitFixBytes uses — one
+        // decision, not two independently maintained ones (Fable review,
+        // 2026-08-28: the prose and the machine-readable fact must agree).
+        if let fix = FeasibilityReason.wiredLimitFix(plannedBytes: totalBytes, advisory: advisory) {
             // Suggest the advisory ceiling itself (RAM minus the OS reserve),
             // not the launch's bare requirement — setting the system-wide GPU
             // wired limit to exactly one launch's footprint leaves zero room
             // for WindowServer or anything else sharing it, which is the hang
-            // this cycle exists to avoid (Fable review, 2026-08-28).
-            let advisoryMB = Int(Double(advisory) / 1_048_576)
+            // this cycle exists to avoid.
+            let advisoryMB = Int(Double(fix) / 1_048_576)
             message += " Raise the ceiling with: sudo sysctl -w iogpu.wired_limit_mb=\(advisoryMB)"
         } else {
             message += " Even raising the limit isn't enough on this machine's \(gib(advisory)) GiB " +
