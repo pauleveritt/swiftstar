@@ -185,7 +185,6 @@ public final class PoolOrchestrator {
         var builder = TurnOutcomeBuilder(
             model: model, build: "pooled", sampler: "engine-defaults", task: prompt)
         var dispatched: [HandoffPacket] = []
-        var toolCallCount = 0
         // The orchestrator is the agent's own role: full bash (`.app` policy),
         // matching the app's shell-on agent tab — not the pool worker's
         // vetted-only commands. The caller validates the final result.
@@ -217,7 +216,6 @@ public final class PoolOrchestrator {
                 builder.apply(event)
                 switch event {
                 case .toolRequest(let idx, let name, let params):
-                    toolCallCount += 1
                     if name == "dispatch" {
                         if let packet = buildDispatchPacket(params) {
                             dispatched.append(packet)

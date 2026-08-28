@@ -1252,6 +1252,11 @@ func runDirectiveOnce() throws {
         let (outcome, dispatched) = try orch.runOrchestrator(
             prompt: prompt, worktree: wt.url,
             capture: captureHandle) { params in
+                // Harness simplification (verdict caveat): the dispatched phase
+                // reuses the harness's global writable scope + vetted commands
+                // (phasePacket), not the model's per-phase writableFiles/
+                // validationCommand params — the app's real path respects those
+                // via DispatchPacketBuilder.build.
                 guard let task = params.first(where: { $0.name == "taskText" })?.value,
                       !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
                 return phasePacket(task)

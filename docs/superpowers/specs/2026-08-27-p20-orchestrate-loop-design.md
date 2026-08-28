@@ -11,8 +11,12 @@ in the ROADMAP: **small-ctx workers** → its own phase, merged with P23's
 per-worker think control (one engine patch, fork-ledger row #12, recapture);
 **two-phase `/spike`** → Backlog behind P24 (phase 2 rides mediated bash).
 
-Scope is strict: the directive and the rule are *prompt text* — no engine
-patch, no new wire kind, no host-driven state machine. The loop is
+Scope is strict: the directive and the rule are *prompt text* — no new wire
+kind, no host-driven state machine. **Amended by live measurement (2026-08-27):**
+the model-driven loop also required an engine patch — `dispatch` had to be
+added to the advertised tool schema (fork divergence #12), because without it
+the model made 0 dispatches in 34 tool calls. See D3 and the
+[closure verdict](../research/2026-08-27-p20-closure-verdict.md). The loop is
 *model-driven*: the model is the orchestrator; the host's existing machinery
 (`dispatch` tool, pool, receipt injection, parent-side validation) is the
 substrate it drives.
@@ -86,7 +90,13 @@ correctly *not* dispatched because they had no acceptance predicate).
 - **D3 — the directive and the rule are standalone, testable Swift
   constants.** They live in `SwiftStarKit` (not the app target, which has no
   test target) as pure text, so the fast tier asserts the required clauses are
-  present without any engine. No engine patch.
+  present without any engine. **Amended 2026-08-27:** "no engine patch" did
+  not survive measurement — the model ignores a prose-named tool that is not
+  in the engine's advertised schema (0 dispatches in 34 tool calls), so
+  `dispatch` was added to the schema under `--host-tools` as fork divergence
+  #12 (see the [closure verdict](../research/2026-08-27-p20-closure-verdict.md)).
+  The prompt-only parts of D3 stand for the *directive* and the *rule*; the
+  loop's dispatch step needs the schema entry.
 
 - **D4 — dispatch-preference is prompt-only.** No new app state, no Settings
   toggle, no wire field. The rule is text in the system prompt. (If P21's

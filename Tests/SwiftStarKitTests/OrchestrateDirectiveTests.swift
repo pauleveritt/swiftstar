@@ -45,4 +45,10 @@ struct OrchestrateDirectiveTests {
         #expect(text.contains("validate the whole result"))
         #expect(text.contains("exits 0"))
     }
+
+    @Test func instructsDecompositionWithMachineCheckableAcceptance() {
+        let text = OrchestrateDirective.build(task: "t", writableFiles: [])
+        #expect(text.contains("Decompose"))
+        #expect(text.contains("machine-checkable"))
+    }
 }
