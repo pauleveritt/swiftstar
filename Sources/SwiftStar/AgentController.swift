@@ -291,6 +291,21 @@ final class AgentController {
         return SubagentPoolSize.clamp(raw == 0 ? 2 : raw)
     }
 
+    /// The admission result for the staged variant at the given context, or
+    /// nil when no variant is staged (a custom/unverified model path — like a
+    /// fresh launch, no gate exists for it). Shared by `startAgent()` and
+    /// `applyModelSelection()` so the two call sites cannot drift about which
+    /// variant is in play or which live memory facts back the gate (P22 D2;
+    /// the failure mode `effectiveSelectedVariantID`'s own doc warns about).
+    private static func admitStagedVariant(contextSize: Int) -> VariantAdmission? {
+        guard let variant = VariantResolver.resolveVariant(
+            selectedVariantID: AgentController.effectiveSelectedVariantID()) else { return nil }
+        return VariantGate.admit(
+            variant, contextSize: contextSize,
+            availableBytes: VariantAdmissionSource.availableBytes(),
+            wiredLimitAdvisoryBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes())
+    }
+
     func startAgent() {
         switch state {
         case .stopped, .failed: break
@@ -299,24 +314,17 @@ final class AgentController {
         // P13: refresh settings so a selected variant applies (mirrors
         // EngineController), then admit it before spawn (C1).
         settings = AgentController.defaultSettings()
-        if let variant = VariantResolver.resolveVariant(
-            selectedVariantID: AgentController.effectiveSelectedVariantID()) {
-            let admission = VariantGate.admit(
-                variant, contextSize: settings.contextSize,
-                availableBytes: VariantAdmissionSource.availableBytes(),
-                wiredLimitAdvisoryBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes())
-            switch admission {
-            case .admitted:
-                break
-            case .contractMismatch(let mismatches):
-                state = .failed(mismatches.map(\.message).joined(separator: "\n"))
-                log("variant refusal: \(mismatches)")
-                return
-            case .infeasible(let reason):
-                state = .failed(reason.message)
-                log("feasibility refusal: \(reason.message)")
-                return
-            }
+        switch AgentController.admitStagedVariant(contextSize: settings.contextSize) {
+        case .admitted, nil:
+            break
+        case .contractMismatch(let mismatches):
+            state = .failed(mismatches.map(\.message).joined(separator: "\n"))
+            log("variant refusal: \(mismatches)")
+            return
+        case .infeasible(let reason):
+            state = .failed(reason.message)
+            log("feasibility refusal: \(reason.message)")
+            return
         }
         let binary = AgentCommand.binaryPath(settings: settings)
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
@@ -1142,19 +1150,11 @@ final class AgentController {
             defaults: .standard,
             environment: ProcessInfo.processInfo.environment,
             projectRoot: AgentController.projectRoot())
-        let variant = VariantResolver.resolveVariant(
-            selectedVariantID: AgentController.effectiveSelectedVariantID())
-        let admission: VariantAdmission? = variant.map {
-            VariantGate.admit(
-                $0, contextSize: targetSettings.contextSize,
-                availableBytes: VariantAdmissionSource.availableBytes(),
-                wiredLimitAdvisoryBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes())
-        }
         switch ModelSwitchEvaluator.decide(
             isGenerating: isGenerating,
             runningModelFile: settings.modelPath,
             targetModelFile: targetSettings.modelPath,
-            admission: admission
+            admission: AgentController.admitStagedVariant(contextSize: targetSettings.contextSize)
         ) {
         case .apply:
             restartAgent()

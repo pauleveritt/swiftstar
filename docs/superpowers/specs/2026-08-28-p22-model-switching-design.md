@@ -200,9 +200,30 @@ public enum ModelSwitchEvaluator {
 }
 ```
 
-### 2. `AgentController.applyModelSelection()` (SwiftStar target, near `restartAgent`)
+### 2. `AgentController.applyModelSelection()` + `admitStagedVariant(contextSize:)` (SwiftStar target, near `restartAgent`)
+
+A private static helper shares the resolve → `VariantGate.admit` block with
+`startAgent()`'s pre-spawn admission — two near-copies of the same steps would
+drift about which variant is in play or which live memory facts back the gate
+(the failure mode `effectiveSelectedVariantID()`'s own doc warns about;
+GLM 5.3 review finding, folded in 2026-08-28):
 
 ```swift
+/// The admission result for the staged variant at the given context, or
+/// nil when no variant is staged (a custom/unverified model path — like a
+/// fresh launch, no gate exists for it). Shared by `startAgent()` and
+/// `applyModelSelection()` so the two call sites cannot drift about which
+/// variant is in play or which live memory facts back the gate (P22 D2;
+/// the failure mode `effectiveSelectedVariantID`'s own doc warns about).
+private static func admitStagedVariant(contextSize: Int) -> VariantAdmission? {
+    guard let variant = VariantResolver.resolveVariant(
+        selectedVariantID: AgentController.effectiveSelectedVariantID()) else { return nil }
+    return VariantGate.admit(
+        variant, contextSize: contextSize,
+        availableBytes: VariantAdmissionSource.availableBytes(),
+        wiredLimitAdvisoryBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes())
+}
+
 /// P22 model switching — the "Apply this model" action. Resolves the staged
 /// selection exactly as the next spawn would, runs the pure switch decision
 /// (admission × generating × changed), and stops + re-spawns only when the
@@ -214,19 +235,11 @@ func applyModelSelection() {
         defaults: .standard,
         environment: ProcessInfo.processInfo.environment,
         projectRoot: AgentController.projectRoot())
-    let variant = VariantResolver.resolveVariant(
-        selectedVariantID: AgentController.effectiveSelectedVariantID())
-    let admission: VariantAdmission? = variant.map {
-        VariantGate.admit(
-            $0, contextSize: targetSettings.contextSize,
-            availableBytes: VariantAdmissionSource.availableBytes(),
-            wiredLimitAdvisoryBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes())
-    }
     switch ModelSwitchEvaluator.decide(
         isGenerating: isGenerating,
         runningModelFile: settings.modelPath,
         targetModelFile: targetSettings.modelPath,
-        admission: admission
+        admission: AgentController.admitStagedVariant(contextSize: targetSettings.contextSize)
     ) {
     case .apply:
         restartAgent()
@@ -238,6 +251,11 @@ func applyModelSelection() {
     }
 }
 ```
+
+`startAgent()`'s admission block reduces to the same helper (its refusals set
+`.failed` state and log; `applyModelSelection()`'s surface as transcript rows —
+the only divergence is the outcome handling, which the helper deliberately does
+not share).
 
 ### 3. Toolbar `ModelMenu` (`Sources/SwiftStar/AgentView.swift`)
 
@@ -272,6 +290,8 @@ func applyModelSelection() {
 6. `refusedWithContractMismatchMessages` (messages joined with "\n")
 7. `refusedWithFeasibilityMessage` (`reason.message`)
 8. `sameFileDifferentPathSpellingIsNoChange` (`standardizedFileURL`)
+9. `noChangeWhenSameModelFileRegardlessOfContractMismatch` (GLM 5.3 review
+   gap, folded in 2026-08-28 — the analog of #3 for a mismatch admission)
 
 ## Live validation (closure evidence; GPU OK required first)
 

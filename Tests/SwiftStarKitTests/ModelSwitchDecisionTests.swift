@@ -38,6 +38,13 @@ struct ModelSwitchDecisionTests {
             admission: .infeasible(reason)) == .noChange)
     }
 
+    @Test func noChangeWhenSameModelFileRegardlessOfContractMismatch() {
+        let mismatches: [VariantMismatch] = [.architecture(expected: "laguna", actual: "mellum")]
+        #expect(ModelSwitchEvaluator.decide(
+            isGenerating: false, runningModelFile: running, targetModelFile: running,
+            admission: .contractMismatch(mismatches)) == .noChange)
+    }
+
     @Test func appliesForCustomPathWithNilAdmission() {
         #expect(ModelSwitchEvaluator.decide(
             isGenerating: false, runningModelFile: running, targetModelFile: target,
