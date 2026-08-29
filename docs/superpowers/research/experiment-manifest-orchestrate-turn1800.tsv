@@ -20,7 +20,9 @@
 #   - they grade  -> the voids were an artifact of my bound, and the honest
 #                    pooled rate uses these outcomes at n=30
 #   - they void again -> "the orchestrator sometimes does not end a turn at all"
-#                    is a real property of the loop, worth a P27 cycle
+#                    is a real property of the loop, worth its own cycle
+#   [corrected 2026-08-29: the original text said "a P27 cycle"; no P27
+#    exists in the roadmap. Prose only — no decision rule is affected.]
 # Either answer is useful; leaving five cells silent is not.
 #
 # These five seeds were NOT graded by the main pass, so nothing is being

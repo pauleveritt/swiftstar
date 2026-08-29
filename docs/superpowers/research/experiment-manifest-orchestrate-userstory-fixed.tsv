@@ -50,7 +50,8 @@
 #  2. 5-7/10: a real signal that task framing matters beyond the missing
 #     context; underpowered to size it further at this n.
 #  3. <=4/10: reliability is task-specific even with the fix; the 93% figure
-#     keeps its "measured on one task" caveat, and failures become direct P27
+#     keeps its "measured on one task" caveat, and failures feed the Backlog
+#     entry directly [corrected 2026-08-29: originally "direct P27
 #     inputs.
 # Additionally: if ANY cell in this arm still substitutes Flask (or otherwise
 # ignores the now-present project context), that is reported explicitly and

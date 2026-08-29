@@ -47,7 +47,9 @@
 #     Next step is a larger arm on this same spec, not a different spec.
 #  3. <=4/10: the loop's reliability is task-specific, not a property of the
 #     loop; the 93% figure must not be quoted without the caveat "measured on
-#     one task" from here forward, and the failure captures become P27 inputs
+#     one task" from here forward, and the failure captures feed the Backlog
+#     entry that tracks this work [corrected 2026-08-29: originally "P27
+#     inputs"; no P27 exists. Prose only — no decision rule is affected.]
 #     directly (same taxonomy discipline as the roadmap voids).
 # Every non-pass cell gets read for its failure mode, same as the roadmap
 # arm's seed-106 (dispatch-ordering deadlock) and seed-109 (malformed tool call
