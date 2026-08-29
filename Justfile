@@ -17,28 +17,47 @@ docs:
 # unverified: even the row cited as the exemplar of "already short" (P20)
 # failed it by 7x. Caught only because a docs-restructuring pass ran the
 # actual gate instead of trusting the number in docs/sdd.md.
+#
+# Splits table rows on a backtick-depth-aware pipe scan, not a naive
+# `IFS='|'` split -- a plain split mis-indexes every cell after a Direction
+# or Status cell containing an inline `` `foo | bar` `` code span or a
+# regex alternation like `P(A|B)`, silently checking the wrong substring
+# against the cap. Found by an independent review of this exact recipe.
 lint-docs:
     #!/usr/bin/env bash
     set -euo pipefail
     fail=0
-    while IFS= read -r line; do
-        [[ "$line" =~ ^\|\ P[0-9] ]] || continue
-        IFS='|' read -ra cells <<< "$line"
-        direction_len=${#cells[3]}
-        status_len=${#cells[4]}
-        if [ "$direction_len" -gt 900 ]; then
-            echo "ROADMAP.md: Direction cell is $direction_len chars (cap 900): ${cells[3]:0:70}..."
-            fail=1
-        fi
-        if [ "$status_len" -gt 1000 ]; then
-            echo "ROADMAP.md: Status cell is $status_len chars (cap 1000): ${cells[4]:0:70}..."
-            fail=1
-        fi
-    done < ROADMAP.md
+    awk '
+        /^\| P[0-9]/ {
+            n = split($0, chars, "")
+            depth = 0; cell = 0; buf = ""
+            delete cells
+            for (i = 1; i <= n; i++) {
+                c = chars[i]
+                if (c == "`") { depth = 1 - depth; buf = buf c; continue }
+                if (c == "|" && depth == 0) { cells[cell] = buf; cell++; buf = ""; continue }
+                buf = buf c
+            }
+            cells[cell] = buf
+            d = cells[3]; s = cells[4]
+            if (length(d) > 900) {
+                printf "ROADMAP.md: Direction cell is %d chars (cap 900): %s...\n", length(d), substr(d, 1, 70)
+                bad = 1
+            }
+            if (length(s) > 1000) {
+                printf "ROADMAP.md: Status cell is %d chars (cap 1000): %s...\n", length(s), substr(s, 1, 70)
+                bad = 1
+            }
+        }
+        END { exit bad }
+    ' ROADMAP.md || fail=1
     for f in docs/superpowers/plans/*.md; do
-        lines=$(wc -l < "$f")
-        fenced=$(awk '/^```/{f=!f;next} f{c++} END{print c+0}' "$f")
-        pct=$(( lines > 0 ? fenced * 100 / lines : 0 ))
+        read -r lines pct <<< "$(awk '
+            { n++ }
+            /^```/ { infence = !infence; next }
+            infence { c++ }
+            END { pct = (n > 0) ? int(c * 100 / n) : 0; print n, pct }
+        ' "$f")"
         if [ "$lines" -gt 400 ] || [ "$pct" -gt 25 ]; then
             echo "$f: $lines lines, ${pct}% fenced (cap 400 lines / 25% fenced)"
             fail=1
