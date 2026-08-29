@@ -226,13 +226,49 @@ func phasePacket(_ phaseText: String, absoluteRoot: String? = nil, textContract:
 /// begin; this is the short continuation that only has to emit. It names no new
 /// facts on purpose — everything it needs is the model's own prior assistant
 /// turn, still in the pooled worker's session.
-let repairEmissionFollowUp = ([
+///
+/// The wording is plural but states **no count**, and that distinction is the
+/// whole point. P17 found that asserting "exactly one file is wrong" on every
+/// cell was a harness defect that the model dutifully obeyed. This text was the
+/// same defect one layer down: phrased in the singular ("the file you just
+/// diagnosed… one fenced code block"), it steered a model that had correctly
+/// diagnosed two or three broken files into emitting only one of them, and
+/// round 2 then re-emitted the same file. Block B measured the cost —
+/// `depth-2` 63% and `depth-3` 44% against `plausible-wrong-fix` 95%, with 10
+/// of 18 failures showing that shape. Naming a *number* here would just repeat
+/// P17's mistake in the other direction, so the fix is to let the model's own
+/// diagnosis set the count. See
+/// `docs/superpowers/research/2026-08-29-block-b-negative-result-analysis.md`.
+///
+/// `AGENTTEST_SINGULAR_FOLLOWUP=1` restores the old singular wording verbatim.
+/// This exists so the two wordings can be measured as a **concurrent control**
+/// on one binary. Comparing a new arm against Block B's frozen baseline caps
+/// power at ~72% however many new cells are run, because that baseline's n=18
+/// is the binding constraint; and a frozen baseline also leaves a binary-drift
+/// confound that no amount of n removes. Interleaving both arms on one binary
+/// answers both objections. The default is the fixed plural wording — the flag
+/// only opts back into the known defect, for measurement.
+let repairEmissionFollowUpSingular = ([
     "Now emit it. Your entire response must be the heading line for the file you",
     "just diagnosed, followed by one fenced code block containing that file's",
     "complete corrected contents with the correction you just described already",
     "applied. Nothing before the heading line and nothing after the closing fence.",
     "Do not explain anything further and do not restate the diagnosis.",
 ]).joined(separator: " ")
+
+let repairEmissionFollowUpPlural = ([
+    "Now emit them. Your entire response must be, for each file you just",
+    "diagnosed, the heading line for that file followed immediately by one fenced",
+    "code block containing that file's complete corrected contents with the",
+    "correction you just described already applied. Emit every file you",
+    "diagnosed, however many that is — not just the first one. Nothing before the",
+    "first heading line and nothing after the last closing fence.",
+    "Do not explain anything further and do not restate the diagnosis.",
+]).joined(separator: " ")
+
+let repairEmissionFollowUp = env["AGENTTEST_SINGULAR_FOLLOWUP"] == "1"
+    ? repairEmissionFollowUpSingular
+    : repairEmissionFollowUpPlural
 
 /// The build arm's half of the two-turn emission protocol. Same shape as
 /// `repairEmissionFollowUp`, but a build phase writes a set of files rather than
