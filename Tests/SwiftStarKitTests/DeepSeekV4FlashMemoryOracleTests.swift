@@ -12,13 +12,20 @@ import Foundation
 /// shipped — so the exact allocator math stays checkable without carrying its
 /// full complexity into the app. The shipped `MemoryBudget` is three
 /// constants (weights/scratch/three KV anchors) because the design doc found
-/// this whole model is affine in `ctx` above the 4,096-token prefill cap; this
-/// test is what proves that claim rather than merely asserting it.
+/// this whole model is affine in `ctx` above the 4,096-token prefill cap;
+/// this test is what proves that claim rather than merely asserting it.
 ///
-/// If a future `external/ds4` pin changes the allocator, THIS test is what
-/// will disagree with the shipped constants — re-derive the constants, do not
-/// widen the tolerance (`docs/harvest/ds4-control.md`'s "re-fetch, never
-/// carry forward" discipline for every numeric fact).
+/// This test does NOT catch drift from a future `external/ds4` pin change:
+/// the oracle above is ported by hand from `~/projects/ds4-control`, an
+/// unpinned, unvendored sibling checkout that nothing in this repo re-syncs
+/// against. What it actually protects is approximation error — that the
+/// shipped 3-anchor affine `MemoryBudget` stays a faithful stand-in for the
+/// oracle's exact (and far more complex) allocator formula, both at the
+/// three declared anchors and across the extrapolated range between/beyond
+/// them. If the real allocator's math changes upstream, re-derive this
+/// oracle by hand against the new `ds4-control` source
+/// (`docs/harvest/ds4-control.md`'s "re-fetch, never carry forward"
+/// discipline) — this test alone won't tell you that happened.
 private enum DeepSeekFlashMetalOracle {
     // Metal shape constants for `.flash` (ds4-control Feasibility.swift:118-125).
     static let layers = 43
@@ -192,7 +199,13 @@ struct DeepSeekV4FlashMemoryOracleTests {
     // earlier "20 MiB" claim was based on) finds the true worst case at
     // 31.93 MiB (ctx 983,023); this leaves real margin above that, corrected
     // 2026-08-28 after a 25 MiB tolerance failed against ctx 450,000 (29 MiB).
-    private static let tolerance: Int64 = 40 * 1_024 * 1_024
+    // This tolerance is for extrapolated context sizes only.
+    private static let extrapolationTolerance: Int64 = 40 * 1_024 * 1_024
+    // 1 MiB — the three declared anchors (`kvGiBAt16k`/`32k`/`40k`) are
+    // hand-transcribed to 6 decimal GiB places, so the loose extrapolation
+    // tolerance above could hide a real transcription typo at exactly the
+    // points meant to be exact.
+    private static let anchorTolerance: Int64 = 1 * 1_024 * 1_024
 
     private var variant: Variant { VariantRegistry.deepSeekV4Flash }
 
@@ -205,21 +218,27 @@ struct DeepSeekV4FlashMemoryOracleTests {
             let shipped = try #require(variant.contract.memoryBudget.totalBytes(at: ctx))
             let oracle = oracleTotalBytes(at: ctx)
             let delta = abs(shipped - oracle)
-            #expect(delta <= Self.tolerance,
-                    "ctx \(ctx): shipped \(shipped) vs oracle \(oracle), delta \(delta) bytes exceeds tolerance")
+            #expect(delta <= Self.anchorTolerance,
+                    "ctx \(ctx): shipped \(shipped) vs oracle \(oracle), delta \(delta) bytes exceeds anchor tolerance")
         }
     }
 
     @Test func shippedBudgetAgreesWithTheOracleAcrossTheExtrapolatedRange() throws {
-        // Every context the variant declares as supported, not just the three
-        // anchors — this is what actually tests the affine claim.
-        let samples = [51_200, 65_536, 150_000, 262_144, 393_216, 450_000]
+        // A strided sweep of the full declared range — not a handful of
+        // hand-picked points — is what actually exercises the affine claim.
+        // The arithmetic is cheap (no I/O), so a dense sweep costs nothing.
+        let step = 4_096
+        let minContext = variant.contract.memoryBudget.minContext
+        let maxContext = variant.contract.memoryBudget.maxContext
+        var samples = Array(Swift.stride(from: minContext, to: maxContext, by: step))
+        samples.append(maxContext)  // exact upper bound, even if step doesn't land on it
+
         for ctx in samples {
             let shipped = try #require(variant.contract.memoryBudget.totalBytes(at: ctx),
                                         "ctx \(ctx) should be within the declared range")
             let oracle = oracleTotalBytes(at: ctx)
             let delta = abs(shipped - oracle)
-            #expect(delta <= Self.tolerance,
+            #expect(delta <= Self.extrapolationTolerance,
                     "ctx \(ctx): shipped \(shipped) vs oracle \(oracle), delta \(delta) bytes exceeds tolerance")
         }
     }
