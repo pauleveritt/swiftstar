@@ -26,3 +26,4 @@ captures/
 
 # App runtime state: the agent stages Superpowers skills into its workspace.
 .swiftstar/
+.DS_Store
