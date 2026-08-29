@@ -8,6 +8,35 @@ watch-docs:
 docs:
     uv run --group docs sphinx-build -W -b html docs docs/_build/html
 
+# Enforce docs/sdd.md's size caps: ROADMAP phase-table cells under 300 chars,
+# plan docs under 400 lines / 25% fenced code. Written convention alone has
+# already failed silently once (see docs/sdd.md, "The phase table").
+lint-docs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fail=0
+    while IFS= read -r line; do
+        [[ "$line" =~ ^\|\ P[0-9] ]] || continue
+        IFS='|' read -ra cells <<< "$line"
+        for cell in "${cells[@]}"; do
+            len=${#cell}
+            if [ "$len" -gt 300 ]; then
+                echo "ROADMAP.md: phase-table cell is $len chars (cap 300): ${cell:0:70}..."
+                fail=1
+            fi
+        done
+    done < ROADMAP.md
+    for f in docs/superpowers/plans/*.md; do
+        lines=$(wc -l < "$f")
+        fenced=$(awk '/^```/{f=!f;next} f{c++} END{print c+0}' "$f")
+        pct=$(( lines > 0 ? fenced * 100 / lines : 0 ))
+        if [ "$lines" -gt 400 ] || [ "$pct" -gt 25 ]; then
+            echo "$f: $lines lines, ${pct}% fenced (cap 400 lines / 25% fenced)"
+            fail=1
+        fi
+    done
+    exit $fail
+
 # Fast tier: SwiftStarKit against fixtures. No model, no network, no subprocess
 # (enforced by the FastTierGuard build-tool plugin on SwiftStarKitTests).
 test:

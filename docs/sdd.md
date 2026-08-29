@@ -11,8 +11,23 @@ Spec-driven development, one phase at a time.
 3. **Plan** — an implementation plan committed to
    `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`, task by task, each task
    naming the files it touches and the test that proves it.
+
+   **Plans — local rule, overriding `superpowers:writing-plans`.** A plan
+   names per task: files touched (`path:line` for modifications), interfaces
+   produced (signatures only), and the test that proves it (test name + the
+   assertion, one line each). It does not paste bodies. That skill's "No
+   Placeholders" section requires full code blocks; it serves a stateless
+   subagent executor and is **not in force here** — a test name plus its
+   assertion is not a placeholder. Ceiling: under 400 lines, under 25%
+   fenced. Over either, split the phase.
 4. **Execute** the plan, test-first.
 5. **Review**, then close the phase in `ROADMAP.md`.
+
+   **Close the plan.** At phase close the plan gains a `## Result` section
+   (commits, what diverged, what descoped), and every fence over 15 lines is
+   replaced by a `path:line` reference to what shipped. "Kept as it was
+   written," below, governs the *decision* record (`specs/`, `research/`). A
+   plan is a build instruction; its history is in git.
 
 Research that informs a decision but is not itself a design goes in
 `docs/superpowers/research/`.
@@ -33,6 +48,22 @@ re-litigate from scratch.
   generated from committed captures.
 - **Live** (`just capture`) — the real engine and real weights. Minutes to run,
   never in CI.
+
+## The phase table
+
+`ROADMAP.md`'s Status column is a status: state, date, one link. Direction
+stays one sentence. Either cell exceeding 300 characters means a verdict doc
+is owed — move the narrative to `docs/superpowers/research/`, link it, and
+let the cell shrink back down. Applies at every update, not just at close: a
+cell growing mid-phase is the signal a verdict doc is owed *now*, not at the
+next milestone.
+
+Enforced mechanically by `just lint-docs`, checking phase-table cell length
+and plan fenced-code fraction/line count. A written convention that nothing
+checks gets ignored under deadline pressure — this project has already
+proven that twice on two different rules (see `ROADMAP.md`'s Backlog,
+"eval-system consolidation" and the P26 schema-freeze note) — so the gate
+exists precisely because prose alone did not hold.
 
 ## Standing rules
 
