@@ -14,15 +14,18 @@ carried as a submodule.
 
 ## Status
 
-**Phases P0–P22 and P25 complete.** SwiftStar launches a regular macOS app (a single
-Agent surface via `ds4-agent` NDJSON with tool cards, consent controls, and
-interruptible turns), downloads and gates model feasibility, replays Metrics
-and Diagnostics from committed captures, bootstraps the Superpowers skills,
-answers tool calls over a bidirectional wire, dispatches worktree-isolated
-attempts, and runs a subagent pool — context-isolated subagents sharing one
-locked engine, driven through a queue over the serialized GPU, with the
-context-curve win measured (3.70x realized vs the 4.2x ceiling). See
-[`ROADMAP.md`](ROADMAP.md) for what is next (P23).
+**A working local-agent app.** SwiftStar launches a regular macOS app — a
+single Agent surface via `ds4-agent` NDJSON with tool cards, consent
+controls, and interruptible turns — that downloads weights and gates model
+feasibility before every spawn, replays Metrics and Diagnostics from
+committed captures, bootstraps the Superpowers skills, answers tool calls
+over a bidirectional wire, dispatches worktree-isolated attempts, coordinates
+multi-phase work through an `/orchestrate` loop, and runs a subagent pool —
+context-isolated subagents sharing one locked engine, driven through a queue
+over the serialized GPU, with the context-curve win measured (3.70x realized
+vs the 4.2x ceiling). A model ladder (Mellum, Laguna XS, Laguna S, DeepSeek V4
+Flash) is switchable live, admission-gated before any stop. See
+[`ROADMAP.md`](ROADMAP.md) for current phase status.
 
 - [`BRIEF.md`](BRIEF.md) — the design. Read this first.
 - [`ROADMAP.md`](ROADMAP.md) — phases, concept budget, backlog.
