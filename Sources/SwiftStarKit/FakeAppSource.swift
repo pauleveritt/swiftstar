@@ -1,8 +1,9 @@
 import Foundation
 
 /// Generates the complete Swift source of a fake host *app* (the tool owner)
-/// from a canned-answer map. Mirrors `FakeAgentSource`/`FakeServerSource` for
-/// the bidirectional wire (D4): the integration tier runs fake-agent ↔
+/// from a canned-answer map. Mirrors `FakeAgentSource` (and, formerly, the
+/// Chat surface's `FakeServerSource`, retired 2026-08-26) for the
+/// bidirectional wire (D4): the integration tier runs fake-agent ↔
 /// fake-app end to end — the fake agent emits `tool_request` lines, the fake
 /// app answers each with a `tool_result` line. The fake reads NDJSON lines on
 /// stdin; a `tool_request` is answered with `ok:true` and the answer keyed by

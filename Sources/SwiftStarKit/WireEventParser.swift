@@ -60,9 +60,10 @@ public enum WireEvent: Equatable, Sendable {
     case refused(String)
 }
 
-/// Streaming NDJSON telemetry consumer, shaped like `SSEParser`: feed one wire
-/// line at a time; it returns an event or nil. The first non-blank line must be
-/// the `hello` handshake (binding rule 7); anything else is refused loudly.
+/// Streaming NDJSON telemetry consumer, shaped like the Chat surface's
+/// `SSEParser` (retired 2026-08-26): feed one wire line at a time; it returns
+/// an event or nil. The first non-blank line must be the `hello` handshake
+/// (binding rule 7); anything else is refused loudly.
 public struct WireEventParser: Sendable {
     private var sawHandshake = false
     private static let requiredCaps: Set<String> = ["status", "ready", "ts"]
