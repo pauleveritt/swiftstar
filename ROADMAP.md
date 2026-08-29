@@ -118,115 +118,23 @@ for the fuller (non-gating) list.
 
 ## Concept budget
 
-*Every term below is a cost against the reader's ability to hold the design in
-mind. Checked at the end of each phase; a term earns its place by naming
-something the design actually needs, not by being convenient shorthand.*
+*Every term the design introduces is a cost against the reader's ability to
+hold the design in mind. Checked at the end of each phase; a term earns its
+place by naming something the design actually needs, not by being convenient
+shorthand.*
 
-Seed terms, to be defined in this repository's own words when the phase that
-needs each one lands: **patch set**, **shipped integration**. (The
-seed terms **handoff packet** and **candidate ref** were defined by P10 and now
-appear below.) Defined so far:
+Seed terms awaiting a definition, to be written in this repository's own
+words when the phase that needs each one lands: **patch set**, **shipped
+integration**.
 
-- **feasibility** (P3) — the engine's startup memory plan vs. available RAM,
-  computed, with an actionable refusal (deficit, levers, re-check number).
-
-- **seam** — the spawned-child-plus-wire boundary between the app and the engine.
-- **wire** — the byte stream on that seam (P2: SSE from `ds4-server`).
-- **capture** — a byte-for-byte recording of the seam (wire + stderr + trace),
-  timestamped on the wire and anchored in wall-clock by its provenance.
-- **handshake** — the wire's first line: a version/capability `hello` object; a
-  consumer refuses a mismatch loudly (binding rule 7).
-- **trace** — the engine's `--trace` channel, a separate timestamped file carrying
-  what the wire suppresses (compaction rebuild stats); captured alongside the wire.
-- **fixture** — a committed capture used by tests.
-- **finding** (P6) — a machine-computed diagnostic result: a typed value with a
-  severity and the computed numbers it reports; phrased by a deterministic
-  renderer now, a model later.
-- **baseline** (P6) — a session's own early prefill throughput (highest
-  `prefill_tps` at `ctx_used ≤ 8,192`), against which later throughput is
-  compared; the session measures itself, no external calibration.
-- **diagnostic** (P6) — a finding the analyzer computes from a capture, never a
-  model's judgment. The model only phrases.
-- **workspace** (P7) — the confinement root plus the cwd the app grants at
-  spawn (`--workspace`); the file tools (`read`/`more`/`write`/`list`/`edit`/
-  `search`) fail closed outside it — an unresolvable or escaping path is
-  refused, not silently `chdir`'d.
-- **tool card** (P7) — the transcript's per-call reconstruction of one tool
-  invocation from the wire's phase stream (`start`/`tool`/`param_*`/`output`/
-  `finish`); appended at the `tool` phase, mutated in place by `param_end`/
-  `output`/`finish`, keyed by `idx` scoped to the current block.
-- **turn outcome** (P7) — the capture-grade per-turn record (model/build/sampler
-  and task, token and context use, stop reason, and each tool-call lifecycle
-  transition) that P10's handoff packets consume instead of trusting the
-  transcript's prose.
-- **bootstrap** (P8) — the deterministic skills index `SuperpowersBootstrap`
-  renders from a skills dir (`name`/`description` front-matter, sorted by name,
-  one line per skill), passed to the agent via `ds4-agent -sys`; the engine's
-  existing `sysprompt.kv` rebuild-on-mismatch makes it "prefilled once." A
-  missing skills dir degrades to "No skills available in this workspace."
-  rather than fabricating skills the agent cannot `read`.
-- **progressive disclosure** (P8) — the index lives in the system prompt; the
-  full skill bodies are staged into the workspace (`.swiftstar/skills/<name>/`)
-  at spawn and `read` on demand inside the workspace grant. The bootstrap never
-  inlines skill bodies, so the agent pays the prefill cost only for the skills
-  it loads.
-- **tool request** (P9) — the `--host-tools` wire event the engine emits on stdout
-  when the host owns execution: `{"t":"tool_request","idx":N,"name":"<tool>",
-  "params":[…],"ts":<µs>}`, one per tool call in a block. The engine blocks on a
-  matching `tool_result` from stdin; a mismatched `idx` or any non-`tool_result`
-  line is a loud refusal. `hello` advertises `"tool_request"` in `caps` iff the
-  flag is set.
-- **tool result** (P9) — the host's answer on stdin:
-  `{"t":"tool_result","idx":N,"ok":true|false,"s":"<condensed result text>"}`.
-  `ok:false` is a result, not an absence — the engine consumes it and continues.
-  The `s` is condensed (`ToolResultCondenser`, cap 8000) before it enters KV.
-- **host tool execution** (P9) — the app owns tool execution: with `--host-tools`,
-  the engine emits `tool_request` and blocks; the app's `ToolCallbackResponder`
-  enforces the workspace/shell consent, executes the call, condenses the result,
-  writes the `tool_result` back, and records the host facts into the per-turn
-  `TurnOutcome`. Without the flag the engine executes internally and the wire is
-  observation-only.
-- **handoff packet** (P10) — the typed contract a dispatched attempt runs under:
-  `taskText`, the exact `writableFiles` (worktree-relative), the
-  `validationCommand` the parent will actually run, a per-file `FileBaseline`
-  (`sha256` + `lineEnding` + Unix `mode`) read from the worktree at dispatch time
-  rather than guessed, and turn/tool-call budgets. The worker gets
-  `read`/`write`/`edit` (+`list`/`search` as read aids) and no `bash`; every
-  mutation is revision-checked against `writableFiles`. It consumes the P9
-  host-authoritative facts — success is never inferred from prose.
-- **candidate ref** (P10) — the reviewable commit a dispatched attempt returns
-  when the turn ends without a revision-check violation and (when the packet's
-  `validationCommand` is set) the validation passes: the dispatcher commits the
-  worktree's diff to a throwaway branch and returns the SHA. The ref resolves via
-  `git rev-parse` after the worktree is removed (the commit object survives); the
-  parent reviews it. Nothing merges.
-- **receipt** (P10) — the typed refusal a dispatched attempt returns otherwise,
-  naming the reason: a mutation outside `writableFiles` (`.refusedTool`, first
-  offending path), a turn/tool-call budget exceeded (`.budgetExceeded`), the
-  validation command failing (`.validationFailed` with exit status + stdout
-  digest), or no mutations (`.noChanges`). The reason is machine-computed from the
-  P9 `TurnOutcome`, not inferred from the transcript.
-- **revision check** (P10) — the membership test a dispatched attempt runs on
-  every mutation: a `write`/`edit` whose workspace-relative path is not in the
-  packet's `writableFiles` is refused host-side (`ToolCallbackResponder.consent`
-  refuses the tool, does not execute, does not record it), so an out-of-set write
-  never lands in the worktree. Two checks by design: the host-side refusal is the
-  production confinement; the pure verdict's `.refusedTool` is the backstop (a
-  mutation that *is* in `allowedMutations` but outside `writableFiles` — a
-  symlink escape, or the integration test's scripted mutation).
-
-- **rolling digest** (P11) — the objective-independent "always-want" reduced
-  form of the conversation, maintained incrementally and inference-free by the
-  host: strip tool noise, keep the host-authoritative ledger (files touched,
-  refs, receipts, exit statuses). Backed by the session `.kv` rendered text for
-  crash recovery. The packet-maker's extraction reads this, never the raw
-  conversation — Layer 1 of context distillation, pre-chewed before the
-  objective is known.
-
-- **context assembly** (P11) — the packet-maker's `deterministic-load → rolling
-  digest → adaptation → packet` pipeline: the `dispatch` tool's objective plus
-  the digest plus staged read names plus the deterministic adaptation (D7) become
-  a *prepared* packet `taskText`, not P10's bare sentence.
+The defined term list — feasibility, seam, wire, capture, handshake, trace,
+fixture, finding, baseline, diagnostic, workspace, tool card, turn outcome,
+bootstrap, progressive disclosure, tool request, tool result, host tool
+execution, handoff packet, candidate ref, receipt, revision check, rolling
+digest, context assembly — moved to [`docs/glossary.md`](docs/glossary.md)
+(its "Concepts" section, plus the Mechanisms table for the P10 dispatch
+terms), alongside the app's Modes/Roles/Mechanisms vocabulary. Check new
+terms against that file at the end of each phase.
 
 ## Phases
 
