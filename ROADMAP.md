@@ -16,7 +16,7 @@ Backlog, not into the current phase.*
 
 **P18 is last (2026-08-27 decision):** the `mellum-fixture` benchmark is deferred to the end of the phase sequence — it runs after the model ladder and the remaining phases ship, so it validates the final state rather than an intermediate one.
 
-**Measurement campaign closed 2026-08-29 (branch `measurement-campaign-2026-08-29`).** An overnight pre-registered campaign plus five follow-up arms. **What it measured:** the `/orchestrate` loop at **27/29 = 93% [78%, 98%]** on the `roadmap` spec — replacing P20's single seed-42 observation — and **Mellum's editing rate at ~68% pooled**, which **overturns P17's 15/17** and kills the flat-depth-profile claim (95/63/44 across 1/2/3 files; P17's number was an n=3 upper-tail draw). Both figures carry caveats stated with them: the 93% spans 77–93% depending on how the timeout-truncated tail is treated and rests on **one task**, and the depth profile is confounded with defect difficulty, not file count. **What it fixed:** four harness/engine defects, three of which would have silently corrupted an unattended run — a stale engine binary, an orphaned engine holding the instance lock, void cells permanently burning their seeds, and the singular repair-emission follow-up — plus the directive's missing `projectContext` and engine **divergence #15** (the degeneracy guard aborting legitimate 64-dash comment separators). **What it did not answer:** whether the loop's 93% generalizes to a second task — two arms were stopped early, each having found a real defect instead of an answer; parked in the Backlog with fresh seeds and a written decision rule. Findings collected in [`docs/pathologies.md`](docs/pathologies.md).
+**Measurement campaign closed 2026-08-29 (branch `measurement-campaign-2026-08-29`).** An overnight pre-registered campaign plus five follow-up arms. **What it measured:** the `/orchestrate` loop at **27/29 = 93% [78%, 98%]** on the `roadmap` spec — replacing P20's single seed-42 observation — and **Mellum's editing rate at ~68% pooled**, which **overturns P17's 15/17** and kills the flat-depth-profile claim (95/63/44 across 1/2/3 files; P17's number was an n=3 upper-tail draw). Both figures carry caveats stated with them: the 93% spans 77–93% depending on how the timeout-truncated tail is treated (uniform 900s-bound config: **23/25 = 92%** [75%, 98%]; pooled with the four cells recovered at the 1800s bound: **27/29 = 93%** [78%, 98%]; all five truncated cells counted as failures: **23/30 = 77%** [59%, 88%] — the five were **not** a random subsample, they were selected *by* the bound for being slow and then re-measured under a *different* one, and four of the five passed, so exclusion cost n rather than inflating the rate) and rests on **one task**, and the depth profile is confounded with defect difficulty, not file count. **What it fixed:** four harness/engine defects, three of which would have silently corrupted an unattended run — a stale engine binary, an orphaned engine holding the instance lock, void cells permanently burning their seeds, and the singular repair-emission follow-up — plus the directive's missing `projectContext` and engine **divergence #15** (the degeneracy guard aborting legitimate 64-dash comment separators). **What it did not answer:** whether the loop's 93% generalizes to a second task — two arms were stopped early, each having found a real defect instead of an answer; parked in the Backlog with fresh seeds and a written decision rule. Findings collected in [`docs/pathologies.md`](docs/pathologies.md).
 
 **Also landed 2026-08-26 (out-of-phase, now formalized as P19–P21):** the app
 is one Agent surface (Chat retired), with the ported UI, Settings, per-turn
@@ -410,6 +410,54 @@ Deferred, each with the condition that reopens it.
   fixes are live-unvalidated, so cell 1 is a plumbing check as much as a
   measurement. ~3–5 h. *Reopens whenever there is a clean morning; nothing
   else is blocked on it.*
+- **The largest single failure population is not the one the campaign chased
+  (2026-08-29).** The 2026-08-29 failure classification of 24 non-passing
+  repair captures found **7 of 24** sharing one shape: the model **correctly
+  names the bug on a first pass, then explicitly reasons itself out of fixing
+  it** and never emits the file — *"I don't see any issues with the `<html>`
+  tag."* That is a bigger and more consistent population than the delivery
+  defect the campaign spent the day on (2 of 24), and the classification
+  called it out unprompted as the next thing worth targeting. Nothing has been
+  tried against it. Unlike the delivery defect, there is **no evidence yet
+  that it is a harness artifact** — it may be the model, and saying so needs a
+  probe, not an assumption. See
+  [`2026-08-29-failure-classification.md`](docs/superpowers/research/2026-08-29-failure-classification.md)
+  and [`docs/pathologies.md`](docs/pathologies.md) #2. *Reopens whenever
+  repair-loop quality is worked on again; it is the highest-yield known target
+  in that area.*
+- **Two data-integrity flags from the same classification (2026-08-29), both
+  unexamined.** (1) A **false `V6` void**: `plausible-wrong-fix` seed 5 was
+  recorded as harness-void while its underlying candidate actually graded
+  **13/13** — if that is a scorer defect rather than a one-off, it silently
+  removes passing cells from denominators, which is the exact class of error
+  this campaign's discipline exists to catch. (2) A **content regression at
+  seed 60** not present in the earlier Block B analysis. Both are named in the
+  classification doc and neither has been chased. *Reopens before the next
+  arm that reuses those denominators — a scorer that drops passes is worse
+  than one that drops fails, because it flatters the result.*
+- **Fork branch name contradicts the fork ledger's own stated structure
+  (2026-08-29).** `.gitmodules` pins `p20-dispatch-schema`, a branch cut for
+  P20's dispatch schema (divergence #12) that has since accreted #13, #13a,
+  #13b, #14 and #15 — it is the integration line, but its name describes one
+  of six things it carries. The ledger's divergence **#6** defines the intended
+  structure as `swiftstar-integration` = `laguna-s2.1` + patch set, and a
+  branch by that name exists but is a **strict ancestor** (307 behind, 0
+  ahead), so it is a stale marker rather than an alternative. P23's plan
+  already listed *"reconcile `.gitmodules` vs the pinned branch"* as blocking
+  task 0b; it was worked around instead. Fast-forwarding `swiftstar-integration`
+  and repointing `.gitmodules` is mechanically trivial — **the cost is that
+  9+ research documents name `p20-dispatch-schema` as the branch a given
+  divergence lives on**, and those are historical records that should not be
+  rewritten, so the rename owes a ledger note saying when it happened.
+  *Belongs in P26's hygiene work, not a tired end-of-day rename.*
+- **The strict docs build has been failing on `main` since before 2026-08-29.**
+  `just docs` (`sphinx-build -W`) fails on two documents that are in `docs/`
+  but in no toctree (`glossary.md`, `2026-08-26-old-ui-element-inventory.md`).
+  Verified by building with and without the day's new file. Not caused by this
+  work — `docs/pathologies.md` was added to the toctree so it adds no third
+  warning — and deliberately not fixed inside an unrelated commit, since a
+  silently red gate is worth seeing. *Reopens the next time anyone relies on
+  the docs gate to mean anything.*
 - **Smaller items parked with it (2026-08-29).** (a) `main.swift`'s 18
   `exit()` calls skip their `defer`s, so a FAIL orphans the engine and leaks
   the worktree — worked around all day by the driver's reaper and sweeper,
