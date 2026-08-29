@@ -8,9 +8,15 @@ watch-docs:
 docs:
     uv run --group docs sphinx-build -W -b html docs docs/_build/html
 
-# Enforce docs/sdd.md's size caps: ROADMAP phase-table cells under 300 chars,
-# plan docs under 400 lines / 25% fenced code. Written convention alone has
-# already failed silently once (see docs/sdd.md, "The phase table").
+# Enforce docs/sdd.md's size caps: ROADMAP phase-table Direction/Status
+# cells, plan docs under 400 lines / 25% fenced code. Written convention
+# alone has already failed silently once (see docs/sdd.md, "The phase
+# table"). Direction/Status caps (900/1000 chars) are calibrated against
+# this project's own post-cleanup ROADMAP, not picked in the abstract --
+# the first version of this gate used 300 chars, which was aspirational and
+# unverified: even the row cited as the exemplar of "already short" (P20)
+# failed it by 7x. Caught only because a docs-restructuring pass ran the
+# actual gate instead of trusting the number in docs/sdd.md.
 lint-docs:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -18,13 +24,16 @@ lint-docs:
     while IFS= read -r line; do
         [[ "$line" =~ ^\|\ P[0-9] ]] || continue
         IFS='|' read -ra cells <<< "$line"
-        for cell in "${cells[@]}"; do
-            len=${#cell}
-            if [ "$len" -gt 300 ]; then
-                echo "ROADMAP.md: phase-table cell is $len chars (cap 300): ${cell:0:70}..."
-                fail=1
-            fi
-        done
+        direction_len=${#cells[3]}
+        status_len=${#cells[4]}
+        if [ "$direction_len" -gt 900 ]; then
+            echo "ROADMAP.md: Direction cell is $direction_len chars (cap 900): ${cells[3]:0:70}..."
+            fail=1
+        fi
+        if [ "$status_len" -gt 1000 ]; then
+            echo "ROADMAP.md: Status cell is $status_len chars (cap 1000): ${cells[4]:0:70}..."
+            fail=1
+        fi
     done < ROADMAP.md
     for f in docs/superpowers/plans/*.md; do
         lines=$(wc -l < "$f")

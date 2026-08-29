@@ -51,12 +51,20 @@ re-litigate from scratch.
 
 ## The phase table
 
-`ROADMAP.md`'s Status column is a status: state, date, one link. Direction
-stays one sentence. Either cell exceeding 300 characters means a verdict doc
-is owed — move the narrative to `docs/superpowers/research/`, link it, and
-let the cell shrink back down. Applies at every update, not just at close: a
-cell growing mid-phase is the signal a verdict doc is owed *now*, not at the
-next milestone.
+`ROADMAP.md`'s Status column is a status: state, date, key facts, links.
+Direction stays one sentence. A Direction cell exceeding 900 characters, or
+a Status cell exceeding 1,000, means a verdict doc is owed — move the
+narrative to `docs/superpowers/research/`, link it, and let the cell shrink
+back down. Applies at every update, not just at close: a cell growing
+mid-phase is the signal a verdict doc is owed *now*, not at the next
+milestone.
+
+These caps are calibrated against this project's own post-cleanup ROADMAP,
+not chosen in the abstract — the first version used a uniform 300-character
+cap on every cell, which nobody checked before writing it down: even P20's
+row, the cited example of "already short," failed it by roughly 7x. If
+`just lint-docs` starts failing pervasively again, recalibrate against real
+content before assuming every row regressed.
 
 Enforced mechanically by `just lint-docs`, checking phase-table cell length
 and plan fenced-code fraction/line count. A written convention that nothing
