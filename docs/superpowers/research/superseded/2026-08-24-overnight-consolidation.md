@@ -131,7 +131,7 @@ Recorded so nobody re-derives them.
   anywhere.** Untracked.
 - [`docs/superpowers/research/2026-08-23-p11-agenttest-mellum-verification-record.md`](2026-08-23-p11-agenttest-mellum-verification-record.md)
   — the two AgentClinic runs and the nudge follow-up. Commits `9226953`, `88669a4`.
-- [`docs/harvest/engine-lines.md`](../../harvest/engine-lines.md) — stale Mellum claims
+- [`docs/harvest/engine-lines.md`](../../../harvest/engine-lines.md) — stale Mellum claims
   corrected and the real P12 inheritance list written. Commit `1603570`.
 - `fixtures/agenttest/specs/roadmap-user-story-mellum-decomposed.md` — Mellum's actual
   decomposition output, the input that produced the cost reduction. Untracked; worth
@@ -464,7 +464,7 @@ seven commits `2f8bd32`…`e739816`. **Not merged into
 
 **swiftstar — branch `p11-subagent-pool`**, commit `5ffc16c`
 
-- [`docs/superpowers/research/2026-08-23-house-style-as-a-compiled-artifact.md`](2026-08-23-house-style-as-a-compiled-artifact.md)
+- [`docs/superpowers/research/2026-08-23-house-style-as-a-compiled-artifact.md`](../2026-08-23-house-style-as-a-compiled-artifact.md)
   — **new, unrelated to Mellum.** Style inference re-run per prompt is a recomputation
   over a slowly-changing corpus; the load-bearing move is *style as a P9/P10 objective*
   rather than prompt content, with an out-of-band pass compiling what it can into
@@ -872,7 +872,7 @@ became how to get reliability without amputating reasoning. The reasoning, in or
 
 **swiftstar — `p11-subagent-pool`, all uncommitted at time of writing**
 
-- [`docs/superpowers/research/2026-08-24-laguna-revision-test-spec.md`](2026-08-24-laguna-revision-test-spec.md)
+- [`docs/superpowers/research/2026-08-24-laguna-revision-test-spec.md`](../2026-08-24-laguna-revision-test-spec.md)
   — the L1/L2/L3 hand-holding ladder, four named outcomes fixed in advance, and the
   sequencing note that Q2_K is the *target* (55 GiB, native) tested second only because it
   carries a confound, not because it is lower priority.

@@ -1,6 +1,6 @@
 # Agent test telemetry — GLM 5.2 review + engine investigation (2026-08-23)
 
-> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](2026-08-25-local-model-agency.md). Retained as the evidence record for the GLM 5.2 telemetry critique and the ctx_used/generatedTokens engine trace, plus the before/after bounding-fix measurements.
+> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](../2026-08-25-local-model-agency.md). Retained as the evidence record for the GLM 5.2 telemetry critique and the ctx_used/generatedTokens engine trace, plus the before/after bounding-fix measurements.
 
 **Status:** the first live run's telemetry was reviewed adversarially by GLM 5.2
 (`z-ai/glm-5.2`), and the suspect metrics were traced into the engine. The

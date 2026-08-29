@@ -1,6 +1,6 @@
 # Mellum 2.1: a reproducible gap between tool-call protocol compliance and agentic follow-through
 
-> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](2026-08-25-local-model-agency.md). Retained as the evidence record for the two-mode-split data, the three correction-mechanism tests, and the reproduced hallucinated-import repair failure.
+> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](../2026-08-25-local-model-agency.md). Retained as the evidence record for the two-mode-split data, the three correction-mechanism tests, and the reproduced hallucinated-import repair failure.
 
 **Status:** internal finding, drafted for possible sharing with the Mellum team ahead of an RL training pass. Not yet sent anywhere. All data below comes from two independent test environments running the same model.
 
