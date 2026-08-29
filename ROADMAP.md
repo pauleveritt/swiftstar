@@ -265,117 +265,11 @@ P15's plan is written:
 
 ## Backlog
 
-Deferred, each with the condition that reopens it.
+Deferred, each with the condition that reopens it. Grouped for scanning; a
+group's order is not a priority order.
 
-- **Orchestrate-loop generalization: does 93% hold on a second task?
-  (parked 2026-08-29, end of day — two fixes landed, neither yet validated
-  live.)** Block A measured the `/orchestrate` loop at **27/29 = 93%
-  [78%, 98%]** — but every one of those cells ran the **same task**
-  (`roadmap` spec, one synthetic app, one 13-test oracle). Thirty seeds on one
-  task measures seed variance, not task variance, and `/goal` v5's
-  byte-identical-prompt swing (2/3 → 0/3) is a standing warning that
-  task-to-task variance may be the larger term. **The 93% figure should carry
-  "measured on one task" until this closes.**
-  *Two attempts were made and both were stopped deliberately, each having
-  found a real defect rather than an answer:*
-  1. **Seeds 201–204** — 4/4 lost to the orchestrator building the app in
-     **Flask instead of FastAPI**: `runDirectiveOnce` never passed
-     `sharedContext` (mission + `tech-stack.md`) into the prompt, though the
-     non-directive phase loop always had. **Fixed** (`OrchestrateDirective.build`
-     gained `projectContext`); confirmed present on the wire, but no cell has
-     yet been *graded* with it.
-  2. **Seeds 211–215** — 5/5 lost to an **engine false positive**: the
-     degeneracy guard aborted legitimate writes whose tail was a 64-dash
-     comment separator. **Fixed** as fork divergence **#15**; unit-verified
-     across a 13-case table and both test tiers (785 tests), but **never run
-     against a live model**.
-  *To resume:* fresh pre-registration, seeds **221–230** (211–220 are burnt —
-  215 used, and the arm they belong to is abandoned), `roadmap-user-story`,
-  n=10, `TURN_TIMEOUT=1500`, `RUN_CAP=3600`. The decision rule is already
-  written in `experiment-manifest-orchestrate-userstory-fixed.tsv` and can be
-  copied verbatim: ≥8/10 generalizes, 5–7 signal-but-underpowered, ≤4
-  task-specific. **First cell must be inspected before the rest run** — both
-  fixes are live-unvalidated, so cell 1 is a plumbing check as much as a
-  measurement. ~3–5 h. *Reopens whenever there is a clean morning; nothing
-  else is blocked on it.*
-- **The largest single failure population is not the one the campaign chased
-  (2026-08-29).** The 2026-08-29 failure classification of 24 non-passing
-  repair captures found **7 of 24** sharing one shape: the model **correctly
-  names the bug on a first pass, then explicitly reasons itself out of fixing
-  it** and never emits the file — *"I don't see any issues with the `<html>`
-  tag."* That is a bigger and more consistent population than the delivery
-  defect the campaign spent the day on (2 of 24), and the classification
-  called it out unprompted as the next thing worth targeting. Nothing has been
-  tried against it. Unlike the delivery defect, there is **no evidence yet
-  that it is a harness artifact** — it may be the model, and saying so needs a
-  probe, not an assumption. See
-  [`2026-08-29-failure-classification.md`](docs/superpowers/research/2026-08-29-failure-classification.md)
-  and [`docs/pathologies.md`](docs/pathologies.md) #2. *Reopens whenever
-  repair-loop quality is worked on again; it is the highest-yield known target
-  in that area.*
-- **Two data-integrity flags from the same classification (2026-08-29), both
-  unexamined.** (1) A **false `V6` void**: `plausible-wrong-fix` seed 5 was
-  recorded as harness-void while its underlying candidate actually graded
-  **13/13** — if that is a scorer defect rather than a one-off, it silently
-  removes passing cells from denominators, which is the exact class of error
-  this campaign's discipline exists to catch. (2) A **content regression at
-  seed 60** not present in the earlier Block B analysis. Both are named in the
-  classification doc and neither has been chased. *Reopens before the next
-  arm that reuses those denominators — a scorer that drops passes is worse
-  than one that drops fails, because it flatters the result.*
-- **Fork branch name contradicts the fork ledger's own stated structure
-  (2026-08-29).** `.gitmodules` pins `p20-dispatch-schema`, a branch cut for
-  P20's dispatch schema (divergence #12) that has since accreted #13, #13a,
-  #13b, #14 and #15 — it is the integration line, but its name describes one
-  of six things it carries. The ledger's divergence **#6** defines the intended
-  structure as `swiftstar-integration` = `laguna-s2.1` + patch set, and a
-  branch by that name exists but is a **strict ancestor** (307 behind, 0
-  ahead), so it is a stale marker rather than an alternative. P23's plan
-  already listed *"reconcile `.gitmodules` vs the pinned branch"* as blocking
-  task 0b; it was worked around instead. Fast-forwarding `swiftstar-integration`
-  and repointing `.gitmodules` is mechanically trivial — **the cost is that
-  9+ research documents name `p20-dispatch-schema` as the branch a given
-  divergence lives on**, and those are historical records that should not be
-  rewritten, so the rename owes a ledger note saying when it happened.
-  *Belongs in P26's hygiene work, not a tired end-of-day rename.*
-- **The strict docs build has been failing on `main` since before 2026-08-29.**
-  `just docs` (`sphinx-build -W`) fails on two documents that are in `docs/`
-  but in no toctree (`glossary.md`, `2026-08-26-old-ui-element-inventory.md`).
-  Verified by building with and without the day's new file. Not caused by this
-  work — `docs/pathologies.md` was added to the toctree so it adds no third
-  warning — and deliberately not fixed inside an unrelated commit, since a
-  silently red gate is worth seeing. *Reopens the next time anyone relies on
-  the docs gate to mean anything.* *Fixed 2026-08-29: both documents added to
-  a toctree in `docs/index.md` (glossary into the main hidden toctree,
-  the old-UI inventory into a new "Archive" toctree); `just docs` is green.*
-- **Smaller items parked with it (2026-08-29).** (a) `main.swift`'s 18
-  `exit()` calls skip their `defer`s, so a FAIL orphans the engine and leaks
-  the worktree — worked around all day by the driver's reaper and sweeper,
-  never fixed at source (~1–1.5 h). (b) `RepairLoop.swift:215` returns
-  `.exhausted` on a zero-heading harvest, abandoning remaining rounds; the
-  change is ~15 min but alters repair semantics, and its **only** validation
-  surface is the Mellum fixture tier, so it should wait for P18 rather than
-  ship unvalidated. Note the *other* `contractNotFollowed` site (line 119) is
-  a deliberate refusal and must not be "fixed" by pattern-matching the
-  receipt name. (c) A second temp-dir leak class, `swiftstar-wt-*` dispatch
-  worktrees, dating to 2026-08-25 — distinct from the `agenttest-*` dirs
-  already swept, and still uncovered by any sweeper. (d) A standing guard
-  against under-specified authored prompts: **four instances in one day**
-  (P17's "exactly one file", the singular emission follow-up, the directive's
-  silence on dispatch ordering, the missing `projectContext`). Form is an open
-  question — test, lint, or review step — and picking wrong yields something
-  that gets disabled in three months.
+### Retired / landed
 
-- **Eval-system consolidation (Later half of the 2026-08-29 audit).**
-  Swift-native `swiftstar-analyze findings`/`index` verbs wired to the
-  existing `DiagnosticsAnalyzer`; port the Python campaign
-  report/taxonomy scripts into those verbs and delete the originals; a
-  zero-Metal replay tier over stored captures; a kill list of dead one-off
-  runners and superseded audit checks; `DeepSeekGrader` calibration; a second
-  fixture app and a real hard/superhard difficulty tier. None of this gates
-  the next campaign run — P26 (Now) does. *Reopens when eval infrastructure
-  work is next picked up.* Source:
-  [`2026-08-29-eval-system-audit-and-later-work.md`](docs/superpowers/research/2026-08-29-eval-system-audit-and-later-work.md).
 - **~~Chat as a separate surface~~ — RETIRED 2026-08-26 by product decision.**
   One surface: the Agent. Retire the Chat tab, the `ds4-server`/SSE wire, and
   `EngineController`; the app owns one `ds4-agent` process, one model load.
@@ -384,34 +278,7 @@ Deferred, each with the condition that reopens it.
   no-think "quick reply" mode into the Agent, with `reasoning_effort`-style
   per-turn control on the agent wire (additive engine patch, fork-ledger
   row).*
-- **Shell toggle removed from the Agent tab — moves to Settings.**
-  `AgentView`'s "Allow shell commands" control was removed 2026-08-26 (the
-  agent now ships in its default deny posture, shell off, with no in-tab
-  override); `AgentSettings.shellAllowed` and the `--shell` argv stay. The
-  workspace picker remains in the Agent status bar. **Corrected 2026-08-26:**
-  shell was turned on as a tactical expedient to unblock progress (the deny
-  posture caused the 23-round read/search stall); the long-term fix is P24's
-  digested first-class tools + mediated bash, not raw shell-on. *Reopens as: a
-  Settings pane for spawn-time agent controls (shell toggle, workspace,
-  context) when the Settings scene is next touched — the Chat-retirement phase
-  is the natural home, now shared with P24's shell-on retirement.*
-- **Golden agent capture predates the wire's `kind` field — the kind-driven
-  tool card has no fixture test.** `fixtures/agent/golden-tools.ndjson` was
-  captured before the engine's `param_begin` events carried `kind`
-  (`ds4_agent.c:9197` pins `"kind":"path"`), so `ToolParam.kind` /
-  `ToolCard.path` enrichment is verified only by the 2026-08-26 live probe
-  (`/tmp/swiftstar-probe/wire.ndjson`, Laguna-XS Q4_K_M, exact app argv) and
-  the engine's own C tests — not by any committed fixture. *Reopens as: a
-  complete clean agent run against the real binary (submodule-pinned), a
-  fresh `golden-tools` recapture with provenance, and a fixture test
-  asserting `kind`/`path`/`finished` populate from it.*
-- **Small-ctx worker sessions for the pool (the RLM lever).** The app's
-  `/chat` now runs its worker as a context-isolated session in the one
-  engine, but at the *full* `-c` ctx — ~2.5 GB KV + ~6.15 GB scratch at 50k
-  (`agent_worker_effective_ctx_size` reads the session ctx; there is no
-  per-worker override). Correction 2 names the lever: a 4k worker is ~1.7 GB,
-  not ~8.7 GB. *Descoped from P20 2026-08-27 → its own phase, merged with P23's per-worker think control (one engine patch, fork-ledger row #13, golden recapture). The patch: give pool workers their own ctx (a per-worker override — `agent_worker_effective_ctx_size` reads the session ctx and none exists), or a kept-alive `rewind`-ed small-ctx template session. The Laguna XS line (P22) is the natural worker model — depends on P22's XS golden recapture.*
-- **Two-phase `/spike`** — P20's descoped command: an exploratory worktree spike, phase 1 read-only recon, phase 2 gated execution. The measured spike (2026-08-26 shell-on) proved the shell lever is the capability ceiling, but P24 retires shell-on for mediated bash. *Reopens behind P24: phase 2 rides P24's mediated-bash ladder (host-run, deterministically digested, policy-gated); until then only a phase-1-only (read-only) spike is designable.* Source: [`2026-08-26-spike-shell-on-findings.md`](docs/superpowers/research/2026-08-26-spike-shell-on-findings.md).
+
 - **~~Phase-level recovery~~ — LANDED as P12.8 (2026-08-25); live confirmation
   arrived 2026-08-26, and it is bad news, not good.** The wiring shipped
   (`commitForRepair`, `adoptRepairedPhase`, `PhaseRepair`, build-loop
@@ -428,6 +295,7 @@ Deferred, each with the condition that reopens it.
   [`2026-08-26-overnight-80-cell-verdict.md`](docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md).
   No verdict record written. *Reopens as: land recommendation 1 from that
   findings doc (cumulative rounds) and re-attempt.*
+
 - **~~`RepairLoop` exits on every receipt, including `validationFailed`~~ —
   FIXED (2026-08-25, `953d05a`).** `.validationFailed` now refreshes `lastGrade`
   from the real `ValidationResult` and retries within the existing
@@ -436,8 +304,43 @@ Deferred, each with the condition that reopens it.
   filed below. Shared machinery — applies to all three `RepairLoop` callers
   (P12.4, P12.8, P15), not just the P12.8 case that surfaced it. **Half-fixed,
   corrected 2026-08-26:** the retry itself works, but the round is not
-  cumulative — see the escalated entry directly below, no longer a
-  hypothetical.
+  cumulative — see the escalated "Retry-round evidence coherence" entry
+  (Agent architecture and process), no longer a hypothetical.
+
+- **Workspace isolation** — a dispatched attempt runs in a disposable detached
+  git worktree; the outcome is a reviewable candidate ref or a receipt naming
+  the refusal; nothing merges and the caller's tree is never touched. *Promoted
+  to P10; listed here because its reopen condition (P9 landing) is the thing to
+  watch.* Source: `satyrn-engine` phase E3.
+
+- **The handoff packet** — a typed contract carrying task text, the exact
+  writable files, the validation command the parent will actually run, and a
+  per-file baseline of SHA-256 plus line-ending and mode read from the worktree
+  rather than guessed; the worker gets `read`/`write`/`edit` and no `bash`,
+  under turn and tool-call budgets, with every mutation revision-checked. *Also
+  P10.* Source: `local-ai-pi`, `harness/typed_contract.py` and
+  `docs/engine/deliver-candidate.md`. **The lesson travels with it:** a
+  contract-blind pre-edit guard duplicating the engine's own check was built and
+  then removed, because it refused contract-authorized renames the engine would
+  admit. A guard with less information than the authoritative layer is not
+  defense in depth.
+
+### Agent architecture and process
+
+- **Shell toggle removed from the Agent tab — moves to Settings.**
+  `AgentView`'s "Allow shell commands" control was removed 2026-08-26 (the
+  agent now ships in its default deny posture, shell off, with no in-tab
+  override); `AgentSettings.shellAllowed` and the `--shell` argv stay. The
+  workspace picker remains in the Agent status bar. **Corrected 2026-08-26:**
+  shell was turned on as a tactical expedient to unblock progress (the deny
+  posture caused the 23-round read/search stall); the long-term fix is P24's
+  digested first-class tools + mediated bash, not raw shell-on. *Reopens as: a
+  Settings pane for spawn-time agent controls (shell toggle, workspace,
+  context) when the Settings scene is next touched — the Chat-retirement phase
+  is the natural home, now shared with P24's shell-on retirement.*
+
+- **Two-phase `/spike`** — P20's descoped command: an exploratory worktree spike, phase 1 read-only recon, phase 2 gated execution. The measured spike (2026-08-26 shell-on) proved the shell lever is the capability ceiling, but P24 retires shell-on for mediated bash. *Reopens behind P24: phase 2 rides P24's mediated-bash ladder (host-run, deterministically digested, policy-gated); until then only a phase-1-only (read-only) spike is designable.* Source: [`2026-08-26-spike-shell-on-findings.md`](docs/superpowers/research/2026-08-26-spike-shell-on-findings.md).
+
 - **Retry-round evidence coherence — confirmed 2026-08-26, and worse than
   filed.** This entry's own reopen condition ("a retry round is observed
   reasoning about the wrong file state") has fired: `RepairLoop.swift:193-207`
@@ -455,6 +358,7 @@ Deferred, each with the condition that reopens it.
   [`2026-08-26-overnight-80-cell-verdict.md`](docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md)
   — make `.validationFailed` commit its tree and advance `head`, landing the
   probe test with it.*
+
 - **`validationFailedReceiptRetriesWithFreshEvidence` proves the retry
   happened, not that fresh evidence reached round 2.** The fixture's
   validation command (`test -f marker.txt`) produces no distinguishing output,
@@ -462,17 +366,7 @@ Deferred, each with the condition that reopens it.
   refresh would still pass. Strengthen with a validation command that emits
   identifiable stderr, then assert it appears in `repair-packet-2.json`'s
   `taskText`. *Reopens next time `RepairLoop.swift` is touched.*
-- **Worker-2 session-context ceiling across multiple phase repairs.** D8 sized
-  worker 2 for two rounds of *one* repair (~10–12k, fits ctx=32768). P12.8
-  changes the shape: up to three phase failures per run, each dispatching to the
-  same worker-2 session with full-surface evidence (six writable files + a
-  traceback). Three sequential repairs plausibly approach the ceiling, and the
-  failure mode is the one D8 already calls fatal — a repair turn ending at
-  `limit`/`contextFull` leaves worker 2 unusable and the run must stop. Options:
-  reset worker 2 between phase repairs (`agent_worker_reset_to_sysprompt` exists
-  engine-side), widen the pool and rotate, or accept it with the existing stop
-  guard and record the ceiling. Needs engine + pool-wire work — "its own small
-  phase." *Reopens when a multi-phase-repair run is actually attempted at scale.*
+
 - **`AGENTTEST_REPAIR_THINK` is inert, and bounded thinking for the repair role
   is unvalidated.** Nothing at dispatch time reads `packet.sampling`; thinking is
   set once at engine-spawn from `AGENTTEST_THINK`, a whole-process property. The
@@ -482,6 +376,7 @@ Deferred, each with the condition that reopens it.
   think control needs new machinery (per-worker engine control, or a second
   engine). *Reopens with bounded-thinking validation for the repair role
   (originally P12.6's second half, never run).*
+
 - **Repair cannot honor `AGENTTEST_PATH_STYLE=absolute`.** D5 mandates building
   the repair packet *before* `WorktreeDispatcher.prepare`, so no worktree URL
   exists yet to render an absolute root from — `repairPacket` always renders
@@ -491,6 +386,7 @@ Deferred, each with the condition that reopens it.
   (C13/B8). Not fixed — fixing it means relaxing D5's ordering. *Reopens if an
   absolute-path arm is ever run with repair enabled; until then, don't combine
   them without accounting for the flip.*
+
 - **Two P15 harvest limitations never filed** (its others were). (1) The
   repeated-heading abort can drop a file that first appears *after* the first
   repeat — not observed, structurally possible. (2) First-occurrence-wins
@@ -498,6 +394,7 @@ Deferred, each with the condition that reopens it.
   error, and re-emits it correctly, the harvest keeps the first (broken) copy.
   Real, with the tradeoff consciously recorded at the time. *Reopens if a run is
   ever traced to either.*
+
 - **P15's design "Deferred" list, unfiled in full**: a packet `mode` enum
   (`agentic|textContract`) instead of the current implicit selection; tightening
   the emission protocol's Section 1; a tool-free engine mode / sampler `</think>`
@@ -505,11 +402,7 @@ Deferred, each with the condition that reopens it.
   guarantee. Source:
   [`host-controlled-action-mode-design.md`](docs/superpowers/specs/2026-08-25-host-controlled-action-mode-design.md).
   *Reopens with any further text-contract work.*
-- **P6 has no verification record**, unlike P1–P5 and P7–P11. Not a defect in
-  the phase — the analyzer and its fixtures are committed and tested — but the
-  house convention is a record per closed phase, and P6's absence was only
-  noticed during the 2026-08-25 P12 audit. *Reopens if the diagnostics tier is
-  ever revisited, or as cheap cleanup alongside another docs pass.*
+
 - **The harvest gate requires `stopReason == .eos`.** A turn that runs to the
   token wall is never harvested, so nothing is written and validation fails on
   an empty tree — 1 of 9 build runs. The repeated-heading abort could recover
@@ -517,10 +410,7 @@ Deferred, each with the condition that reopens it.
   -exhaustion semantics, which differ per arm (repair reuses the worker across
   rounds; build handles exhaustion after phase finalization). *Reopens when
   token-wall runs are a measurable share of failures.*
-- **Generation-time stopping control.** The engine's pool protocol has no cancel,
-  so a degenerate run pays to the token wall before the host can react; the
-  repeated-heading abort is harvest-time only. *Reopens only if engine-side work
-  is on the table — it is the one P15 item that is not host-addressable.*
+
 - **The lenient harvest blurs the failure taxonomy.** Without a fence there is no
   delimiter, so prose under an allowlisted heading is written as file content,
   and turns once classified `contractNotFollowed` can land as `validationFailed`
@@ -530,24 +420,10 @@ Deferred, each with the condition that reopens it.
   measurement needs to separate "ignored the contract" from "wrote buggy code" —
   the honest fix is a stricter emission contract, not a smarter parser.*
 
-- **Workspace isolation** — a dispatched attempt runs in a disposable detached
-  git worktree; the outcome is a reviewable candidate ref or a receipt naming
-  the refusal; nothing merges and the caller's tree is never touched. *Promoted
-  to P10; listed here because its reopen condition (P9 landing) is the thing to
-  watch.* Source: `satyrn-engine` phase E3.
-- **The handoff packet** — a typed contract carrying task text, the exact
-  writable files, the validation command the parent will actually run, and a
-  per-file baseline of SHA-256 plus line-ending and mode read from the worktree
-  rather than guessed; the worker gets `read`/`write`/`edit` and no `bash`,
-  under turn and tool-call budgets, with every mutation revision-checked. *Also
-  P10.* Source: `local-ai-pi`, `harness/typed_contract.py` and
-  `docs/engine/deliver-candidate.md`. **The lesson travels with it:** a
-  contract-blind pre-edit guard duplicating the engine's own check was built and
-  then removed, because it refused contract-authorized renames the engine would
-  admit. A guard with less information than the authoritative layer is not
-  defense in depth.
 - **Specialized tool subagents** — split 2026-08-27 by naming: a **tool** is deterministic host code (no model — run one command in its JSON mode, digest the output); a **subagent** is the model-backed escalation (apply the fix when the run says what it is, or summarize when the deterministic digest isn't decision-adequate). The deterministic half — ruff, pyrefly, pytest, sphinx, roadmap admin run+digest — is now **P24's** direction (`test`/`lint`/`scout`); the subagent half stays here. Budgeted to fit an 8k context on AFM3; because Swift runs the evocation, repeated invocations make the limit a budget rather than a wall. The open question is dispatch — how the orchestrating model+agent decides which specialized agent to call. The economics are measured, not assumed: locally, prefill is the scarce resource, so deterministic work first is a *performance* rule — `ruff --fix` beats the model typing the same 40-line edit by ~500x, and clustering 40 pytest failures to 2 representatives turns a 178s prefill at depth into 9s (rates from `docs/harvest/telemetry-findings.md`; worked table in the ds4-control survey cited by `2026-08-22-p11-engine-constraints-and-corrections.md`). *Reopens when P11 lands and the pool design can hold a one-command worker, or as P24's subagent escalation; this is a candidate shape for P11's workers, not a phase of its own.* Source: P11 "Subagent pool".
+
 - **The dispatch decision** — what the handoff packet maker must know to route a task, on three axes. **(1) Parallelism:** dependency edges declared by the plan author are authoritative; the maker may additionally *prove* independence from disjoint writable-file sets plus disjoint validation commands, and must refuse when it cannot — file-disjointness is necessary, not sufficient (an API change and its consumer share no file). **(2) Thinking requirement:** a task is delegable to a reasoning-light worker only when acceptance is a machine-checkable predicate, the tool surface is bounded (`read`/`write`/`edit`, no `bash`), and the writable-file set is exact — and thinking is a stage, not a property: "fix the broken test" needs diagnosis (thinking) before the apply is mechanical. **(3) Executor:** whether the packet goes to a full-context worker, to a deterministic **tool** (a one-command host run in its JSON mode — ruff, pyrefly, pytest, sphinx, roadmap admin — now P24's direction), or to a model-backed **subagent** that applies the fix when the run says what it is, with AFM3's 8k as the budget for the latter and repeat evocations for anything longer. The lesson travels with it: the maker enforces declared intent and computes conservative proofs; it never re-derives semantics with less information than the plan author — the same lesson as the removed contract-blind pre-edit guard. *This is P10's routing design; axis 3 is what the "Specialized tool subagents" entry feeds. **Reopen condition fired 2026-08-22 (P10 landed); the consumer is P20's `/orchestrate` coordination loop, still a stub in the app.*** Source: P10 "Isolation", the "Specialized tool subagents" backlog entry.
+
 - **House style as a compiled artifact** — the long-term goal is an agent that
   writes code the way the author would have written it. The cheap approach —
   infer style from surrounding code on every prompt — recomputes a function of
@@ -580,137 +456,7 @@ Deferred, each with the condition that reopens it.
   and specialists stay small; low means recipes carry the weight and the
   residency cost above becomes the real problem.* Source:
   [`docs/superpowers/research/2026-08-23-house-style-as-a-compiled-artifact.md`](docs/superpowers/research/2026-08-23-house-style-as-a-compiled-artifact.md).
-- **Context-economy tooling** — two deterministic moves that exist because KV
-  reuse is exact-prefix-only and prefill is the scarce resource: (1)
-  *don't-re-read* — hash+mtime every file the agent has read and answer an
-  unchanged re-read with "unchanged since turn N" instead of contents, worth
-  up to ~130s per avoided deep re-read at measured rates; (2) *warm-prefix
-  routing* — when a pool exists, route a task to the session whose live
-  prefix already contains its files (`ds4_session_common_prefix` is free
-  engine-side; needs a wire query). *(1) **reopened 2026-08-27** — P9's host
-  tools shipped AND the 1809 capture measured the win (one file re-read 31× =
-  37% of Σsuffix); P24's tool list absorbs it as the read-guard. (2)
-  **partially unblocked 2026-08-27** — the pool shipped (P11/P20); still needs
-  the `ds4_session_common_prefix` wire query. See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md).* Source:
-  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
-  survey it cites.
-- **A `recall` tool** — the agent can page files (`read`/`search`/`more`) but
-  not its own history: the transcript is a flat token array whose head is
-  destroyed at compaction. The persist half is nearly free — the engine's
-  session `.kv` files already store the full rendered conversation as plain
-  UTF-8 behind a fixed 48-byte header, and pre-compaction prefixes survive on
-  disk until evicted — so the work is pinning the pre-compaction entry against
-  eviction plus a `recall(query)` tool backed by deterministic search over
-  that text. Compaction becomes lossy-in-context, lossless-on-disk, with zero
-  extra inference. *Reopens when P9 lands (host-owned tools make it app-side
-  rather than a C patch) or when a compaction is first observed discarding
-  something a later turn needed.* **REOPENED 2026-08-27** — both conditions:
-  P9's host tools landed, and a compaction was observed discarding context a
-  later turn re-read (the post-compaction AgentView.swift re-reads in the 1809
-  capture). See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source:
-  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
-  survey it cites.
-- **A session browser over `~/.ds4/kvcache`** — listing, metadata (tokens,
-  ctx, created, last-used), and full-text search across past agent sessions,
-  read directly from the `.kv` header + rendered-text region with no model
-  and no engine. Also the substrate `recall` searches. *Reopens with P7 (an
-  agent tab wants session listing/resume) or with `recall`.* Source: same
-  note; format verified by parsing a real file with `struct.unpack`.
-- **A deterministic compaction skeleton** — of the five things the engine's
-  compaction prompt asks the model to reconstruct, two (files
-  inspected/edited with paths and ranges; commands run) are losslessly
-  reconstructible today from `--json-events` tool params, and a tool-call
-  ledger cannot hallucinate which file it edited. The wire is *not* lossless
-  for results (only the bash family emits `output`), so this is a skeleton
-  plus a smaller model summary, not a replacement. Requires forking the
-  compaction path in `ds4_agent.c`; payoff is real but small (compaction
-  fires roughly once per full context). *REOPENED 2026-08-27* — a compaction
-  was observed at the everyday context size with a measured cost: five in 24
-  min at 28–29k, each discarding ~23k tokens (the 1809 capture). Still
-  requires the `ds4_agent.c` fork. See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source: same note.
-- **An engine-side memory-plan / tokenize CLI** — an additive mode that
-  prints the memory plan for a given ctx and exits without loading weights
-  (the estimator needs only GGUF metadata; `inspect_only` exists), and a
-  tokenize mode (the tokenizer loads vocab without weights). The first
-  retires the P3 under-report *and* the temptation to mirror allocator math
-  in Swift; the second enables pre-flight token budgeting ("this read is 18k
-  tokens and will cross the compaction threshold") without linkage.
-  Upstream-bound; must include the estimator's Laguna scratch fix or it
-  ships the same under-report with a nicer interface. *Reopens with the
-  upstream proposal for the P3 correction, or when P9's budgeting needs
-  token counts.* Source: same note.
-- **Recursive sub-queries — the RLM pattern as P11's third lifetime tier.**
-  A project is a long-lived session; a subagent is a short-lived one sharing
-  the parent's root; an RLM sub-query is an *ephemeral* session over a slice
-  of a large input, whose result folds back into a root context that is
-  deliberately kept small (Recursive Language Models, arXiv:2512.24601: flat
-  scaling with input length *provided chunk size stays constant*). Same pool,
-  three lifetime policies. The economics are this hardware's own: splitting
-  a 131k prefill into eight sequential 16k prefills is up to ~4.2x cheaper by
-  the measured curve, with no concurrency required — which is fortunate,
-  since none exists (P11 bullet above). Two constraints a naive reading of
-  the paper misses: a sub-query session must be a small-ctx *template kept
-  alive and rewound*, not a fresh allocation (each Laguna session pins
-  ~6.1 GB of scratch), and the shared preamble is repeated per sub-query, so
-  the win shrinks with preamble size. Compaction is already a degenerate
-  instance — a bounded summarizer whose output folds back into the parent.
-  *Reopens when P11's pool exists and a task is observed needing more input
-  than fits one shallow context — a large-file read, a multi-file review —
-  which is the measurement that tells us the real gain under the 4.2x
-  ceiling.* Source: `2026-08-22-p11-engine-constraints-and-corrections.md`,
-  "The finding under P11."
-- **Multi-project residency** — N long-lived project sessions sharing one
-  engine, switched without reload. Priced honestly: KV is
-  `49,152 × ctx + 72 MiB` per session *plus* ~6.1 GB scratch each, so five
-  64k-ctx sessions ≈ 89 GiB with the model — over the default wired ceiling
-  on a 96 GB machine. Viable shape: snapshot idle sessions to disk
-  (`ds4_session_save_payload`/`load_snapshot`, ~13 GB IO per 150k swap —
-  seconds, versus minutes of re-prefill) with a small resident working set.
-  *Reopens after P11's pool exists and a second concurrent project is
-  actually wanted.* Source: same note.
-- **Laguna XS 2.1 at 16 GB — feasible, unconfirmed** — the SSD-streaming
-  footprint work is done and the numbers clear 16 GB comfortably: 6.53 GiB
-  planned / 6.46 GiB task footprint ("fits easily under 10 GB including
-  context"), from the uniform RoutedQ3_K artifact plus `--prefill-chunk`. What
-  remains is confirmation, not new engineering: the 16 GB hardware acceptance
-  never ran (the numbers come from a 128 GB dev machine, whose OS page cache
-  hides SSD-miss throughput), so the committed target stays 32 GB until the
-  `mini-notes.md` §7 checklist passes on real 16 GB hardware. *Reopens with P13
-  (Laguna XS is a P13 variant) or when a real 16 GB machine is available.*
-  Source: `~/projects/ds4/.claude/worktrees/laguna-xs2.1` — `LAGUNA-XS.md`,
-  `docs/superpowers/LAGUNA-XS21.md` §6, `docs/superpowers/plans/mini-notes.md`
-  §7, and
-  `docs/superpowers/research/laguna-xs21-p26-p27-hotlist-acceptance.md`.
-- **An engine-side `--null-model` mode** — the real emitter, instance lock,
-  signal handling, and stdout code running against fake weights, so the
-  integration tier exercises the actual code instead of our beliefs about it.
-  Upstream-bound. *Reopens when the fake tier misses a bug the real binary
-  would have caught.*
-- **Heterogeneous compute routing** across ANE and GPU, deterministic rules
-  first. *Reopens when a role exists whose latency tolerance and energy cost are
-  both measured.*
-- **Grammar-constrained tool calls.** An `ds4_agent.c` patch, not an
-  embedding-only capability. *Reopens when a malformed tool call is observed
-  costing a real turn.* **REOPENED 2026-08-29 — the condition is met three
-  times over, and the split matters.** Two historical turns were killed
-  ([Block C](docs/superpowers/research/2026-08-28-block-c-capture-mining.md)):
-  one where the model emitted its own system-prompt placeholder as a tool name
-  (`"name": "{function-name}"`), one where 467 tokens of *correct* reasoning
-  about the right file were discarded. The third arrived in a fresh
-  pre-registered run — Block A seed 109 lost an entire cell to three
-  consecutive `tool calling is not allowed inside <think></think>` rejections
-  followed by the engine's `too many malformed tool calls in a row` kill
-  (`captures/agenttest/20260829-090231-roadmap-directive`). **The two classes
-  need different fixes.** A plain grammar cleanly prevents the malformed-*name*
-  class. The *placement* class — a well-formed call emitted inside `<think>` —
-  is not a syntax error and a grammar over tool-call text will not catch it; it
-  needs think-state-aware constraint or engine-side hoisting. Placement is also
-  the more expensive and more common class (5 of 8 observed malformed calls),
-  and it can only affect thinking-enabled roles, which is exactly what the
-  orchestrate loop is. Base rate is tail risk, not a tax: 0.21% of 3,796 tool
-  requests, and 1 of 38 Block A cells. Note the engine already emits a
-  corrective nudge ("finish thinking before emitting `<tool_call>`") and the
-  model repeated the mistake anyway, so text feedback is not the remedy.
+
 - **Disambiguate the orchestrate directive on dispatch ordering.** The
   directive says only *"One-shot-first: dispatch each phase once"*
   (`Sources/SwiftStarKit/OrchestrateDirective.swift:34`) and never says whether
@@ -733,6 +479,7 @@ Deferred, each with the condition that reopens it.
   and now this. Worth a standing check on authored prompts rather than three
   separate fixes. *Cheap; needs a re-measurement arm against Block A's 27/29
   baseline to confirm, not just a reading of the prompt.*
+
 - **`runDirectiveOnce` dropped `sharedContext` — fixed 2026-08-29, same defect
   family, fourth instance.** The non-directive phase loop (`runOnce`,
   `Sources/swiftstar-agenttest/main.swift:202,390`) always includes
@@ -760,6 +507,182 @@ Deferred, each with the condition that reopens it.
   holds before this note is closed. See
   [`docs/pathologies.md`](docs/pathologies.md) #10 for the general shape:
   **silent framework substitution** when project context is missing.
+
+- **"Swift body, Python brain"** — agent policy in a hot-reloadable uv-managed
+  peer process. *Reopens if agent policy starts changing faster than the app
+  can ship.* Source: `SWIFTSTAR.md`.
+
+### Pool and context economy
+
+- **Small-ctx worker sessions for the pool (the RLM lever).** The app's
+  `/chat` now runs its worker as a context-isolated session in the one
+  engine, but at the *full* `-c` ctx — ~2.5 GB KV + ~6.15 GB scratch at 50k
+  (`agent_worker_effective_ctx_size` reads the session ctx; there is no
+  per-worker override). Correction 2 names the lever: a 4k worker is ~1.7 GB,
+  not ~8.7 GB. *Descoped from P20 2026-08-27 → its own phase, merged with P23's per-worker think control (one engine patch, fork-ledger row #13, golden recapture). The patch: give pool workers their own ctx (a per-worker override — `agent_worker_effective_ctx_size` reads the session ctx and none exists), or a kept-alive `rewind`-ed small-ctx template session. The Laguna XS line (P22) is the natural worker model — depends on P22's XS golden recapture.*
+
+- **Worker-2 session-context ceiling across multiple phase repairs.** D8 sized
+  worker 2 for two rounds of *one* repair (~10–12k, fits ctx=32768). P12.8
+  changes the shape: up to three phase failures per run, each dispatching to the
+  same worker-2 session with full-surface evidence (six writable files + a
+  traceback). Three sequential repairs plausibly approach the ceiling, and the
+  failure mode is the one D8 already calls fatal — a repair turn ending at
+  `limit`/`contextFull` leaves worker 2 unusable and the run must stop. Options:
+  reset worker 2 between phase repairs (`agent_worker_reset_to_sysprompt` exists
+  engine-side), widen the pool and rotate, or accept it with the existing stop
+  guard and record the ceiling. Needs engine + pool-wire work — "its own small
+  phase." *Reopens when a multi-phase-repair run is actually attempted at scale.*
+
+- **Context-economy tooling** — two deterministic moves that exist because KV
+  reuse is exact-prefix-only and prefill is the scarce resource: (1)
+  *don't-re-read* — hash+mtime every file the agent has read and answer an
+  unchanged re-read with "unchanged since turn N" instead of contents, worth
+  up to ~130s per avoided deep re-read at measured rates; (2) *warm-prefix
+  routing* — when a pool exists, route a task to the session whose live
+  prefix already contains its files (`ds4_session_common_prefix` is free
+  engine-side; needs a wire query). *(1) **reopened 2026-08-27** — P9's host
+  tools shipped AND the 1809 capture measured the win (one file re-read 31× =
+  37% of Σsuffix); P24's tool list absorbs it as the read-guard. (2)
+  **partially unblocked 2026-08-27** — the pool shipped (P11/P20); still needs
+  the `ds4_session_common_prefix` wire query. See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md).* Source:
+  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
+  survey it cites.
+
+- **A `recall` tool** — the agent can page files (`read`/`search`/`more`) but
+  not its own history: the transcript is a flat token array whose head is
+  destroyed at compaction. The persist half is nearly free — the engine's
+  session `.kv` files already store the full rendered conversation as plain
+  UTF-8 behind a fixed 48-byte header, and pre-compaction prefixes survive on
+  disk until evicted — so the work is pinning the pre-compaction entry against
+  eviction plus a `recall(query)` tool backed by deterministic search over
+  that text. Compaction becomes lossy-in-context, lossless-on-disk, with zero
+  extra inference. *Reopens when P9 lands (host-owned tools make it app-side
+  rather than a C patch) or when a compaction is first observed discarding
+  something a later turn needed.* **REOPENED 2026-08-27** — both conditions:
+  P9's host tools landed, and a compaction was observed discarding context a
+  later turn re-read (the post-compaction AgentView.swift re-reads in the 1809
+  capture). See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source:
+  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
+  survey it cites.
+
+- **A session browser over `~/.ds4/kvcache`** — listing, metadata (tokens,
+  ctx, created, last-used), and full-text search across past agent sessions,
+  read directly from the `.kv` header + rendered-text region with no model
+  and no engine. Also the substrate `recall` searches. *Reopens with P7 (an
+  agent tab wants session listing/resume) or with `recall`.* Source: same
+  note; format verified by parsing a real file with `struct.unpack`.
+
+- **A deterministic compaction skeleton** — of the five things the engine's
+  compaction prompt asks the model to reconstruct, two (files
+  inspected/edited with paths and ranges; commands run) are losslessly
+  reconstructible today from `--json-events` tool params, and a tool-call
+  ledger cannot hallucinate which file it edited. The wire is *not* lossless
+  for results (only the bash family emits `output`), so this is a skeleton
+  plus a smaller model summary, not a replacement. Requires forking the
+  compaction path in `ds4_agent.c`; payoff is real but small (compaction
+  fires roughly once per full context). *REOPENED 2026-08-27* — a compaction
+  was observed at the everyday context size with a measured cost: five in 24
+  min at 28–29k, each discarding ~23k tokens (the 1809 capture). Still
+  requires the `ds4_agent.c` fork. See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source: same note.
+
+- **Recursive sub-queries — the RLM pattern as P11's third lifetime tier.**
+  A project is a long-lived session; a subagent is a short-lived one sharing
+  the parent's root; an RLM sub-query is an *ephemeral* session over a slice
+  of a large input, whose result folds back into a root context that is
+  deliberately kept small (Recursive Language Models, arXiv:2512.24601: flat
+  scaling with input length *provided chunk size stays constant*). Same pool,
+  three lifetime policies. The economics are this hardware's own: splitting
+  a 131k prefill into eight sequential 16k prefills is up to ~4.2x cheaper by
+  the measured curve, with no concurrency required — which is fortunate,
+  since none exists (the pool is single-threaded by design — see Prior
+  work's P11 entry). Two constraints a naive reading of
+  the paper misses: a sub-query session must be a small-ctx *template kept
+  alive and rewound*, not a fresh allocation (each Laguna session pins
+  ~6.1 GB of scratch), and the shared preamble is repeated per sub-query, so
+  the win shrinks with preamble size. Compaction is already a degenerate
+  instance — a bounded summarizer whose output folds back into the parent.
+  *Reopens when P11's pool exists and a task is observed needing more input
+  than fits one shallow context — a large-file read, a multi-file review —
+  which is the measurement that tells us the real gain under the 4.2x
+  ceiling.* Source: `2026-08-22-p11-engine-constraints-and-corrections.md`,
+  "The finding under P11."
+
+- **Multi-project residency** — N long-lived project sessions sharing one
+  engine, switched without reload. Priced honestly: KV is
+  `49,152 × ctx + 72 MiB` per session *plus* ~6.1 GB scratch each, so five
+  64k-ctx sessions ≈ 89 GiB with the model — over the default wired ceiling
+  on a 96 GB machine. Viable shape: snapshot idle sessions to disk
+  (`ds4_session_save_payload`/`load_snapshot`, ~13 GB IO per 150k swap —
+  seconds, versus minutes of re-prefill) with a small resident working set.
+  *Reopens after P11's pool exists and a second concurrent project is
+  actually wanted.* Source: same note.
+
+### Model and engine features
+
+- **Generation-time stopping control.** The engine's pool protocol has no cancel,
+  so a degenerate run pays to the token wall before the host can react; the
+  repeated-heading abort is harvest-time only. *Reopens only if engine-side work
+  is on the table — it is the one P15 item that is not host-addressable.*
+
+- **An engine-side memory-plan / tokenize CLI** — an additive mode that
+  prints the memory plan for a given ctx and exits without loading weights
+  (the estimator needs only GGUF metadata; `inspect_only` exists), and a
+  tokenize mode (the tokenizer loads vocab without weights). The first
+  retires the P3 under-report *and* the temptation to mirror allocator math
+  in Swift; the second enables pre-flight token budgeting ("this read is 18k
+  tokens and will cross the compaction threshold") without linkage.
+  Upstream-bound; must include the estimator's Laguna scratch fix or it
+  ships the same under-report with a nicer interface. *Reopens with the
+  upstream proposal for the P3 correction, or when P9's budgeting needs
+  token counts.* Source: same note.
+
+- **Laguna XS 2.1 at 16 GB — feasible, unconfirmed** — the SSD-streaming
+  footprint work is done and the numbers clear 16 GB comfortably: 6.53 GiB
+  planned / 6.46 GiB task footprint ("fits easily under 10 GB including
+  context"), from the uniform RoutedQ3_K artifact plus `--prefill-chunk`. What
+  remains is confirmation, not new engineering: the 16 GB hardware acceptance
+  never ran (the numbers come from a 128 GB dev machine, whose OS page cache
+  hides SSD-miss throughput), so the committed target stays 32 GB until the
+  `mini-notes.md` §7 checklist passes on real 16 GB hardware. *Reopens with P13
+  (Laguna XS is a P13 variant) or when a real 16 GB machine is available.*
+  Source: `~/projects/ds4/.claude/worktrees/laguna-xs2.1` — `LAGUNA-XS.md`,
+  `docs/superpowers/LAGUNA-XS21.md` §6, `docs/superpowers/plans/mini-notes.md`
+  §7, and
+  `docs/superpowers/research/laguna-xs21-p26-p27-hotlist-acceptance.md`.
+
+- **An engine-side `--null-model` mode** — the real emitter, instance lock,
+  signal handling, and stdout code running against fake weights, so the
+  integration tier exercises the actual code instead of our beliefs about it.
+  Upstream-bound. *Reopens when the fake tier misses a bug the real binary
+  would have caught.*
+
+- **Heterogeneous compute routing** across ANE and GPU, deterministic rules
+  first. *Reopens when a role exists whose latency tolerance and energy cost are
+  both measured.*
+
+- **Grammar-constrained tool calls.** An `ds4_agent.c` patch, not an
+  embedding-only capability. *Reopens when a malformed tool call is observed
+  costing a real turn.* **REOPENED 2026-08-29 — the condition is met three
+  times over, and the split matters.** Two historical turns were killed
+  ([Block C](docs/superpowers/research/2026-08-28-block-c-capture-mining.md)):
+  one where the model emitted its own system-prompt placeholder as a tool name
+  (`"name": "{function-name}"`), one where 467 tokens of *correct* reasoning
+  about the right file were discarded. The third arrived in a fresh
+  pre-registered run — Block A seed 109 lost an entire cell to three
+  consecutive `tool calling is not allowed inside <think></think>` rejections
+  followed by the engine's `too many malformed tool calls in a row` kill
+  (`captures/agenttest/20260829-090231-roadmap-directive`). **The two classes
+  need different fixes.** A plain grammar cleanly prevents the malformed-*name*
+  class. The *placement* class — a well-formed call emitted inside `<think>` —
+  is not a syntax error and a grammar over tool-call text will not catch it; it
+  needs think-state-aware constraint or engine-side hoisting. Placement is also
+  the more expensive and more common class (5 of 8 observed malformed calls),
+  and it can only affect thinking-enabled roles, which is exactly what the
+  orchestrate loop is. Base rate is tail risk, not a tax: 0.21% of 3,796 tool
+  requests, and 1 of 38 Block A cells. Note the engine already emits a
+  corrective nudge ("finish thinking before emitting `<tool_call>`") and the
+  model repeated the mistake anyway, so text feedback is not the remedy.
+
 - **DFlash speculative decoding.** `laguna-s-2.1-DFlash-Q8_0.gguf` (1.1 GB) is
   a draft head for Laguna S, not a standalone model — its GGUF declares
   `general.architecture: dflash` and `dflash.block_count`, not a servable
@@ -776,6 +699,7 @@ Deferred, each with the condition that reopens it.
   sampling diversity for — model it as a `draftModel` field on Laguna S's
   `Variant`, not a fifth registry entry, since it has no context range or
   memory budget of its own.*
+
 - **Energy-aware pacing** — pace-to-read decoding and watts-aware scheduling via
   a runtime control message. The control message must be *built*, not exposed:
   `ds4_session_set_power` rejects Laguna at any value below 100 and is
@@ -784,9 +708,85 @@ Deferred, each with the condition that reopens it.
   current measurement says idle draw is under 1W — the reopen path is P21's
   "expose the wire's `power` field" step, to measure the sustained draw of
   the prefill spikes before building the lever.*
+
 - **An embedding spike.** *Reopens only if dynamic Swift-defined per-token logit
   masking becomes critical-path. Nothing else in `SWIFTSTAR.md` requires
   in-process access.*
+
+### Evaluation and measurement
+
+- **Orchestrate-loop generalization: does 93% hold on a second task?
+  (parked 2026-08-29, end of day — two fixes landed, neither yet validated
+  live.)** Block A measured the `/orchestrate` loop at **27/29 = 93%
+  [78%, 98%]** — but every one of those cells ran the **same task**
+  (`roadmap` spec, one synthetic app, one 13-test oracle). Thirty seeds on one
+  task measures seed variance, not task variance, and `/goal` v5's
+  byte-identical-prompt swing (2/3 → 0/3) is a standing warning that
+  task-to-task variance may be the larger term. **The 93% figure should carry
+  "measured on one task" until this closes.**
+  *Two attempts were made and both were stopped deliberately, each having
+  found a real defect rather than an answer:*
+  1. **Seeds 201–204** — 4/4 lost to the orchestrator building the app in
+     **Flask instead of FastAPI**: `runDirectiveOnce` never passed
+     `sharedContext` (mission + `tech-stack.md`) into the prompt, though the
+     non-directive phase loop always had. **Fixed** (`OrchestrateDirective.build`
+     gained `projectContext`); confirmed present on the wire, but no cell has
+     yet been *graded* with it.
+  2. **Seeds 211–215** — 5/5 lost to an **engine false positive**: the
+     degeneracy guard aborted legitimate writes whose tail was a 64-dash
+     comment separator. **Fixed** as fork divergence **#15**; unit-verified
+     across a 13-case table and both test tiers (785 tests), but **never run
+     against a live model**.
+  *To resume:* fresh pre-registration, seeds **221–230** (211–220 are burnt —
+  215 used, and the arm they belong to is abandoned), `roadmap-user-story`,
+  n=10, `TURN_TIMEOUT=1500`, `RUN_CAP=3600`. The decision rule is already
+  written in `experiment-manifest-orchestrate-userstory-fixed.tsv` and can be
+  copied verbatim: ≥8/10 generalizes, 5–7 signal-but-underpowered, ≤4
+  task-specific. **First cell must be inspected before the rest run** — both
+  fixes are live-unvalidated, so cell 1 is a plumbing check as much as a
+  measurement. ~3–5 h. *Reopens whenever there is a clean morning; nothing
+  else is blocked on it.*
+
+- **The largest single failure population is not the one the campaign chased
+  (2026-08-29).** The 2026-08-29 failure classification of 24 non-passing
+  repair captures found **7 of 24** sharing one shape: the model **correctly
+  names the bug on a first pass, then explicitly reasons itself out of fixing
+  it** and never emits the file — *"I don't see any issues with the `<html>`
+  tag."* That is a bigger and more consistent population than the delivery
+  defect the campaign spent the day on (2 of 24), and the classification
+  called it out unprompted as the next thing worth targeting. Nothing has been
+  tried against it. Unlike the delivery defect, there is **no evidence yet
+  that it is a harness artifact** — it may be the model, and saying so needs a
+  probe, not an assumption. See
+  [`2026-08-29-failure-classification.md`](docs/superpowers/research/2026-08-29-failure-classification.md)
+  and [`docs/pathologies.md`](docs/pathologies.md) #2. *Reopens whenever
+  repair-loop quality is worked on again; it is the highest-yield known target
+  in that area.*
+
+- **Two data-integrity flags from the same classification (2026-08-29), both
+  unexamined.** (1) A **false `V6` void**: `plausible-wrong-fix` seed 5 was
+  recorded as harness-void while its underlying candidate actually graded
+  **13/13** — if that is a scorer defect rather than a one-off, it silently
+  removes passing cells from denominators, which is the exact class of error
+  this campaign's discipline exists to catch. (2) A **content regression at
+  seed 60** not present in the earlier Block B analysis. Both are named in the
+  classification doc and neither has been chased. *Reopens before the next
+  arm that reuses those denominators — a scorer that drops passes is worse
+  than one that drops fails, because it flatters the result.*
+
+- **Eval-system consolidation (Later half of the 2026-08-29 audit).**
+  Swift-native `swiftstar-analyze findings`/`index` verbs wired to the
+  existing `DiagnosticsAnalyzer`; port the Python campaign
+  report/taxonomy scripts into those verbs and delete the originals; a
+  zero-Metal replay tier over stored captures; a kill list of dead one-off
+  runners and superseded audit checks; `DeepSeekGrader` calibration; a second
+  fixture app and a real hard/superhard difficulty tier. None of this gates
+  the next campaign run — P26 (Now) does. *Reopens when eval infrastructure
+  work is next picked up.* Source:
+  [`2026-08-29-eval-system-audit-and-later-work.md`](docs/superpowers/research/2026-08-29-eval-system-audit-and-later-work.md).
+
+### ANE watcher tier
+
 - **The ANE watcher tier — a librarian and an inspector over Monty.** A third
   tier beside the GPU main agent and the GPU pool: AFM on the ANE (macOS 26
   CoreML, 27 CoreAI — verify) as the model, and
@@ -816,11 +816,71 @@ Deferred, each with the condition that reopens it.
   first time) is measured.* **Split 2026-08-27:** the deterministic background files+symbols index (what feeds P24's `scout`) is P24's, not this tier's; this entry keeps the model-backed roles — the librarian's Monty reactions and the inspector as P24's ANE-only-phrases escalation when deterministic clustering isn't decision-adequate. Both stay AFM-gated. **CAG filing 2026-08-28:** the watcher's context decomposes into a stable layer (envelope + stubs + interests — preloaded once as a cached prefix), an event layer (the projected digest slice — appended per wake), and an edge layer (`kv_query` — CAG's own "preload a foundation, retrieve only edge cases" hybrid). At a 4k window (the tighter bound; the specialized-tool-subagents entry already budgets 8k on AFM3), fixed overhead is ~1–1.4k tokens, leaving ~2.5–3.3k for slice + fill — the pre-chewed project state must live **outside** the window (typed index, digest, kv), never preloaded; whole-corpus preloading is off the table (CAG's *small* config alone is 21k). Capacity answer: 4k is enough for **reaction and adjudication** (the moment-specific hole), not for indexing (already P24's, deterministic) or whole-project projection. Handoff-packet facts fork: deterministic **derived facts** (extend the packet's authored/derived `baselines` split — the dispatcher pulls from the digest, the model adjudicates only the residue), staged AFM classification slice-wise via `ask_model`, or the GPU decompose role (status quo). Deciding measurement: **pre-chew quality** — audit past decompose-authored facts for the fraction the digest could have derived; high means 4k is plenty, low means the librarian stays reaction-only. Source:
   `docs/superpowers/research/2026-08-23-monty-and-the-ane-watcher-tier.md`,
   `docs/superpowers/research/2026-08-28-cag-and-the-librarian.md` (arXiv 2412.15605v2).
-- **"Swift body, Python brain"** — agent policy in a hot-reloadable uv-managed
-  peer process. *Reopens if agent policy starts changing faster than the app
-  can ship.* Source: `SWIFTSTAR.md`.
-- **A menu-bar extra.** Explicitly declined 2026-08-21. *Reopens only on a
-  direct request; the at-a-glance glance is the one thing it was good for.*
+
+### Process and tooling
+
+- **Fork branch name contradicts the fork ledger's own stated structure
+  (2026-08-29).** `.gitmodules` pins `p20-dispatch-schema`, a branch cut for
+  P20's dispatch schema (divergence #12) that has since accreted #13, #13a,
+  #13b, #14 and #15 — it is the integration line, but its name describes one
+  of six things it carries. The ledger's divergence **#6** defines the intended
+  structure as `swiftstar-integration` = `laguna-s2.1` + patch set, and a
+  branch by that name exists but is a **strict ancestor** (307 behind, 0
+  ahead), so it is a stale marker rather than an alternative. P23's plan
+  already listed *"reconcile `.gitmodules` vs the pinned branch"* as blocking
+  task 0b; it was worked around instead. Fast-forwarding `swiftstar-integration`
+  and repointing `.gitmodules` is mechanically trivial — **the cost is that
+  9+ research documents name `p20-dispatch-schema` as the branch a given
+  divergence lives on**, and those are historical records that should not be
+  rewritten, so the rename owes a ledger note saying when it happened.
+  *Belongs in P26's hygiene work, not a tired end-of-day rename.*
+
+- **The strict docs build has been failing on `main` since before 2026-08-29.**
+  `just docs` (`sphinx-build -W`) fails on two documents that are in `docs/`
+  but in no toctree (`glossary.md`, `2026-08-26-old-ui-element-inventory.md`).
+  Verified by building with and without the day's new file. Not caused by this
+  work — `docs/pathologies.md` was added to the toctree so it adds no third
+  warning — and deliberately not fixed inside an unrelated commit, since a
+  silently red gate is worth seeing. *Reopens the next time anyone relies on
+  the docs gate to mean anything.* *Fixed 2026-08-29: both documents added to
+  a toctree in `docs/index.md` (glossary into the main hidden toctree,
+  the old-UI inventory into a new "Archive" toctree); `just docs` is green.*
+
+- **Smaller items parked with it (2026-08-29).** (a) `main.swift`'s 18
+  `exit()` calls skip their `defer`s, so a FAIL orphans the engine and leaks
+  the worktree — worked around all day by the driver's reaper and sweeper,
+  never fixed at source (~1–1.5 h). (b) `RepairLoop.swift:215` returns
+  `.exhausted` on a zero-heading harvest, abandoning remaining rounds; the
+  change is ~15 min but alters repair semantics, and its **only** validation
+  surface is the Mellum fixture tier, so it should wait for P18 rather than
+  ship unvalidated. Note the *other* `contractNotFollowed` site (line 119) is
+  a deliberate refusal and must not be "fixed" by pattern-matching the
+  receipt name. (c) A second temp-dir leak class, `swiftstar-wt-*` dispatch
+  worktrees, dating to 2026-08-25 — distinct from the `agenttest-*` dirs
+  already swept, and still uncovered by any sweeper. (d) A standing guard
+  against under-specified authored prompts: **four instances in one day**
+  (P17's "exactly one file", the singular emission follow-up, the directive's
+  silence on dispatch ordering, the missing `projectContext`). Form is an open
+  question — test, lint, or review step — and picking wrong yields something
+  that gets disabled in three months.
+
+- **Golden agent capture predates the wire's `kind` field — the kind-driven
+  tool card has no fixture test.** `fixtures/agent/golden-tools.ndjson` was
+  captured before the engine's `param_begin` events carried `kind`
+  (`ds4_agent.c:9197` pins `"kind":"path"`), so `ToolParam.kind` /
+  `ToolCard.path` enrichment is verified only by the 2026-08-26 live probe
+  (`/tmp/swiftstar-probe/wire.ndjson`, Laguna-XS Q4_K_M, exact app argv) and
+  the engine's own C tests — not by any committed fixture. *Reopens as: a
+  complete clean agent run against the real binary (submodule-pinned), a
+  fresh `golden-tools` recapture with provenance, and a fixture test
+  asserting `kind`/`path`/`finished` populate from it.*
+
+- **P6 has no verification record**, unlike P1–P5 and P7–P11. Not a defect in
+  the phase — the analyzer and its fixtures are committed and tested — but the
+  house convention is a record per closed phase, and P6's absence was only
+  noticed during the 2026-08-25 P12 audit. *Reopens if the diagnostics tier is
+  ever revisited, or as cheap cleanup alongside another docs pass.*
+
 - **Warm-started metrics for `swiftstar-agenttest`.** Wall-clock elapsed and
   context/token counters currently start (`runStart = Date()`,
   `Sources/swiftstar-agenttest/main.swift`) *before* `PoolOrchestrator` is
@@ -839,6 +899,7 @@ Deferred, each with the condition that reopens it.
   already bit one such comparison this session — see
   `.superpowers/sdd/2026-08-24-p12-4-repair-role/progress.md` if that
   session's ledger is still around). Source: this session, 2026-08-25.
+
 - **Agent harness (Pi) tooling: lazy Context7 stays, Superpowers goes lazy.**
   The dev harness runs both as Pi packages (`npm:@upstash/context7-pi`,
   `git:github.com/obra/superpowers`). Context7 already ships the right shape —
@@ -861,6 +922,12 @@ Deferred, each with the condition that reopens it.
   re-measuring system-prompt + first-run token cost on the real
   small-context models.* Source:
   [`2026-08-27-pi-harness-context7-superpowers.md`](docs/superpowers/research/2026-08-27-pi-harness-context7-superpowers.md).
+
+### Declined
+
+- **A menu-bar extra.** Explicitly declined 2026-08-21. *Reopens only on a
+  direct request; the at-a-glance glance is the one thing it was good for.*
+
 
 ## Prior work
 
