@@ -6,30 +6,6 @@ import Foundation
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct RepairLoopTests {
 
-    private func makeRepo() throws -> URL {
-        let repo = FileManager.default.temporaryDirectory
-            .appendingPathComponent("repairloop-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
-        _ = try git(repo, ["init"])
-        _ = try git(repo, ["config", "user.email", "swiftstar@test.local"])
-        _ = try git(repo, ["config", "user.name", "SwiftStar Test"])
-        try "seed\n".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        _ = try git(repo, ["add", "a.txt"])
-        _ = try git(repo, ["commit", "-m", "seed"])
-        return repo
-    }
-
-    private func git(_ dir: URL, _ args: [String]) throws -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", dir.path] + args
-        let out = Pipe(); p.standardOutput = out; p.standardError = Pipe()
-        try p.run(); p.waitUntilExit()
-        let output = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        guard p.terminationStatus == 0 else { throw NSError(domain: "git", code: Int(p.terminationStatus)) }
-        return output
-    }
-
     private func authoredPacket() -> HandoffPacket {
         HandoffPacket(taskText: "fix it", writableFiles: ["a.txt"], validationCommand: "true",
                       baselines: [:], turnBudget: 1000, toolCallBudget: 8,
@@ -59,7 +35,7 @@ struct RepairLoopTests {
     /// constraint on what could be observed. Raising it is only meaningful if
     /// `RepairLoop` actually runs the rounds it is asked for.
     @Test func honoursARoundBudgetAboveTheDefault() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         var rounds: [Int] = []
         let result = try RepairLoop.run(
@@ -94,9 +70,9 @@ struct RepairLoopTests {
     /// is not (2026-08-26 overnight-matrix Defect: repairPacket's directive
     /// self-contradicted its own evidence in 39/40 Mellum cells).
     @Test func repairContextCarriesMissingWritableFilesAtHead() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
-        // makeRepo() seeds a.txt at HEAD; b.txt and c.txt were never written.
+        // GitFixtureRepo.make seeds a.txt at HEAD; b.txt and c.txt were never written.
         var seenMissing: [[String]] = []
         _ = try RepairLoop.run(
             repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
@@ -123,7 +99,7 @@ struct RepairLoopTests {
     /// `a.txt` and never passes, so the returned worktree must show BOTH files
     /// -- proving it is the accumulated last candidate and not the base tree.
     @Test func exhaustionReturnsTheBestTreeReached() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let calls = LockedCounter()
         let packet = HandoffPacket(
@@ -157,7 +133,7 @@ struct RepairLoopTests {
     }
 
     @Test func passesOnFirstCandidate() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let result = try RepairLoop.run(
             repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
@@ -175,7 +151,7 @@ struct RepairLoopTests {
     }
 
     @Test func retriesAfterCandidateStillFails() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let calls = LockedCounter()
         let result = try RepairLoop.run(
@@ -193,7 +169,7 @@ struct RepairLoopTests {
     }
 
     @Test func exhaustsAfterTwoCandidateRounds() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let result = try RepairLoop.run(
             repo: repo, failedRef: "HEAD", initialGrade: GradeResult(exit: 1, output: "fail"),
@@ -211,7 +187,7 @@ struct RepairLoopTests {
     }
 
     @Test func receiptEndsTheLoopImmediately() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let calls = LockedCounter()
         let result = try RepairLoop.run(
@@ -228,7 +204,7 @@ struct RepairLoopTests {
     }
 
     @Test func sessionExhaustionThrows() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         #expect(throws: RepairLoopError.self) {
             _ = try RepairLoop.run(
@@ -246,7 +222,7 @@ struct RepairLoopTests {
     private struct BoomError: Error {}
 
     @Test func runPhaseThrowDiscardsWorktree() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         var capturedWorktreeURL: URL?
         #expect(throws: BoomError.self) {
@@ -268,7 +244,7 @@ struct RepairLoopTests {
     /// omitted, which would be indistinguishable from "unchanged/fine" to the
     /// model reading the rendered packet.
     @Test func missingWritableFileGetsExplicitMarkerInEvidence() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let packetWithMissingFile = HandoffPacket(
             taskText: "fix it", writableFiles: ["a.txt", "never_created.py"], validationCommand: "true",
@@ -287,7 +263,7 @@ struct RepairLoopTests {
     }
 
     @Test func missingWritableFileMarkerAppearsInCapturedPacket() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let cap = FileManager.default.temporaryDirectory.appendingPathComponent("repairloop-cap-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: cap, withIntermediateDirectories: true)
@@ -317,13 +293,13 @@ struct RepairLoopTests {
     /// cannot be decoded — not the "does not exist" marker which would be wrong.
     @Test func undecodableFileGetsExplicitMarkerInEvidence() throws {
         // Create a repo with an existing binary file in the base commit.
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         // Add invalid UTF-8 binary file to the repo.
         let invalidUTF8 = Data([0xFF, 0xFE, 0xFD])
         try invalidUTF8.write(to: repo.appendingPathComponent("binary.bin"))
-        _ = try git(repo, ["add", "binary.bin"])
-        _ = try git(repo, ["commit", "-m", "add binary file"])
+        _ = try GitFixtureRepo.git(repo, ["add", "binary.bin"])
+        _ = try GitFixtureRepo.git(repo, ["commit", "-m", "add binary file"])
 
         let cap = FileManager.default.temporaryDirectory.appendingPathComponent("repairloop-cap-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: cap, withIntermediateDirectories: true)
@@ -357,7 +333,7 @@ struct RepairLoopTests {
     private struct PhaseMustNotRunError: Error {}
 
     @Test func textContractCapGuardShortCircuitsBeforeRunPhase() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         // a.txt is seeded with "seed\n" (5 bytes); a `fileCap` below that
         // trips the cap guard before any phase runs.
@@ -394,7 +370,7 @@ struct RepairLoopTests {
     /// survival from re-doing: if round 1's `a.txt` write did not survive,
     /// round 2 will see the pre-round-1 seed content, not what round 1 wrote.
     @Test func validationFailedRoundWorkSurvivesIntoNextRound() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let calls = LockedCounter()
         var seenInRound2: String?
@@ -429,7 +405,7 @@ struct RepairLoopTests {
     /// immediately — it should refresh `lastGrade` from the real validation
     /// output and let the existing round budget continue.
     @Test func validationFailedReceiptRetriesWithFreshEvidence() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let cap = FileManager.default.temporaryDirectory.appendingPathComponent("repairloop-cap-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: cap, withIntermediateDirectories: true)
@@ -485,7 +461,7 @@ struct RepairLoopTests {
     /// types. Companion to `receiptEndsTheLoopImmediately`, which already
     /// exercises this path; kept here to spell out the intent explicitly.
     @Test func nonValidationFailedReceiptStillEndsLoopImmediately() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let calls = LockedCounter()
         let result = try RepairLoop.run(
@@ -502,7 +478,7 @@ struct RepairLoopTests {
     }
 
     @Test func writesPerRoundCapture() throws {
-        let repo = try makeRepo()
+        let repo = try GitFixtureRepo.make(prefix: "repairloop")
         defer { try? FileManager.default.removeItem(at: repo) }
         let cap = FileManager.default.temporaryDirectory.appendingPathComponent("repairloop-cap-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: cap, withIntermediateDirectories: true)

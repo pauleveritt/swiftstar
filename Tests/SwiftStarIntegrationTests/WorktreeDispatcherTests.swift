@@ -19,25 +19,9 @@ import CryptoKit
 struct WorktreeDispatcherTests {
 
     // MARK: - a small fixture git repo (git init + a seed commit)
-
-    /// Build a temp git repo with one seed commit containing `a.txt`, so the
-    /// worktree dispatch has a real HEAD to branch from and a real file to
-    /// baseline. `git` runs via `/usr/bin/git` (the same binary AgentController
-    /// resolves); the repo config gets a test identity so `git commit` works
-    /// without inheriting the user's global config.
-    private func makeFixtureRepo() throws -> URL {
-        let repo = FileManager.default.temporaryDirectory
-            .appendingPathComponent("swiftstar-dispatch-repo-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
-        _ = try git(repo, ["init"])
-        _ = try git(repo, ["config", "user.email", "swiftstar@test.local"])
-        _ = try git(repo, ["config", "user.name", "SwiftStar Test"])
-        try "seed\n".write(to: repo.appendingPathComponent("a.txt"),
-                           atomically: true, encoding: .utf8)
-        _ = try git(repo, ["add", "a.txt"])
-        _ = try git(repo, ["commit", "-m", "seed"])
-        return repo
-    }
+    //
+    // `GitFixtureRepo.make`/`GitFixtureRepo.git` (test-support, shared with
+    // WorktreeTransactionTests, PhaseRepairTests, RepairLoopTests).
 
     /// A clean `TurnOutcome` whose `mutations` list the attempt wrote.
     private func outcome(mutations: [String], task: String = "edit a.txt",
@@ -58,32 +42,10 @@ struct WorktreeDispatcherTests {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    /// Run `git -C <dir> <args>`, returning stdout. Throws on non-zero exit.
-    private func git(_ dir: URL, _ args: [String]) throws -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", dir.path] + args
-        let out = Pipe()
-        let err = Pipe()
-        p.standardOutput = out
-        p.standardError = err
-        try p.run()
-        p.waitUntilExit()
-        let output = String(data: out.fileHandleForReading.readDataToEndOfFile(),
-                            encoding: .utf8) ?? ""
-        let errorOutput = String(data: err.fileHandleForReading.readDataToEndOfFile(),
-                                 encoding: .utf8) ?? ""
-        guard p.terminationStatus == 0 else {
-            throw NSError(domain: "WorktreeDispatcherTests.git", code: Int(p.terminationStatus),
-                          userInfo: [NSLocalizedDescriptionKey: output + errorOutput])
-        }
-        return output
-    }
-
     // P11: the async pooled path — prepare a worktree, mutate it, finalize to a
     // candidate ref, discard; the caller's tree is never touched.
     @Test func prepareFinalizeDiscardIsolatesTheCallerTree() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let packet = HandoffPacket(
@@ -105,7 +67,7 @@ struct WorktreeDispatcherTests {
             Issue.record("expected a candidate for an in-bounds mutation"); return
         }
         #expect(ref.hasPrefix("refs/swiftstar/candidates/"))
-        let resolved = try git(repo, ["rev-parse", ref])
+        let resolved = try GitFixtureRepo.git(repo, ["rev-parse", ref])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         #expect(resolved.count == 40)
 
@@ -115,35 +77,13 @@ struct WorktreeDispatcherTests {
     }
 
     // MARK: - the happy path: an allowed mutation commits a candidate ref
-
-    @Test func candidateCommitsAllowedMutation() throws {
-        let repo = try makeFixtureRepo()
-        defer { try? FileManager.default.removeItem(at: repo) }
-
-        let packet = HandoffPacket(
-            taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
-            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
-            try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
-                                   atomically: true, encoding: .utf8)
-            return self.outcome(mutations: ["a.txt"])
-        }
-
-        guard case .candidate(let ref, let carried, _) = outcome else {
-            Issue.record("expected candidate for an in-bounds mutation"); return
-        }
-        #expect(!ref.isEmpty, "candidate ref must be a non-empty namespaced ref")
-        #expect(ref.hasPrefix("refs/swiftstar/candidates/"), "candidate ref must be durable (F7)")
-        // Evidence floor: the ref is a real commit that resolves in the repo.
-        let resolved = try git(repo, ["rev-parse", ref])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        #expect(resolved.count == 40, "candidate ref must resolve to a commit SHA")
-        // The commit changed a.txt (the allowed file).
-        let show = try git(repo, ["show", "--stat", "--name-only", ref])
-        #expect(show.contains("a.txt"))
-        // D4: the candidate carries the P9 TurnOutcome as evidence.
-        #expect(carried.mutations == ["a.txt"])
-    }
+    //
+    // `candidateCommitsAllowedMutation` was removed 2026-08-29: the fast-tier
+    // `WorktreeDispatchTests.allowedMutationsYieldCandidate` already proves the
+    // pure verdict for an allowed mutation, and the integration-only pieces
+    // (the ref resolves to a real 40-char commit SHA, `git show` names the
+    // mutated file) are already covered by `prepareFinalizeDiscardIsolatesTheCallerTree`
+    // and `candidateCommitDoesNotIncludeUntrackedBuildDir` below.
 
     /// A worker can "mutate" a file by rewriting it with byte-identical content.
     /// The host records the write, so `mutations` is non-empty, but git sees no
@@ -151,10 +91,10 @@ struct WorktreeDispatcherTests {
     /// clean". Observed in a real batch (C16 run 2: 8 mutations, then
     /// gitFailed), where it killed the run mid-transaction.
     @Test func rewritingIdenticalContentDoesNotFailTheCommit() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
 
-        let head = try git(repo, ["rev-parse", "HEAD"])
+        let head = try GitFixtureRepo.git(repo, ["rev-parse", "HEAD"])
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         let packet = HandoffPacket(
@@ -173,7 +113,7 @@ struct WorktreeDispatcherTests {
         }
         // The tree is unchanged, so the candidate is the parent commit itself —
         // honest, and it keeps the phase chain resolvable.
-        let resolved = try git(repo, ["rev-parse", ref])
+        let resolved = try GitFixtureRepo.git(repo, ["rev-parse", ref])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         #expect(resolved == head, "an empty diff should resolve to the unchanged tree")
     }
@@ -185,7 +125,7 @@ struct WorktreeDispatcherTests {
     /// directly and passed `validation: nil`, so two runs shipped code that
     /// could not be imported. The library was right; the call site was not.
     @Test func dispatchDowngradesCandidateWhenValidationFails() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let packet = HandoffPacket(
@@ -212,7 +152,7 @@ struct WorktreeDispatcherTests {
         // The worktree is removed by dispatch; the candidate ref must still
         // resolve in the parent repo (the commit object survives the
         // worktree's removal — the parent reviews the ref, not the worktree).
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let packet = HandoffPacket(
@@ -228,7 +168,7 @@ struct WorktreeDispatcherTests {
         }
         // The worktree dir is gone.
         // (dispatch removes it; nothing to assert beyond the ref resolving.)
-        let resolved = try git(repo, ["rev-parse", ref])
+        let resolved = try GitFixtureRepo.git(repo, ["rev-parse", ref])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         #expect(resolved.count == 40)
     }
@@ -239,7 +179,7 @@ struct WorktreeDispatcherTests {
         // dir left in the worktree by the attempt (or by a build the agent ran)
         // must NOT end up in the candidate commit — only the mutated writable
         // file should be there.
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let packet = HandoffPacket(
@@ -261,7 +201,7 @@ struct WorktreeDispatcherTests {
         guard case .candidate(let ref, _, _) = outcome else {
             Issue.record("expected candidate"); return
         }
-        let show = try git(repo, ["show", "--stat", "--name-only", ref])
+        let show = try GitFixtureRepo.git(repo, ["show", "--stat", "--name-only", ref])
         #expect(show.contains("a.txt"), "the mutated writable file must be in the candidate")
         #expect(!show.contains(".build"),
                 "an untracked .build/ dir must NOT be swept into the candidate")
@@ -353,45 +293,20 @@ struct WorktreeDispatcherTests {
     }
 
     // MARK: - revision check: a mutation outside writableFiles is a receipt
-
-    @Test func mutationOutsideWritableFilesYieldsReceipt() throws {
-        let repo = try makeFixtureRepo()
-        defer { try? FileManager.default.removeItem(at: repo) }
-
-        let packet = HandoffPacket(
-            taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
-            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
-            try "outside\n".write(to: wt.appendingPathComponent("outside.txt"),
-                                 atomically: true, encoding: .utf8)
-            return self.outcome(mutations: ["outside.txt"])
-        }
-        guard case .receipt(.refusedTool(let path)) = outcome else {
-            Issue.record("expected refusedTool for an out-of-bounds mutation"); return
-        }
-        #expect(path == "outside.txt")
-    }
+    //
+    // `mutationOutsideWritableFilesYieldsReceipt` was removed 2026-08-29: the
+    // fast-tier `WorktreeDispatchTests.mutationOutsideWritableFilesIsRefused`
+    // already proves the pure verdict for this case, and this test added no
+    // integration-only behavior beyond routing through a real `dispatch()`.
 
     // MARK: - validation: a failing validation yields a receipt with exit+digest
-
-    @Test func validationFailedYieldsReceiptWithExitAndDigest() throws {
-        let repo = try makeFixtureRepo()
-        defer { try? FileManager.default.removeItem(at: repo) }
-
-        let packet = HandoffPacket(
-            taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: "false",
-            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
-            try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
-                                   atomically: true, encoding: .utf8)
-            return self.outcome(mutations: ["a.txt"])
-        }
-        guard case .receipt(.validationFailed(let exit, let digest)) = outcome else {
-            Issue.record("expected validationFailed"); return
-        }
-        #expect(exit != 0)
-        #expect(!digest.isEmpty)
-    }
+    //
+    // `validationFailedYieldsReceiptWithExitAndDigest` (integration) was
+    // removed 2026-08-29: the fast-tier test of the same name already proves
+    // the verdict's exit/digest mapping, `dispatchDowngradesCandidateWhenValidationFails`
+    // below already proves `dispatch()` downgrades a real failing validation
+    // end to end, and `runValidationCapturesStderr`/`theDigestCoversTheSameTextAsOutput`
+    // already prove the real exit+digest values `runValidation` produces.
 
     // MARK: - validation: the failure output must survive
 
@@ -402,7 +317,7 @@ struct WorktreeDispatcherTests {
     /// about why. A receipt that carries no evidence is the same defect class as
     /// a packet asserting a sampler the engine never ran under.
     @Test func runValidationCapturesStderr() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
         let r = try WorktreeDispatcher.runValidation(
             ">&2 echo 'ImportError: attempted relative import'; exit 1", in: repo)
@@ -411,7 +326,7 @@ struct WorktreeDispatcherTests {
     }
 
     @Test func runValidationCapturesStdout() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
         let r = try WorktreeDispatcher.runValidation("echo hello-from-stdout", in: repo)
         #expect(r?.passed == true)
@@ -422,7 +337,7 @@ struct WorktreeDispatcherTests {
     /// while the failure lives on stderr is what made the empty-string digest
     /// look like a real value.
     @Test func theDigestCoversTheSameTextAsOutput() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
         let a = try WorktreeDispatcher.runValidation(">&2 echo boom; exit 1", in: repo)
         let b = try WorktreeDispatcher.runValidation(">&2 echo different; exit 1", in: repo)
@@ -437,7 +352,7 @@ struct WorktreeDispatcherTests {
     /// thread. Pinned here so a future edit to the shared digest logic cannot
     /// silently diverge the two.
     @Test func runValidationAsyncMatchesSyncBehavior() async throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
         let r = try await WorktreeDispatcher.runValidation(
             ">&2 echo 'ImportError: attempted relative import'; exit 1", in: repo)
@@ -446,46 +361,22 @@ struct WorktreeDispatcherTests {
     }
 
     @Test func runValidationAsyncReturnsNilWithNoCommand() async throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
         let r = try await WorktreeDispatcher.runValidation(nil, in: repo)
         #expect(r == nil)
     }
 
-    @Test func validationPassedYieldsCandidate() throws {
-        let repo = try makeFixtureRepo()
-        defer { try? FileManager.default.removeItem(at: repo) }
-
-        let packet = HandoffPacket(
-            taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: "true",
-            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, wt in
-            try "candidate\n".write(to: wt.appendingPathComponent("a.txt"),
-                                   atomically: true, encoding: .utf8)
-            return self.outcome(mutations: ["a.txt"])
-        }
-        guard case .candidate(let ref, _, _) = outcome else {
-            Issue.record("expected candidate when validation passed"); return
-        }
-        #expect(!ref.isEmpty)
-    }
+    // `validationPassedYieldsCandidate` (integration) was removed 2026-08-29:
+    // the fast-tier test of the same name already proves the verdict's
+    // passing-validation mapping, and `runValidationCapturesStdout` already
+    // proves a real passing command's `runValidation` result.
 
     // MARK: - no changes: nothing mutated -> nothing to commit -> receipt
-
-    @Test func noMutationsYieldNoChangesReceipt() throws {
-        let repo = try makeFixtureRepo()
-        defer { try? FileManager.default.removeItem(at: repo) }
-
-        let packet = HandoffPacket(
-            taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
-            baselines: [:], turnBudget: 10_000, toolCallBudget: 16)
-        let outcome = try WorktreeDispatcher.dispatch(packet: packet, in: repo) { _, _ in
-            self.outcome(mutations: [], toolCalls: 0)
-        }
-        guard case .receipt(.noChanges) = outcome else {
-            Issue.record("expected noChanges when nothing was mutated"); return
-        }
-    }
+    //
+    // `noMutationsYieldNoChangesReceipt` was removed 2026-08-29: the fast-tier
+    // `WorktreeDispatchTests.noMutationsYieldNoChanges` already proves the
+    // pure verdict for no mutations.
 
     // MARK: - evidence floor: baselines are read from the worktree
 
@@ -494,7 +385,7 @@ struct WorktreeDispatcherTests {
         // the file's bytes, mode via `git ls-files -s`, line ending by scanning
         // bytes) differs from the post-mutation hash — the parent can detect
         // drift a candidate introduces on a file it was allowed to touch.
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let baseline = try WorktreeDispatcher.readBaseline(for: "a.txt", in: repo)
@@ -516,7 +407,7 @@ struct WorktreeDispatcherTests {
         // The fixture seeds `a.txt` with `"seed\n"`; the baseline's sha256 must
         // equal the CryptoKit SHA-256 of those exact bytes (a 64-char hex), and
         // must NOT equal the git hash-object SHA-1 of the same bytes.
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let baseline = try WorktreeDispatcher.readBaseline(for: "a.txt", in: repo)
@@ -527,7 +418,7 @@ struct WorktreeDispatcherTests {
 
         // Cross-check: it must differ from the git hash-object SHA-1 of the
         // same bytes (the value the old code stored).
-        let gitSha1 = try git(repo, ["hash-object", "a.txt"])
+        let gitSha1 = try GitFixtureRepo.git(repo, ["hash-object", "a.txt"])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         #expect(baseline.sha256 != gitSha1,
                 "sha256 must not be the git hash-object SHA-1")
@@ -536,13 +427,13 @@ struct WorktreeDispatcherTests {
     @Test func baselineClassifiesCrlfLineEnding() throws {
         // The line-ending classification scans the file's bytes: a CRLF file
         // reads as `.crlf`; a mixed file (CRLF + lone LF) reads as `.mixed`.
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let crlf = repo.appendingPathComponent("crlf.txt")
         try "line1\r\nline2\r\n".write(to: crlf, atomically: true, encoding: .utf8)
-        _ = try git(repo, ["add", "crlf.txt"])
-        _ = try git(repo, ["commit", "-m", "crlf seed"])
+        _ = try GitFixtureRepo.git(repo, ["add", "crlf.txt"])
+        _ = try GitFixtureRepo.git(repo, ["commit", "-m", "crlf seed"])
         let baseline = try WorktreeDispatcher.readBaseline(for: "crlf.txt", in: repo)
         #expect(baseline.lineEnding == .crlf)
     }
@@ -554,7 +445,7 @@ struct WorktreeDispatcherTests {
         // candidate against the pre-attempt state of each writable file. The
         // old code read the baselines then discarded them (`_ = try? ...`),
         // leaving the candidate's baselines empty.
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
 
         // The expected baseline is the seed state of `a.txt` (what a fresh
@@ -585,7 +476,7 @@ struct WorktreeDispatcherTests {
     // MARK: - commitForRepair (P12.8): commit failed phase work unconditionally
 
     @Test func commitForRepairCommitsFailedPhaseWork() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
         let packet = HandoffPacket(
             taskText: "edit a.txt", writableFiles: ["a.txt"], validationCommand: nil,
@@ -597,14 +488,14 @@ struct WorktreeDispatcherTests {
 
         let ref = try WorktreeDispatcher.commitForRepair(worktree, packet: packet, in: repo)
         #expect(ref.count == 40, "commitForRepair must return a 40-char commit SHA")
-        let show = try git(repo, ["show", "--stat", "--name-only", ref])
+        let show = try GitFixtureRepo.git(repo, ["show", "--stat", "--name-only", ref])
         #expect(show.contains("a.txt"), "the failed phase's mutation must be committed")
     }
 
     @Test func commitForRepairReturnsParentShaWhenNothingStaged() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "swiftstar-dispatch-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
-        let head = try git(repo, ["rev-parse", "HEAD"])
+        let head = try GitFixtureRepo.git(repo, ["rev-parse", "HEAD"])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let packet = HandoffPacket(
             taskText: "no-op", writableFiles: ["a.txt"], validationCommand: nil,

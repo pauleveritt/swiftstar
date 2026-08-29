@@ -56,8 +56,9 @@ public enum AgentEvent: Equatable, Sendable {
 }
 
 /// Streaming NDJSON consumer for the `ds4-agent` wire (`--json-events`),
-/// shaped like `WireEventParser` and `SSEParser`: feed one wire line at a time;
-/// it returns an event or nil. The first non-blank line must be the v1 `hello`
+/// shaped like `WireEventParser` (and, formerly, the Chat surface's
+/// `SSEParser`, retired 2026-08-26): feed one wire line at a time; it
+/// returns an event or nil. The first non-blank line must be the v1 `hello`
 /// handshake whose caps include `text`, `tool`, `status` and `ts` (binding
 /// rule 7). Deliberately a sibling of `WireEventParser`, not an extension of
 /// it: the telemetry consumers (`MetricsReducer`, `DiagnosticsAnalyzer`) switch

@@ -13,7 +13,7 @@ import Darwin
 final class AgentController {
     /// Single reachable controller, so the app delegate can stop the agent on
     /// quit even though the controller is owned by MainView (mirrors the
-    /// retired EngineController.shared pattern).
+    /// Chat surface's EngineController.shared pattern, retired 2026-08-26).
     static weak var shared: AgentController?
 
     enum AgentState: Equatable {
@@ -41,7 +41,8 @@ final class AgentController {
     private(set) var lastPlannedBytes: Int64?
     /// The model (`modelPath` last component) the plan in `lastPlannedBytes`
     /// was measured for; the memory ring only uses the denominator when it
-    /// matches the running model (mirrors EngineController's stale-plan guard).
+    /// matches the running model (mirrors the Chat surface's EngineController
+    /// stale-plan guard, retired 2026-08-26).
     private(set) var lastPlannedModel: String?
     /// The agent process's resident footprint, polled once a second while the
     /// agent is up; nil when the process is gone.
@@ -333,8 +334,9 @@ final class AgentController {
         case .stopped, .failed: break
         default: return
         }
-        // P13: refresh settings so a selected variant applies (mirrors
-        // EngineController), then admit it before spawn (C1).
+        // P13: refresh settings so a selected variant applies (mirrors the
+        // Chat surface's EngineController, retired 2026-08-26), then admit it
+        // before spawn (C1).
         settings = pinnedSettings ?? AgentController.defaultSettings()
         switch AgentController.admitStagedVariant(contextSize: settings.contextSize) {
         case .admitted, nil:
@@ -359,8 +361,9 @@ final class AgentController {
         // A restart is a fresh wire: the handshake state must reset or the new
         // session's hello is misread as a second handshake (stuck in
         // .starting forever). The transcript is deliberately kept (history,
-        // like EngineController); stderrTail is reset so a failure message
-        // never pairs a new session with a stale tail.
+        // like the Chat surface's EngineController, retired 2026-08-26);
+        // stderrTail is reset so a failure message never pairs a new session
+        // with a stale tail.
         parser = PoolWireParser()
         // P23 (D3): caps are a property of the spawned engine build, so a
         // re-spawn (including a model switch to a different engine dir) must

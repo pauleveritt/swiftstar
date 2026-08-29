@@ -24,7 +24,7 @@ struct FakeAgentSourceTests {
         let source = try FakeAgentSource.generate(capture: load("golden-tools.ndjson"), engineArgv: makeArgv())
         // The fake embeds the expected argv (including the consent flags) and
         // the replay lines from the real capture. Capture lines are embedded as
-        // escaped Swift string literals (FakeServerSource.swiftStringLiteral
+        // escaped Swift string literals (FakeSourceLiteral.swiftStringLiteral
         // escapes `"` -> `\"`), so a `"phase":"start"` fragment appears in the
         // source in its escaped form `\"phase\":\"start\"`.
         #expect(source.contains("\"-m\", \"/tmp/model.gguf\""))

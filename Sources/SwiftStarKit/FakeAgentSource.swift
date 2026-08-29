@@ -6,7 +6,8 @@ public enum FakeAgentError: Error, Equatable, Sendable {
 }
 
 /// Generates the complete Swift source of a fake `ds4-agent` from a committed
-/// NDJSON capture (mirrors `FakeServerSource` for the agent wire). The fake
+/// NDJSON capture (mirrors the Chat surface's `FakeServerSource`, retired
+/// 2026-08-26, for the agent wire). The fake
 /// validates its argv strictly (including `--workspace` and `--shell`), reads
 /// one prompt line per turn from stdin, replays the capture to stdout with
 /// `ts`-derived delays, and honors an ETX byte (0x03) on stdin as an
@@ -49,8 +50,9 @@ public enum FakeAgentSource {
         }
         // Every event carries a monotonic `ts` (fork divergence #7); derive
         // per-line delays from consecutive deltas — no sidecar file needed.
-        // The first line's delay is 0 (no wait before hello), mirroring
-        // FakeServerSource's `lastStamp = stamps.first ?? 0`.
+        // The first line's delay is 0 (no wait before hello), mirroring the
+        // Chat surface's `FakeServerSource.lastStamp = stamps.first ?? 0`
+        // (retired 2026-08-26).
         var replay: [(Int, String)] = []
         var lastTS: Int?
         for (index, line) in captureLines.enumerated() {

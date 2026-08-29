@@ -22,7 +22,7 @@ struct SettingsView: View {
     // P19.1 D4: the engine lifecycle escape hatch, stashed here (not the main
     // surface). Reached via AgentController.shared — the weak reference set in
     // init, alive as long as MainView owns the controller.
-    @State private var engineController: AgentController?
+    @State private var agentController: AgentController?
 
     // Download section (P3)
     @State private var downloadRunner = DownloadRunner()
@@ -94,19 +94,19 @@ struct SettingsView: View {
                 Text("A selected variant is verified before launch; a custom file is not. Settings apply when the engine next starts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let engineController {
+                if let agentController {
                     Divider()
                     HStack {
-                        Text(engineStateLabel(engineController.state))
+                        Text(engineStateLabel(agentController.state))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Stop") { engineController.stopAgent() }
-                            .disabled(engineController.state == .stopped || engineController.state == .stopping)
-                        Button("Start") { engineController.startAgent() }
-                            .disabled(engineController.state == .ready || engineController.state == .starting)
-                        Button("Restart") { engineController.restartAgent() }
-                            .disabled(engineController.state == .stopping)
+                        Button("Stop") { agentController.stopAgent() }
+                            .disabled(agentController.state == .stopped || agentController.state == .stopping)
+                        Button("Start") { agentController.startAgent() }
+                            .disabled(agentController.state == .ready || agentController.state == .starting)
+                        Button("Restart") { agentController.restartAgent() }
+                            .disabled(agentController.state == .stopping)
                     }
                 }
             }
@@ -154,7 +154,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 560)
-        .onAppear { engineController = AgentController.shared }
+        .onAppear { agentController = AgentController.shared }
         .onDisappear { downloadTask?.cancel() }
     }
 
