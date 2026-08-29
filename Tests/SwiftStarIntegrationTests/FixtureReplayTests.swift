@@ -18,6 +18,26 @@ struct FixtureReplayTests {
         #expect(try Data(contentsOf: bundled) == Data(contentsOf: repo))
     }
 
+    /// `golden.trace` is the same kind of manually-synced duplicate as
+    /// `golden.ndjson` (a symlink was tried and rejected — SwiftPM's
+    /// resource-copy step preserves it rather than dereferencing it, so it
+    /// dangles once relocated into the `.build` bundle; see
+    /// `fixtures/agent/provenance.md`) but the sibling test above only ever
+    /// checked the `.ndjson` half, so a recapture could update one copy of
+    /// `.trace` and not the other with nothing catching it.
+    @Test func bundledTraceFixtureMatchesRepoFixture() throws {
+        guard let bundled = Bundle.module.url(forResource: "golden", withExtension: "trace") else {
+            Issue.record("bundled golden.trace missing")
+            return
+        }
+        let repo = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // SwiftStarIntegrationTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // repo root
+            .appendingPathComponent("fixtures/agent/golden.trace")
+        #expect(try Data(contentsOf: bundled) == Data(contentsOf: repo))
+    }
+
     @Test func replayYieldsStatusAndReadyThroughReducer() async {
         var parser = WireEventParser()
         let reducer = MetricsReducer()
