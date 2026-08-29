@@ -44,9 +44,10 @@ struct PoolOrchestratorTests {
     }
 
     /// P23 review follow-up: `runPhase` never sends a `think` field on the
-    /// wire — `PoolPrompt` here carries no override, and `--per-turn-think`
-    /// is not yet in this harness's argv — so the recorded outcome must not
-    /// claim one happened. Before this fix, a packet's declared `.on`
+    /// wire — `PoolPrompt` there carries no override (Task 10 did add
+    /// `--per-turn-think` to the shared argv, so the engine advertises the
+    /// cap, but the harness's send is still unwired) — so the recorded
+    /// outcome must not claim one happened. Before this fix, a packet's declared `.on`
     /// (mapping to `.high`) was recorded verbatim in `outcome.sampler` while
     /// the wire silently ran the harness's fixed default: a capture-integrity
     /// lie identical in kind to the one this phase exists to retire.

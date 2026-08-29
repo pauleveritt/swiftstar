@@ -49,7 +49,7 @@ extension AgentController {
         // clamped to [4096, parent] so a worker can never bypass admission (D8).
         let thinkDecision = TurnThinkPolicy.decide(
             requested: TurnThinkPolicy.effort(for: packet.sampling.think),
-            family: AgentController.familyOf(settings.modelPath),
+            family: AgentController.runningModelFamily(),
             capAdvertised: advertisedCaps.contains(TurnThinkPolicy.overrideCap))
         let effort: ThinkEffort?
         switch thinkDecision {

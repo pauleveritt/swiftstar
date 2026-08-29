@@ -886,7 +886,7 @@ final class AgentController {
         // moment the app could send an override.
         let decision = TurnThinkPolicy.decide(
             requested: think,
-            family: AgentController.familyOf(settings.modelPath),
+            family: AgentController.runningModelFamily(),
             capAdvertised: advertisedCaps.contains(TurnThinkPolicy.overrideCap))
         let effort: ThinkEffort?
         switch decision {
@@ -1094,13 +1094,15 @@ final class AgentController {
 
     /// The running model's `ModelFamily` for `TurnThinkPolicy` (P23): from the
     /// staged variant when one exists, else Laguna S's family — the
-    /// nothing-configured default. A custom/unverified model path resolves to
-    /// the default family's policy (no app-side refusal); the engine's own
-    /// loud refusal (D4) is the backstop for a prefix-busting family the app
-    /// cannot identify. `internal`, not `private`: `AgentPoolTurnLoop` (a
-    /// separate file extension of this type) consults it at dispatch time, and
-    /// Swift's `private` is file-scoped.
-    static func familyOf(_ modelPath: URL) -> ModelFamily {
+    /// nothing-configured default. Resolution goes through the selected
+    /// variant ID, not the settings' model path — a custom/unverified model
+    /// path resolves to the default family's policy (no app-side refusal);
+    /// the engine's own loud refusal (D4) is the backstop for a
+    /// prefix-busting family the app cannot identify. `internal`, not
+    /// `private`: `AgentPoolTurnLoop` (a separate file extension of this
+    /// type) consults it at dispatch time, and Swift's `private` is
+    /// file-scoped.
+    static func runningModelFamily() -> ModelFamily {
         VariantResolver.resolveVariant(
             selectedVariantID: AgentController.effectiveSelectedVariantID())?.family
             ?? VariantRegistry.lagunaS.family

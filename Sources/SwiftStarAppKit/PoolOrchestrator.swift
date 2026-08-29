@@ -59,15 +59,16 @@ public final class PoolOrchestrator {
     public func runPhase(worker: WorkerId, packet: HandoffPacket, worktree: URL,
                          capture: FileHandle? = nil) throws -> TurnOutcome {
         var builder = TurnOutcomeBuilder(
-            // P23 review follow-up: `think` stays nil here until Task 10 adds
-            // `--per-turn-think` to this harness's argv. Recording the
-            // packet's declared think without also sending it on the wire
-            // was itself a new capture-integrity lie — the exact defect this
-            // phase exists to retire — since the pinned engine never
-            // advertises the cap and the prompt below carries no `think`
-            // field, so every turn actually ran at the harness's fixed
+            // P23 review follow-up: `think` stays nil because the prompt
+            // below carries no `think` field — recording the packet's
+            // declared think without also sending it on the wire was itself
+            // a new capture-integrity lie, the exact defect this phase
+            // exists to retire. (Task 10 has since put `--per-turn-think`
+            // in the shared argv this harness spawns with, so the engine
+            // now advertises the cap; the *send* is still not wired here,
+            // and until it is, every turn runs at the harness's fixed
             // `--nothink`/`--think-budget` default regardless of what
-            // `packet.sampling.think` asked for.
+            // `packet.sampling.think` asked for — which is what nil records.)
             model: model, build: "pooled",
             task: packet.taskText,
             think: nil)
