@@ -256,10 +256,9 @@ struct WiredLimitAdvisoryTests {
         let url = try? writeMellumGGUF()
         guard let url else { Issue.record("failed to write fixture"); return }
         let variant = mellum(modelFile: url)
-        let plentyOfBytes: Int64 = 256 * 1024 * 1024 * 1024
         let result = VariantGate.admit(
-            variant, contextSize: 40_960, availableBytes: plentyOfBytes,
-            wiredLimitAdvisoryBytes: plentyOfBytes)
+            variant, contextSize: 40_960, availableBytes: plentyOfGateBytes,
+            wiredLimitAdvisoryBytes: plentyOfGateBytes)
         #expect(result == .admitted)
     }
 }

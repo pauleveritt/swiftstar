@@ -35,7 +35,7 @@ A check that cannot be evaluated from the captures returns UNAUDITABLE, which
 is NOT a pass. Silently passing an unevaluable check is how one retired V1-V4
 check reported "0 blocked" for a defect that was never looked for.
 """
-import csv, json, glob, os, re, sys
+import csv, json, os, re, sys
 
 # Overridable so a /goal measure batch can be audited from its own manifest
 # without editing this file. Plumbing only -- no check reads this.
@@ -95,7 +95,7 @@ def turns(cell):
 
 # --- invariants -------------------------------------------------------------
 
-def check_v5(cell, loop=None):
+def check_v5(cell):
     """Every packet must have been deliverable."""
     w = os.path.join(cell, 'wire.ndjson')
     if not os.path.exists(w):
@@ -147,7 +147,7 @@ def _discarded_fences(cell):
     return out
 
 
-def check_v6(cell, loop=None):
+def check_v6(cell):
     """No file content may be harvested in place of code the model fenced.
 
     v2 (2026-08-26) wrote the model's own prose into six source files: Mellum
