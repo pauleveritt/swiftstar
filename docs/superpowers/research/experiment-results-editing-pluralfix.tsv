@@ -9,3 +9,23 @@ depth-2	2	10	pass	13/13	20260829-101206-fixture-depth-2
 depth-2	2	11	pass	13/13	20260829-101323-fixture-depth-2
 depth-2	2	12	pass	13/13	20260829-101444-fixture-depth-2
 depth-2	2	13	pass	13/13	20260829-101632-fixture-depth-2
+depth-2	2	14	pass	13/13	20260829-101756-fixture-depth-2
+depth-2	2	15	pass	13/13	20260829-102038-fixture-depth-2
+depth-3	2	4	pass	13/13	20260829-102155-fixture-depth-3
+depth-3	2	5	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-102317-fixture-depth-3
+depth-3	2	6	pass	13/13	20260829-102529-fixture-depth-3
+depth-3	2	7	pass	13/13	20260829-102705-fixture-depth-3
+depth-3	2	8	fail	1 failed, 12 passed, 3 warnings in 0.15s	20260829-102829-fixture-depth-3
+depth-3	2	9	pass	13/13	20260829-103035-fixture-depth-3
+depth-3	2	10	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-103158-fixture-depth-3
+depth-3	2	11	fail	1 failed, 12 passed, 3 warnings in 0.14s	20260829-103417-fixture-depth-3
+depth-3	2	12	fail	no graded round recorded (e.g. contractNotFollowed)	20260829-103625-fixture-depth-3
+depth-3	2	13	pass	13/13	20260829-103756-fixture-depth-3
+depth-3	2	14	pass	13/13	20260829-103918-fixture-depth-3
+depth-3	2	15	pass	13/13	20260829-104038-fixture-depth-3
+plausible-wrong-fix	2	4	pass	13/13	20260829-104212-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	5	harness-void	V6 1 heading(s) had fenced code discarded in favour of commentary: ['app.py']	20260829-104336-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	6	pass	13/13	20260829-104501-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	7	pass	13/13	20260829-104620-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	8	pass	13/13	20260829-104739-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	9	pass	13/13	20260829-104859-fixture-plausible-wrong-fix

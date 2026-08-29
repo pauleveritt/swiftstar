@@ -1,0 +1,49 @@
+fixture	rounds	seed	outcome	detail	capture	arm
+depth-3	2	24	pass	13/13	20260829-111022-fixture-depth-3	plural
+depth-3	2	25	pass	13/13	20260829-111213-fixture-depth-3	plural
+depth-3	2	26	pass	13/13	20260829-111342-fixture-depth-3	plural
+depth-3	2	27	pass	13/13	20260829-111505-fixture-depth-3	plural
+depth-3	2	28	pass	13/13	20260829-111631-fixture-depth-3	plural
+depth-3	2	29	pass	13/13	20260829-111755-fixture-depth-3	plural
+depth-3	2	30	pass	13/13	20260829-111919-fixture-depth-3	plural
+depth-3	2	31	fail	1 failed, 12 passed, 3 warnings in 0.14s	20260829-112054-fixture-depth-3	plural
+depth-3	2	32	pass	13/13	20260829-112301-fixture-depth-3	plural
+depth-3	2	33	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-112423-fixture-depth-3	plural
+depth-3	2	34	pass	13/13	20260829-112633-fixture-depth-3	plural
+depth-3	2	35	pass	13/13	20260829-112757-fixture-depth-3	plural
+depth-3	2	36	pass	13/13	20260829-112930-fixture-depth-3	plural
+depth-3	2	37	harness-void	V6 2 heading(s) had fenced code discarded in favour of commentary: ['app.py', 'models.py']	20260829-113114-fixture-depth-3	plural
+depth-3	2	38	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-113347-fixture-depth-3	plural
+depth-3	2	39	pass	13/13	20260829-113559-fixture-depth-3	plural
+depth-3	2	40	pass	13/13	20260829-113729-fixture-depth-3	plural
+depth-3	2	41	pass	13/13	20260829-113857-fixture-depth-3	plural
+depth-3	2	42	fail	1 failed, 12 passed, 3 warnings in 0.15s	20260829-114029-fixture-depth-3	plural
+depth-3	2	43	pass	13/13	20260829-114303-fixture-depth-3	plural
+depth-3	2	44	fail	1 failed, 12 passed, 3 warnings in 0.15s	20260829-114507-fixture-depth-3	plural
+depth-3	2	45	harness-void	V6 2 heading(s) had fenced code discarded in favour of commentary: ['app.py', 'models.py']	20260829-114725-fixture-depth-3	plural
+depth-3	2	46	harness-void	V5 stop_reason=limit	20260829-114934-fixture-depth-3	plural
+depth-3	2	47	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-115313-fixture-depth-3	plural
+depth-3	2	48	pass	13/13	20260829-115526-fixture-depth-3	plural
+depth-3	2	49	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-115650-fixture-depth-3	plural
+depth-3	2	50	pass	13/13	20260829-115853-fixture-depth-3	plural
+depth-3	2	51	pass	13/13	20260829-120025-fixture-depth-3	plural
+depth-3	2	52	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-120148-fixture-depth-3	plural
+depth-3	2	53	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-120350-fixture-depth-3	plural
+depth-3	2	54	fail	1 failed, 12 passed, 3 warnings in 0.15s	20260829-120600-fixture-depth-3	plural
+depth-3	2	55	harness-void	V5 stop_reason=limit	20260829-120826-fixture-depth-3	plural
+depth-3	2	56	pass	13/13	20260829-121110-fixture-depth-3	plural
+depth-3	2	57	pass	13/13	20260829-121231-fixture-depth-3	plural
+depth-3	2	58	pass	13/13	20260829-121354-fixture-depth-3	plural
+depth-3	2	59	pass	13/13	20260829-121514-fixture-depth-3	plural
+depth-3	2	60	fail	1 failed, 12 passed, 3 warnings in 0.15s	20260829-121635-fixture-depth-3	plural
+depth-3	2	61	pass	13/13	20260829-121845-fixture-depth-3	plural
+depth-3	2	62	pass	13/13	20260829-122004-fixture-depth-3	plural
+depth-3	2	63	pass	13/13	20260829-122222-fixture-depth-3	plural
+depth-2	2	24	pass	13/13	20260829-122339-fixture-depth-2	plural
+depth-2	2	25	pass	13/13	20260829-122453-fixture-depth-2	plural
+depth-2	2	26	fail	no graded round recorded (e.g. contractNotFollowed)	20260829-122604-fixture-depth-2	plural
+depth-2	2	27	pass	13/13	20260829-122723-fixture-depth-2	plural
+depth-2	2	28	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-122901-fixture-depth-2	plural
+depth-2	2	29	fail	2 failed, 11 passed, 3 warnings in 0.14s	20260829-123102-fixture-depth-2	plural
+depth-2	2	30	pass	13/13	20260829-123253-fixture-depth-2	plural
+depth-2	2	31	pass	13/13	20260829-123409-fixture-depth-2	plural

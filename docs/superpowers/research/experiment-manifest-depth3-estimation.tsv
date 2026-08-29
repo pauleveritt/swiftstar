@@ -1,0 +1,131 @@
+# Pre-registered manifest — depth-3 post-fix ESTIMATION arm. Written BEFORE the
+# first cell. Separate arm, separate results file; nothing earlier is re-run.
+#
+# PROVENANCE (recorded before the run, per review):
+#   repo HEAD f61de85 + uncommitted Sources/swiftstar-agenttest/main.swift
+#   ds4 pin   1a2dddf (divergence #14)
+#   harness   sha256:9466aa2807c90d34...   engine sha256:af8f1e8babab54fd...
+#   Follow-up wording: PLURAL (the shipped default). Byte-identical to what the
+#   plural-fix arm ran; the AGENTTEST_SINGULAR_FOLLOWUP switch added afterwards
+#   does not alter the default path. NO harness changes during this run.
+#
+# WHY THIS IS NOT THE EXPERIMENT I FIRST PROPOSED.
+# I intended to run depth-3 at larger n to test "is depth-3 stuck". A review of
+# the five failing plural-fix depth-3 captures answered that from disk, at zero
+# engine cost: NONE of them is "emitted fewer files than diagnosed". The Block B
+# failure signature — headingless turn 1, singular follow-up, one file, twice —
+# does not occur once. Four are content/diagnosis failures (talked itself out of
+# base.html; the naive datetime.now default_factory timezone trap; an <html> tag
+# added without lang="en"; a redirect without status_code=303) and one is a
+# format collapse. So the delivery limit is fixed and depth-3's residual is a
+# DIFFERENT limit. That question is settled; re-running it would re-derive it.
+#
+# Two further findings from that review shape this design:
+#   1. POWER. Against Block B's frozen depth-3 baseline of 8/18, detecting
+#      44%->70% by Fisher needs n=367 and asymptotes near 0.60 power even at
+#      n=200. No affordable n can confirm a modest improvement. At n=40 this is
+#      an ESTIMATION instrument, not a hypothesis test, and is designed as one.
+#   2. DEPTH IS CONFOUNDED WITH DEFECT DIFFICULTY. depth-3 uniquely contains the
+#      timezone trap, the hardest content defect in the corpus. If per-defect
+#      difficulty were uniform, depth-3's 58% would predict depth-2 ~70%; the
+#      observed depth-2 is 100%. So the 95/63/44 profile is defect identity, not
+#      a file-count slope. NO n fixes this. Answering the depth question cleanly
+#      needs a `depth-3-easy` fixture (three files, three easy defects) that
+#      does not exist. This arm therefore makes NO depth-slope claim.
+#
+# DESIGN. depth-3 x rounds=2 x seeds 24-63 (n=40, PRIMARY, estimation)
+#         depth-2 x rounds=2 x seeds 24-31 (n=8, regression tripwire)
+# Seeds 24-63 are disjoint from every prior use ON THESE FIXTURES: 1-3 (P17),
+# 4-23 (Block B and the plural-fix arm), 97-99 (preflight, plausible-wrong-fix
+# only), 900 (arm-switch plumbing test, depth-3).
+# Note 42 falls inside this range and WAS used before — by P20's live
+# orchestrate run and by Block A. That is a different tier entirely (directive
+# mode, Laguna S, the roadmap spec), not this fixture family, so it is not a
+# collision and seed 42 is kept rather than skipped. Skipping it would put a
+# hole in the range for no reason and invite the question later.
+#
+# PRIMARY ENDPOINT: the depth-3 post-fix pass rate with a Wilson 95% interval.
+# The interval IS the deliverable. There is no pooled multi-file endpoint —
+# depth-2 and depth-3 are now known to fail for different reasons, so pooling
+# them would average two unrelated quantities. The 19/24 pooled near-miss from
+# the plural-fix arm is DEAD and is not revisited; re-running until a pooled
+# endpoint clears its bar is the trap this whole campaign exists to avoid.
+#
+# DECISION RULES, fixed before the first cell:
+#  1. [the ONLY alpha=0.05 test in this experiment] Improvement confirmed iff
+#     >=30/40 (75%; Fisher vs 8/18 gives p=0.036). Stated in advance: this
+#     threshold has 0.84 power if the truth is 0.80 but only 0.31 if it is 0.70,
+#     so it can fire ONLY for a large effect. Failing to fire is not evidence of
+#     no effect.
+#  2. No meaningful improvement iff the Wilson upper bound < 0.64 (<= ~20/40).
+#  3. Otherwise the verdict IS the interval: "post-fix depth-3 sits at [L, U],
+#     and the fix did not lift it into the depth-2 regime."
+#  4. MECHANISTIC SECONDARY, and the real test of the hypothesis — falsifiable
+#     at any n. Classify every failing capture into {fewer-files-than-diagnosed,
+#     wrong-file-set/diagnosis, content, format-collapse}. PRE-REGISTERED
+#     PREDICTION: delivery-class ("fewer files than diagnosed") <= 1 failure.
+#     More than 1 refutes the claim that the plural fix extinguished the
+#     delivery defect, whatever the pass rate does.
+#  5. TRIPWIRE: depth-2 <= 5/8 flags a regression (P(<=5 | p=0.95) ~ 0.006).
+#     Otherwise reported descriptively only — n=8 cannot tell 0.85 from 1.0.
+#  6. VOIDS excluded from denominators and left re-runnable, as before. If voids
+#     exceed 15% of attempted cells the run is declared COMPROMISED and is not
+#     analyzed. Format-collapse cells are tabulated in the format category
+#     whether they land as `fail` (contractNotFollowed) or as a V6 void.
+#
+# WHAT THIS CANNOT CONCLUDE: confirmation of a modest (44->58-70%) improvement;
+# anything separating file count from defect difficulty; anything about WHY the
+# content failures happen.
+#
+# Runner: EXP_MANIFEST=<this> \
+#   EXP_RESULTS=docs/superpowers/research/experiment-results-depth3-estimation.tsv \
+#   python3 Tools/run-experiment.py
+fixture	rounds	seed	arm
+depth-3	2	24	plural
+depth-3	2	25	plural
+depth-3	2	26	plural
+depth-3	2	27	plural
+depth-3	2	28	plural
+depth-3	2	29	plural
+depth-3	2	30	plural
+depth-3	2	31	plural
+depth-3	2	32	plural
+depth-3	2	33	plural
+depth-3	2	34	plural
+depth-3	2	35	plural
+depth-3	2	36	plural
+depth-3	2	37	plural
+depth-3	2	38	plural
+depth-3	2	39	plural
+depth-3	2	40	plural
+depth-3	2	41	plural
+depth-3	2	42	plural
+depth-3	2	43	plural
+depth-3	2	44	plural
+depth-3	2	45	plural
+depth-3	2	46	plural
+depth-3	2	47	plural
+depth-3	2	48	plural
+depth-3	2	49	plural
+depth-3	2	50	plural
+depth-3	2	51	plural
+depth-3	2	52	plural
+depth-3	2	53	plural
+depth-3	2	54	plural
+depth-3	2	55	plural
+depth-3	2	56	plural
+depth-3	2	57	plural
+depth-3	2	58	plural
+depth-3	2	59	plural
+depth-3	2	60	plural
+depth-3	2	61	plural
+depth-3	2	62	plural
+depth-3	2	63	plural
+depth-2	2	24	plural
+depth-2	2	25	plural
+depth-2	2	26	plural
+depth-2	2	27	plural
+depth-2	2	28	plural
+depth-2	2	29	plural
+depth-2	2	30	plural
+depth-2	2	31	plural

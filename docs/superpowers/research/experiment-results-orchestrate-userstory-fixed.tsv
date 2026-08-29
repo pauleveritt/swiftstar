@@ -1,0 +1,6 @@
+spec	think	seed	outcome	dispatches	rounds	acceptance_exit	seconds	capture	detail
+roadmap-user-story	1500	211	harness-void				177	20260829-140600-roadmap-user-story-directive	[agenttest] directive run failed: turnDidNotEnd
+roadmap-user-story	1500	212	harness-void				227	20260829-140857-roadmap-user-story-directive	[agenttest] directive run failed: turnDidNotEnd
+roadmap-user-story	1500	213	harness-void				472	20260829-141245-roadmap-user-story-directive	[agenttest] directive run failed: turnDidNotEnd
+roadmap-user-story	1500	214	harness-void				777	20260829-142038-roadmap-user-story-directive	[agenttest] directive run failed: turnDidNotEnd
+roadmap-user-story	1500	215	harness-void				808	20260829-143335-roadmap-user-story-directive	[agenttest] directive run failed: turnDidNotEnd

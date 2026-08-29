@@ -1,0 +1,74 @@
+# Pre-registered manifest — orchestrate-loop GENERALIZATION arm. Written BEFORE
+# the first cell. Separate arm, separate results file.
+#
+# WHY. Block A's 27/29 = 93% was measured on ONE task: the `roadmap` spec, one
+# synthetic FastAPI app, one 13-test oracle. Thirty seeds on one task measures
+# seed variance, not task variance — and the /goal v5 finding (a byte-identical
+# prompt swinging 2/3 -> 0/3 at fixed seed) is a standing warning that
+# task-to-task variance is plausibly larger than what a seed sweep can see. A
+# rate on one task cannot be generalized to "the loop", and this campaign has
+# not yet tested that it does. This is the single highest-value remaining
+# question, cheaper than any further Mellum n.
+#
+# THE SECOND TASK. `roadmap-user-story` (fixtures/agenttest/specs/roadmap-user-story.md,
+# 82 lines vs roadmap.md's 56): the identical target app — same routes, same
+# redirect contract, same data model, same 13-test acceptance suite — but
+# phrased as user-facing business outcomes rather than implementation
+# instructions. Genuinely different task SHAPE (the orchestrator must derive
+# the same file/phase plan from a differently-organized spec), same oracle, so
+# a rate difference is attributable to task framing rather than a harder grader.
+# `writableFiles` in main.swift is not spec-conditional and is correct for both
+# specs (confirmed by reading both spec files against it). Never run through
+# the directive path before this arm (checked: no prior
+# captures/agenttest/*-roadmap-user-story-directive dirs).
+#
+# PROVENANCE: repo HEAD f61de85 + uncommitted main.swift (repairEmissionFollowUp
+# switch — inert on this path, directive mode never calls RepairLoop). ds4 pin
+# 1a2dddf. Same configuration as Block A's main pass: laguna-s-2.1, think budget
+# 1500, 2-worker pool, 4-round cap. TURN_TIMEOUT=1500 (between the main pass's
+# 900s, which truncated a genuine multi-dispatch tail, and the long-turn arm's
+# 1800s) so this arm does not repeat that mistake at 1/3 the n.
+#
+# DESIGN: n=10, seeds 201-210 — disjoint from every prior seed on the directive
+# path (42, 101-130). n=10 is deliberately small: this is a SCREEN for a large
+# generalization failure, not a precision instrument. Wilson width at n=10 is
+# wide by design; see the decision rule below for what that width can and
+# cannot support.
+#
+# PRIMARY ENDPOINT: pass rate on roadmap-user-story, reported with its Wilson
+# interval, read AGAINST Block A's 27/29 = 93% baseline — not pooled with it
+# (different task; pooling would average two different quantities, the same
+# mistake the depth-2/depth-3 pooling made).
+#
+# DECISION RULE, fixed before the first cell:
+#  1. >=8/10 (80%): the loop generalizes across this task shift; no further
+#     action needed on genericity grounds alone.
+#  2. 5-7/10: a real signal that task framing matters, underpowered to size it.
+#     Next step is a larger arm on this same spec, not a different spec.
+#  3. <=4/10: the loop's reliability is task-specific, not a property of the
+#     loop; the 93% figure must not be quoted without the caveat "measured on
+#     one task" from here forward, and the failure captures become P27 inputs
+#     directly (same taxonomy discipline as the roadmap voids).
+# Every non-pass cell gets read for its failure mode, same as the roadmap
+# arm's seed-106 (dispatch-ordering deadlock) and seed-109 (malformed tool call
+# in think) — those two roadmap-backlog entries are candidates a second task
+# might reproduce or might not; either answer is informative.
+#
+# WHAT THIS CANNOT CONCLUDE: a precise rate on this task (n=10 gives a wide
+# interval by design); anything about tasks other than these two.
+#
+# Runner: TURN_TIMEOUT=1500 RUN_CAP=3600 \
+#   CAMPAIGN_MANIFEST=<this> \
+#   CAMPAIGN_RESULTS=docs/superpowers/research/experiment-results-orchestrate-userstory.tsv \
+#   python3 Tools/run-orchestrate-campaign.py
+spec	think	seed
+roadmap-user-story	1500	201
+roadmap-user-story	1500	202
+roadmap-user-story	1500	203
+roadmap-user-story	1500	204
+roadmap-user-story	1500	205
+roadmap-user-story	1500	206
+roadmap-user-story	1500	207
+roadmap-user-story	1500	208
+roadmap-user-story	1500	209
+roadmap-user-story	1500	210

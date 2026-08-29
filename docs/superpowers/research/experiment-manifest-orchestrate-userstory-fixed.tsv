@@ -1,0 +1,78 @@
+# Pre-registered manifest — orchestrate-loop generalization arm, RE-RUN with a
+# harness fix. Written BEFORE the first cell of this arm. Separate arm, separate
+# results file; the confounded arm below is not amended or re-labeled.
+#
+# WHY A RE-RUN, NOT A CONTINUATION.
+# experiment-manifest-orchestrate-userstory.tsv (results:
+# experiment-results-orchestrate-userstory.tsv) was stopped early at 4 cells
+# (seeds 201-204), by design, once the cause was confirmed: `runDirectiveOnce`
+# built the orchestrate prompt from `task` alone, while the non-directive phase
+# loop (`runOnce`, main.swift:202,390) always includes `sharedContext` (mission
+# + tech-stack.md, which pins `fastapi[standard]`) in its packets. On
+# `roadmap-user-story`'s business-outcome phrasing, an orchestrator given no
+# framework pin built the ENTIRE APP IN FLASK, passed its own phase validation
+# (which also never checks the framework), and failed the acceptance suite's
+# `from app import app` at collection time — a total loss. All three graded
+# cells (201 fail, 203 fail, 202 harness-void via turnDidNotEnd) trace to this;
+# verified directly by recovering the leaked dispatch worktree for seed 203 and
+# re-running the acceptance suite by hand: `ModuleNotFoundError: No module
+# named 'flask'`. Continuing that arm to n=10 would have spent ~4 more hours
+# confirming the same known bug rather than answering the generalization
+# question. Stopping was an instrument-integrity call, not outcome-chasing on
+# the pass rate — the stop file went in before any further cell's result was
+# known.
+#
+# THE FIX (Sources/SwiftStarKit/OrchestrateDirective.swift): `build` gained an
+# optional `projectContext` parameter (default "", every existing call site and
+# all 8 pre-existing tests unaffected — verified, `swift test --filter
+# OrchestrateDirectiveTests` 11/11 green including 3 new cases). `main.swift`'s
+# directive call site now passes `sharedContext` (the same value `runOnce`
+# already used). This closes the specific gap; it is not a claim that directive
+# mode and phase-loop mode are now identical in every respect.
+#
+# PROVENANCE: repo HEAD (see git log at run time) + this fix, committed before
+# the first cell (fix is source-only, no engine/ds4 change). ds4 pin unchanged
+# from the confounded arm (1a2dddf). TURN_TIMEOUT=1500, RUN_CAP=3600 — same as
+# the confounded arm, so timeout policy is not a variable between them.
+#
+# DESIGN: same task (roadmap-user-story), same n=10 as originally planned, same
+# decision rule. Seeds 211-220 — disjoint from 201-210 (confounded arm), 101-130
+# and 42 (roadmap-spec Block A), so no cell here was ever run under the old,
+# broken prompt.
+#
+# PRIMARY ENDPOINT: pass rate on roadmap-user-story under the fixed prompt,
+# Wilson 95% interval, read against Block A's roadmap-spec baseline 27/29=93%
+# (still not pooled — different task, per the original design's reasoning).
+#
+# DECISION RULE, unchanged from the original design:
+#  1. >=8/10 (80%): the loop generalizes across this task shift once given the
+#     same project context the phase loop already gets.
+#  2. 5-7/10: a real signal that task framing matters beyond the missing
+#     context; underpowered to size it further at this n.
+#  3. <=4/10: reliability is task-specific even with the fix; the 93% figure
+#     keeps its "measured on one task" caveat, and failures become direct P27
+#     inputs.
+# Additionally: if ANY cell in this arm still substitutes Flask (or otherwise
+# ignores the now-present project context), that is reported explicitly and
+# separately from the pass rate — it would mean the fix is necessary but not
+# sufficient, a different finding than "the loop doesn't generalize."
+#
+# WHAT THIS CANNOT CONCLUDE: anything about tasks other than these two; a
+# precise rate at n=10; whether other gaps exist between directive mode and the
+# phase loop besides the one fixed here.
+#
+# Runner: TURN_TIMEOUT=1500 RUN_CAP=3600 \
+#   CAMPAIGN_MANIFEST=<this> \
+#   CAMPAIGN_RESULTS=docs/superpowers/research/experiment-results-orchestrate-userstory-fixed.tsv \
+#   python3 Tools/run-orchestrate-campaign.py
+spec	think	seed
+roadmap-user-story	1500	211
+roadmap-user-story	1500	212
+roadmap-user-story	1500	213
+roadmap-user-story	1500	214
+roadmap-user-story	1500	215
+roadmap-user-story	1500	216
+roadmap-user-story	1500	217
+roadmap-user-story	1500	218
+roadmap-user-story	1500	219
+roadmap-user-story	1500	220
