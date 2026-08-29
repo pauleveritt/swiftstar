@@ -2,37 +2,131 @@ import Testing
 import Foundation
 @testable import SwiftStarKit
 
-struct VariantGateTests {
-    private func variant(modelFile: URL) -> Variant {
-        let base = VariantRegistry.mellum
-        return Variant(
-            id: base.id,
-            displayName: base.displayName,
-            modelFile: modelFile,
-            family: base.family,
-            sampler: base.sampler,
-            contract: base.contract
-        )
-    }
+// MARK: - Shared fixtures
 
-    private func writeMellumGGUF(downType: UInt32 = 8) throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("gate-test-\(UUID().uuidString).gguf")
-        try GGUFBuilder.make(tensors: GGUFBuilder.mellumTensors(downType: downType)).write(to: url)
-        return url
-    }
+/// Rebuild `base` with a different `modelFile` — the only field these tests
+/// ever vary, since `VariantGate` reads the file at that path.
+private func gateVariant(base: Variant, modelFile: URL) -> Variant {
+    Variant(
+        id: base.id,
+        displayName: base.displayName,
+        modelFile: modelFile,
+        family: base.family,
+        sampler: base.sampler,
+        contract: base.contract
+    )
+}
 
-    private let plentyOfBytes: Int64 = 256 * 1024 * 1024 * 1024  // 256 GiB
+private func writeMellumGGUF(downType: UInt32 = 8) throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("gate-test-\(UUID().uuidString).gguf")
+    try GGUFBuilder.make(tensors: GGUFBuilder.mellumTensors(downType: downType)).write(to: url)
+    return url
+}
 
-    @Test func admitsACleanMellumVariant() throws {
-        let url = try writeMellumGGUF()
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 32_768, availableBytes: plentyOfBytes)
+private func writeLagunaSGGUF(q2Type: UInt32 = 10, q3Type: UInt32 = 11) throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("gate-test-\(UUID().uuidString).gguf")
+    let tensors = GGUFBuilder.lagunaSTensors(q2Type: q2Type, q3Type: q3Type)
+    try GGUFBuilder.makeLaguna(tensors: tensors).write(to: url)
+    return url
+}
+
+private let plentyOfGateBytes: Int64 = 256 * 1024 * 1024 * 1024  // 256 GiB
+
+// MARK: - Cross-variant admission table
+//
+// Both variants exercised here (Mellum, Laguna S) go through the same three
+// admission shapes: a clean file at the variant's own context is admitted; a
+// context above the variant's declared range is refused as `.unsupportedContext`;
+// a too-tight memory budget is refused as `.infeasible` naming the variant. The
+// context sizes and available-bytes thresholds differ per variant (Mellum's
+// range tops out at 40,960; Laguna S's covers the app default 51,200), so
+// those stay per-row rather than shared constants.
+
+struct GateAdmissionCase: Sendable, CustomTestStringConvertible {
+    let name: String
+    let baseVariant: Variant
+    let writeCleanGGUF: @Sendable () throws -> URL
+    let admitContextSize: Int
+    let aboveRangeContextSize: Int
+    let infeasibleContextSize: Int
+    let tightAvailableBytes: Int64
+    let displayNameSubstring: String
+    var testDescription: String { name }
+}
+
+private let gateAdmissionCases: [GateAdmissionCase] = [
+    .init(name: "mellum", baseVariant: VariantRegistry.mellum,
+          writeCleanGGUF: { try writeMellumGGUF() },
+          admitContextSize: 32_768, aboveRangeContextSize: 131_072,
+          infeasibleContextSize: 40_960, tightAvailableBytes: 8 * 1024 * 1024 * 1024,
+          displayNameSubstring: "Mellum"),
+    .init(name: "lagunaS", baseVariant: VariantRegistry.lagunaS,
+          writeCleanGGUF: { try writeLagunaSGGUF() },
+          // The app's shipped default context (51,200) — Laguna S's declared
+          // range (16,384–51,200) must actually cover it (unlike Mellum).
+          admitContextSize: 51_200, aboveRangeContextSize: 200_000,
+          infeasibleContextSize: 32_768, tightAvailableBytes: 8 * 1024 * 1024 * 1024,
+          displayNameSubstring: "Laguna S"),
+]
+
+struct VariantGateAdmissionTests {
+    @Test(arguments: gateAdmissionCases)
+    func admitsACleanVariant(_ c: GateAdmissionCase) throws {
+        let url = try c.writeCleanGGUF()
+        let result = VariantGate.admit(
+            gateVariant(base: c.baseVariant, modelFile: url),
+            contextSize: c.admitContextSize, availableBytes: plentyOfGateBytes)
         #expect(result == .admitted)
     }
 
+    @Test(arguments: gateAdmissionCases)
+    func unsupportedContextAboveRangeRefuses(_ c: GateAdmissionCase) throws {
+        let url = try c.writeCleanGGUF()
+        let result = VariantGate.admit(
+            gateVariant(base: c.baseVariant, modelFile: url),
+            contextSize: c.aboveRangeContextSize, availableBytes: plentyOfGateBytes)
+        guard case .contractMismatch(let mismatches) = result else {
+            Issue.record("expected contractMismatch (unsupported ctx), got \(result)")
+            return
+        }
+        #expect(mismatches.count == 1)
+        guard case .unsupportedContext(let requested, _, _) = mismatches[0] else {
+            Issue.record("expected .unsupportedContext, got \(mismatches)")
+            return
+        }
+        #expect(requested == c.aboveRangeContextSize)
+    }
+
+    @Test(arguments: gateAdmissionCases)
+    func infeasibleBudgetRefusesWithVariantDisplayName(_ c: GateAdmissionCase) throws {
+        let url = try c.writeCleanGGUF()
+        let result = VariantGate.admit(
+            gateVariant(base: c.baseVariant, modelFile: url),
+            contextSize: c.infeasibleContextSize, availableBytes: c.tightAvailableBytes)
+        guard case .infeasible(let reason) = result else {
+            Issue.record("expected infeasible, got \(result)")
+            return
+        }
+        #expect(reason.deficitBytes > 0)
+        #expect(reason.message.contains(c.displayNameSubstring))
+    }
+}
+
+// MARK: - Standalone, variant-specific tests
+//
+// These don't have a counterpart on the other variant in this file: file-
+// unreadability and mismatch-precedence are generic `VariantGate` behaviors
+// only pinned once (via Mellum), and the mixed-quant-per-segment refusal only
+// makes sense for Laguna S's two-segment contract.
+
+struct MellumGateTests {
     @Test func unreadableFileIsContractMismatch() {
         let url = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).gguf")
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 32_768, availableBytes: plentyOfBytes)
+        let result = VariantGate.admit(
+            gateVariant(base: VariantRegistry.mellum, modelFile: url),
+            contextSize: 32_768, availableBytes: plentyOfGateBytes)
         guard case .contractMismatch(let mismatches) = result else {
             Issue.record("expected contractMismatch, got \(result)")
             return
@@ -46,112 +140,37 @@ struct VariantGateTests {
 
     @Test func contractMismatchPrecedesMemoryCheck() throws {
         let url = try writeMellumGGUF(downType: 6)  // Q5_0 down: contract violation
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 32_768, availableBytes: 1)  // also infeasible
+        let result = VariantGate.admit(
+            gateVariant(base: VariantRegistry.mellum, modelFile: url),
+            contextSize: 32_768, availableBytes: 1)  // also infeasible
         guard case .contractMismatch = result else {
             Issue.record("expected contractMismatch (precedence), got \(result)")
             return
         }
     }
 
-    @Test func infeasibleBudgetRefuses() throws {
-        let url = try writeMellumGGUF()
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 40_960, availableBytes: 8 * 1024 * 1024 * 1024)
-        guard case .infeasible(let reason) = result else {
-            Issue.record("expected infeasible, got \(result)")
-            return
-        }
-        #expect(reason.deficitBytes > 0)
-        #expect(reason.message.contains("Mellum"))
-    }
-
-    @Test func unsupportedContextRefuses() throws {
-        let url = try writeMellumGGUF()
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 131_072, availableBytes: plentyOfBytes)
-        guard case .contractMismatch(let mismatches) = result else {
-            Issue.record("expected contractMismatch (unsupported ctx), got \(result)")
-            return
-        }
-        #expect(mismatches.count == 1)
-        guard case .unsupportedContext(let requested, _, _) = mismatches[0] else {
-            Issue.record("expected .unsupportedContext, got \(mismatches)")
-            return
-        }
-        #expect(requested == 131_072)
-    }
-
     @Test func admittedHasNilRefusalMessage() throws {
         let url = try writeMellumGGUF()
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 32_768, availableBytes: plentyOfBytes)
+        let result = VariantGate.admit(
+            gateVariant(base: VariantRegistry.mellum, modelFile: url),
+            contextSize: 32_768, availableBytes: plentyOfGateBytes)
         #expect(result.refusalMessage == nil)
     }
 }
 
 struct LagunaSGateTests {
-    private func variant(modelFile: URL) -> Variant {
-        let base = VariantRegistry.lagunaS
-        return Variant(
-            id: base.id,
-            displayName: base.displayName,
-            modelFile: modelFile,
-            family: base.family,
-            sampler: base.sampler,
-            contract: base.contract
-        )
-    }
-
-    private func writeLagunaSGGUF(q2Type: UInt32 = 10, q3Type: UInt32 = 11) throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("gate-test-\(UUID().uuidString).gguf")
-        let tensors = GGUFBuilder.lagunaSTensors(q2Type: q2Type, q3Type: q3Type)
-        try GGUFBuilder.makeLaguna(tensors: tensors).write(to: url)
-        return url
-    }
-
-    private let plentyOfBytes: Int64 = 256 * 1024 * 1024 * 1024  // 256 GiB
-
-    @Test func admitsACleanLagunaSVariantAtTheAppDefaultContext() throws {
-        let url = try writeLagunaSGGUF()
-        // The app's shipped default context (51,200) — Laguna S's declared
-        // range (16,384–51,200) must actually cover it (unlike Mellum/XS).
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 51_200, availableBytes: plentyOfBytes)
-        #expect(result == .admitted)
-    }
-
     @Test func mixedQuantMismatchIsNamedPerSegment() throws {
         // Q3_K where Q2_K is expected on the first segment: a contract
         // violation the single-segment shape couldn't even express.
         let url = try writeLagunaSGGUF(q2Type: 11)
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 51_200, availableBytes: plentyOfBytes)
+        let result = VariantGate.admit(
+            gateVariant(base: VariantRegistry.lagunaS, modelFile: url),
+            contextSize: 51_200, availableBytes: plentyOfGateBytes)
         guard case .contractMismatch(let mismatches) = result else {
             Issue.record("expected contractMismatch, got \(result)")
             return
         }
         #expect(mismatches.count == 20)
-    }
-
-    @Test func unsupportedContextAboveLagunaSRangeRefuses() throws {
-        let url = try writeLagunaSGGUF()
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 200_000, availableBytes: plentyOfBytes)
-        guard case .contractMismatch(let mismatches) = result else {
-            Issue.record("expected contractMismatch (unsupported ctx), got \(result)")
-            return
-        }
-        #expect(mismatches.count == 1)
-        guard case .unsupportedContext = mismatches[0] else {
-            Issue.record("expected .unsupportedContext, got \(mismatches)")
-            return
-        }
-    }
-
-    @Test func infeasibleBudgetRefusesWithLagunaSName() throws {
-        let url = try writeLagunaSGGUF()
-        let result = VariantGate.admit(variant(modelFile: url), contextSize: 32_768, availableBytes: 8 * 1024 * 1024 * 1024)
-        guard case .infeasible(let reason) = result else {
-            Issue.record("expected infeasible, got \(result)")
-            return
-        }
-        #expect(reason.deficitBytes > 0)
-        #expect(reason.message.contains("Laguna S"))
     }
 }
 
@@ -163,17 +182,7 @@ struct LagunaSGateTests {
 /// messages depending on whether raising the limit would actually help.
 struct WiredLimitAdvisoryTests {
     private func mellum(modelFile: URL) -> Variant {
-        let base = VariantRegistry.mellum
-        return Variant(
-            id: base.id, displayName: base.displayName, modelFile: modelFile,
-            family: base.family, sampler: base.sampler, contract: base.contract)
-    }
-
-    private func writeMellumGGUF() throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("advisory-test-\(UUID().uuidString).gguf")
-        try GGUFBuilder.make(tensors: GGUFBuilder.mellumTensors()).write(to: url)
-        return url
+        gateVariant(base: VariantRegistry.mellum, modelFile: modelFile)
     }
 
     @Test func noAdvisoryKeepsTheLegacyCloseAppsMessage() throws {

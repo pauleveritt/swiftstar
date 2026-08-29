@@ -2,44 +2,45 @@ import Testing
 import Foundation
 @testable import SwiftStarKit
 
-struct VariantRegistryTests {
-    @Test func resolvesMellum() throws {
-        let variant = try #require(VariantRegistry.resolve("mellum-2.1"))
-        #expect(variant.id == "mellum-2.1")
-        #expect(variant.family == .mellum)
-        #expect(variant.contract.architecture == "mellum")
-        #expect(variant.contract.rope.scalingType == "yarn")
-        #expect(variant.contract.rope.freqBase == 500_000.0)
+// MARK: - Cross-variant identity table
+//
+// `resolve(id)` checks the same core contract fields (id, family,
+// architecture, rope, a sample tensor name) for every registered variant, plus
+// whatever is *distinctive* about that variant's quant-layout shape, sampler,
+// and runtime — a single uniform quant segment vs. two mixed segments,
+// sampler defaults present with family-specific values vs. absent, SSD-
+// streaming runtime present vs. absent. The distinctive part is a closure per
+// row rather than forced-shared fields, since those shapes genuinely differ;
+// the next variant adds one row supplying its own.
+
+struct VariantIdentityCase: Sendable, CustomTestStringConvertible {
+    let id: String
+    let family: ModelFamily
+    let architecture: String
+    let freqBase: Double
+    let sampleLayer: Int
+    let assertDistinctiveFields: @Sendable (Variant) -> Void
+    var testDescription: String { id }
+}
+
+private let variantIdentityCases: [VariantIdentityCase] = [
+    .init(id: "mellum-2.1", family: .mellum, architecture: "mellum",
+          freqBase: 500_000.0, sampleLayer: 3, assertDistinctiveFields: { variant in
         #expect(variant.contract.quantLayout.downType == .q8_0)
         #expect(variant.contract.quantLayout.startLayer == 0)
         #expect(variant.contract.quantLayout.layerCount == 28)
-        #expect(variant.contract.quantLayout.downTensorName(layer: 3) == "blk.3.ffn_down_exps.weight")
         // JetBrains' published Mellum sampling (ds4.c:63358).
         #expect(variant.sampler?.temperature == 0.6)
         #expect(variant.sampler?.topK == 20)
         #expect(variant.sampler?.topP == 0.95)
         #expect(variant.sampler?.minP == 0.0)
-    }
-
-    @Test func unknownIDIsNil() {
-        #expect(VariantRegistry.resolve("nope") == nil)
-    }
-
-    @Test func allContainsMellum() {
-        #expect(VariantRegistry.all.map(\.id).contains("mellum-2.1"))
-    }
-
-    @Test func resolvesLagunaXS() throws {
-        let variant = try #require(VariantRegistry.resolve("laguna-xs-2.1"))
-        #expect(variant.id == "laguna-xs-2.1")
-        #expect(variant.family == .lagunaXS)
-        #expect(variant.contract.architecture == "laguna")
-        #expect(variant.contract.rope.scalingType == "yarn")
-        #expect(variant.contract.rope.freqBase == 500_000.0)
+        #expect(variant.runtime == nil)
+    }),
+    .init(id: "laguna-xs-2.1", family: .lagunaXS, architecture: "laguna",
+          freqBase: 500_000.0, sampleLayer: 5, assertDistinctiveFields: { variant in
         #expect(variant.contract.quantLayout.downType == .q3_k)
         #expect(variant.contract.quantLayout.startLayer == 1)
         #expect(variant.contract.quantLayout.layerCount == 40)
-        #expect(variant.contract.quantLayout.downTensorName(layer: 5) == "blk.5.ffn_down_exps.weight")
         // Laguna family sampling defaults (engine-lines.md).
         #expect(variant.sampler?.temperature == 0.7)
         #expect(variant.sampler?.topK == 20)
@@ -49,21 +50,11 @@ struct VariantRegistryTests {
         #expect(variant.runtime?.ssdStreaming == true)
         #expect(variant.runtime?.ssdStreamingCacheExperts == 3200)
         #expect(variant.runtime?.prefillChunk == 4096)
-    }
-
-    @Test func allContainsLagunaXS() {
-        #expect(VariantRegistry.all.map(\.id).contains("laguna-xs-2.1"))
-    }
-
-    @Test func resolvesLagunaS() throws {
-        let variant = try #require(VariantRegistry.resolve("laguna-s-2.1"))
-        #expect(variant.id == "laguna-s-2.1")
-        #expect(variant.family == .lagunaS)
-        #expect(variant.contract.architecture == "laguna")
-        #expect(variant.contract.rope.scalingType == "yarn")
-        #expect(variant.contract.rope.freqBase == 500_000.0)
+    }),
+    .init(id: "laguna-s-2.1", family: .lagunaS, architecture: "laguna",
+          freqBase: 500_000.0, sampleLayer: 5, assertDistinctiveFields: { variant in
         // The mixed "RoutedQ2_K-Last27Q3_K" layout, read from the real file:
-        // dense layer 0 skipped, Q2_K on 1..<21, Q3_K on the last 27 (21..<48).
+        // dense layer 0 skipped, Q2_K on 1..<21, Q3_K on the last 27.
         #expect(variant.contract.quantLayout.segments.count == 2)
         #expect(variant.contract.quantLayout.segments[0].downType == .q2_k)
         #expect(variant.contract.quantLayout.segments[0].startLayer == 1)
@@ -71,32 +62,20 @@ struct VariantRegistryTests {
         #expect(variant.contract.quantLayout.segments[1].downType == .q3_k)
         #expect(variant.contract.quantLayout.segments[1].startLayer == 21)
         #expect(variant.contract.quantLayout.segments[1].layerCount == 48)
-        #expect(variant.contract.quantLayout.downTensorName(layer: 5) == "blk.5.ffn_down_exps.weight")
         // Laguna family sampling defaults (engine-lines.md) — same as XS.
         #expect(variant.sampler?.temperature == 0.7)
         #expect(variant.sampler?.topK == 20)
         #expect(variant.sampler?.topP == 0.95)
         #expect(variant.sampler?.minP == 0.05)
-        // S gained SSD streaming with the Laguna line (ROADMAP P22 forward
-        // item, engine divergence #13): the shared EngineRuntimeConfig carries
-        // --ssd-streaming + the expert cache; no prefill chunk (XS's 4096 is
-        // XS-tuned — the branch's gate widening left --prefill-chunk XS-only).
+        // S gained SSD streaming with the Laguna line (engine divergence
+        // #13): no prefill chunk (XS's 4096 is XS-tuned; the gate widening
+        // that shipped it left --prefill-chunk XS-only).
         #expect(variant.runtime?.ssdStreaming == true)
         #expect(variant.runtime?.ssdStreamingCacheExperts == 3200)
         #expect(variant.runtime?.prefillChunk == nil)
-    }
-
-    @Test func allContainsLagunaS() {
-        #expect(VariantRegistry.all.map(\.id).contains("laguna-s-2.1"))
-    }
-
-    @Test func resolvesDeepSeekV4Flash() throws {
-        let variant = try #require(VariantRegistry.resolve("deepseek-v4-flash"))
-        #expect(variant.id == "deepseek-v4-flash")
-        #expect(variant.family == .deepSeekV4Flash)
-        #expect(variant.contract.architecture == "deepseek4")
-        #expect(variant.contract.rope.scalingType == "yarn")
-        #expect(variant.contract.rope.freqBase == 10_000.0)
+    }),
+    .init(id: "deepseek-v4-flash", family: .deepSeekV4Flash, architecture: "deepseek4",
+          freqBase: 10_000.0, sampleLayer: 40, assertDistinctiveFields: { variant in
         // The q2-q4-imatrix mixed layout, read from the real file: Q2_K on
         // 0..<37, Q4_K on 37..<43 — no dense leading layer, unlike Laguna.
         #expect(variant.contract.quantLayout.segments.count == 2)
@@ -106,15 +85,34 @@ struct VariantRegistryTests {
         #expect(variant.contract.quantLayout.segments[1].downType == .q4_k)
         #expect(variant.contract.quantLayout.segments[1].startLayer == 37)
         #expect(variant.contract.quantLayout.segments[1].layerCount == 43)
-        #expect(variant.contract.quantLayout.downTensorName(layer: 40) == "blk.40.ffn_down_exps.weight")
         // No published sampler defaults or SSD-streaming runtime for this
         // family (resident only — that's the Laguna XS story).
         #expect(variant.sampler == nil)
         #expect(variant.runtime == nil)
+    }),
+]
+
+struct VariantRegistryTests {
+    @Test(arguments: variantIdentityCases)
+    func resolvesWithFullContract(_ c: VariantIdentityCase) throws {
+        let variant = try #require(VariantRegistry.resolve(c.id))
+        #expect(variant.id == c.id)
+        #expect(variant.family == c.family)
+        #expect(variant.contract.architecture == c.architecture)
+        #expect(variant.contract.rope.scalingType == "yarn")
+        #expect(variant.contract.rope.freqBase == c.freqBase)
+        #expect(variant.contract.quantLayout.downTensorName(layer: c.sampleLayer)
+                == "blk.\(c.sampleLayer).ffn_down_exps.weight")
+        c.assertDistinctiveFields(variant)
     }
 
-    @Test func allContainsDeepSeekV4Flash() {
-        #expect(VariantRegistry.all.map(\.id).contains("deepseek-v4-flash"))
+    @Test(arguments: variantIdentityCases.map(\.id))
+    func allContainsEveryRegisteredVariant(_ id: String) {
+        #expect(VariantRegistry.all.map(\.id).contains(id))
+    }
+
+    @Test func unknownIDIsNil() {
+        #expect(VariantRegistry.resolve("nope") == nil)
     }
 }
 
@@ -193,6 +191,48 @@ struct MemoryBudgetTests {
     }
 }
 
+// MARK: - Cross-variant memory-budget table
+//
+// The out-of-range refusal shape recurs across every variant here (just the
+// probe contexts differ); the "already covers the app default" shape recurs
+// across the two whose range does (Laguna S, DeepSeek — Laguna XS's own
+// success case is `lagunaXSAdmitsTheAppDefaultContext` below, since its range
+// only covers the default after P23's raise, not by construction like S/
+// DeepSeek). One table, one exclusion filter, instead of two per-variant
+// struct families.
+
+struct MemoryBudgetCase: Sendable, CustomTestStringConvertible {
+    let name: String
+    let budget: MemoryBudget
+    let outOfRangeContexts: [Int]
+    var testDescription: String { name }
+}
+
+private let memoryBudgetCases: [MemoryBudgetCase] = [
+    .init(name: "lagunaXS", budget: VariantRegistry.lagunaXS.contract.memoryBudget,
+          outOfRangeContexts: [16_383, 51_201, 262_144]),
+    .init(name: "lagunaS", budget: VariantRegistry.lagunaS.contract.memoryBudget,
+          outOfRangeContexts: [16_383, 51_201, 150_000]),
+    .init(name: "deepSeekV4Flash", budget: VariantRegistry.deepSeekV4Flash.contract.memoryBudget,
+          outOfRangeContexts: [16_383, 450_001]),
+]
+
+struct MemoryBudgetCrossVariantTests {
+    @Test(arguments: memoryBudgetCases)
+    func unsupportedContextIsRefused(_ c: MemoryBudgetCase) {
+        for ctx in c.outOfRangeContexts {
+            #expect(c.budget.totalBytes(at: ctx) == nil, "\(c.name) at ctx \(ctx) should be refused")
+        }
+    }
+
+    @Test(arguments: memoryBudgetCases.filter { $0.name != "lagunaXS" })
+    func rangeCoversTheAppDefaultContextWithoutClamping(_ c: MemoryBudgetCase) {
+        #expect(c.budget.minContext <= 51_200)
+        #expect(c.budget.maxContext >= 51_200)
+        #expect(c.budget.clampContext(51_200) == 51_200)
+    }
+}
+
 struct LagunaXSMemoryBudgetTests {
     private let budget = VariantRegistry.lagunaXS.contract.memoryBudget
 
@@ -207,29 +247,10 @@ struct LagunaXSMemoryBudgetTests {
         let gib = Double(total) / 1_073_741_824
         #expect(abs(gib - 5.91) < 0.01)
     }
-
-    /// The refusal side of the declared range. P23 raised this variant's
-    /// ceiling 32,768 → 51,200, so the above-max probes moved with it; the
-    /// behaviour pinned here (a context outside [minContext, maxContext] is
-    /// refused) is unchanged. Sibling success test:
-    /// `lagunaXSAdmitsTheAppDefaultContext`.
-    @Test func unsupportedContextIsRefused() {
-        #expect(budget.totalBytes(at: 16_383) == nil)
-        #expect(budget.totalBytes(at: 51_201) == nil)
-        #expect(budget.totalBytes(at: 262_144) == nil)
-    }
 }
 
 struct LagunaSMemoryBudgetTests {
     private let budget = VariantRegistry.lagunaS.contract.memoryBudget
-
-    @Test func rangeCoversTheAppDefaultContextWithoutClamping() {
-        // Unlike Mellum/XS, Laguna S's declared range must already cover the
-        // app's shipped default (51,200) — it is the app's default model.
-        #expect(budget.minContext <= 51_200)
-        #expect(budget.maxContext >= 51_200)
-        #expect(budget.clampContext(51_200) == 51_200)
-    }
 
     @Test func kvAtAppDefaultContext() throws {
         // KV(ctx) = 49,152 x ctx + 75,497,472 B (Correction 2, verified
@@ -275,12 +296,6 @@ struct LagunaSMemoryBudgetTests {
         #expect(VariantRegistry.lagunaS.contract.memoryBudget.maxContext == 51_200)
     }
 
-    @Test func unsupportedContextIsRefused() {
-        #expect(budget.totalBytes(at: 16_383) == nil)
-        #expect(budget.totalBytes(at: 51_201) == nil)
-        #expect(budget.totalBytes(at: 150_000) == nil)
-    }
-
     @Test func totalAtAppDefaultIsSanityCheckedAgainstTheSsdStreamingFootprint() throws {
         // S now SSD-streams (P22 divergence #13): the budget models the
         // streaming path, not residency — the ~46 GiB on-disk weights file no
@@ -309,17 +324,6 @@ struct LagunaSMemoryBudgetTests {
 
 struct DeepSeekV4FlashMemoryBudgetTests {
     private let budget = VariantRegistry.deepSeekV4Flash.contract.memoryBudget
-
-    @Test func rangeCoversTheAppDefaultContextWithoutClamping() {
-        #expect(budget.minContext <= 51_200)
-        #expect(budget.maxContext >= 51_200)
-        #expect(budget.clampContext(51_200) == 51_200)
-    }
-
-    @Test func unsupportedContextIsRefused() {
-        #expect(budget.totalBytes(at: 16_383) == nil)
-        #expect(budget.totalBytes(at: 450_001) == nil)
-    }
 
     @Test func totalAtAppDefaultIsSanityCheckedAgainstTheOnDiskFileSize() throws {
         // The gguf is ~90.9 GiB on disk (97,591,747,456 bytes); resident total
