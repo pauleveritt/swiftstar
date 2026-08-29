@@ -5,6 +5,26 @@ import Foundation
 struct AgentTranscriptTests {
     private static let hello = AgentEvent.hello(version: 1, capabilities: ["text", "tool", "status", "ts"])
 
+    private static var fixturesRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("fixtures/agent")
+    }
+
+    /// Replays a committed wire fixture through a fresh parser/transcript and
+    /// returns the resulting tool cards. Shared by the `golden-tools*` tests
+    /// below so the fixture-path construction and feed loop live in one place.
+    private func toolCards(fromFixture name: String) throws -> [ToolCard] {
+        let url = Self.fixturesRoot.appendingPathComponent(name)
+        let text = try String(contentsOf: url, encoding: .utf8)
+        var parser = AgentWireParser()
+        var t = AgentTranscript()
+        for line in text.split(whereSeparator: \.isNewline) {
+            if let e = parser.feed(String(line)) { t.apply(e) }
+        }
+        return t.rows.compactMap { if case .tool(let card) = $0 { return card } else { return nil } }
+    }
+
     @Test func contentCoalesces() {
         var t = AgentTranscript()
         t.apply(.text("Hello "))
@@ -147,17 +167,7 @@ struct AgentTranscriptTests {
     }
 
     @Test func goldenToolsTranscriptBuildsToolCards() throws {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("fixtures/agent/golden-tools.ndjson")
-        let text = try String(contentsOf: url, encoding: .utf8)
-        var parser = AgentWireParser()
-        var t = AgentTranscript()
-        for line in text.split(whereSeparator: \.isNewline) {
-            let s = String(line)
-            if let e = parser.feed(s) { t.apply(e) }
-        }
-        let cards = t.rows.compactMap { if case .tool(let card) = $0 { return card } else { return nil } }
+        let cards = try toolCards(fromFixture: "golden-tools.ndjson")
         #expect(!cards.isEmpty)
         #expect(cards.contains { $0.name == "bash" && $0.output != nil })  // the echo output surfaced on its card
         #expect(cards.contains { $0.name == "read" })
@@ -168,16 +178,7 @@ struct AgentTranscriptTests {
         // The P21 "golden recapture" premise was wrong: the fixture already
         // carries the `kind` fields across all five kinds — the gap was
         // assertions, not a clean recapture run.
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("fixtures/agent/golden-tools.ndjson")
-        let text = try String(contentsOf: url, encoding: .utf8)
-        var parser = AgentWireParser()
-        var t = AgentTranscript()
-        for line in text.split(whereSeparator: \.isNewline) {
-            if let e = parser.feed(String(line)) { t.apply(e) }
-        }
-        let cards = t.rows.compactMap { if case .tool(let card) = $0 { return card } else { return nil } }
+        let cards = try toolCards(fromFixture: "golden-tools.ndjson")
         let params = cards.flatMap(\.params)
         #expect(params.contains { $0.kind == "path" })
         #expect(cards.contains { $0.path != nil })
@@ -188,17 +189,7 @@ struct AgentTranscriptTests {
     }
 
     @Test func goldenToolsXsTranscriptBuildsToolCards() throws {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("fixtures/agent/golden-tools-xs.ndjson")
-        let text = try String(contentsOf: url, encoding: .utf8)
-        var parser = AgentWireParser()
-        var t = AgentTranscript()
-        for line in text.split(whereSeparator: \.isNewline) {
-            let s = String(line)
-            if let e = parser.feed(s) { t.apply(e) }
-        }
-        let cards = t.rows.compactMap { if case .tool(let card) = $0 { return card } else { return nil } }
+        let cards = try toolCards(fromFixture: "golden-tools-xs.ndjson")
         #expect(!cards.isEmpty)
         #expect(cards.contains { $0.name == "bash" && $0.output != nil })  // the echo output surfaced on its card
         #expect(cards.contains { $0.name == "read" })
@@ -216,16 +207,7 @@ struct AgentTranscriptTests {
         // diff_old, diff_new: the full five-kind zoo) — and this is also the
         // first fixture test to assert `finished`, which neither of the
         // golden-tools tests above ever checked.
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("fixtures/agent/golden-tools-xs.ndjson")
-        let text = try String(contentsOf: url, encoding: .utf8)
-        var parser = AgentWireParser()
-        var t = AgentTranscript()
-        for line in text.split(whereSeparator: \.isNewline) {
-            if let e = parser.feed(String(line)) { t.apply(e) }
-        }
-        let cards = t.rows.compactMap { if case .tool(let card) = $0 { return card } else { return nil } }
+        let cards = try toolCards(fromFixture: "golden-tools-xs.ndjson")
         let params = cards.flatMap(\.params)
         #expect(params.contains { $0.kind == "path" })
         #expect(params.contains { $0.kind == "content" })
