@@ -152,20 +152,28 @@ def sweep_temp_worktrees() -> int:
 
     `main.swift:1317` calls `exit(1)` on a FAIL, and Swift's `exit` does not run
     `defer`, so `WorktreeDispatcher.discard` never fires. Each leak is a small
-    git repo in $TMPDIR, but nothing sweeps them and a campaign makes 30.
-    Only ever touches `agenttest-directive-*`, never anything else.
+    git repo in $TMPDIR, but nothing sweeps them: on 2026-08-29 a sweep found
+    240 of them dating back to 2026-08-23, from all three tiers.
+
+    Covers `agenttest-*` (batch), `agenttest-fixture-*` and
+    `agenttest-directive-*`, and nothing else. The 10-minute age guard means a
+    concurrently running harness's live worktree is never removed, even though
+    the driver lock should already prevent that.
     """
     tmp = tempfile.gettempdir()
     removed = 0
+    cutoff = time.time() - 600
     try:
         names = os.listdir(tmp)
     except OSError:
         return 0
     for name in names:
-        if not name.startswith('agenttest-directive-'):
+        if not name.startswith('agenttest-'):
             continue
         path = os.path.join(tmp, name)
         try:
+            if os.path.getmtime(path) > cutoff:
+                continue
             shutil.rmtree(path)
             removed += 1
         except OSError:

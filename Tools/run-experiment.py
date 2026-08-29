@@ -46,7 +46,16 @@ def rows():
         line = line.rstrip('\n')
         if not line or line.startswith('#') or line.startswith('fixture\t'):
             continue
-        out.append(line.split('\t'))
+        parts = line.split('\t')
+        # An optional 4th column names the ARM, which selects a prompt variant
+        # via env. Manifests without it are unaffected — the arm defaults to
+        # 'plural', the shipped behaviour. This exists so two wordings can be
+        # interleaved on ONE binary: comparing a new arm against a frozen
+        # baseline leaves a binary-drift confound and caps power at the old
+        # baseline's n, whatever n the new arm uses.
+        if len(parts) == 3:
+            parts.append('plural')
+        out.append(parts[:4])
     return out
 
 
@@ -59,8 +68,17 @@ def done():
     # n at whatever ran before the breakage. (2026-08-28: a stale engine binary
     # did exactly that to a dry run; the classification was right and the
     # resume semantics would have made it permanent.)
-    return {tuple(r[:3]) for r in csv.reader(open(RESULTS), delimiter='\t')
-            if r and r[0] != 'fixture' and len(r) > 3 and r[3] in ('pass', 'fail')}
+    # Keyed on (fixture, rounds, seed, arm): the same cell run under a
+    # different prompt arm is a DIFFERENT cell, not a repeat. Legacy 6-column
+    # rows predate the arm column and are read as the shipped 'plural' arm.
+    closed = set()
+    for r in csv.reader(open(RESULTS), delimiter='\t'):
+        if not r or r[0] == 'fixture' or len(r) <= 3:
+            continue
+        if r[3] not in ('pass', 'fail'):
+            continue
+        closed.add((r[0], r[1], r[2], r[6] if len(r) > 6 else 'plural'))
+    return closed
 
 
 def last_grade(cell):
@@ -94,17 +112,23 @@ def main():
     have = done()
     if not os.path.exists(RESULTS):
         with open(RESULTS, 'w') as fh:
-            fh.write('fixture\trounds\tseed\toutcome\tdetail\tcapture\n')
-    for fixture, rnd, seed in rows():
+            fh.write('fixture\trounds\tseed\toutcome\tdetail\tcapture\tarm\n')
+    for fixture, rnd, seed, arm in rows():
         if sel.get('fixture') and fixture != sel['fixture']:
             continue
         if sel.get('rounds') and rnd != sel['rounds']:
             continue
-        if (fixture, rnd, seed) in have:
-            print(f'[skip] {fixture}/{rnd}/{seed} already recorded')
+        if sel.get('arm') and arm != sel['arm']:
+            continue
+        if (fixture, rnd, seed, arm) in have:
+            print(f'[skip] {fixture}/{rnd}/{seed}/{arm} already recorded')
             continue
         env = dict(os.environ, AGENTTEST_SEED=seed, AGENTTEST_REPAIR_ROUNDS=rnd)
-        print(f'[run ] {fixture}/rounds={rnd}/seed={seed}', flush=True)
+        if arm == 'singular':
+            env['AGENTTEST_SINGULAR_FOLLOWUP'] = '1'
+        else:
+            env.pop('AGENTTEST_SINGULAR_FOLLOWUP', None)
+        print(f'[run ] {fixture}/rounds={rnd}/seed={seed}/arm={arm}', flush=True)
         p = subprocess.run([BIN, '--fixture', fixture, '--variant', 'mellum-2.1'],
                            env=env, capture_output=True, text=True, cwd=ROOT)
         out = p.stdout + p.stderr
@@ -113,8 +137,8 @@ def main():
         outcome, detail = ('harness-void', 'no capture produced') if not (cell and os.path.isdir(cell)) \
             else classify(cell)
         with open(RESULTS, 'a') as fh:
-            fh.write(f'{fixture}\t{rnd}\t{seed}\t{outcome}\t{detail}\t{os.path.basename(cell)}\n')
-        print(f'[done] {fixture}/{rnd}/{seed} -> {outcome}: {detail}', flush=True)
+            fh.write(f'{fixture}\t{rnd}\t{seed}\t{outcome}\t{detail}\t{os.path.basename(cell)}\t{arm}\n')
+        print(f'[done] {fixture}/{rnd}/{seed}/{arm} -> {outcome}: {detail}', flush=True)
 
 
 if __name__ == '__main__':

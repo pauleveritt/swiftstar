@@ -105,6 +105,21 @@ else
   ok "no ds4-agent holding the instance lock"
 fi
 
+# ---- 5b. sweep leaked temp worktrees ----------------------------------------
+# The harness's `exit(1)` on a FAIL skips its `defer`, so `WorktreeDispatcher`
+# never discards the throwaway repo. Nothing sweeps the fixture and batch tiers
+# (only the Block A driver sweeps, and only between its own cells), so they
+# accumulate: a sweep on 2026-08-29 found 240 dating back to 2026-08-23. Small
+# individually — 11.3 MiB in total — so this is housekeeping, never a failure.
+# The 10-minute age guard keeps a concurrently running harness's live worktree.
+leaked="$(find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'agenttest-*' -mmin +10 2>/dev/null | wc -l | tr -d ' ')"
+if [ "${leaked:-0}" -gt 0 ]; then
+  find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'agenttest-*' -mmin +10 -exec rm -rf {} + 2>/dev/null
+  ok "swept ${leaked} leaked temp worktree(s)"
+else
+  ok "no leaked temp worktrees"
+fi
+
 # ---- 6. resources ------------------------------------------------------------
 freegib="$(df -g "$HERE" | awk 'NR==2 {print $4}')"
 if [ "${freegib:-0}" -lt 20 ]; then
