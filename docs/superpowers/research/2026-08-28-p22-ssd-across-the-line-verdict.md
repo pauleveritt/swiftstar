@@ -72,3 +72,22 @@ sanity test now pins the streaming footprint, and the ledger row notes the
 stale "deliberately excluded" comment (fixed), ROADMAP wording (recorded
 above), and the absence of an app-side DFlash lever (accepted — the exclusion
 is engine-side today, which is where the load-bearing check must live).
+
+## Budget-envelope fixes shipped 2026-08-28 (later pass)
+
+Two further PLAUSIBLE findings from the same review lineage were addressed:
+
+- **`maxContext` narrowed.** `lagunaS`'s SSD-streaming `maxContext` was
+  150,000 on the strength of one live measurement at ctx 51,200 — the old
+  150,000 ceiling was validated for the *resident* path, not streaming, and S
+  passes no `--prefill-chunk` cap. Narrowed to 51,200 (the measured point, and
+  exactly the app's default) until a higher-ctx streaming measurement
+  justifies raising it again.
+- **`weightsGiB` derivation coupled to `ssdStreamingCacheExperts`.**
+  `weightsGiB` (12.40) was a disconnected literal that happened to agree with
+  `ssdStreamingCacheExperts` (3,200); now derived as `cacheExperts x
+  perExpertGiB + residentSliceGiB` from the same `cacheExperts` value the
+  runtime flag uses, so a future retune can't silently under-plan the gate.
+
+New tests pin both (`maxContextIsCappedAtMeasuredStreamingPoint`,
+`weightsGiBStaysCoupledToCacheExperts`); fast tier 746 green.

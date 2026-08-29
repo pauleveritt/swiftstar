@@ -75,3 +75,29 @@ Commits: `6c6f1fe`, `d299fa8`, `c450e60`, `8d62c10`. Fast tier: 741 tests,
 GLM 5.3 (read-only, `fda614c..8d62c10`): **approve with minor fixes** — none
 Critical/Important; both minors folded (`8d62c10`). The review's pending
 "live validation" caveat is now closed by this record.
+
+## Correctness fixes shipped 2026-08-28 (post-ship deep review)
+
+A deep multi-angle code review of the full P22 commit range found the pure
+`ModelSwitchEvaluator` sound but its wiring leaking in seven ways:
+
+1. An empty stored `selectedVariantID` (written by the menu's own
+   Default/Custom buttons) silently skipped both the admission gate and the
+   SSD-streaming runtime.
+2. `noChange` compared only the model file, so a same-file switch that only
+   changed context size or runtime flags was swallowed as a no-op (and a
+   symlinked path spelling forced a spurious restart in the other direction).
+3. A custom/unverified model path bypassed admission entirely, killing a
+   working session for a missing or infeasible target.
+4. "Apply this model" was reachable mid-`/chat`-consult with no refusal.
+5. The admitted target wasn't pinned across `restartAgent()`'s async stop
+   window (TOCTOU).
+6. The restart poll had no timeout.
+7. The apply path wrote no transcript row, and a `.failed` launch was a
+   main-window dead end with no recovery control.
+
+All seven fixed: the pinned target is threaded through
+`startAgent`/`restartAgent`, `noChange` does a full-settings + symlink-aware
+comparison, a consult guard was added, custom paths get an existence check,
+the restart poll is bounded, and `.failed` state gets a "Start with this
+model" recovery control. Fast tier still green (744 tests).
