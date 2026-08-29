@@ -1,0 +1,82 @@
+# Pre-registered manifest — editing fixtures under the PLURAL emission
+# follow-up. Written BEFORE the first cell of this arm.
+#
+# NOT an amendment to experiment-manifest-editing-n20.tsv, which is complete and
+# closed at 60 rows. This is a separate arm against a CHANGED INSTRUMENT: the
+# repair emission follow-up in main.swift was rewritten from singular ("the file
+# you just diagnosed… one fenced code block") to plural-but-count-free ("for
+# each file you just diagnosed… however many that is"). Everything else —
+# fixtures, reference tree, acceptance suite, oracle, runner, variant, rounds —
+# is unchanged.
+#
+# WHAT IT TESTS. Block B's failure taxonomy attributed 10 of 18 failures to the
+# singular wording: the model diagnosed both/all broken files, then emitted only
+# one, and round 2 re-emitted the same one. If that reading is right, the
+# multi-file fixtures should improve sharply and the single-file control should
+# not move.
+#
+# PRIMARY endpoint, fixed in advance: the POOLED multi-file rate (depth-2 +
+# depth-3, n=24) against Block B's pooled multi-file baseline of 20/37 = 54%.
+# Pooling is pre-registered because it is the only comparison this arm has the
+# power to settle at n=12 per fixture; per-fixture rates are SECONDARY and will
+# be reported with intervals, not adjudicated.
+#
+# CONTROL: plausible-wrong-fix (1 file) at n=6. It scored 95% in Block B and has
+# no second file to drop, so the fix should leave it alone. A drop here means
+# the new wording broke something, and the arm fails rather than succeeds.
+#
+# This is a SCREEN, not a confirmation. n=12 per fixture can detect a large
+# effect and cannot resolve a small one. If the pooled rate does not move, that
+# is informative; if it moves a little, the honest answer is "underpowered" and
+# the next step is a larger pre-registration, not a re-read of these numbers.
+#
+# DECISION RULE, fixed before the first cell (two-sided Fisher exact against the
+# 20/37 baseline; k = passes out of 24 multi-file cells):
+#   k >= 20  (>=83%)  p <= 0.027  -> SUPPORTS the fix; the taxonomy's claim that
+#                                    ~10/18 failures were harness-amplified stands
+#   k == 18-19        p ~ 0.11    -> suggestive but UNDERPOWERED; do not claim a
+#                                    win. Next step is a larger pre-registration
+#   k <= 16  (<=67%)  p >= 0.43   -> NO detectable effect; the singular-wording
+#                                    reading is wrong or minor, and the failures
+#                                    are the model's, not the harness's
+# The control must stay high: plausible-wrong-fix below 4/6 is a regression
+# signal and voids the arm regardless of what the multi-file cells did.
+#
+# Seeds deliberately REUSE Block B's 4-15 (and 4-9 for the control) so the two
+# arms differ in the instrument rather than in the seed set. Different results
+# file, so nothing in Block B is re-run or overwritten.
+#
+# Runner: EXP_MANIFEST=<this> \
+#   EXP_RESULTS=docs/superpowers/research/experiment-results-editing-pluralfix.tsv \
+#   python3 Tools/run-experiment.py
+fixture	rounds	seed
+depth-2	2	4
+depth-2	2	5
+depth-2	2	6
+depth-2	2	7
+depth-2	2	8
+depth-2	2	9
+depth-2	2	10
+depth-2	2	11
+depth-2	2	12
+depth-2	2	13
+depth-2	2	14
+depth-2	2	15
+depth-3	2	4
+depth-3	2	5
+depth-3	2	6
+depth-3	2	7
+depth-3	2	8
+depth-3	2	9
+depth-3	2	10
+depth-3	2	11
+depth-3	2	12
+depth-3	2	13
+depth-3	2	14
+depth-3	2	15
+plausible-wrong-fix	2	4
+plausible-wrong-fix	2	5
+plausible-wrong-fix	2	6
+plausible-wrong-fix	2	7
+plausible-wrong-fix	2	8
+plausible-wrong-fix	2	9

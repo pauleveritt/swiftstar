@@ -1,0 +1,31 @@
+spec	think	seed	outcome	dispatches	rounds	acceptance_exit	seconds	capture	detail
+roadmap	1500	101	harness-void				950	20260829-003931-roadmap-directive	[agenttest] directive run failed: turnDidNotEnd
+roadmap	1500	102	pass	1	2	0	905	20260829-005521-roadmap-directive	
+roadmap	1500	103	pass	1	2	0	751	20260829-011027-roadmap-directive	
+roadmap	1500	104	pass	1	2	0	806	20260829-012258-roadmap-directive	
+roadmap	1500	105	pass	2	2	0	812	20260829-013625-roadmap-directive	
+roadmap	1500	106	fail	0	1	2	296	20260829-014957-roadmap-directive	
+roadmap	1500	107	harness-void				901	20260829-015453-roadmap-directive	[agenttest] directive run failed: turnDidNotEnd
+roadmap	1500	108	fail	1	2	1	884	20260829-020955-roadmap-directive	
+roadmap	1500	109	harness-void				901	20260829-022439-roadmap-directive	[agenttest] directive run failed: turnDidNotEnd
+roadmap	1500	110	pass	1	2	0	905	20260829-023941-roadmap-directive	
+roadmap	1500	111	pass	1	2	0	792	20260829-025446-roadmap-directive	
+roadmap	1500	112	pass	1	2	0	890	20260829-030759-roadmap-directive	
+roadmap	1500	113	pass	1	2	0	807	20260829-032250-roadmap-directive	
+roadmap	1500	114	pass	1	2	0	765	20260829-033618-roadmap-directive	
+roadmap	1500	115	pass	1	2	0	1200	20260829-034904-roadmap-directive	
+roadmap	1500	116	harness-void				901	20260829-040904-roadmap-directive	[agenttest] directive run failed: turnDidNotEnd
+roadmap	1500	117	pass	1	2	0	714	20260829-042405-roadmap-directive	
+roadmap	1500	118	pass	1	2	0	808	20260829-043559-roadmap-directive	
+roadmap	1500	119	pass	3	2	0	836	20260829-044928-roadmap-directive	
+roadmap	1500	120	pass	1	2	0	635	20260829-050325-roadmap-directive	
+roadmap	1500	121	pass	1	2	0	1089	20260829-051400-roadmap-directive	
+roadmap	1500	122	pass	1	2	0	949	20260829-053210-roadmap-directive	
+roadmap	1500	123	pass	1	2	0	887	20260829-054759-roadmap-directive	
+roadmap	1500	124	pass	1	2	0	942	20260829-060247-roadmap-directive	
+roadmap	1500	125	pass	1	2	0	832	20260829-061829-roadmap-directive	
+roadmap	1500	126	pass	1	2	0	798	20260829-063221-roadmap-directive	
+roadmap	1500	127	pass	1	2	0	799	20260829-064540-roadmap-directive	
+roadmap	1500	128	pass	1	2	0	781	20260829-065859-roadmap-directive	
+roadmap	1500	129	harness-void				1738	20260829-071200-roadmap-directive	[agenttest] directive run failed: turnDidNotEnd
+roadmap	1500	130	pass	1	2	0	777	20260829-074058-roadmap-directive	

@@ -1,0 +1,39 @@
+# Follow-up pre-registration — Block A, long-turn arm. Written BEFORE the first
+# run of this arm, after the main Block A pass completed 30/30.
+#
+# NOT an amendment to experiment-manifest-orchestrate.tsv, which is complete and
+# closed at 30 rows. This is a SEPARATE arm with its own results file, because
+# it changes a factor: AGENTTEST_TURN_TIMEOUT is 1800 (P20's harness default)
+# instead of the 900 the main pass used.
+#
+# WHY. Five of the main pass's 30 cells recorded `harness-void` with
+# `turnDidNotEnd`, at 901s, 901s, 901s, 950s and 1738s elapsed — clustered
+# exactly on the 900s per-turn timeout the campaign itself imposed. That bound
+# was a guard-rail choice (so the harness's clean shutdown fires before the
+# driver's kill), not part of P20's configuration. So the main pass's 23/25 is
+# conditional on "turns that finish inside 900s", and the excluded five are the
+# slow tail rather than a random sample — which biases that rate upward by an
+# unknown amount.
+#
+# WHAT THIS DECIDES. Re-running exactly those five seeds at 1800s separates two
+# possibilities that the main pass cannot:
+#   - they grade  -> the voids were an artifact of my bound, and the honest
+#                    pooled rate uses these outcomes at n=30
+#   - they void again -> "the orchestrator sometimes does not end a turn at all"
+#                    is a real property of the loop, worth a P27 cycle
+# Either answer is useful; leaving five cells silent is not.
+#
+# These five seeds were NOT graded by the main pass, so nothing is being
+# re-run over or overwritten: the main results file still holds their void rows
+# as the diagnostic record, and this arm records its own outcomes separately.
+#
+# Runner: TURN_TIMEOUT=1800 RUN_CAP=7200 \
+#   CAMPAIGN_MANIFEST=<this> \
+#   CAMPAIGN_RESULTS=docs/superpowers/research/experiment-results-orchestrate-turn1800.tsv \
+#   python3 Tools/run-orchestrate-campaign.py
+spec	think	seed
+roadmap	1500	101
+roadmap	1500	107
+roadmap	1500	109
+roadmap	1500	116
+roadmap	1500	129

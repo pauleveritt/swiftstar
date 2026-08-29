@@ -53,7 +53,14 @@ def rows():
 def done():
     if not os.path.exists(RESULTS):
         return set()
-    return {tuple(r[:3]) for r in csv.reader(open(RESULTS), delimiter='\t') if r and r[0] != 'fixture'}
+    # Only a GRADED cell is closed. A `harness-void` row records a run the
+    # harness could not use, so its cell must stay re-runnable — otherwise one
+    # broken engine voids every remaining cell in seconds and permanently fixes
+    # n at whatever ran before the breakage. (2026-08-28: a stale engine binary
+    # did exactly that to a dry run; the classification was right and the
+    # resume semantics would have made it permanent.)
+    return {tuple(r[:3]) for r in csv.reader(open(RESULTS), delimiter='\t')
+            if r and r[0] != 'fixture' and len(r) > 3 and r[3] in ('pass', 'fail')}
 
 
 def last_grade(cell):

@@ -1,0 +1,65 @@
+fixture	rounds	seed	outcome	detail	capture
+plausible-wrong-fix	2	4	pass	13/13	20260828-225729-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	5	pass	13/13	20260828-225830-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	6	pass	13/13	20260828-225930-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	7	pass	13/13	20260828-230032-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	8	pass	13/13	20260828-230135-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	9	harness-void	V5 stop_reason=limit	20260828-230241-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	10	pass	13/13	20260828-230508-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	11	pass	13/13	20260828-230614-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	12	pass	13/13	20260828-230719-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	13	pass	13/13	20260828-230821-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	14	pass	13/13	20260828-230922-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	15	fail	1 failed, 12 passed, 3 warnings in 0.14s	20260828-231023-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	16	pass	13/13	20260828-231229-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	17	pass	13/13	20260828-231332-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	18	pass	13/13	20260828-231437-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	19	pass	13/13	20260828-231540-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	20	pass	13/13	20260828-231644-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	21	pass	13/13	20260828-231748-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	22	pass	13/13	20260828-231851-fixture-plausible-wrong-fix
+plausible-wrong-fix	2	23	pass	13/13	20260828-231956-fixture-plausible-wrong-fix
+depth-2	2	4	pass	13/13	20260828-232103-fixture-depth-2
+depth-2	2	5	pass	13/13	20260828-232341-fixture-depth-2
+depth-2	2	6	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260828-232608-fixture-depth-2
+depth-2	2	7	pass	13/13	20260828-232815-fixture-depth-2
+depth-2	2	8	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260828-232927-fixture-depth-2
+depth-2	2	9	harness-void	V5 stop_reason=limit	20260828-233236-fixture-depth-2
+depth-2	2	10	pass	13/13	20260828-233513-fixture-depth-2
+depth-2	2	11	pass	13/13	20260828-233626-fixture-depth-2
+depth-2	2	12	pass	13/13	20260828-233839-fixture-depth-2
+depth-2	2	13	pass	13/13	20260828-233953-fixture-depth-2
+depth-2	2	14	pass	13/13	20260828-234108-fixture-depth-2
+depth-2	2	15	fail	2 failed, 11 passed, 3 warnings in 0.14s	20260828-234300-fixture-depth-2
+depth-2	2	16	pass	13/13	20260828-234512-fixture-depth-2
+depth-2	2	17	pass	13/13	20260828-234712-fixture-depth-2
+depth-2	2	18	pass	13/13	20260828-234917-fixture-depth-2
+depth-2	2	19	fail	2 failed, 11 passed, 3 warnings in 0.14s	20260828-235039-fixture-depth-2
+depth-2	2	20	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260828-235328-fixture-depth-2
+depth-2	2	21	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260828-235533-fixture-depth-2
+depth-2	2	22	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260828-235751-fixture-depth-2
+depth-2	2	23	pass	13/13	20260829-000055-fixture-depth-2
+depth-3	2	4	fail	1 failed, 12 passed, 3 warnings in 0.17s	20260829-000253-fixture-depth-3
+depth-3	2	5	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-000457-fixture-depth-3
+depth-3	2	6	pass	13/13	20260829-000651-fixture-depth-3
+depth-3	2	7	fail	no graded round recorded (e.g. contractNotFollowed)	20260829-000852-fixture-depth-3
+depth-3	2	8	pass	13/13	20260829-001103-fixture-depth-3
+depth-3	2	9	pass	13/13	20260829-001224-fixture-depth-3
+depth-3	2	10	fail	1 failed, 12 passed, 3 warnings in 0.15s	20260829-001344-fixture-depth-3
+depth-3	2	11	fail	1 failed, 12 passed, 3 warnings in 0.14s	20260829-001601-fixture-depth-3
+depth-3	2	12	pass	13/13	20260829-001801-fixture-depth-3
+depth-3	2	13	fail	3 failed, 10 passed, 3 warnings in 0.15s	20260829-001921-fixture-depth-3
+depth-3	2	14	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-002121-fixture-depth-3
+depth-3	2	15	harness-void	V6 3 heading(s) had fenced code discarded in favour of commentary: ['app.py', 'models.py', 'tests/test_app.py']	20260829-002326-fixture-depth-3
+depth-3	2	16	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-002558-fixture-depth-3
+depth-3	2	17	pass	13/13	20260829-002758-fixture-depth-3
+depth-3	2	18	fail	2 failed, 11 passed, 3 warnings in 0.15s	20260829-002917-fixture-depth-3
+depth-3	2	19	fail	no graded round recorded (e.g. contractNotFollowed)	20260829-003112-fixture-depth-3
+depth-3	2	20	harness-void	V6 3 heading(s) had fenced code discarded in favour of commentary: ['app.py', 'models.py', 'templates/base.html']	20260829-003232-fixture-depth-3
+depth-3	2	21	pass	13/13	20260829-003440-fixture-depth-3
+depth-3	2	22	pass	13/13	20260829-003648-fixture-depth-3
+depth-3	2	23	pass	13/13	20260829-003808-fixture-depth-3
+plausible-wrong-fix	2	9	pass	13/13	20260829-080854-fixture-plausible-wrong-fix
+depth-2	2	9	harness-void	V5 stop_reason=limit	20260829-080950-fixture-depth-2
+depth-3	2	15	harness-void	V6 1 heading(s) had fenced code discarded in favour of commentary: ['tests/test_app.py']	20260829-081207-fixture-depth-3
+depth-3	2	20	harness-void	V6 14 heading(s) had fenced code discarded in favour of commentary: ['app.py', 'models.py', 'templates/base.html']	20260829-081433-fixture-depth-3
