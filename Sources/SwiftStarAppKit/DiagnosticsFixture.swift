@@ -6,6 +6,11 @@ import SwiftStarKit
 /// (P21: once a session is live, `DiagnosticsModel` analyzes the session's own
 /// capture instead — same relationship Metrics' `FixtureReplay` has to its
 /// live source).
+///
+/// The bundled `golden.{ndjson,trace}` are unsynced-by-construction copies of
+/// `fixtures/agent/golden.{ndjson,trace}` — see `FixtureReplay`'s doc comment
+/// for why (a symlink was tried and does not survive SwiftPM's resource copy)
+/// and update both on every recapture.
 public struct DiagnosticsFixture: Sendable {
     public struct Input: Equatable, Sendable {
         public var events: [WireEvent]

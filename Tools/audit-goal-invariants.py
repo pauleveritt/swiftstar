@@ -1,29 +1,39 @@
 #!/usr/bin/env python3
-"""Audit agenttest captures against P16's frozen validity invariants (V1-V5).
+"""Audit agenttest captures against P16's frozen validity invariants V5-V6.
 
 The provenance of every number in `docs/superpowers/research/goal-ledger.md`.
 Lives in the repo, not a scratchpad, so those numbers stay reproducible.
 
+2026-08-29: V1-V4 (the repair-loop invariants) were removed. P16 closed
+2026-08-26, superseded by v3, and the apparatus they audited -- the phased
+repair loop -- was demoted along with it; goal-ledger.md's V1-V4 numbers are
+a closed historical record, not a target this script still measures against.
+V5 (packet deliverability) and V6 (harvest faithfulness) are still live: they
+back `Tools/run-experiment.py`'s `harness-void` classification, which `exec`s
+this module's body above its CLI entry point and pulls `check_v5`/`check_v6`
+directly out of its namespace. See
+docs/superpowers/research/2026-08-29-eval-system-audit-and-later-work.md for
+the fuller audit this trim was scoped from.
+
 Two rules this file exists to enforce on itself, both learned the hard way
 (2026-08-26, Fable review):
 
-  1. **Check the artifact the invariant names.** V2 says "no round's *evidence*
-     may contain a bare collection error." The evidence is the packet the model
-     was dispatched (`repair-packet-N.json`), NOT the grade recorded after that
-     round ran (`repair-round-N.json`). The first version of this script grepped
-     the latter, which is off-by-one in both directions -- it never inspects
-     round 1's dispatched evidence, and it does inspect a final-round grade that
-     was never shown to anyone. That bug certified a cell VALID whose round-1
-     packet contained the exact string V2 forbids.
+  1. **Check the artifact the invariant names.** The evidence a check reads
+     must be the artifact the invariant actually names (the packet the model
+     was dispatched, `repair-packet-N.json`), not some other artifact that
+     merely looks related (a post-hoc grade recorded after the round ran,
+     `repair-round-N.json`). A retired V1-V4 check once conflated the two --
+     off-by-one in both directions -- and certified a cell VALID whose
+     round-1 packet contained the exact string it was meant to forbid.
 
   2. **Every check is validated against a known-bad and a known-good cell**
      before its output may be trusted -- `--self-test`. A check that has never
-     fired is an untested claim, not a passing grade. `check_v4` shipped in a
-     state where it could never fire under any input.
+     fired is an untested claim, not a passing grade. A retired V1-V4 check
+     once shipped in a state where it could never fire under any input.
 
 A check that cannot be evaluated from the captures returns UNAUDITABLE, which
-is NOT a pass. Silently passing an unevaluable check is how V4 reported "0
-blocked" for a defect that was never looked for.
+is NOT a pass. Silently passing an unevaluable check is how one retired V1-V4
+check reported "0 blocked" for a defect that was never looked for.
 """
 import csv, json, glob, os, re, sys
 
@@ -38,43 +48,6 @@ def resolve(d):
     if not os.path.isdir(d):
         d = os.path.join('captures/agenttest', os.path.basename(d.rstrip('/')))
     return d
-
-
-def repair_loops(cell):
-    """(label, dir) for each repair loop the cell ran."""
-    out = [(os.path.basename(p), p) for p in sorted(glob.glob(os.path.join(cell, 'repair-phase*')))]
-    if glob.glob(os.path.join(cell, 'repair-round-*.json')):
-        out.append(('acceptance', cell))
-    return out
-
-
-def _n(path):
-    return int(re.search(r'(\d+)', os.path.basename(path)).group(1))
-
-
-def packets(loop):
-    return sorted(glob.glob(os.path.join(loop, 'repair-packet-*.json')), key=_n)
-
-
-def rounds(loop):
-    return sorted(glob.glob(os.path.join(loop, 'repair-round-*.json')), key=_n)
-
-
-def task_text(pf):
-    return json.load(open(pf))['taskText']
-
-
-def evidence_block(t):
-    i = t.find('Current contents of the files you may edit')
-    return t[i:] if i >= 0 else ''
-
-
-def missing_paths(t):
-    out = set()
-    for m in re.finditer(r'=== (\S+) ===\n(.*?)(?=\n=== |\Z)', evidence_block(t), re.S):
-        if 'does not exist in this worktree' in m.group(2)[:80]:
-            out.add(m.group(1))
-    return out
 
 
 WRITABLE = {'app.py', 'models.py', 'templates/base.html', 'templates/home.html',
@@ -120,189 +93,7 @@ def turns(cell):
     return out
 
 
-def evidence_files(t):
-    """(path, body) for each file the packet shows as current contents."""
-    return [(m.group(1), m.group(2))
-            for m in re.finditer(r'=== (\S+) ===\n(.*?)(?=\n=== |\Z)', evidence_block(t), re.S)]
-
-
 # --- invariants -------------------------------------------------------------
-
-def emitted_headings(cell):
-    """Allowlisted paths the model emitted as heading lines, across all turns.
-
-    The only evidence in a capture of what the model actually *wrote*: round
-    records carry a receipt and a grade but no mutation list, and the packets'
-    file contents are what V1 is comparing in the first place.
-    """
-    ts = turns(cell)
-    if ts is None:
-        return None
-    out = set()
-    for t in ts:
-        for line in t.split('\n'):
-            h = _heading(line)
-            if h and h in WRITABLE:
-                out.add(h)
-    return out
-
-
-def check_v1(cell, loop):
-    """A `.validationFailed` round's write must survive into the next round.
-
-    Gated on round k's receipt actually being validationFailed (proof a turn
-    ran). Compares the missing-set of consecutive DISPATCHED packets: if the
-    round wrote a file that had been missing and it survived, the set shrinks.
-
-    Known limits, stated rather than hidden: this can only observe survival of
-    writes to *missing* files. A surviving write to an already-present file
-    leaves the set unchanged and would be misread as a discard, so the check
-    only reports FAIL when `miss_k` is non-empty and unchanged. In tool-call
-    mode a zero-mutation turn can also yield validationFailed, in which case an
-    unchanged set is correct behaviour, not a discard -- so this is sound only
-    for text-contract runs. Returns UNAUDITABLE outside them.
-    """
-    pk, rd = packets(loop), {_n(f): json.load(open(f)) for f in rounds(loop)}
-    if len(pk) < 2:
-        return PASS, None
-    for i in range(len(pk) - 1):
-        k = _n(pk[i])
-        rj = rd.get(k)
-        if not rj:
-            continue
-        rc = rj.get('receipt')
-        if not (isinstance(rc, dict) and 'validationFailed' in rc):
-            continue
-        if not json.load(open(pk[i])).get('textContract', True):
-            return UNAUDITABLE, 'tool-call mode: zero-mutation turns also yield validationFailed'
-        a, b = missing_paths(task_text(pk[i])), missing_paths(task_text(pk[i + 1]))
-        if not (a and b == a):
-            continue
-        # V1 says "a round that ran AND WROTE". The receipt above proves it RAN.
-        # Without this second gate the check reports a discarded write whenever
-        # a round simply did not emit the missing file -- which is correct
-        # behaviour, not a defect. That false positive blocked 20260826-112121,
-        # whose rounds 3-5 emitted a byte-identical app.py and never once
-        # emitted tests/test_app.py. It survived the whole of v2 because the
-        # frozen fixture was a 2-round capture and the case needs 3+.
-        wrote = emitted_headings(cell)
-        if wrote is None:
-            return UNAUDITABLE, 'no wire.ndjson: cannot establish the round wrote anything'
-        if not (a & wrote):
-            continue
-        return FAIL, (f'round {k} ended validationFailed but round {k+1} was dispatched the '
-                      f'identical missing set {sorted(a)}, and the model did emit '
-                      f'{sorted(a & wrote)} -- the write did not survive')
-    return PASS, None
-
-
-def check_v2(cell, loop):
-    """No round's DISPATCHED EVIDENCE may be a bare pytest collection error.
-
-    Reads `repair-packet-N.json` -- what the model was actually shown -- not
-    the grade recorded after the round ran. See this module's docstring.
-    """
-    pk = packets(loop)
-    if not pk:
-        return UNAUDITABLE, 'no repair packets captured'
-    for pf in pk:
-        t = task_text(pf)
-        if 'Interrupted:' in t and 'error during collection' in t:
-            return FAIL, f'{os.path.basename(pf)}: dispatched evidence is a bare collection error'
-    return PASS, None
-
-
-def check_v3(cell, loop):
-    """The directive must not assert "exactly one file is wrong" while >=2
-    writable files are missing/failing in the same packet.
-
-    Only the *missing* half is implemented -- "failing" has no operational
-    definition over a capture, so a packet asserting one-file-wrong while two
-    present-but-wrong files need edits is NOT detected. Reported honestly as a
-    partial check rather than a clean pass.
-    """
-    for pf in packets(loop):
-        t = task_text(pf)
-        if 'xactly one file is wrong' not in t:
-            continue
-        miss = missing_paths(t)
-        if len(miss) >= 2:
-            return FAIL, f'{os.path.basename(pf)}: asserts one-file-wrong, {len(miss)} missing {sorted(miss)}'
-    return PASS, None
-
-
-def dispatched_texts(cell):
-    """taskText of every packet this run actually dispatched.
-
-    Phase briefs come from `phase-packet-N.json`, written at dispatch inside the
-    phase loop. NOT `packet.json`: that is phase 1's packet as built *before*
-    dispatch, and under absolute path style it is not the one that was sent.
-    """
-    out = []
-    for pf in sorted(glob.glob(os.path.join(cell, 'phase-packet-*.json')), key=_n):
-        out.append(task_text(pf))
-    for label, d in repair_loops(cell):
-        for pf in packets(d):
-            out.append(task_text(pf))
-    return out
-
-
-CITATION = re.compile(r'`([^`]+)`|\'([^\']{4,})\'|"([^"]{4,})"')
-
-
-def check_v4(cell, loop=None):
-    """Every verdict.json reason must trace to text some packet dispatched.
-
-    A reason faulting the model for something it was never shown is a grading
-    defect, not a model failure. Mechanically: a reason cites identifiers --
-    backticked tokens and quoted strings (`base.html`, 'Scope creep never
-    ends.', `RedirectResponse`). At least one citation per reason must appear in
-    some dispatched packet, or the reason is untraceable.
-
-    UNAUDITABLE unless every phase brief is present: run-config records how many
-    phases ran, and a missing one could be exactly the brief a reason traces to.
-    Through v1-v3 this was ALWAYS the case -- `main.swift` captured only
-    phases[0] -- so V4 has never actually been evaluated.
-    """
-    # No verdict means no grading happened, so there is nothing for V4 to
-    # violate -- a run that stopped in phase 1 passes vacuously. This ordering
-    # matters: gating on phase-packet completeness first reported UNAUDITABLE
-    # for runs that never reached a verdict, which overstates how much of the
-    # apparatus is unevaluated (caught on the 20260826-123639 confirm run).
-    vp = os.path.join(cell, 'verdict.json')
-    if not os.path.exists(vp):
-        return PASS, None
-    reasons = json.load(open(vp)).get('reasons') or []
-    if not reasons:
-        return PASS, None
-
-    cfgp = os.path.join(cell, 'run-config.json')
-    if not os.path.exists(cfgp):
-        return UNAUDITABLE, 'no run-config.json: cannot tell how many phases ran'
-    cfg = json.load(open(cfgp))
-    if 'phases' not in cfg:
-        return UNAUDITABLE, ('capture predates the V4 fix: run-config records no phase count '
-                             'and only phases[0] was captured (main.swift)')
-    want = int(cfg['phases'])
-    have = len(glob.glob(os.path.join(cell, 'phase-packet-*.json')))
-    if have < want:
-        return UNAUDITABLE, f'only {have} of {want} dispatched phase packets captured'
-
-    texts = dispatched_texts(cell)
-    if not texts:
-        return UNAUDITABLE, 'no dispatched packets captured'
-    untraceable = []
-    for r in reasons:
-        cites = [g for m in CITATION.finditer(r) for g in m.groups() if g]
-        if not cites:
-            continue                      # nothing concrete to trace; not a finding
-        if not any(any(c in t for t in texts) for c in cites):
-            untraceable.append(r)
-    if untraceable:
-        return FAIL, (f'{len(untraceable)} verdict reason(s) cite nothing any dispatched packet '
-                      f'contains, e.g. "{untraceable[0][:90]}"')
-    return PASS, None
-
 
 def check_v5(cell, loop=None):
     """Every packet must have been deliverable."""
@@ -387,20 +178,12 @@ def check_v6(cell, loop=None):
     return PASS, None
 
 
-PER_LOOP = {'V1': check_v1, 'V2': check_v2, 'V3': check_v3}
-PER_CELL = {'V4': check_v4, 'V5': check_v5, 'V6': check_v6}
+PER_CELL = {'V5': check_v5, 'V6': check_v6}
 
 
 def audit(cell_dir):
     cell = resolve(cell_dir)
     blocked, unaud = {}, {}
-    for label, loop in repair_loops(cell):
-        for name, fn in PER_LOOP.items():
-            st, why = fn(cell, loop)
-            if st == FAIL:
-                blocked.setdefault(name, []).append(f'{label}: {why}')
-            elif st == UNAUDITABLE:
-                unaud.setdefault(name, []).append(f'{label}: {why}')
     for name, fn in PER_CELL.items():
         st, why = fn(cell)
         if st == FAIL:
@@ -414,59 +197,31 @@ def audit(cell_dir):
 # --- self-test --------------------------------------------------------------
 
 FIXTURES = [
-    # (check, cell, loop-label, expected, why this cell is the fixture)
-    ('V1', '20260826-050316-roadmap', 'repair-phase1', FAIL,
-     'known-bad: two validationFailed rounds, identical 6-file missing set'),
-    ('V1', '20260826-085813-roadmap', 'repair-phase1', PASS,
-     'known-good: phase repair produced a candidate on round 1, no discard path taken'),
-    ('V1', '20260826-112121-roadmap', 'repair-phase1', PASS,
-     'known-good from the current batch: rounds 3-5 ran and the missing set never '
-     'changed, but the model never emitted tests/test_app.py as a heading -- the '
-     'old check called this a discarded write'),
-    ('V2', '20260826-085813-roadmap', 'acceptance', FAIL,
-     'known-bad: acceptance round-1 packet carries a bare collection error'),
-    ('V2', '20260826-085813-roadmap', 'repair-phase1', PASS,
-     'known-good: phase-1 repair evidence is an import traceback, not a collection abort'),
-    ('V3', '20260826-060458-roadmap', 'repair-phase1', FAIL,
-     'known-bad: one-file-wrong asserted with 6 missing'),
-    ('V3', '20260826-085813-roadmap', 'acceptance', PASS,
-     'known-good: one-file-wrong asserted with 0 missing (correctly calibrated)'),
-    ('V4', 'fixtures/agenttest/goal-audit/v4-untraceable', None, FAIL,
-     'known-bad (synthetic): the reason cites `WebSocketMiddleware`, which no '
-     'dispatched packet mentions -- the model faulted for what it was never shown'),
-    ('V4', 'fixtures/agenttest/goal-audit/v4-traceable', None, PASS,
-     'known-good (synthetic): the reason cites `RedirectResponse`, which the '
-     'dispatched packet contains'),
-    ('V5', '20260826-055741-roadmap', None, FAIL, 'known-bad: context overflow'),
-    ('V5', '20260826-060458-roadmap', None, PASS, 'known-good: clean wire'),
-    ('V6', '20260826-104811-roadmap', None, FAIL,
+    # (check, cell, expected, why this cell is the fixture)
+    ('V5', '20260826-055741-roadmap', FAIL, 'known-bad: context overflow'),
+    ('V5', '20260826-060458-roadmap', PASS, 'known-good: clean wire'),
+    ('V6', '20260826-104811-roadmap', FAIL,
      'known-bad (widened clause): all 6 headings had their fenced code discarded '
      'in favour of commentary -- zero-fence detection alone passed this cell'),
-    ('V6', '20260826-105529-roadmap', None, PASS,
+    ('V6', '20260826-105529-roadmap', PASS,
      'known-good: every harvested file came from a fenced block'),
 ]
 
 
 def self_test():
     ok = True
-    for name, cell, label, expected, why in FIXTURES:
+    for name, cell, expected, why in FIXTURES:
         # resolve() already prefixes captures/agenttest for a bare cell name and
         # leaves an existing directory alone, so a fixture path works too.
         c = resolve(cell)
-        if name in PER_CELL:
-            got, detail = PER_CELL[name](c)
-        else:
-            loop = c if label == 'acceptance' else os.path.join(c, label)
-            got, detail = PER_LOOP[name](c, loop)
+        got, detail = PER_CELL[name](c)
         good = got == expected
         ok &= good
-        print(f"  [{'ok' if good else 'FAIL'}] {name} {cell}/{label or '-'}: "
+        print(f"  [{'ok' if good else 'FAIL'}] {name} {cell}: "
               f"expected {expected}, got {got}   ({why})")
         if not good and detail:
             print(f"        detail: {detail}")
     print(f"\nself-test: {'PASS' if ok else 'FAIL'}")
-    print("V4's fixtures are SYNTHETIC (fixtures/agenttest/goal-audit): no real capture\n"
-          "carries phase-packet-N.json yet. done-when (d) still needs a batch known-bad.")
     return 0 if ok else 1
 
 

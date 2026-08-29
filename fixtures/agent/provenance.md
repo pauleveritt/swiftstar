@@ -164,6 +164,17 @@ reason the rule exists. The recapture must also be copied to the bundled
 `FixtureReplayTests.bundledFixtureMatchesRepoFixture` assertion (bundled == repo) stays green —
 the P5 precedent (`9e97bc3`) established that both copies move together.
 
+**This is manual, and stays manual (2026-08-29 audit).** A relative symlink from the
+`Resources/` copy to this fixture was tried and rejected: SwiftPM's resource-copy build step
+(`.process("Resources")` in `Package.swift`) preserves the symlink instead of dereferencing it,
+and the relative target breaks once relocated into
+`.build/.../SwiftStar_SwiftStarAppKit.bundle/` — confirmed by running
+`bundledFixtureMatchesRepoFixture` against the symlinked tree, which failed with "no such file"
+from `Bundle.module`. Until a build-time resource-generation step exists (out of scope for a
+plain-file fix), the two copies are kept in sync by hand; see the doc comments on
+`FixtureReplay` and `DiagnosticsFixture` (`Sources/SwiftStarAppKit/`), the two consumers of the
+bundled copy, for the same note at the point of use.
+
 ## P11 recapture (2026-08-23) — submodule `d351b40`
 
 Recaptured against the rebuilt binary at submodule `d351b40346629269cbd3639f9cec0345b8d94b1b`

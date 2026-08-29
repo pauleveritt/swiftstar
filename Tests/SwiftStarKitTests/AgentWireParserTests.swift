@@ -236,6 +236,60 @@ struct AgentWireParserTests {
         #expect(readyReasons.contains { $0 != nil })
     }
 
+    @Test func goldenToolsXsNdjsonParsesWithoutRefusing() throws {
+        // golden-tools-xs.ndjson: the Laguna XS counterpart to golden-tools,
+        // captured 2026-08-28 (P22 XS golden recapture) against the real
+        // engine (pin 849f375). Per its own provenance table, every one of
+        // the capture's 5 turn-end readys carries a stop reason (stronger
+        // than the S-model test's "contains at least one" below) — checked
+        // here rather than assumed.
+        let url = Self.fixturesRoot.appendingPathComponent("golden-tools-xs.ndjson")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        var p = AgentWireParser()
+        let events = feedAll(&p, text)
+        #expect(events.first == .hello(version: 1, capabilities: ["status", "ready", "text", "think", "tool", "queued", "ts"]))
+        #expect(events.allSatisfy { if case .refused = $0 { return false } else { return true } })
+        let toolEvents = events.compactMap { if case .tool(let te) = $0 { return te } else { return nil } }
+        #expect(toolEvents.contains { $0.phase == .start })
+        #expect(toolEvents.contains { $0.phase == .output })
+        #expect(toolEvents.contains { $0.phase == .finish })
+        // D12: 1 startup ready (no stop reason) + 5 turn-end readys, every one
+        // of which carries stop_reason="eos" (provenance's verification table).
+        var readyCount = 0
+        var stopReasons: [String] = []
+        for event in events {
+            guard case .ready(_, let stop, _, _) = event else { continue }
+            readyCount += 1
+            if let stop { stopReasons.append(stop) }
+        }
+        #expect(readyCount == 6)
+        #expect(stopReasons.count == 5)
+        #expect(stopReasons.allSatisfy { $0 == "eos" })
+    }
+
+    @Test func goldenToolsXsThinkEventsParseAsRealWireContent() throws {
+        // golden-tools-xs.ndjson is the only committed fixture carrying real
+        // `{"t":"think"}` wire events (27 of them) — everywhere else `think`
+        // parsing is pinned only by the hand-authored line in
+        // textAndThinkParse above. Replay the real capture and check both the
+        // count and that the reassembled text is genuine model output, not an
+        // artifact of concatenation (it names the file the capture actually
+        // wrote to, per golden-tools-xs.provenance.md's prompt list).
+        let url = Self.fixturesRoot.appendingPathComponent("golden-tools-xs.ndjson")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        var p = AgentWireParser()
+        var thinkChunks: [String] = []
+        for line in text.split(whereSeparator: \.isNewline) {
+            let s = String(line)
+            guard !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            if case .think(let chunk)? = p.feed(s) { thinkChunks.append(chunk) }
+        }
+        #expect(thinkChunks.count == 27)
+        let joined = thinkChunks.joined()
+        #expect(joined.contains("seed.txt"))
+        #expect(joined.contains("write") || joined.contains("Write"))
+    }
+
     // MARK: - advertised caps (P23, D3)
 
     @Test func optionalCapsRecordsWhatHelloAdvertised() {

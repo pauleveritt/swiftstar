@@ -1,1 +1,0 @@
-{"reasons": ["Missing `WebSocketMiddleware` for the realtime channel"], "verdict": "bad"}

@@ -186,4 +186,56 @@ struct AgentTranscriptTests {
         #expect(params.contains { $0.kind == "diff_old" })
         #expect(params.contains { $0.kind == "diff_new" })
     }
+
+    @Test func goldenToolsXsTranscriptBuildsToolCards() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("fixtures/agent/golden-tools-xs.ndjson")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        var parser = AgentWireParser()
+        var t = AgentTranscript()
+        for line in text.split(whereSeparator: \.isNewline) {
+            let s = String(line)
+            if let e = parser.feed(s) { t.apply(e) }
+        }
+        let cards = t.rows.compactMap { if case .tool(let card) = $0 { return card } else { return nil } }
+        #expect(!cards.isEmpty)
+        #expect(cards.contains { $0.name == "bash" && $0.output != nil })  // the echo output surfaced on its card
+        #expect(cards.contains { $0.name == "read" })
+        #expect(cards.contains { $0.name == "write" })
+        #expect(cards.contains { $0.name == "edit" })
+        #expect(cards.contains { $0.name == "list" })
+    }
+
+    @Test func goldenToolsXsKindsAndFinishedAreParsed() throws {
+        // Closes the ROADMAP backlog item "the golden agent capture predates
+        // the wire's kind field": golden-tools.ndjson was captured before
+        // param_begin's kind field, so its kind/path/finished enrichment had
+        // no committed-fixture proof. golden-tools-xs.ndjson postdates that —
+        // it carries kind on every param_begin (path, content, bash_command,
+        // diff_old, diff_new: the full five-kind zoo) — and this is also the
+        // first fixture test to assert `finished`, which neither of the
+        // golden-tools tests above ever checked.
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("fixtures/agent/golden-tools-xs.ndjson")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        var parser = AgentWireParser()
+        var t = AgentTranscript()
+        for line in text.split(whereSeparator: \.isNewline) {
+            if let e = parser.feed(String(line)) { t.apply(e) }
+        }
+        let cards = t.rows.compactMap { if case .tool(let card) = $0 { return card } else { return nil } }
+        let params = cards.flatMap(\.params)
+        #expect(params.contains { $0.kind == "path" })
+        #expect(params.contains { $0.kind == "content" })
+        #expect(params.contains { $0.kind == "bash_command" })
+        #expect(params.contains { $0.kind == "diff_old" })
+        #expect(params.contains { $0.kind == "diff_new" })
+        #expect(cards.contains { $0.path == "seed.txt" })
+        // Every one of the capture's 8 tool blocks reaches a `finish` phase —
+        // this fixture never has an in-flight or interrupted card.
+        #expect(cards.count == 8)
+        #expect(cards.allSatisfy { $0.finished })
+    }
 }
