@@ -462,7 +462,9 @@ Deferred, each with the condition that reopens it.
   work — `docs/pathologies.md` was added to the toctree so it adds no third
   warning — and deliberately not fixed inside an unrelated commit, since a
   silently red gate is worth seeing. *Reopens the next time anyone relies on
-  the docs gate to mean anything.*
+  the docs gate to mean anything.* *Fixed 2026-08-29: both documents added to
+  a toctree in `docs/index.md` (glossary into the main hidden toctree,
+  the old-UI inventory into a new "Archive" toctree); `just docs` is green.*
 - **Smaller items parked with it (2026-08-29).** (a) `main.swift`'s 18
   `exit()` calls skip their `defer`s, so a FAIL orphans the engine and leaks
   the worktree — worked around all day by the driver's reaper and sweeper,

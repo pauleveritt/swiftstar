@@ -21,5 +21,14 @@ For now, the durable documents are in the repository root:
 sdd
 laptop-ai
 pathologies
+glossary
 harvest/index
+```
+
+```{toctree}
+:caption: Archive
+:maxdepth: 1
+:hidden:
+
+2026-08-26-old-ui-element-inventory
 ```
