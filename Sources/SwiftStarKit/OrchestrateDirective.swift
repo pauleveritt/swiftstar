@@ -8,12 +8,26 @@ import Foundation
 /// dispatch each phase once and do the work yourself on a refusal — the host
 /// never runs a repair loop.
 public enum OrchestrateDirective {
-    public static func build(task: String, writableFiles: [String]) -> String {
+    /// `projectContext` carries project-level constraints the task text itself
+    /// may not restate — a framework pin, a house style. Found missing
+    /// 2026-08-29: `runDirectiveOnce` built this prompt from `task` alone,
+    /// while the non-directive phase loop (`runOnce`, `main.swift:202,390`)
+    /// always includes `sharedContext` (mission + tech-stack) in its packets.
+    /// On the `roadmap` spec this went unnoticed — its implementation-style
+    /// phrasing happens to cue the right framework — but on
+    /// `roadmap-user-story`'s business-outcome phrasing, an orchestrator given
+    /// no framework pin built the entire app in Flask instead of the specified
+    /// FastAPI, passing its own validation and then failing the acceptance
+    /// suite's import at collection time: a total loss, not a partial one
+    /// (`captures/agenttest/20260829-130604-roadmap-user-story-directive`).
+    /// Default empty so every existing call site and test is unaffected.
+    public static func build(task: String, writableFiles: [String], projectContext: String = "") -> String {
         // D5: `--files` is scope context, not enforcement — the per-dispatch
         // `writableFiles` (revision-checked host-side) is the real boundary.
         let scope = writableFiles.isEmpty
             ? "the whole workspace"
             : writableFiles.joined(separator: ", ")
+        let trimmedContext = projectContext.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let lines = [
             "You are in orchestrate mode: run a multi-phase task end to end, then write",
@@ -41,6 +55,9 @@ public enum OrchestrateDirective {
             "   that has no acceptance predicate — do that work yourself.",
             "",
             "Writable scope for this task: \(scope).",
+        ]
+        + (trimmedContext.isEmpty ? [] : ["", "Project context: \(trimmedContext)"])
+        + [
             "",
             "Task: \(task)",
         ]

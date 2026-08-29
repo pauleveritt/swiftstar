@@ -1295,7 +1295,8 @@ func runDirectiveOnce() throws {
         contentsOf: fixtureDir.appendingPathComponent("acceptance/test_acceptance.py"),
         encoding: .utf8)
 
-    var prompt = OrchestrateDirective.build(task: specText, writableFiles: writableFiles)
+    var prompt = OrchestrateDirective.build(
+        task: specText, writableFiles: writableFiles, projectContext: sharedContext)
     var totalDispatches = 0
     var rounds = 0
     let maxRounds = max(1, Int(env["AGENTTEST_DIRECTIVE_ROUNDS"] ?? "4") ?? 4)

@@ -51,4 +51,21 @@ struct OrchestrateDirectiveTests {
         #expect(text.contains("Decompose"))
         #expect(text.contains("machine-checkable"))
     }
+
+    @Test func embedsProjectContextWhenProvided() {
+        let text = OrchestrateDirective.build(
+            task: "t", writableFiles: [], projectContext: "Web framework: fastapi[standard]")
+        #expect(text.contains("Project context:"))
+        #expect(text.contains("fastapi[standard]"))
+    }
+
+    @Test func omitsProjectContextSectionWhenAbsent() {
+        let text = OrchestrateDirective.build(task: "t", writableFiles: [])
+        #expect(!text.contains("Project context:"))
+    }
+
+    @Test func omitsProjectContextSectionWhenWhitespaceOnly() {
+        let text = OrchestrateDirective.build(task: "t", writableFiles: [], projectContext: "  \n  ")
+        #expect(!text.contains("Project context:"))
+    }
 }
