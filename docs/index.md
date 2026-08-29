@@ -20,5 +20,6 @@ For now, the durable documents are in the repository root:
 
 sdd
 laptop-ai
+pathologies
 harvest/index
 ```

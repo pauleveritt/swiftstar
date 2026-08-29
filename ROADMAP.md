@@ -377,6 +377,55 @@ P15's plan is written:
 
 Deferred, each with the condition that reopens it.
 
+- **Orchestrate-loop generalization: does 93% hold on a second task?
+  (parked 2026-08-29, end of day — two fixes landed, neither yet validated
+  live.)** Block A measured the `/orchestrate` loop at **27/29 = 93%
+  [78%, 98%]** — but every one of those cells ran the **same task**
+  (`roadmap` spec, one synthetic app, one 13-test oracle). Thirty seeds on one
+  task measures seed variance, not task variance, and `/goal` v5's
+  byte-identical-prompt swing (2/3 → 0/3) is a standing warning that
+  task-to-task variance may be the larger term. **The 93% figure should carry
+  "measured on one task" until this closes.**
+  *Two attempts were made and both were stopped deliberately, each having
+  found a real defect rather than an answer:*
+  1. **Seeds 201–204** — 4/4 lost to the orchestrator building the app in
+     **Flask instead of FastAPI**: `runDirectiveOnce` never passed
+     `sharedContext` (mission + `tech-stack.md`) into the prompt, though the
+     non-directive phase loop always had. **Fixed** (`OrchestrateDirective.build`
+     gained `projectContext`); confirmed present on the wire, but no cell has
+     yet been *graded* with it.
+  2. **Seeds 211–215** — 5/5 lost to an **engine false positive**: the
+     degeneracy guard aborted legitimate writes whose tail was a 64-dash
+     comment separator. **Fixed** as fork divergence **#15**; unit-verified
+     across a 13-case table and both test tiers (785 tests), but **never run
+     against a live model**.
+  *To resume:* fresh pre-registration, seeds **221–230** (211–220 are burnt —
+  215 used, and the arm they belong to is abandoned), `roadmap-user-story`,
+  n=10, `TURN_TIMEOUT=1500`, `RUN_CAP=3600`. The decision rule is already
+  written in `experiment-manifest-orchestrate-userstory-fixed.tsv` and can be
+  copied verbatim: ≥8/10 generalizes, 5–7 signal-but-underpowered, ≤4
+  task-specific. **First cell must be inspected before the rest run** — both
+  fixes are live-unvalidated, so cell 1 is a plumbing check as much as a
+  measurement. ~3–5 h. *Reopens whenever there is a clean morning; nothing
+  else is blocked on it.*
+- **Smaller items parked with it (2026-08-29).** (a) `main.swift`'s 18
+  `exit()` calls skip their `defer`s, so a FAIL orphans the engine and leaks
+  the worktree — worked around all day by the driver's reaper and sweeper,
+  never fixed at source (~1–1.5 h). (b) `RepairLoop.swift:215` returns
+  `.exhausted` on a zero-heading harvest, abandoning remaining rounds; the
+  change is ~15 min but alters repair semantics, and its **only** validation
+  surface is the Mellum fixture tier, so it should wait for P18 rather than
+  ship unvalidated. Note the *other* `contractNotFollowed` site (line 119) is
+  a deliberate refusal and must not be "fixed" by pattern-matching the
+  receipt name. (c) A second temp-dir leak class, `swiftstar-wt-*` dispatch
+  worktrees, dating to 2026-08-25 — distinct from the `agenttest-*` dirs
+  already swept, and still uncovered by any sweeper. (d) A standing guard
+  against under-specified authored prompts: **four instances in one day**
+  (P17's "exactly one file", the singular emission follow-up, the directive's
+  silence on dispatch ordering, the missing `projectContext`). Form is an open
+  question — test, lint, or review step — and picking wrong yields something
+  that gets disabled in three months.
+
 - **Eval-system consolidation (Later half of the 2026-08-29 audit).**
   Swift-native `swiftstar-analyze findings`/`index` verbs wired to the
   existing `DiagnosticsAnalyzer`; port the Python campaign
@@ -744,6 +793,33 @@ Deferred, each with the condition that reopens it.
   and now this. Worth a standing check on authored prompts rather than three
   separate fixes. *Cheap; needs a re-measurement arm against Block A's 27/29
   baseline to confirm, not just a reading of the prompt.*
+- **`runDirectiveOnce` dropped `sharedContext` — fixed 2026-08-29, same defect
+  family, fourth instance.** The non-directive phase loop (`runOnce`,
+  `Sources/swiftstar-agenttest/main.swift:202,390`) always includes
+  `sharedContext` (mission + `tech-stack.md`, which pins `fastapi[standard]`)
+  in its packets; `runDirectiveOnce` built the orchestrate prompt from `task`
+  alone. Invisible on the `roadmap` spec — its implementation-style phrasing
+  happens to cue the right framework — but a generalization arm on
+  `roadmap-user-story` (business-outcome phrasing, same target app, same
+  oracle) lost 3 of its first 3 graded cells to the orchestrator building the
+  **entire app in Flask instead of FastAPI**: it passed its own phase
+  validation (which never checks the framework either) and then failed the
+  acceptance suite's `from app import app` at collection time — a total loss,
+  not a partial one. Confirmed by hand: recovered the leaked dispatch
+  worktree for seed 203 before the sweeper could take it and re-ran the
+  acceptance suite directly —
+  `ModuleNotFoundError: No module named 'flask'`
+  (`captures/agenttest/20260829-130604-roadmap-user-story-directive`). The arm
+  was stopped at n=4 once the cause was confirmed rather than run to n=10
+  confirming the same bug repeatedly. **Fixed**: `OrchestrateDirective.build`
+  gained an optional `projectContext` parameter (default empty; all 8
+  pre-existing tests unaffected, 3 new tests added,
+  `Tests/SwiftStarKitTests/OrchestrateDirectiveTests.swift`), and the directive
+  call site now passes `sharedContext`. A re-run arm at seeds 211–220
+  (`experiment-manifest-orchestrate-userstory-fixed.tsv`) will confirm the fix
+  holds before this note is closed. See
+  [`docs/pathologies.md`](docs/pathologies.md) #10 for the general shape:
+  **silent framework substitution** when project context is missing.
 - **DFlash speculative decoding.** `laguna-s-2.1-DFlash-Q8_0.gguf` (1.1 GB) is
   a draft head for Laguna S, not a standalone model — its GGUF declares
   `general.architecture: dflash` and `dflash.block_count`, not a servable
