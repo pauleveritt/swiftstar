@@ -1,6 +1,6 @@
 # Superseded working documents
 
-Two retirements live here.
+Three retirements live here.
 
 ## 2026-08-26: the 80-cell overnight ablation
 All four covered the 80-cell overnight ablation of 2026-08-25→26 and are
@@ -28,3 +28,22 @@ could not resolve an effect from engine noise at the `n` tried, and by the time
 that was found, ROADMAP's `## Now` had already moved past the question this
 loop existed to answer. Superseded by the `mellum-fixture` benchmark named in
 `ROADMAP.md`.
+
+## 2026-08-29: orphaned docs moved for hygiene, not because they were wrong
+
+Moved during a ROADMAP/docs de-duplication pass (2026-08-29). Unlike the two
+retirements above, these were not found to contain wrong claims — they were
+moved because a repo-wide reference check found each one cited only from
+`2026-08-24-overnight-consolidation.md` (itself moved here in the same pass,
+still an unmerged staging document — see its own header), meaning nothing
+outside this directory still depends on them. Kept for the record; not cited
+by any current phase or verdict doc.
+
+| file | what it was | why moved |
+|---|---|---|
+| `2026-08-24-overnight-consolidation.md` | staging area for several parallel Mellum/P11/engine-merge research threads, never merged or deduplicated | superseded as a live finding by `2026-08-25-local-model-agency.md`; only its own appendix docs still cited it |
+| `2026-08-23-mellum-agentic-tool-use-finding.md` | early Mellum agentic tool-use finding | superseded as a live finding by `2026-08-25-local-model-agency.md` (see its own header note) |
+| `2026-08-23-p11-agenttest-mellum-verification-record.md` | P11 agenttest verification record for the Mellum live run | superseded as a live finding by `2026-08-25-local-model-agency.md` (see its own header note) |
+| `2026-08-23-p11-agenttest-telemetry-review.md` | GLM 5.2 telemetry critique of the P11 agenttest harness | superseded as a live finding by `2026-08-25-local-model-agency.md` (see its own header note) |
+| `2026-08-24-handoff-packet-frontmatter-schema.md` | a handoff-packet frontmatter schema draft | orphaned — cited only from `2026-08-24-overnight-consolidation.md` |
+| `2026-08-23-p11-kimi-k3-review.md` (67.8 KB) | Kimi K3's review pass over P11 work | orphaned, and mostly raw model chain-of-thought output rather than authored prose — see its own header note |

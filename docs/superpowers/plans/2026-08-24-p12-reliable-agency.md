@@ -60,7 +60,7 @@ acceptance suite** — never by tool calls, and never by a model's own report.
 
 P12 was "Laguna XS 2.1 and/or Mellum 2.1 as first-class variants." An overnight
 investigation across three parallel sessions
-([consolidation](../research/2026-08-24-overnight-consolidation.md), Sections
+([consolidation](../research/superseded/2026-08-24-overnight-consolidation.md), Sections
 A–D) established that variety is not the blocker. The blocker is that a local
 model which demonstrably writes correct code still fails to reliably *act*, and
 most of those failures traced to host-side contract or prompt shape rather than

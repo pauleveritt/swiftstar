@@ -198,7 +198,13 @@ during this session.
 
 - **Artifact:** GGUF v3, **1,328 tensors, 62 metadata keys**, 97,591,747,456
   bytes (90.8894 GiB). A byte-identical copy under the pre-`-0731` legacy name
-  sits in `external/ds4/gguf/` (gitignored inside the submodule).
+  sits in `external/ds4/gguf/` (gitignored inside the submodule); both copies'
+  bytes match the published Hugging Face SHA-256 per
+  [`antirez/ds4#635`](https://github.com/antirez/ds4/issues/635) — no download
+  needed. Found by cross-referencing `docs/laptop-ai.md` against the
+  predecessor `~/projects/ds4-control`, which ran this exact model
+  successfully (2026-08-27 research); a prefilled KV-cache directory from
+  DS4 Control's prior use (13 checkpoint files) is further proof it ran.
 - **Architecture:** `general.architecture = "deepseek4"`.
 - **Rope:** `deepseek4.rope.scaling.type = "yarn"`, `deepseek4.rope.freq_base =
   10000.0` (also `scaling.factor 16.0`, `original_context_length 65536`,
@@ -366,7 +372,11 @@ unattended work.
 ### Cycle 6 — SSD streaming (deferred, not scheduled)
 
 Left out deliberately; re-open only with a reason, and re-check
-[`antirez/ds4#635`](https://github.com/antirez/ds4/issues/635) first.
+[`antirez/ds4#635`](https://github.com/antirez/ds4/issues/635) first. Already
+fully designed and shipped for this model at
+`~/projects/ds4-control` — default ON, frees ~15 GiB, with per-quant
+expert-cache budgets (q2-q4-imatrix's default budget is 67 GB) — should this
+cycle reopen, that design is the starting point, not a from-scratch one.
 
 ### Intermediate states this creates
 

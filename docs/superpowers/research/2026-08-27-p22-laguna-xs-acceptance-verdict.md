@@ -41,6 +41,8 @@ So the spike was **SwiftStar-side plus verification**, not an engine merge.
 - `GGUFType.q3_k`, `laguna.rope.*` metadata keys, the `startLayer` verifier
   change, and the GLM 5.3 review fixes (pool-argv runtime test, Mellum
   `startLayer == 0` regression assertion).
+- **614 declared tests on the branch** (main: 552, of which 82 are
+  integration-tier and do not run in the fast tier).
 - **614 fast-tier tests green** (was 600 at baseline). GLM 5.3 (read-only)
   review: **APPROVE**, all findings Minor, two folded in.
 
@@ -88,6 +90,16 @@ Evidence per run: `captures/agenttest/20260827-074305-roadmap/` and
    resident, SSD streaming live (cache 3200 experts, hit rate ~0.22 on the
    smoke prompt, mlock OK), generation at ~19 t/s on the M5 Max for a 2-token
    reply — enough to confirm the path, not a throughput claim.
+
+## Merged 2026-08-27 (path fix `df200da`)
+
+`p13-laguna-xs-variant` merged. The merge carried one fix:
+`VariantRegistry.locateModel` now **searches known model directories**
+instead of naming one — the branch's original default
+(`~/models/laguna-xs-2.1-RoutedQ3_K-biased.gguf`) resolved to a directory
+holding only the Mellum file, and the acceptance run's green result above
+depended on `SWIFTSTAR_LAGUNA_XS_MODEL` masking that gap. Pinned by
+`everyRegisteredVariantResolvesToAReadableFile`.
 
 ## 5. Open items (honest, unchanged)
 

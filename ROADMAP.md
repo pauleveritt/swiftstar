@@ -69,35 +69,10 @@ apparatus, not on Mellum as an editor.**
 **P16's ">=10 valid Mellum pipeline cells" stays demoted.** It was a proxy for
 the repair-limit question, already answered more cheaply at fixture tier.
 
-**P18's shape, deliberately boring:**
-
-1. **Fixture-only, one task family per run.** Start with "repair visible
-   files" (editing). Keep "author a missing file from implied tests" as a
-   *separate* benchmark — P17 shows it is a different capability, not a harder
-   version of the first.
-2. **One attempt, no repair rounds, no prompt interventions.** A pinned broken
-   tree, the writable files, an explicit task/acceptance contract. Capture
-   output, apply it, grade it. Nothing self-modifying.
-3. **A flat oracle**, not a collection-gated pytest run: 13 independently
-   evaluable requirements, each pass/fail, even when imports fail. Pre-register
-   both the primary metric (all 13 pass) and the secondary (count passed) —
-   partial scores real from the start, not retrofitted after a binary metric
-   turns out to have no resolution (as v5's did).
-4. **Freeze the prompt and fixture manifest before sampling.** ~10–20
-   fresh-process trials per fixture, shuffled across fixtures. Raw packet,
-   engine argv, output, resulting tree, and requirement vector are the record.
-   Never overwrite or rerun a recorded cell.
-5. **Only then, as a separate bounded comparison**, test rounds: if one-shot
-   results are stable, compare exactly one predeclared feedback policy (e.g.
-   1 vs 3 rounds) on the same fixtures and oracle. No prompt tuning between
-   arms.
-
-**A new, standalone `mellum-fixture` runner, not an extension of
-`swiftstar-agenttest`.** Near-zero policy: construct fixture → call Mellum →
-apply output → independently score → save artifacts. It answers one narrow
-question — what can this Mellum configuration do on explicit, pinned repair
-tasks — and does not diagnose the pipeline, repair its own methodology, or turn
-every surprising result into another feature.
+**P18's design** (fixture-only one-shot benchmark shape, the standalone
+`mellum-fixture` runner) is written up at
+[`docs/superpowers/specs/2026-08-27-p18-mellum-fixture-design.md`](docs/superpowers/specs/2026-08-27-p18-mellum-fixture-design.md)
+— it is deferred, so the design detail doesn't belong inline here.
 
 **P26: eval-system hygiene (2026-08-29, new) — gates further research/tuning,
 does not need the engine.** Two independent reviews of the eval/telemetry
@@ -118,115 +93,23 @@ for the fuller (non-gating) list.
 
 ## Concept budget
 
-*Every term below is a cost against the reader's ability to hold the design in
-mind. Checked at the end of each phase; a term earns its place by naming
-something the design actually needs, not by being convenient shorthand.*
+*Every term the design introduces is a cost against the reader's ability to
+hold the design in mind. Checked at the end of each phase; a term earns its
+place by naming something the design actually needs, not by being convenient
+shorthand.*
 
-Seed terms, to be defined in this repository's own words when the phase that
-needs each one lands: **patch set**, **shipped integration**. (The
-seed terms **handoff packet** and **candidate ref** were defined by P10 and now
-appear below.) Defined so far:
+Seed terms awaiting a definition, to be written in this repository's own
+words when the phase that needs each one lands: **patch set**, **shipped
+integration**.
 
-- **feasibility** (P3) — the engine's startup memory plan vs. available RAM,
-  computed, with an actionable refusal (deficit, levers, re-check number).
-
-- **seam** — the spawned-child-plus-wire boundary between the app and the engine.
-- **wire** — the byte stream on that seam (P2: SSE from `ds4-server`).
-- **capture** — a byte-for-byte recording of the seam (wire + stderr + trace),
-  timestamped on the wire and anchored in wall-clock by its provenance.
-- **handshake** — the wire's first line: a version/capability `hello` object; a
-  consumer refuses a mismatch loudly (binding rule 7).
-- **trace** — the engine's `--trace` channel, a separate timestamped file carrying
-  what the wire suppresses (compaction rebuild stats); captured alongside the wire.
-- **fixture** — a committed capture used by tests.
-- **finding** (P6) — a machine-computed diagnostic result: a typed value with a
-  severity and the computed numbers it reports; phrased by a deterministic
-  renderer now, a model later.
-- **baseline** (P6) — a session's own early prefill throughput (highest
-  `prefill_tps` at `ctx_used ≤ 8,192`), against which later throughput is
-  compared; the session measures itself, no external calibration.
-- **diagnostic** (P6) — a finding the analyzer computes from a capture, never a
-  model's judgment. The model only phrases.
-- **workspace** (P7) — the confinement root plus the cwd the app grants at
-  spawn (`--workspace`); the file tools (`read`/`more`/`write`/`list`/`edit`/
-  `search`) fail closed outside it — an unresolvable or escaping path is
-  refused, not silently `chdir`'d.
-- **tool card** (P7) — the transcript's per-call reconstruction of one tool
-  invocation from the wire's phase stream (`start`/`tool`/`param_*`/`output`/
-  `finish`); appended at the `tool` phase, mutated in place by `param_end`/
-  `output`/`finish`, keyed by `idx` scoped to the current block.
-- **turn outcome** (P7) — the capture-grade per-turn record (model/build/sampler
-  and task, token and context use, stop reason, and each tool-call lifecycle
-  transition) that P10's handoff packets consume instead of trusting the
-  transcript's prose.
-- **bootstrap** (P8) — the deterministic skills index `SuperpowersBootstrap`
-  renders from a skills dir (`name`/`description` front-matter, sorted by name,
-  one line per skill), passed to the agent via `ds4-agent -sys`; the engine's
-  existing `sysprompt.kv` rebuild-on-mismatch makes it "prefilled once." A
-  missing skills dir degrades to "No skills available in this workspace."
-  rather than fabricating skills the agent cannot `read`.
-- **progressive disclosure** (P8) — the index lives in the system prompt; the
-  full skill bodies are staged into the workspace (`.swiftstar/skills/<name>/`)
-  at spawn and `read` on demand inside the workspace grant. The bootstrap never
-  inlines skill bodies, so the agent pays the prefill cost only for the skills
-  it loads.
-- **tool request** (P9) — the `--host-tools` wire event the engine emits on stdout
-  when the host owns execution: `{"t":"tool_request","idx":N,"name":"<tool>",
-  "params":[…],"ts":<µs>}`, one per tool call in a block. The engine blocks on a
-  matching `tool_result` from stdin; a mismatched `idx` or any non-`tool_result`
-  line is a loud refusal. `hello` advertises `"tool_request"` in `caps` iff the
-  flag is set.
-- **tool result** (P9) — the host's answer on stdin:
-  `{"t":"tool_result","idx":N,"ok":true|false,"s":"<condensed result text>"}`.
-  `ok:false` is a result, not an absence — the engine consumes it and continues.
-  The `s` is condensed (`ToolResultCondenser`, cap 8000) before it enters KV.
-- **host tool execution** (P9) — the app owns tool execution: with `--host-tools`,
-  the engine emits `tool_request` and blocks; the app's `ToolCallbackResponder`
-  enforces the workspace/shell consent, executes the call, condenses the result,
-  writes the `tool_result` back, and records the host facts into the per-turn
-  `TurnOutcome`. Without the flag the engine executes internally and the wire is
-  observation-only.
-- **handoff packet** (P10) — the typed contract a dispatched attempt runs under:
-  `taskText`, the exact `writableFiles` (worktree-relative), the
-  `validationCommand` the parent will actually run, a per-file `FileBaseline`
-  (`sha256` + `lineEnding` + Unix `mode`) read from the worktree at dispatch time
-  rather than guessed, and turn/tool-call budgets. The worker gets
-  `read`/`write`/`edit` (+`list`/`search` as read aids) and no `bash`; every
-  mutation is revision-checked against `writableFiles`. It consumes the P9
-  host-authoritative facts — success is never inferred from prose.
-- **candidate ref** (P10) — the reviewable commit a dispatched attempt returns
-  when the turn ends without a revision-check violation and (when the packet's
-  `validationCommand` is set) the validation passes: the dispatcher commits the
-  worktree's diff to a throwaway branch and returns the SHA. The ref resolves via
-  `git rev-parse` after the worktree is removed (the commit object survives); the
-  parent reviews it. Nothing merges.
-- **receipt** (P10) — the typed refusal a dispatched attempt returns otherwise,
-  naming the reason: a mutation outside `writableFiles` (`.refusedTool`, first
-  offending path), a turn/tool-call budget exceeded (`.budgetExceeded`), the
-  validation command failing (`.validationFailed` with exit status + stdout
-  digest), or no mutations (`.noChanges`). The reason is machine-computed from the
-  P9 `TurnOutcome`, not inferred from the transcript.
-- **revision check** (P10) — the membership test a dispatched attempt runs on
-  every mutation: a `write`/`edit` whose workspace-relative path is not in the
-  packet's `writableFiles` is refused host-side (`ToolCallbackResponder.consent`
-  refuses the tool, does not execute, does not record it), so an out-of-set write
-  never lands in the worktree. Two checks by design: the host-side refusal is the
-  production confinement; the pure verdict's `.refusedTool` is the backstop (a
-  mutation that *is* in `allowedMutations` but outside `writableFiles` — a
-  symlink escape, or the integration test's scripted mutation).
-
-- **rolling digest** (P11) — the objective-independent "always-want" reduced
-  form of the conversation, maintained incrementally and inference-free by the
-  host: strip tool noise, keep the host-authoritative ledger (files touched,
-  refs, receipts, exit statuses). Backed by the session `.kv` rendered text for
-  crash recovery. The packet-maker's extraction reads this, never the raw
-  conversation — Layer 1 of context distillation, pre-chewed before the
-  objective is known.
-
-- **context assembly** (P11) — the packet-maker's `deterministic-load → rolling
-  digest → adaptation → packet` pipeline: the `dispatch` tool's objective plus
-  the digest plus staged read names plus the deterministic adaptation (D7) become
-  a *prepared* packet `taskText`, not P10's bare sentence.
+The defined term list — feasibility, seam, wire, capture, handshake, trace,
+fixture, finding, baseline, diagnostic, workspace, tool card, turn outcome,
+bootstrap, progressive disclosure, tool request, tool result, host tool
+execution, handoff packet, candidate ref, receipt, revision check, rolling
+digest, context assembly — moved to [`docs/glossary.md`](docs/glossary.md)
+(its "Concepts" section, plus the Mechanisms table for the P10 dispatch
+terms), alongside the app's Modes/Roles/Mechanisms vocabulary. Check new
+terms against that file at the end of each phase.
 
 ## Phases
 
@@ -254,11 +137,11 @@ appear below.) Defined so far:
 | P19 | One surface | The Agent is the app: Chat retired (the `ds4-server`/SSE path, `EngineController`, the tab), the ported Agent UI (composer, workspace picker, status bar + rings, message rendering, tool cards), Settings (shell toggle, font-size slider), per-turn summary on bubbles | **landed 2026-08-26** — Chat retirement `f546671`; UI port `ebfc046`; Settings `5d7c1de`; turn summary `8b9710b`; stop-button fix `478d871`. See the [`agent-surface-port verification record`](docs/superpowers/research/2026-08-26-agent-surface-port-verification-record.md) and the [`old-ui element inventory`](docs/2026-08-26-old-ui-element-inventory.md). Reopened and **complete 2026-08-27**: **P19.0** (consulted answer styling, stable-row-ID decision) and **P19.1** (the app shell) — a Tahoe-forward `NavigationSplitView` shell with a real customizable toolbar, collapsible sidebar, Settings moves (pool size, session capture, smart/dumb default, workspace default), one toolbar model choice with the engine lifecycle hidden, a component/region design vocabulary, and the Swift 6 concurrency gates. See the [`P19.1 design`](docs/superpowers/specs/2026-08-27-p19-1-app-shell-design.md) |
 | P20 | Delegation in one engine | Subagents without a second process: the app's agent spawns with `--subagent-pool N`; `/chat` (manual → pool-routed → answer surfaced); smart/dumb handoff-packet lever + dumb-mode dispatch refusal; restart-safe pool state | **mostly landed 2026-08-26** — pool routing `00b5d80`; orchestrate `52257b8`/`95ac5c3`; dumb lever `2011203`/`53b7ee5`; pool reset `3e07b54`; real-engine pool protocol test (worker prompt → `pong`, one process, two sessions). **Closing 2026-08-27 — two items ship, two descope.** *Ship:* **(1) the `/orchestrate` coordination loop, model-driven** (the model is the orchestrator — decompose → `dispatch` each phase → read receipts → validate → iterate → write files; the app's existing `dispatch` tool + pool + receipt-injection + parent-side validation already run the loop, so the missing pieces are the orchestrate directive and the `/orchestrate` wiring replacing `orchestrateStub()`; **one-shot-first, no automatic repair loop**, per P17's verdict that more rounds do not help editing; the directive is a standalone testable Swift constant; the loop's dispatch step needed engine divergence #12 (the `dispatch` schema)). **(2) the dispatch-preference bootstrap rule, prompt-only** (prefer dispatch when a phase has machine-checkable acceptance, after ~N exploration rounds; **never for watched interactive sessions** — the 2026-08-27 capture's two exploration turns were user-steered, interrupted, open-ended with no acceptance predicate, so P10's routing rule refuses them; the pool consult was the right delegation and it worked — see the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md)). *Descope:* **small-ctx workers** (the RLM lever) → its own phase, merged with P23's per-worker think control (one engine patch, fork-ledger row #13, recapture); **two-phase `/spike`** → Backlog behind P24 (phase 2 rides mediated bash). **Implementation landed 2026-08-27 (fast tier green, 697 tests):** spec [`2026-08-27-p20-orchestrate-loop-design.md`](docs/superpowers/specs/2026-08-27-p20-orchestrate-loop-design.md); `OrchestrateDirective.swift` (directive + `DispatchPreferenceRule`); `orchestrateStub()` → `orchestrate(task:writableFiles:)`; rule appended to `-sys` at spawn. **Closed 2026-08-27 — live validation PASS** (1 dispatch + 13/13, 2 orchestrator turns, 695s; seed-dependent — see the [closure verdict](docs/superpowers/research/2026-08-27-p20-closure-verdict.md)); review-fix commits `9efd050` |
 | P21 | Measurable sessions | Telemetry you can act on: live session capture (wire + trace + stderr per spawn under `captures/live/`), the telemetry analyses (heavy-session compaction, spike shell-on findings) | **landed 2026-08-26** — capture `96fcc49`/`4e7cb3a`. See the [`heavy-session findings`](docs/superpowers/research/2026-08-26-heavy-session-telemetry-findings.md) and the [`spike shell-on findings`](docs/superpowers/research/2026-08-26-spike-shell-on-findings.md). Forward: the **DumbImplementer eval** (design around Σsuffix — Σprompt double-counts, so Σcached/Σprompt is not a cache-hit rate), and **expose the wire's `power` field** (already emitted; the parser drops it) as the first step toward the power question. The kind assertions and the DialLogic re-anchor landed 2026-08-27 — the fixture already carries kinds (no recapture needed), and the anchors are re-anchored to the app's 50k (25k/37.5k; critical now reachable) |
-| P22 | More models: Laguna XS + model switching | Laguna XS 2.1 as a first-class, choosable preset at parity with Laguna S — merge the unmerged `p13-laguna-xs-variant` branch (9 commits; its spec `2026-08-26-p13-laguna-xs-variant-design.md` lives on that branch), the completed live acceptance run, XS golden recapture — plus **model switching** (woven in): an "Apply this model" action that stops and re-spawns the agent with the new model, feasibility-/VariantGate-admitted *before* the stop (never kill a working session to switch to an infeasible model), transcript preserved, provenance per-spawn reflects the new model, pool re-spawns with it, switch refused mid-generation. XS is also the natural line for P20's small-ctx workers | **acceptance done 2026-08-27** — variant + engine-flag wiring shipped on `p13-laguna-xs-variant`; live acceptance green on the real engine with `--ssd-streaming`: agentclinic `roadmap` passed via `DS4_AGENT_TOOL_NUDGE=2` (13/13, verdict good), `roadmap-user-story` passed on defaults (13/13, verdict good); 614 declared tests on that branch (main: 552, of which 82 are integration-tier and do not run in the fast tier); GLM 5.3 APPROVE. See the [`acceptance verdict`](docs/superpowers/research/2026-08-27-p22-laguna-xs-acceptance-verdict.md). **merged 2026-08-27** (`p13-laguna-xs-variant`, path fix `df200da`): `VariantRegistry.locateModel` now searches known model directories instead of naming one — the branch's original default (`~/models/laguna-xs-2.1-RoutedQ3_K-biased.gguf`) resolved to a directory holding only the Mellum file, and the acceptance run's green result depended on `SWIFTSTAR_LAGUNA_XS_MODEL` masking that. Pinned by `everyRegisteredVariantResolvesToAReadableFile`. Note the acceptance ran the **RoutedQ3_K** file, not the `Q4_K_M` one, which the contract's `downType: .q3_k` would refuse — recapture against the file the contract actually admits. Forward: 16 GB hardware acceptance — **skipped by decision 2026-08-27** (not gating P22 closure; still unconfirmed — ran on 128 GB). **Model switching shipped 2026-08-28** — the "Apply this model" action (VariantGate-admitted *before* the stop, refused mid-generation, transcript preserved, provenance per spawn reflects the new model, pool re-spawns with it): spec [`2026-08-28-p22-model-switching-design.md`](docs/superpowers/specs/2026-08-28-p22-model-switching-design.md), plan, 4 commits, fast tier 741 green (9 new tests), GLM 5.3 approve-with-minor (both folds), live-validated S→XS (clamped ctx + runtime flags + pool in the new argv, transcript + provenance checked) plus a refused-switch run (session untouched) — and an accidental live XS→DeepSeek switch that admitted 92.03 GiB under the Metal ceiling, live-proof of P25 Cycle 4b's denominator through the app. See the [verdict](docs/superpowers/research/2026-08-28-p22-model-switching-verdict.md) and the [live-validation record](docs/superpowers/research/2026-08-28-p22-model-switching-live-validation.md). **SSD across the Laguna line shipped 2026-08-28** — engine divergence #13 (the `laguna-s21-ssd` branch's tip `2613723` — the 4-line gate widening — ported to the pin; `--ssd-streaming` now admits XS21 + S21, `--prefill-chunk` stays XS21-only), `lagunaS` gains the shared `EngineRuntimeConfig` (`--ssd-streaming --ssd-streaming-cache-experts 3200`, no prefill chunk), submodule bumped to `849f375` (wire-neutral divergence → no golden recapture owed), engine rebuilt; live: S-ssd resident 20.53 GiB at ctx 51200 (vs 53.08 GiB resident, ~32.5 GiB saved), DFlash × SSD-streaming refused loudly at admission (the load-bearing exclusion composes), DFlash alone loads and generates on the resident path. See the [verdict](docs/superpowers/research/2026-08-28-p22-ssd-across-the-line-verdict.md) and the [live-validation record](docs/superpowers/research/2026-08-28-p22-ssd-across-the-line-live-validation.md). **XS golden recapture shipped 2026-08-28** — the `golden-tools-xs` fixture: a verbatim `swiftstar-drive` capture of the real engine (pin `849f375`) with the **contract-admitted** `RoutedQ3_K` file at ctx 32768 (the `Q4_K_M` file the contract's `downType: .q3_k` refuses was never the admission path), tool zoo + D12 `stop_reason` on all 5 turn-ends verified, confinement proven; `everyRegisteredVariantResolvesToAReadableFile` passes on the real file. See the [verdict](docs/superpowers/research/2026-08-28-p22-xs-golden-recapture-verdict.md) **Model-switching correctness fixes shipped 2026-08-28** — a deep multi-angle code review of the P22 commit range found the pure `ModelSwitchEvaluator` sound but its wiring leaking: an empty stored `selectedVariantID` (written by the menu's own Default/Custom buttons) silently skipped both the admission gate and the SSD-streaming runtime; `noChange` compared only the model file, so a same-file switch that only changed context size or runtime flags was swallowed as a no-op (and a symlinked path spelling forced a spurious restart in the other direction); a custom/unverified model path bypassed admission entirely, killing a working session for a missing or infeasible target; "Apply this model" was reachable mid-`/chat`-consult with no refusal; the admitted target wasn't pinned across `restartAgent()`'s async stop window (TOCTOU); the restart poll had no timeout and the apply path wrote no transcript row; and a `.failed` launch was a main-window dead end with no recovery control. All seven fixed (pinned target threaded through `startAgent`/`restartAgent`, full-settings + symlink-aware `noChange` comparison, consult guard, existence check for custom paths, bounded restart poll, `.failed`-state "Start with this model"); fast tier still green (744 tests). **Budget-envelope fixes shipped 2026-08-28** — the review's remaining two PLAUSIBLE findings addressed: `lagunaS`'s SSD-streaming `maxContext` was 150,000 on the strength of one live measurement at ctx 51,200 (the old 150,000 ceiling was validated for the *resident* path, not streaming, and S passes no `--prefill-chunk` cap) — narrowed to 51,200 (the measured point, and exactly the app's default) until a higher-ctx streaming measurement justifies raising it again; and `weightsGiB` (12.40) was a disconnected literal that happened to agree with `ssdStreamingCacheExperts` (3,200) — now derived as `cacheExperts x perExpertGiB + residentSliceGiB` from the same `cacheExperts` value the runtime flag uses, so a future retune can't silently under-plan the gate. New tests pin both (`maxContextIsCappedAt...`, `weightsGiBStaysCoupledTo...`); fast tier 746 green. |
+| P22 | More models: Laguna XS + model switching | Laguna XS 2.1 as a first-class, choosable preset at parity with Laguna S — merge the unmerged `p13-laguna-xs-variant` branch (9 commits; its spec `2026-08-26-p13-laguna-xs-variant-design.md` lives on that branch), the completed live acceptance run, XS golden recapture — plus **model switching** (woven in): an "Apply this model" action that stops and re-spawns the agent with the new model, feasibility-/VariantGate-admitted *before* the stop (never kill a working session to switch to an infeasible model), transcript preserved, provenance per-spawn reflects the new model, pool re-spawns with it, switch refused mid-generation. XS is also the natural line for P20's small-ctx workers | **Closed.** Laguna XS 2.1 shipped at parity with Laguna S — merged 2026-08-27 with live acceptance PASS on the real engine (`--ssd-streaming`), a golden recapture against the contract-admitted file, and a merge-time `locateModel` path fix. Model switching ("Apply this model") shipped 2026-08-28: admission before stop, live-validated S→XS plus an accidental XS→DeepSeek switch that proved P25 Cycle 4b's admission denominator through the app, then hardened by a 7-finding post-ship correctness review. SSD streaming extended across the whole Laguna line 2026-08-28 (S now resident at 20.53 GiB, ~32.5 GiB saved; DFlash × SSD-streaming correctly refused), with a follow-up budget-envelope fix (`maxContext`, `weightsGiB` derivation). 16 GB hardware acceptance **skipped by decision 2026-08-27**, still unconfirmed. See the [acceptance verdict](docs/superpowers/research/2026-08-27-p22-laguna-xs-acceptance-verdict.md), [model-switching verdict](docs/superpowers/research/2026-08-28-p22-model-switching-verdict.md) ([live validation](docs/superpowers/research/2026-08-28-p22-model-switching-live-validation.md)), [SSD-across-the-line verdict](docs/superpowers/research/2026-08-28-p22-ssd-across-the-line-verdict.md) ([live validation](docs/superpowers/research/2026-08-28-p22-ssd-across-the-line-live-validation.md)), and the [XS golden recapture verdict](docs/superpowers/research/2026-08-28-p22-xs-golden-recapture-verdict.md). |
 | P23 | Wire-level control | Per-turn think on the agent wire (`reasoning_effort`-style) **plus per-worker context for pool workers** (the small-ctx/RLM lever, descoped from P20 2026-08-27 and merged here). The think leg buys correctness and responsiveness — it bounds the observed think-to-the-wall failure and delivers the "fast reply"; its wall-clock ceiling is ~9.3%, so it is **not** a throughput lever. The per-worker-context leg carries the measured speed (4.2x prefill ceiling; ~6.15 GB → ~1.5 GB scratch per worker). One engine patch, **fork-ledger row #14** (P22's SSD widening took #13), one golden recapture. Spec: [`2026-08-28-p23-wire-level-control-design.md`](docs/superpowers/specs/2026-08-28-p23-wire-level-control-design.md) | **implemented and closed 2026-08-28** — part 2: per-turn think (`/quick`, `think_override` cap, `TurnThinkPolicy`), per-worker ctx (clamped to `[4096, parent]`; `sysprompt-<ctx>.kv`), sampler truth (`TurnOutcome.sampler` records the effort actually used; `PoolOrchestrator` no longer records an override it never sends), fork-ledger row #14, golden re-capture + think-override fixture. D11 decided: warm-prefix routing (`ds4_session_common_prefix` as a wire query) stays out of scope — the backlog entry stands, a future phase pays the second recapture it would cost. An independent review (dispatched mid-close) found and fixed a real data race in the ctx-swap path (`agent_worker_set_session_ctx` freed/reassigned `w->session` under `pool_mu` alone while status reads held only `w->mu`) plus a stranded-NULL-session guard, both landed before the recapture so it wasn't paid twice. The golden recapture also surfaced a stale, unrelated invariant: `planned_bytes` had drifted from an already-fixed (2026-07-27, pre-P23) scratch-estimator bug the P9-era fixture predated — traced, confirmed via `kv_bytes`/`model_bytes` staying byte-identical, and the pinned test value updated with the trace recorded in `fixtures/agent/provenance.md`. Spec test 9 (think-to-the-wall regression guard) is **deferred**: the plan's reconstructed reproduction prompt doesn't induce visible thinking on the locally available models (no system prompt to induce it, and the research doc never recorded probe A's literal prompt) — recorded in [`2026-08-28-p23-think-to-the-wall-repro-attempt.md`](docs/superpowers/research/2026-08-28-p23-think-to-the-wall-repro-attempt.md) rather than shipped as a misleading test; the mechanism it would pin is not in doubt (probe A already demonstrated `--think-budget` live). Note the "toolless" half of the quick reply is **descoped** (dropping tool schemas for one turn busts the KV prefix in both directions; the non-busting token-ban approach is unverified) — `/quick` means no-think, not toolless |
 | P24 | Digested first-class tools | P9's deferred condensation direction, now motivated by the measured enemy: the sum of prefill tails, each taxed by depth (231→134 tok/s over 12k→27k ctx; **sharpened 2026-08-27 by our own production capture** — one file re-read 31× = 29 syncs at exactly 1,809 suffix tokens = 37% of Σsuffix, see [`2026-08-27-1809-prefill-tail-findings.md`](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md)). Deterministic host-owned **tools** (no model, millisecond Swift): `test` (pytest → ~2 clustered representatives, lossless-for-the-decision, full output re-runnable), `scout` (index-backed locate), `lint` (ruff/pyrefly digests), **the `read`-guard** (`don't-re-read`: hash+mtime every file, answer an unchanged re-read "unchanged since turn N" — the 1809 capture's direct fix, absorbed from the Context-economy backlog entry whose P9 reopen condition shipped) — plus the ladder for the rest: **mediated bash** (host-run, deterministically digested, policy-gated, never raw) and **model-asks-human** for the novel; retires the shell-on expedient (2026-08-26). The model-backed half (ANE only phrases) stays in the ANE watcher tier Backlog entry, gated on the two AFM falsifiers. Naming: a **tool** is deterministic (no model); a **subagent** has a model in the loop. The other legs of the prefill-tail attack are already scheduled: small-ctx workers (now its own phase, merged with P23) and P20's dispatch-preference rule, plus P21's DumbImplementer eval (the measurement). Source: JetBrains RTK token-savings benchmark (2026-07), now corroborated by our own capture — the guardrail: a tool's self-reported savings are a claim about its counterfactual, not about your bill; measure the paired bill with `swiftstar-analyze diff` | **planned — production measurement in hand (2026-08-27)** |
 | P26 | Eval-system hygiene | Correct the stale, overturned "flat depth profile" claim everywhere it appears; commit the untracked overnight-campaign scripts, manifests, and results as the pre-registered evidence they are; freeze one merged results schema across the two Python campaign runners before the next cell runs; annotate uncalibrated LLM-judge acceptance claims as advisory pending calibration. Docs-and-git only — no engine, no Metal — so it runs concurrently with anything else in flight. Later, non-gating work (Swift-native `swiftstar-analyze findings`/`index`, the zero-Metal replay tier, a kill list, grader calibration, a second fixture app) is Backlog, not this phase | **partially delivered (2026-08-29)** on branch `measurement-campaign-2026-08-29`. **Done:** (1) the overturned flat-depth-profile claim is corrected in all three places the audit named (line 33's narrative, the P13 and P17 rows); (2) the campaign scripts, manifests, and results are committed as the pre-registered evidence they are — the overnight set in `f61de85`, the five follow-up arms plus the failure classification in this branch. **The gate FAILED, not merely slipped:** this row says the schema freeze "should land before the next campaign cell runs so that batch is comparable to the last". Five arms then ran on 2026-08-29 *after* this row was written, without the freeze — and one of the two schemas was **widened** in the process (an `arm` column added to `run-experiment.py` for interleaved prompt arms). So the condition was not just unmet, the gap grew, and today's batch is already non-comparable to the last in that dimension. **Not done, still gating:** (3) the two Python runners still carry *different* result schemas — `run-experiment.py` now writes 7 columns (an `arm` column was added for interleaved prompt arms) and `run-orchestrate-campaign.py` writes 10; freezing one merged schema was explicitly scoped to land *before the next campaign cell*, and has not; (4) uncalibrated LLM-judge acceptance claims are still unannotated. Both remaining items are docs-and-git and need no engine. See [`2026-08-29-eval-system-audit-and-later-work.md`](docs/superpowers/research/2026-08-29-eval-system-audit-and-later-work.md) |
-| P25 | More models: DeepSeek V4 Flash | The fourth rung of the app's own model ladder — [`docs/laptop-ai.md:34`](docs/laptop-ai.md) names it "the flagship," **the reference the others are measured against**, at the 128 GB tier (64 GB Laguna S, 32 GB Laguna XS, 16 GB Mellum all shipped by P22). Missing entirely today: no gguf on disk under the app's own search paths, no `Variant`, no ROADMAP mention before this row — found only by cross-referencing `docs/laptop-ai.md` against the predecessor `~/projects/ds4-control`, which ran it successfully (2026-08-27 research, recorded here per user request). See also the DS4 Control harvest doc, [`docs/harvest/ds4-control.md`](docs/harvest/ds4-control.md), whose opening line already named the predecessor's target as "a local DeepSeek V4 / Laguna S 2.1 engine" without DeepSeek ever being carried into SwiftStar's own model list. | **Now (2026-08-27, moved up)** — the flagship rung is wanted; implementation in progress (the uncommitted `VariantRegistry`/`GGUFMetadataReader`/`Variant` + tests work). Findings: **(1) identity** — DeepSeek V4 Flash, 43 layers, 1,000,000-token context ceiling (`~/projects/ds4-control/Sources/DS4Control/Model/Variant.swift`); a bigger sibling V4 Pro (61 layers) needs ≥512 GiB and is out of scope for a laptop. Three Flash quants exist; **q2-q4-imatrix (91 GiB weights) is the one `docs/laptop-ai.md` means by "flagship"** — DS4 Control's own default on ≥128 GiB machines. **(2) weights are already present** — byte-identical 93,070.7 MiB files (97,591,747,456 bytes, matching the published Hugging Face SHA-256 per `antirez/ds4#635`) sit in both `external/ds4/gguf/` (under the pre-`-0731` legacy filename) and `~/Library/Application Support/DS4 Control/gguf/` (the current `-0731`-named artifact) — no download needed. A prefilled KV-cache directory from DS4 Control's prior use (13 checkpoint files) is further proof it ran. **(3) engine support is ready** — the pinned `external/ds4` SHA (`f56d0ca`, 2026-08-25) has full native `deepseek4` architecture support (`ds4.c`: block_count, attention/indexer config, expert routing — confirmed by direct read) and postdates every DeepSeek-related upstream commit found (latest 2026-08-16, a `-0813` V4 Pro quant plus a run of Metal-specific DeepSeek routed-MoE/indexed-prefill/decode-fusion optimizations landed 2026-08-05–07). **(4) one open upstream caveat, not a blocker** — [`antirez/ds4#635`](https://github.com/antirez/ds4/issues/635) is still open (last activity 2026-08-14): a reported SSD-streaming correctness regression for long-context prompts on ROCm/Strix Halo specifically; not reproduced on Metal, and resident (non-streaming) mode showed no such issue. Worth tracking before enabling SSD streaming for this model; irrelevant to a resident launch. **(5) the real scoping fork** — DS4 Control's `Feasibility.swift` memory-admission model for this architecture is a precise, shape-driven mirror of ds4's actual Metal allocator (per-tensor formulas keyed on 64 attention heads, 256 routed experts/6 used, indexer topology, hyper-connections, a 129,280 vocabulary — nothing like SwiftStar's linear `MemoryBudget` interpolation), paired with a wired-limit-based admission strategy (Metal's `recommendedMaxWorkingSetSize` + the `iogpu.wired_limit_mb` sysctl — more accurate than SwiftStar's current free+inactive-pages `MemorySnapshot`). SSD streaming is also already fully designed and shipped there (`~/projects/ds4-control/docs/superpowers/specs/2026-08-12-ssd-streaming-design.md`: default ON, frees ~15 GiB, per-quant expert-cache budgets — q2-q4's default budget is 67 GB). **(6) the memory-model fork is RESOLVED (2026-08-27, extended review)** — design doc: [`docs/superpowers/specs/2026-08-27-p25-deepseek-v4-flash-variant-design.md`](docs/superpowers/specs/2026-08-27-p25-deepseek-v4-flash-variant-design.md). The faithful-vs-linear fork was a **false dichotomy**: ds4's Metal model is *affine in ctx* above the 4,096 prefill cap (every ctx-dependent term is linear in `ctx/4` or `ctx/128`; everything else keys on `prefillCap` alone), so feeding its own outputs in as SwiftStar's three `MemoryBudget` anchors reproduces the exact model to **≤20 MiB (0.02%) across 16k–1M**, always conservative. Derive faithfully offline, ship three constants in the existing shape — **neither `MemoryBudget` nor `QuantContract` needs extension** (the latter's two-segment layout was read from the real GGUF: Q2_K layers 0–36, Q4_K layers 37–42, no dense leading layer). The row's claim that both shapes "need real extension" is withdrawn. **The actual blocker is elsewhere:** `VariantGate` admits against `MemorySnapshot`'s free+inactive pages (measured 82.71 GiB live) versus a 95.85 GiB minimum need — it refuses the flagship on a machine that can run it, and admits or refuses with the machine's memory weather. The fix is a Metal working-set denominator (`recommendedMaxWorkingSetSize` = 107.52 GiB here; `iogpu.wired_limit_mb` = 0/unraised), which is a **shared, cross-variant** change and the phase's one real risk. Envelope on this box (M5 Max, 128 GiB): resident-feasible to **ctx 526,267 under the OS default with no sysctl**, Think Max (393,216) reachable at 104.49 GiB, the full 1M window needing a raised wired limit. Two cheap gaps also found: `GGUFMetadataReader` hardcodes `mellum.`/`laguna.` rope key prefixes and needs `deepseek4.` cases, and neither weights copy sits on a `locateModel` search path (the XS failure mode its own doc comment warns about). Free: `ModelFamily` has no external switches, the picker derives from the registry, no download, and the app's 51,200 default context needs no clamping. **Cycle 4b shipped and closed (2026-08-28)** — the admission denominator switched from `MemorySnapshot`'s free+inactive pages to `MetalWorkingSet`'s wired-limit-aware ceiling (`recommendedMaxWorkingSetSize`, overridden by a raised `iogpu.wired_limit_mb`), a shared cross-variant change; three Fable-review passes fixed a wrong sysctl advisory number, stale capture telemetry, missing `MetalWorkingSet` unit coverage, and prose-only remedy text (now also machine-readable via `FeasibilityReason.wiredLimitFixBytes`); DeepSeek's `maxContext` corrected 524,288 → 450,000 for real headroom. 732 fast-tier tests, 9/9 live integration tests green. See the [Cycle 4b verdict](docs/superpowers/research/2026-08-28-p25-cycle-4b-verdict.md). *Remaining: **5 (live 91 GiB acceptance run) skipped by decision 2026-08-27**, 6 (SSD streaming) stays deferred — neither blocks P25.* |
+| P25 | More models: DeepSeek V4 Flash | The fourth rung of the app's own model ladder — [`docs/laptop-ai.md:34`](docs/laptop-ai.md) names it "the flagship," **the reference the others are measured against**, at the 128 GB tier (64 GB Laguna S, 32 GB Laguna XS, 16 GB Mellum all shipped by P22). Missing entirely today: no gguf on disk under the app's own search paths, no `Variant`, no ROADMAP mention before this row — found only by cross-referencing `docs/laptop-ai.md` against the predecessor `~/projects/ds4-control`, which ran it successfully (2026-08-27 research, recorded here per user request). See also the DS4 Control harvest doc, [`docs/harvest/ds4-control.md`](docs/harvest/ds4-control.md), whose opening line already named the predecessor's target as "a local DeepSeek V4 / Laguna S 2.1 engine" without DeepSeek ever being carried into SwiftStar's own model list. | **Closed 2026-08-28.** DeepSeek V4 Flash — the 128 GB flagship rung, weights already on disk and engine-supported (§ Gardenable facts) — shipped as a first-class `Variant`. The scoping fork the row opened ("faithful Metal-allocator port vs. linear approximation") turned out to be a false dichotomy: ds4-control's model is affine in context above the 4,096 prefill cap, so a faithful offline derivation feeds SwiftStar's existing three-anchor `MemoryBudget` shape exactly — no shape extension needed anywhere. **The real blocker was the admission denominator**, not the budget: `VariantGate` was refusing a machine that could run it because it checked free+inactive RAM pages instead of the actual Metal working-set ceiling. Cycle 4b (2026-08-28) fixed that — a shared, cross-variant switch to `MetalWorkingSet`'s wired-limit-aware ceiling, three Fable review passes, `maxContext` corrected 524,288 → 450,000 for real headroom, 732 fast-tier + 9/9 live integration tests green. *Remaining, neither blocking P25:* Cycle 5 (live 91 GiB acceptance run) skipped by decision 2026-08-27; Cycle 6 (SSD streaming) deferred. See the [design doc](docs/superpowers/specs/2026-08-27-p25-deepseek-v4-flash-variant-design.md) (identity, engine-support, and upstream-caveat findings; the affine-model proof) and the [Cycle 4b verdict](docs/superpowers/research/2026-08-28-p25-cycle-4b-verdict.md). |
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
@@ -382,115 +265,11 @@ P15's plan is written:
 
 ## Backlog
 
-Deferred, each with the condition that reopens it.
+Deferred, each with the condition that reopens it. Grouped for scanning; a
+group's order is not a priority order.
 
-- **Orchestrate-loop generalization: does 93% hold on a second task?
-  (parked 2026-08-29, end of day — two fixes landed, neither yet validated
-  live.)** Block A measured the `/orchestrate` loop at **27/29 = 93%
-  [78%, 98%]** — but every one of those cells ran the **same task**
-  (`roadmap` spec, one synthetic app, one 13-test oracle). Thirty seeds on one
-  task measures seed variance, not task variance, and `/goal` v5's
-  byte-identical-prompt swing (2/3 → 0/3) is a standing warning that
-  task-to-task variance may be the larger term. **The 93% figure should carry
-  "measured on one task" until this closes.**
-  *Two attempts were made and both were stopped deliberately, each having
-  found a real defect rather than an answer:*
-  1. **Seeds 201–204** — 4/4 lost to the orchestrator building the app in
-     **Flask instead of FastAPI**: `runDirectiveOnce` never passed
-     `sharedContext` (mission + `tech-stack.md`) into the prompt, though the
-     non-directive phase loop always had. **Fixed** (`OrchestrateDirective.build`
-     gained `projectContext`); confirmed present on the wire, but no cell has
-     yet been *graded* with it.
-  2. **Seeds 211–215** — 5/5 lost to an **engine false positive**: the
-     degeneracy guard aborted legitimate writes whose tail was a 64-dash
-     comment separator. **Fixed** as fork divergence **#15**; unit-verified
-     across a 13-case table and both test tiers (785 tests), but **never run
-     against a live model**.
-  *To resume:* fresh pre-registration, seeds **221–230** (211–220 are burnt —
-  215 used, and the arm they belong to is abandoned), `roadmap-user-story`,
-  n=10, `TURN_TIMEOUT=1500`, `RUN_CAP=3600`. The decision rule is already
-  written in `experiment-manifest-orchestrate-userstory-fixed.tsv` and can be
-  copied verbatim: ≥8/10 generalizes, 5–7 signal-but-underpowered, ≤4
-  task-specific. **First cell must be inspected before the rest run** — both
-  fixes are live-unvalidated, so cell 1 is a plumbing check as much as a
-  measurement. ~3–5 h. *Reopens whenever there is a clean morning; nothing
-  else is blocked on it.*
-- **The largest single failure population is not the one the campaign chased
-  (2026-08-29).** The 2026-08-29 failure classification of 24 non-passing
-  repair captures found **7 of 24** sharing one shape: the model **correctly
-  names the bug on a first pass, then explicitly reasons itself out of fixing
-  it** and never emits the file — *"I don't see any issues with the `<html>`
-  tag."* That is a bigger and more consistent population than the delivery
-  defect the campaign spent the day on (2 of 24), and the classification
-  called it out unprompted as the next thing worth targeting. Nothing has been
-  tried against it. Unlike the delivery defect, there is **no evidence yet
-  that it is a harness artifact** — it may be the model, and saying so needs a
-  probe, not an assumption. See
-  [`2026-08-29-failure-classification.md`](docs/superpowers/research/2026-08-29-failure-classification.md)
-  and [`docs/pathologies.md`](docs/pathologies.md) #2. *Reopens whenever
-  repair-loop quality is worked on again; it is the highest-yield known target
-  in that area.*
-- **Two data-integrity flags from the same classification (2026-08-29), both
-  unexamined.** (1) A **false `V6` void**: `plausible-wrong-fix` seed 5 was
-  recorded as harness-void while its underlying candidate actually graded
-  **13/13** — if that is a scorer defect rather than a one-off, it silently
-  removes passing cells from denominators, which is the exact class of error
-  this campaign's discipline exists to catch. (2) A **content regression at
-  seed 60** not present in the earlier Block B analysis. Both are named in the
-  classification doc and neither has been chased. *Reopens before the next
-  arm that reuses those denominators — a scorer that drops passes is worse
-  than one that drops fails, because it flatters the result.*
-- **Fork branch name contradicts the fork ledger's own stated structure
-  (2026-08-29).** `.gitmodules` pins `p20-dispatch-schema`, a branch cut for
-  P20's dispatch schema (divergence #12) that has since accreted #13, #13a,
-  #13b, #14 and #15 — it is the integration line, but its name describes one
-  of six things it carries. The ledger's divergence **#6** defines the intended
-  structure as `swiftstar-integration` = `laguna-s2.1` + patch set, and a
-  branch by that name exists but is a **strict ancestor** (307 behind, 0
-  ahead), so it is a stale marker rather than an alternative. P23's plan
-  already listed *"reconcile `.gitmodules` vs the pinned branch"* as blocking
-  task 0b; it was worked around instead. Fast-forwarding `swiftstar-integration`
-  and repointing `.gitmodules` is mechanically trivial — **the cost is that
-  9+ research documents name `p20-dispatch-schema` as the branch a given
-  divergence lives on**, and those are historical records that should not be
-  rewritten, so the rename owes a ledger note saying when it happened.
-  *Belongs in P26's hygiene work, not a tired end-of-day rename.*
-- **The strict docs build has been failing on `main` since before 2026-08-29.**
-  `just docs` (`sphinx-build -W`) fails on two documents that are in `docs/`
-  but in no toctree (`glossary.md`, `2026-08-26-old-ui-element-inventory.md`).
-  Verified by building with and without the day's new file. Not caused by this
-  work — `docs/pathologies.md` was added to the toctree so it adds no third
-  warning — and deliberately not fixed inside an unrelated commit, since a
-  silently red gate is worth seeing. *Reopens the next time anyone relies on
-  the docs gate to mean anything.*
-- **Smaller items parked with it (2026-08-29).** (a) `main.swift`'s 18
-  `exit()` calls skip their `defer`s, so a FAIL orphans the engine and leaks
-  the worktree — worked around all day by the driver's reaper and sweeper,
-  never fixed at source (~1–1.5 h). (b) `RepairLoop.swift:215` returns
-  `.exhausted` on a zero-heading harvest, abandoning remaining rounds; the
-  change is ~15 min but alters repair semantics, and its **only** validation
-  surface is the Mellum fixture tier, so it should wait for P18 rather than
-  ship unvalidated. Note the *other* `contractNotFollowed` site (line 119) is
-  a deliberate refusal and must not be "fixed" by pattern-matching the
-  receipt name. (c) A second temp-dir leak class, `swiftstar-wt-*` dispatch
-  worktrees, dating to 2026-08-25 — distinct from the `agenttest-*` dirs
-  already swept, and still uncovered by any sweeper. (d) A standing guard
-  against under-specified authored prompts: **four instances in one day**
-  (P17's "exactly one file", the singular emission follow-up, the directive's
-  silence on dispatch ordering, the missing `projectContext`). Form is an open
-  question — test, lint, or review step — and picking wrong yields something
-  that gets disabled in three months.
+### Retired / landed
 
-- **Eval-system consolidation (Later half of the 2026-08-29 audit).**
-  Swift-native `swiftstar-analyze findings`/`index` verbs wired to the
-  existing `DiagnosticsAnalyzer`; port the Python campaign
-  report/taxonomy scripts into those verbs and delete the originals; a
-  zero-Metal replay tier over stored captures; a kill list of dead one-off
-  runners and superseded audit checks; `DeepSeekGrader` calibration; a second
-  fixture app and a real hard/superhard difficulty tier. None of this gates
-  the next campaign run — P26 (Now) does. *Reopens when eval infrastructure
-  work is next picked up.* Source:
-  [`2026-08-29-eval-system-audit-and-later-work.md`](docs/superpowers/research/2026-08-29-eval-system-audit-and-later-work.md).
 - **~~Chat as a separate surface~~ — RETIRED 2026-08-26 by product decision.**
   One surface: the Agent. Retire the Chat tab, the `ds4-server`/SSE wire, and
   `EngineController`; the app owns one `ds4-agent` process, one model load.
@@ -499,34 +278,7 @@ Deferred, each with the condition that reopens it.
   no-think "quick reply" mode into the Agent, with `reasoning_effort`-style
   per-turn control on the agent wire (additive engine patch, fork-ledger
   row).*
-- **Shell toggle removed from the Agent tab — moves to Settings.**
-  `AgentView`'s "Allow shell commands" control was removed 2026-08-26 (the
-  agent now ships in its default deny posture, shell off, with no in-tab
-  override); `AgentSettings.shellAllowed` and the `--shell` argv stay. The
-  workspace picker remains in the Agent status bar. **Corrected 2026-08-26:**
-  shell was turned on as a tactical expedient to unblock progress (the deny
-  posture caused the 23-round read/search stall); the long-term fix is P24's
-  digested first-class tools + mediated bash, not raw shell-on. *Reopens as: a
-  Settings pane for spawn-time agent controls (shell toggle, workspace,
-  context) when the Settings scene is next touched — the Chat-retirement phase
-  is the natural home, now shared with P24's shell-on retirement.*
-- **Golden agent capture predates the wire's `kind` field — the kind-driven
-  tool card has no fixture test.** `fixtures/agent/golden-tools.ndjson` was
-  captured before the engine's `param_begin` events carried `kind`
-  (`ds4_agent.c:9197` pins `"kind":"path"`), so `ToolParam.kind` /
-  `ToolCard.path` enrichment is verified only by the 2026-08-26 live probe
-  (`/tmp/swiftstar-probe/wire.ndjson`, Laguna-XS Q4_K_M, exact app argv) and
-  the engine's own C tests — not by any committed fixture. *Reopens as: a
-  complete clean agent run against the real binary (submodule-pinned), a
-  fresh `golden-tools` recapture with provenance, and a fixture test
-  asserting `kind`/`path`/`finished` populate from it.*
-- **Small-ctx worker sessions for the pool (the RLM lever).** The app's
-  `/chat` now runs its worker as a context-isolated session in the one
-  engine, but at the *full* `-c` ctx — ~2.5 GB KV + ~6.15 GB scratch at 50k
-  (`agent_worker_effective_ctx_size` reads the session ctx; there is no
-  per-worker override). Correction 2 names the lever: a 4k worker is ~1.7 GB,
-  not ~8.7 GB. *Descoped from P20 2026-08-27 → its own phase, merged with P23's per-worker think control (one engine patch, fork-ledger row #13, golden recapture). The patch: give pool workers their own ctx (a per-worker override — `agent_worker_effective_ctx_size` reads the session ctx and none exists), or a kept-alive `rewind`-ed small-ctx template session. The Laguna XS line (P22) is the natural worker model — depends on P22's XS golden recapture.*
-- **Two-phase `/spike`** — P20's descoped command: an exploratory worktree spike, phase 1 read-only recon, phase 2 gated execution. The measured spike (2026-08-26 shell-on) proved the shell lever is the capability ceiling, but P24 retires shell-on for mediated bash. *Reopens behind P24: phase 2 rides P24's mediated-bash ladder (host-run, deterministically digested, policy-gated); until then only a phase-1-only (read-only) spike is designable.* Source: [`2026-08-26-spike-shell-on-findings.md`](docs/superpowers/research/2026-08-26-spike-shell-on-findings.md).
+
 - **~~Phase-level recovery~~ — LANDED as P12.8 (2026-08-25); live confirmation
   arrived 2026-08-26, and it is bad news, not good.** The wiring shipped
   (`commitForRepair`, `adoptRepairedPhase`, `PhaseRepair`, build-loop
@@ -543,6 +295,7 @@ Deferred, each with the condition that reopens it.
   [`2026-08-26-overnight-80-cell-verdict.md`](docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md).
   No verdict record written. *Reopens as: land recommendation 1 from that
   findings doc (cumulative rounds) and re-attempt.*
+
 - **~~`RepairLoop` exits on every receipt, including `validationFailed`~~ —
   FIXED (2026-08-25, `953d05a`).** `.validationFailed` now refreshes `lastGrade`
   from the real `ValidationResult` and retries within the existing
@@ -551,8 +304,43 @@ Deferred, each with the condition that reopens it.
   filed below. Shared machinery — applies to all three `RepairLoop` callers
   (P12.4, P12.8, P15), not just the P12.8 case that surfaced it. **Half-fixed,
   corrected 2026-08-26:** the retry itself works, but the round is not
-  cumulative — see the escalated entry directly below, no longer a
-  hypothetical.
+  cumulative — see the escalated "Retry-round evidence coherence" entry
+  (Agent architecture and process), no longer a hypothetical.
+
+- **Workspace isolation** — a dispatched attempt runs in a disposable detached
+  git worktree; the outcome is a reviewable candidate ref or a receipt naming
+  the refusal; nothing merges and the caller's tree is never touched. *Promoted
+  to P10; listed here because its reopen condition (P9 landing) is the thing to
+  watch.* Source: `satyrn-engine` phase E3.
+
+- **The handoff packet** — a typed contract carrying task text, the exact
+  writable files, the validation command the parent will actually run, and a
+  per-file baseline of SHA-256 plus line-ending and mode read from the worktree
+  rather than guessed; the worker gets `read`/`write`/`edit` and no `bash`,
+  under turn and tool-call budgets, with every mutation revision-checked. *Also
+  P10.* Source: `local-ai-pi`, `harness/typed_contract.py` and
+  `docs/engine/deliver-candidate.md`. **The lesson travels with it:** a
+  contract-blind pre-edit guard duplicating the engine's own check was built and
+  then removed, because it refused contract-authorized renames the engine would
+  admit. A guard with less information than the authoritative layer is not
+  defense in depth.
+
+### Agent architecture and process
+
+- **Shell toggle removed from the Agent tab — moves to Settings.**
+  `AgentView`'s "Allow shell commands" control was removed 2026-08-26 (the
+  agent now ships in its default deny posture, shell off, with no in-tab
+  override); `AgentSettings.shellAllowed` and the `--shell` argv stay. The
+  workspace picker remains in the Agent status bar. **Corrected 2026-08-26:**
+  shell was turned on as a tactical expedient to unblock progress (the deny
+  posture caused the 23-round read/search stall); the long-term fix is P24's
+  digested first-class tools + mediated bash, not raw shell-on. *Reopens as: a
+  Settings pane for spawn-time agent controls (shell toggle, workspace,
+  context) when the Settings scene is next touched — the Chat-retirement phase
+  is the natural home, now shared with P24's shell-on retirement.*
+
+- **Two-phase `/spike`** — P20's descoped command: an exploratory worktree spike, phase 1 read-only recon, phase 2 gated execution. The measured spike (2026-08-26 shell-on) proved the shell lever is the capability ceiling, but P24 retires shell-on for mediated bash. *Reopens behind P24: phase 2 rides P24's mediated-bash ladder (host-run, deterministically digested, policy-gated); until then only a phase-1-only (read-only) spike is designable.* Source: [`2026-08-26-spike-shell-on-findings.md`](docs/superpowers/research/2026-08-26-spike-shell-on-findings.md).
+
 - **Retry-round evidence coherence — confirmed 2026-08-26, and worse than
   filed.** This entry's own reopen condition ("a retry round is observed
   reasoning about the wrong file state") has fired: `RepairLoop.swift:193-207`
@@ -570,6 +358,7 @@ Deferred, each with the condition that reopens it.
   [`2026-08-26-overnight-80-cell-verdict.md`](docs/superpowers/research/2026-08-26-overnight-80-cell-verdict.md)
   — make `.validationFailed` commit its tree and advance `head`, landing the
   probe test with it.*
+
 - **`validationFailedReceiptRetriesWithFreshEvidence` proves the retry
   happened, not that fresh evidence reached round 2.** The fixture's
   validation command (`test -f marker.txt`) produces no distinguishing output,
@@ -577,17 +366,7 @@ Deferred, each with the condition that reopens it.
   refresh would still pass. Strengthen with a validation command that emits
   identifiable stderr, then assert it appears in `repair-packet-2.json`'s
   `taskText`. *Reopens next time `RepairLoop.swift` is touched.*
-- **Worker-2 session-context ceiling across multiple phase repairs.** D8 sized
-  worker 2 for two rounds of *one* repair (~10–12k, fits ctx=32768). P12.8
-  changes the shape: up to three phase failures per run, each dispatching to the
-  same worker-2 session with full-surface evidence (six writable files + a
-  traceback). Three sequential repairs plausibly approach the ceiling, and the
-  failure mode is the one D8 already calls fatal — a repair turn ending at
-  `limit`/`contextFull` leaves worker 2 unusable and the run must stop. Options:
-  reset worker 2 between phase repairs (`agent_worker_reset_to_sysprompt` exists
-  engine-side), widen the pool and rotate, or accept it with the existing stop
-  guard and record the ceiling. Needs engine + pool-wire work — "its own small
-  phase." *Reopens when a multi-phase-repair run is actually attempted at scale.*
+
 - **`AGENTTEST_REPAIR_THINK` is inert, and bounded thinking for the repair role
   is unvalidated.** Nothing at dispatch time reads `packet.sampling`; thinking is
   set once at engine-spawn from `AGENTTEST_THINK`, a whole-process property. The
@@ -597,6 +376,7 @@ Deferred, each with the condition that reopens it.
   think control needs new machinery (per-worker engine control, or a second
   engine). *Reopens with bounded-thinking validation for the repair role
   (originally P12.6's second half, never run).*
+
 - **Repair cannot honor `AGENTTEST_PATH_STYLE=absolute`.** D5 mandates building
   the repair packet *before* `WorktreeDispatcher.prepare`, so no worktree URL
   exists yet to render an absolute root from — `repairPacket` always renders
@@ -606,6 +386,7 @@ Deferred, each with the condition that reopens it.
   (C13/B8). Not fixed — fixing it means relaxing D5's ordering. *Reopens if an
   absolute-path arm is ever run with repair enabled; until then, don't combine
   them without accounting for the flip.*
+
 - **Two P15 harvest limitations never filed** (its others were). (1) The
   repeated-heading abort can drop a file that first appears *after* the first
   repeat — not observed, structurally possible. (2) First-occurrence-wins
@@ -613,6 +394,7 @@ Deferred, each with the condition that reopens it.
   error, and re-emits it correctly, the harvest keeps the first (broken) copy.
   Real, with the tradeoff consciously recorded at the time. *Reopens if a run is
   ever traced to either.*
+
 - **P15's design "Deferred" list, unfiled in full**: a packet `mode` enum
   (`agentic|textContract`) instead of the current implicit selection; tightening
   the emission protocol's Section 1; a tool-free engine mode / sampler `</think>`
@@ -620,11 +402,7 @@ Deferred, each with the condition that reopens it.
   guarantee. Source:
   [`host-controlled-action-mode-design.md`](docs/superpowers/specs/2026-08-25-host-controlled-action-mode-design.md).
   *Reopens with any further text-contract work.*
-- **P6 has no verification record**, unlike P1–P5 and P7–P11. Not a defect in
-  the phase — the analyzer and its fixtures are committed and tested — but the
-  house convention is a record per closed phase, and P6's absence was only
-  noticed during the 2026-08-25 P12 audit. *Reopens if the diagnostics tier is
-  ever revisited, or as cheap cleanup alongside another docs pass.*
+
 - **The harvest gate requires `stopReason == .eos`.** A turn that runs to the
   token wall is never harvested, so nothing is written and validation fails on
   an empty tree — 1 of 9 build runs. The repeated-heading abort could recover
@@ -632,10 +410,7 @@ Deferred, each with the condition that reopens it.
   -exhaustion semantics, which differ per arm (repair reuses the worker across
   rounds; build handles exhaustion after phase finalization). *Reopens when
   token-wall runs are a measurable share of failures.*
-- **Generation-time stopping control.** The engine's pool protocol has no cancel,
-  so a degenerate run pays to the token wall before the host can react; the
-  repeated-heading abort is harvest-time only. *Reopens only if engine-side work
-  is on the table — it is the one P15 item that is not host-addressable.*
+
 - **The lenient harvest blurs the failure taxonomy.** Without a fence there is no
   delimiter, so prose under an allowlisted heading is written as file content,
   and turns once classified `contractNotFollowed` can land as `validationFailed`
@@ -645,24 +420,10 @@ Deferred, each with the condition that reopens it.
   measurement needs to separate "ignored the contract" from "wrote buggy code" —
   the honest fix is a stricter emission contract, not a smarter parser.*
 
-- **Workspace isolation** — a dispatched attempt runs in a disposable detached
-  git worktree; the outcome is a reviewable candidate ref or a receipt naming
-  the refusal; nothing merges and the caller's tree is never touched. *Promoted
-  to P10; listed here because its reopen condition (P9 landing) is the thing to
-  watch.* Source: `satyrn-engine` phase E3.
-- **The handoff packet** — a typed contract carrying task text, the exact
-  writable files, the validation command the parent will actually run, and a
-  per-file baseline of SHA-256 plus line-ending and mode read from the worktree
-  rather than guessed; the worker gets `read`/`write`/`edit` and no `bash`,
-  under turn and tool-call budgets, with every mutation revision-checked. *Also
-  P10.* Source: `local-ai-pi`, `harness/typed_contract.py` and
-  `docs/engine/deliver-candidate.md`. **The lesson travels with it:** a
-  contract-blind pre-edit guard duplicating the engine's own check was built and
-  then removed, because it refused contract-authorized renames the engine would
-  admit. A guard with less information than the authoritative layer is not
-  defense in depth.
 - **Specialized tool subagents** — split 2026-08-27 by naming: a **tool** is deterministic host code (no model — run one command in its JSON mode, digest the output); a **subagent** is the model-backed escalation (apply the fix when the run says what it is, or summarize when the deterministic digest isn't decision-adequate). The deterministic half — ruff, pyrefly, pytest, sphinx, roadmap admin run+digest — is now **P24's** direction (`test`/`lint`/`scout`); the subagent half stays here. Budgeted to fit an 8k context on AFM3; because Swift runs the evocation, repeated invocations make the limit a budget rather than a wall. The open question is dispatch — how the orchestrating model+agent decides which specialized agent to call. The economics are measured, not assumed: locally, prefill is the scarce resource, so deterministic work first is a *performance* rule — `ruff --fix` beats the model typing the same 40-line edit by ~500x, and clustering 40 pytest failures to 2 representatives turns a 178s prefill at depth into 9s (rates from `docs/harvest/telemetry-findings.md`; worked table in the ds4-control survey cited by `2026-08-22-p11-engine-constraints-and-corrections.md`). *Reopens when P11 lands and the pool design can hold a one-command worker, or as P24's subagent escalation; this is a candidate shape for P11's workers, not a phase of its own.* Source: P11 "Subagent pool".
+
 - **The dispatch decision** — what the handoff packet maker must know to route a task, on three axes. **(1) Parallelism:** dependency edges declared by the plan author are authoritative; the maker may additionally *prove* independence from disjoint writable-file sets plus disjoint validation commands, and must refuse when it cannot — file-disjointness is necessary, not sufficient (an API change and its consumer share no file). **(2) Thinking requirement:** a task is delegable to a reasoning-light worker only when acceptance is a machine-checkable predicate, the tool surface is bounded (`read`/`write`/`edit`, no `bash`), and the writable-file set is exact — and thinking is a stage, not a property: "fix the broken test" needs diagnosis (thinking) before the apply is mechanical. **(3) Executor:** whether the packet goes to a full-context worker, to a deterministic **tool** (a one-command host run in its JSON mode — ruff, pyrefly, pytest, sphinx, roadmap admin — now P24's direction), or to a model-backed **subagent** that applies the fix when the run says what it is, with AFM3's 8k as the budget for the latter and repeat evocations for anything longer. The lesson travels with it: the maker enforces declared intent and computes conservative proofs; it never re-derives semantics with less information than the plan author — the same lesson as the removed contract-blind pre-edit guard. *This is P10's routing design; axis 3 is what the "Specialized tool subagents" entry feeds. **Reopen condition fired 2026-08-22 (P10 landed); the consumer is P20's `/orchestrate` coordination loop, still a stub in the app.*** Source: P10 "Isolation", the "Specialized tool subagents" backlog entry.
+
 - **House style as a compiled artifact** — the long-term goal is an agent that
   writes code the way the author would have written it. The cheap approach —
   infer style from surrounding code on every prompt — recomputes a function of
@@ -695,137 +456,7 @@ Deferred, each with the condition that reopens it.
   and specialists stay small; low means recipes carry the weight and the
   residency cost above becomes the real problem.* Source:
   [`docs/superpowers/research/2026-08-23-house-style-as-a-compiled-artifact.md`](docs/superpowers/research/2026-08-23-house-style-as-a-compiled-artifact.md).
-- **Context-economy tooling** — two deterministic moves that exist because KV
-  reuse is exact-prefix-only and prefill is the scarce resource: (1)
-  *don't-re-read* — hash+mtime every file the agent has read and answer an
-  unchanged re-read with "unchanged since turn N" instead of contents, worth
-  up to ~130s per avoided deep re-read at measured rates; (2) *warm-prefix
-  routing* — when a pool exists, route a task to the session whose live
-  prefix already contains its files (`ds4_session_common_prefix` is free
-  engine-side; needs a wire query). *(1) **reopened 2026-08-27** — P9's host
-  tools shipped AND the 1809 capture measured the win (one file re-read 31× =
-  37% of Σsuffix); P24's tool list absorbs it as the read-guard. (2)
-  **partially unblocked 2026-08-27** — the pool shipped (P11/P20); still needs
-  the `ds4_session_common_prefix` wire query. See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md).* Source:
-  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
-  survey it cites.
-- **A `recall` tool** — the agent can page files (`read`/`search`/`more`) but
-  not its own history: the transcript is a flat token array whose head is
-  destroyed at compaction. The persist half is nearly free — the engine's
-  session `.kv` files already store the full rendered conversation as plain
-  UTF-8 behind a fixed 48-byte header, and pre-compaction prefixes survive on
-  disk until evicted — so the work is pinning the pre-compaction entry against
-  eviction plus a `recall(query)` tool backed by deterministic search over
-  that text. Compaction becomes lossy-in-context, lossless-on-disk, with zero
-  extra inference. *Reopens when P9 lands (host-owned tools make it app-side
-  rather than a C patch) or when a compaction is first observed discarding
-  something a later turn needed.* **REOPENED 2026-08-27** — both conditions:
-  P9's host tools landed, and a compaction was observed discarding context a
-  later turn re-read (the post-compaction AgentView.swift re-reads in the 1809
-  capture). See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source:
-  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
-  survey it cites.
-- **A session browser over `~/.ds4/kvcache`** — listing, metadata (tokens,
-  ctx, created, last-used), and full-text search across past agent sessions,
-  read directly from the `.kv` header + rendered-text region with no model
-  and no engine. Also the substrate `recall` searches. *Reopens with P7 (an
-  agent tab wants session listing/resume) or with `recall`.* Source: same
-  note; format verified by parsing a real file with `struct.unpack`.
-- **A deterministic compaction skeleton** — of the five things the engine's
-  compaction prompt asks the model to reconstruct, two (files
-  inspected/edited with paths and ranges; commands run) are losslessly
-  reconstructible today from `--json-events` tool params, and a tool-call
-  ledger cannot hallucinate which file it edited. The wire is *not* lossless
-  for results (only the bash family emits `output`), so this is a skeleton
-  plus a smaller model summary, not a replacement. Requires forking the
-  compaction path in `ds4_agent.c`; payoff is real but small (compaction
-  fires roughly once per full context). *REOPENED 2026-08-27* — a compaction
-  was observed at the everyday context size with a measured cost: five in 24
-  min at 28–29k, each discarding ~23k tokens (the 1809 capture). Still
-  requires the `ds4_agent.c` fork. See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source: same note.
-- **An engine-side memory-plan / tokenize CLI** — an additive mode that
-  prints the memory plan for a given ctx and exits without loading weights
-  (the estimator needs only GGUF metadata; `inspect_only` exists), and a
-  tokenize mode (the tokenizer loads vocab without weights). The first
-  retires the P3 under-report *and* the temptation to mirror allocator math
-  in Swift; the second enables pre-flight token budgeting ("this read is 18k
-  tokens and will cross the compaction threshold") without linkage.
-  Upstream-bound; must include the estimator's Laguna scratch fix or it
-  ships the same under-report with a nicer interface. *Reopens with the
-  upstream proposal for the P3 correction, or when P9's budgeting needs
-  token counts.* Source: same note.
-- **Recursive sub-queries — the RLM pattern as P11's third lifetime tier.**
-  A project is a long-lived session; a subagent is a short-lived one sharing
-  the parent's root; an RLM sub-query is an *ephemeral* session over a slice
-  of a large input, whose result folds back into a root context that is
-  deliberately kept small (Recursive Language Models, arXiv:2512.24601: flat
-  scaling with input length *provided chunk size stays constant*). Same pool,
-  three lifetime policies. The economics are this hardware's own: splitting
-  a 131k prefill into eight sequential 16k prefills is up to ~4.2x cheaper by
-  the measured curve, with no concurrency required — which is fortunate,
-  since none exists (P11 bullet above). Two constraints a naive reading of
-  the paper misses: a sub-query session must be a small-ctx *template kept
-  alive and rewound*, not a fresh allocation (each Laguna session pins
-  ~6.1 GB of scratch), and the shared preamble is repeated per sub-query, so
-  the win shrinks with preamble size. Compaction is already a degenerate
-  instance — a bounded summarizer whose output folds back into the parent.
-  *Reopens when P11's pool exists and a task is observed needing more input
-  than fits one shallow context — a large-file read, a multi-file review —
-  which is the measurement that tells us the real gain under the 4.2x
-  ceiling.* Source: `2026-08-22-p11-engine-constraints-and-corrections.md`,
-  "The finding under P11."
-- **Multi-project residency** — N long-lived project sessions sharing one
-  engine, switched without reload. Priced honestly: KV is
-  `49,152 × ctx + 72 MiB` per session *plus* ~6.1 GB scratch each, so five
-  64k-ctx sessions ≈ 89 GiB with the model — over the default wired ceiling
-  on a 96 GB machine. Viable shape: snapshot idle sessions to disk
-  (`ds4_session_save_payload`/`load_snapshot`, ~13 GB IO per 150k swap —
-  seconds, versus minutes of re-prefill) with a small resident working set.
-  *Reopens after P11's pool exists and a second concurrent project is
-  actually wanted.* Source: same note.
-- **Laguna XS 2.1 at 16 GB — feasible, unconfirmed** — the SSD-streaming
-  footprint work is done and the numbers clear 16 GB comfortably: 6.53 GiB
-  planned / 6.46 GiB task footprint ("fits easily under 10 GB including
-  context"), from the uniform RoutedQ3_K artifact plus `--prefill-chunk`. What
-  remains is confirmation, not new engineering: the 16 GB hardware acceptance
-  never ran (the numbers come from a 128 GB dev machine, whose OS page cache
-  hides SSD-miss throughput), so the committed target stays 32 GB until the
-  `mini-notes.md` §7 checklist passes on real 16 GB hardware. *Reopens with P13
-  (Laguna XS is a P13 variant) or when a real 16 GB machine is available.*
-  Source: `~/projects/ds4/.claude/worktrees/laguna-xs2.1` — `LAGUNA-XS.md`,
-  `docs/superpowers/LAGUNA-XS21.md` §6, `docs/superpowers/plans/mini-notes.md`
-  §7, and
-  `docs/superpowers/research/laguna-xs21-p26-p27-hotlist-acceptance.md`.
-- **An engine-side `--null-model` mode** — the real emitter, instance lock,
-  signal handling, and stdout code running against fake weights, so the
-  integration tier exercises the actual code instead of our beliefs about it.
-  Upstream-bound. *Reopens when the fake tier misses a bug the real binary
-  would have caught.*
-- **Heterogeneous compute routing** across ANE and GPU, deterministic rules
-  first. *Reopens when a role exists whose latency tolerance and energy cost are
-  both measured.*
-- **Grammar-constrained tool calls.** An `ds4_agent.c` patch, not an
-  embedding-only capability. *Reopens when a malformed tool call is observed
-  costing a real turn.* **REOPENED 2026-08-29 — the condition is met three
-  times over, and the split matters.** Two historical turns were killed
-  ([Block C](docs/superpowers/research/2026-08-28-block-c-capture-mining.md)):
-  one where the model emitted its own system-prompt placeholder as a tool name
-  (`"name": "{function-name}"`), one where 467 tokens of *correct* reasoning
-  about the right file were discarded. The third arrived in a fresh
-  pre-registered run — Block A seed 109 lost an entire cell to three
-  consecutive `tool calling is not allowed inside <think></think>` rejections
-  followed by the engine's `too many malformed tool calls in a row` kill
-  (`captures/agenttest/20260829-090231-roadmap-directive`). **The two classes
-  need different fixes.** A plain grammar cleanly prevents the malformed-*name*
-  class. The *placement* class — a well-formed call emitted inside `<think>` —
-  is not a syntax error and a grammar over tool-call text will not catch it; it
-  needs think-state-aware constraint or engine-side hoisting. Placement is also
-  the more expensive and more common class (5 of 8 observed malformed calls),
-  and it can only affect thinking-enabled roles, which is exactly what the
-  orchestrate loop is. Base rate is tail risk, not a tax: 0.21% of 3,796 tool
-  requests, and 1 of 38 Block A cells. Note the engine already emits a
-  corrective nudge ("finish thinking before emitting `<tool_call>`") and the
-  model repeated the mistake anyway, so text feedback is not the remedy.
+
 - **Disambiguate the orchestrate directive on dispatch ordering.** The
   directive says only *"One-shot-first: dispatch each phase once"*
   (`Sources/SwiftStarKit/OrchestrateDirective.swift:34`) and never says whether
@@ -848,6 +479,7 @@ Deferred, each with the condition that reopens it.
   and now this. Worth a standing check on authored prompts rather than three
   separate fixes. *Cheap; needs a re-measurement arm against Block A's 27/29
   baseline to confirm, not just a reading of the prompt.*
+
 - **`runDirectiveOnce` dropped `sharedContext` — fixed 2026-08-29, same defect
   family, fourth instance.** The non-directive phase loop (`runOnce`,
   `Sources/swiftstar-agenttest/main.swift:202,390`) always includes
@@ -875,6 +507,182 @@ Deferred, each with the condition that reopens it.
   holds before this note is closed. See
   [`docs/pathologies.md`](docs/pathologies.md) #10 for the general shape:
   **silent framework substitution** when project context is missing.
+
+- **"Swift body, Python brain"** — agent policy in a hot-reloadable uv-managed
+  peer process. *Reopens if agent policy starts changing faster than the app
+  can ship.* Source: `SWIFTSTAR.md`.
+
+### Pool and context economy
+
+- **Small-ctx worker sessions for the pool (the RLM lever).** The app's
+  `/chat` now runs its worker as a context-isolated session in the one
+  engine, but at the *full* `-c` ctx — ~2.5 GB KV + ~6.15 GB scratch at 50k
+  (`agent_worker_effective_ctx_size` reads the session ctx; there is no
+  per-worker override). Correction 2 names the lever: a 4k worker is ~1.7 GB,
+  not ~8.7 GB. *Descoped from P20 2026-08-27 → its own phase, merged with P23's per-worker think control (one engine patch, fork-ledger row #13, golden recapture). The patch: give pool workers their own ctx (a per-worker override — `agent_worker_effective_ctx_size` reads the session ctx and none exists), or a kept-alive `rewind`-ed small-ctx template session. The Laguna XS line (P22) is the natural worker model — depends on P22's XS golden recapture.*
+
+- **Worker-2 session-context ceiling across multiple phase repairs.** D8 sized
+  worker 2 for two rounds of *one* repair (~10–12k, fits ctx=32768). P12.8
+  changes the shape: up to three phase failures per run, each dispatching to the
+  same worker-2 session with full-surface evidence (six writable files + a
+  traceback). Three sequential repairs plausibly approach the ceiling, and the
+  failure mode is the one D8 already calls fatal — a repair turn ending at
+  `limit`/`contextFull` leaves worker 2 unusable and the run must stop. Options:
+  reset worker 2 between phase repairs (`agent_worker_reset_to_sysprompt` exists
+  engine-side), widen the pool and rotate, or accept it with the existing stop
+  guard and record the ceiling. Needs engine + pool-wire work — "its own small
+  phase." *Reopens when a multi-phase-repair run is actually attempted at scale.*
+
+- **Context-economy tooling** — two deterministic moves that exist because KV
+  reuse is exact-prefix-only and prefill is the scarce resource: (1)
+  *don't-re-read* — hash+mtime every file the agent has read and answer an
+  unchanged re-read with "unchanged since turn N" instead of contents, worth
+  up to ~130s per avoided deep re-read at measured rates; (2) *warm-prefix
+  routing* — when a pool exists, route a task to the session whose live
+  prefix already contains its files (`ds4_session_common_prefix` is free
+  engine-side; needs a wire query). *(1) **reopened 2026-08-27** — P9's host
+  tools shipped AND the 1809 capture measured the win (one file re-read 31× =
+  37% of Σsuffix); P24's tool list absorbs it as the read-guard. (2)
+  **partially unblocked 2026-08-27** — the pool shipped (P11/P20); still needs
+  the `ds4_session_common_prefix` wire query. See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md).* Source:
+  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
+  survey it cites.
+
+- **A `recall` tool** — the agent can page files (`read`/`search`/`more`) but
+  not its own history: the transcript is a flat token array whose head is
+  destroyed at compaction. The persist half is nearly free — the engine's
+  session `.kv` files already store the full rendered conversation as plain
+  UTF-8 behind a fixed 48-byte header, and pre-compaction prefixes survive on
+  disk until evicted — so the work is pinning the pre-compaction entry against
+  eviction plus a `recall(query)` tool backed by deterministic search over
+  that text. Compaction becomes lossy-in-context, lossless-on-disk, with zero
+  extra inference. *Reopens when P9 lands (host-owned tools make it app-side
+  rather than a C patch) or when a compaction is first observed discarding
+  something a later turn needed.* **REOPENED 2026-08-27** — both conditions:
+  P9's host tools landed, and a compaction was observed discarding context a
+  later turn re-read (the post-compaction AgentView.swift re-reads in the 1809
+  capture). See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source:
+  `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
+  survey it cites.
+
+- **A session browser over `~/.ds4/kvcache`** — listing, metadata (tokens,
+  ctx, created, last-used), and full-text search across past agent sessions,
+  read directly from the `.kv` header + rendered-text region with no model
+  and no engine. Also the substrate `recall` searches. *Reopens with P7 (an
+  agent tab wants session listing/resume) or with `recall`.* Source: same
+  note; format verified by parsing a real file with `struct.unpack`.
+
+- **A deterministic compaction skeleton** — of the five things the engine's
+  compaction prompt asks the model to reconstruct, two (files
+  inspected/edited with paths and ranges; commands run) are losslessly
+  reconstructible today from `--json-events` tool params, and a tool-call
+  ledger cannot hallucinate which file it edited. The wire is *not* lossless
+  for results (only the bash family emits `output`), so this is a skeleton
+  plus a smaller model summary, not a replacement. Requires forking the
+  compaction path in `ds4_agent.c`; payoff is real but small (compaction
+  fires roughly once per full context). *REOPENED 2026-08-27* — a compaction
+  was observed at the everyday context size with a measured cost: five in 24
+  min at 28–29k, each discarding ~23k tokens (the 1809 capture). Still
+  requires the `ds4_agent.c` fork. See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source: same note.
+
+- **Recursive sub-queries — the RLM pattern as P11's third lifetime tier.**
+  A project is a long-lived session; a subagent is a short-lived one sharing
+  the parent's root; an RLM sub-query is an *ephemeral* session over a slice
+  of a large input, whose result folds back into a root context that is
+  deliberately kept small (Recursive Language Models, arXiv:2512.24601: flat
+  scaling with input length *provided chunk size stays constant*). Same pool,
+  three lifetime policies. The economics are this hardware's own: splitting
+  a 131k prefill into eight sequential 16k prefills is up to ~4.2x cheaper by
+  the measured curve, with no concurrency required — which is fortunate,
+  since none exists (the pool is single-threaded by design — see Prior
+  work's P11 entry). Two constraints a naive reading of
+  the paper misses: a sub-query session must be a small-ctx *template kept
+  alive and rewound*, not a fresh allocation (each Laguna session pins
+  ~6.1 GB of scratch), and the shared preamble is repeated per sub-query, so
+  the win shrinks with preamble size. Compaction is already a degenerate
+  instance — a bounded summarizer whose output folds back into the parent.
+  *Reopens when P11's pool exists and a task is observed needing more input
+  than fits one shallow context — a large-file read, a multi-file review —
+  which is the measurement that tells us the real gain under the 4.2x
+  ceiling.* Source: `2026-08-22-p11-engine-constraints-and-corrections.md`,
+  "The finding under P11."
+
+- **Multi-project residency** — N long-lived project sessions sharing one
+  engine, switched without reload. Priced honestly: KV is
+  `49,152 × ctx + 72 MiB` per session *plus* ~6.1 GB scratch each, so five
+  64k-ctx sessions ≈ 89 GiB with the model — over the default wired ceiling
+  on a 96 GB machine. Viable shape: snapshot idle sessions to disk
+  (`ds4_session_save_payload`/`load_snapshot`, ~13 GB IO per 150k swap —
+  seconds, versus minutes of re-prefill) with a small resident working set.
+  *Reopens after P11's pool exists and a second concurrent project is
+  actually wanted.* Source: same note.
+
+### Model and engine features
+
+- **Generation-time stopping control.** The engine's pool protocol has no cancel,
+  so a degenerate run pays to the token wall before the host can react; the
+  repeated-heading abort is harvest-time only. *Reopens only if engine-side work
+  is on the table — it is the one P15 item that is not host-addressable.*
+
+- **An engine-side memory-plan / tokenize CLI** — an additive mode that
+  prints the memory plan for a given ctx and exits without loading weights
+  (the estimator needs only GGUF metadata; `inspect_only` exists), and a
+  tokenize mode (the tokenizer loads vocab without weights). The first
+  retires the P3 under-report *and* the temptation to mirror allocator math
+  in Swift; the second enables pre-flight token budgeting ("this read is 18k
+  tokens and will cross the compaction threshold") without linkage.
+  Upstream-bound; must include the estimator's Laguna scratch fix or it
+  ships the same under-report with a nicer interface. *Reopens with the
+  upstream proposal for the P3 correction, or when P9's budgeting needs
+  token counts.* Source: same note.
+
+- **Laguna XS 2.1 at 16 GB — feasible, unconfirmed** — the SSD-streaming
+  footprint work is done and the numbers clear 16 GB comfortably: 6.53 GiB
+  planned / 6.46 GiB task footprint ("fits easily under 10 GB including
+  context"), from the uniform RoutedQ3_K artifact plus `--prefill-chunk`. What
+  remains is confirmation, not new engineering: the 16 GB hardware acceptance
+  never ran (the numbers come from a 128 GB dev machine, whose OS page cache
+  hides SSD-miss throughput), so the committed target stays 32 GB until the
+  `mini-notes.md` §7 checklist passes on real 16 GB hardware. *Reopens with P13
+  (Laguna XS is a P13 variant) or when a real 16 GB machine is available.*
+  Source: `~/projects/ds4/.claude/worktrees/laguna-xs2.1` — `LAGUNA-XS.md`,
+  `docs/superpowers/LAGUNA-XS21.md` §6, `docs/superpowers/plans/mini-notes.md`
+  §7, and
+  `docs/superpowers/research/laguna-xs21-p26-p27-hotlist-acceptance.md`.
+
+- **An engine-side `--null-model` mode** — the real emitter, instance lock,
+  signal handling, and stdout code running against fake weights, so the
+  integration tier exercises the actual code instead of our beliefs about it.
+  Upstream-bound. *Reopens when the fake tier misses a bug the real binary
+  would have caught.*
+
+- **Heterogeneous compute routing** across ANE and GPU, deterministic rules
+  first. *Reopens when a role exists whose latency tolerance and energy cost are
+  both measured.*
+
+- **Grammar-constrained tool calls.** An `ds4_agent.c` patch, not an
+  embedding-only capability. *Reopens when a malformed tool call is observed
+  costing a real turn.* **REOPENED 2026-08-29 — the condition is met three
+  times over, and the split matters.** Two historical turns were killed
+  ([Block C](docs/superpowers/research/2026-08-28-block-c-capture-mining.md)):
+  one where the model emitted its own system-prompt placeholder as a tool name
+  (`"name": "{function-name}"`), one where 467 tokens of *correct* reasoning
+  about the right file were discarded. The third arrived in a fresh
+  pre-registered run — Block A seed 109 lost an entire cell to three
+  consecutive `tool calling is not allowed inside <think></think>` rejections
+  followed by the engine's `too many malformed tool calls in a row` kill
+  (`captures/agenttest/20260829-090231-roadmap-directive`). **The two classes
+  need different fixes.** A plain grammar cleanly prevents the malformed-*name*
+  class. The *placement* class — a well-formed call emitted inside `<think>` —
+  is not a syntax error and a grammar over tool-call text will not catch it; it
+  needs think-state-aware constraint or engine-side hoisting. Placement is also
+  the more expensive and more common class (5 of 8 observed malformed calls),
+  and it can only affect thinking-enabled roles, which is exactly what the
+  orchestrate loop is. Base rate is tail risk, not a tax: 0.21% of 3,796 tool
+  requests, and 1 of 38 Block A cells. Note the engine already emits a
+  corrective nudge ("finish thinking before emitting `<tool_call>`") and the
+  model repeated the mistake anyway, so text feedback is not the remedy.
+
 - **DFlash speculative decoding.** `laguna-s-2.1-DFlash-Q8_0.gguf` (1.1 GB) is
   a draft head for Laguna S, not a standalone model — its GGUF declares
   `general.architecture: dflash` and `dflash.block_count`, not a servable
@@ -891,6 +699,7 @@ Deferred, each with the condition that reopens it.
   sampling diversity for — model it as a `draftModel` field on Laguna S's
   `Variant`, not a fifth registry entry, since it has no context range or
   memory budget of its own.*
+
 - **Energy-aware pacing** — pace-to-read decoding and watts-aware scheduling via
   a runtime control message. The control message must be *built*, not exposed:
   `ds4_session_set_power` rejects Laguna at any value below 100 and is
@@ -899,9 +708,85 @@ Deferred, each with the condition that reopens it.
   current measurement says idle draw is under 1W — the reopen path is P21's
   "expose the wire's `power` field" step, to measure the sustained draw of
   the prefill spikes before building the lever.*
+
 - **An embedding spike.** *Reopens only if dynamic Swift-defined per-token logit
   masking becomes critical-path. Nothing else in `SWIFTSTAR.md` requires
   in-process access.*
+
+### Evaluation and measurement
+
+- **Orchestrate-loop generalization: does 93% hold on a second task?
+  (parked 2026-08-29, end of day — two fixes landed, neither yet validated
+  live.)** Block A measured the `/orchestrate` loop at **27/29 = 93%
+  [78%, 98%]** — but every one of those cells ran the **same task**
+  (`roadmap` spec, one synthetic app, one 13-test oracle). Thirty seeds on one
+  task measures seed variance, not task variance, and `/goal` v5's
+  byte-identical-prompt swing (2/3 → 0/3) is a standing warning that
+  task-to-task variance may be the larger term. **The 93% figure should carry
+  "measured on one task" until this closes.**
+  *Two attempts were made and both were stopped deliberately, each having
+  found a real defect rather than an answer:*
+  1. **Seeds 201–204** — 4/4 lost to the orchestrator building the app in
+     **Flask instead of FastAPI**: `runDirectiveOnce` never passed
+     `sharedContext` (mission + `tech-stack.md`) into the prompt, though the
+     non-directive phase loop always had. **Fixed** (`OrchestrateDirective.build`
+     gained `projectContext`); confirmed present on the wire, but no cell has
+     yet been *graded* with it.
+  2. **Seeds 211–215** — 5/5 lost to an **engine false positive**: the
+     degeneracy guard aborted legitimate writes whose tail was a 64-dash
+     comment separator. **Fixed** as fork divergence **#15**; unit-verified
+     across a 13-case table and both test tiers (785 tests), but **never run
+     against a live model**.
+  *To resume:* fresh pre-registration, seeds **221–230** (211–220 are burnt —
+  215 used, and the arm they belong to is abandoned), `roadmap-user-story`,
+  n=10, `TURN_TIMEOUT=1500`, `RUN_CAP=3600`. The decision rule is already
+  written in `experiment-manifest-orchestrate-userstory-fixed.tsv` and can be
+  copied verbatim: ≥8/10 generalizes, 5–7 signal-but-underpowered, ≤4
+  task-specific. **First cell must be inspected before the rest run** — both
+  fixes are live-unvalidated, so cell 1 is a plumbing check as much as a
+  measurement. ~3–5 h. *Reopens whenever there is a clean morning; nothing
+  else is blocked on it.*
+
+- **The largest single failure population is not the one the campaign chased
+  (2026-08-29).** The 2026-08-29 failure classification of 24 non-passing
+  repair captures found **7 of 24** sharing one shape: the model **correctly
+  names the bug on a first pass, then explicitly reasons itself out of fixing
+  it** and never emits the file — *"I don't see any issues with the `<html>`
+  tag."* That is a bigger and more consistent population than the delivery
+  defect the campaign spent the day on (2 of 24), and the classification
+  called it out unprompted as the next thing worth targeting. Nothing has been
+  tried against it. Unlike the delivery defect, there is **no evidence yet
+  that it is a harness artifact** — it may be the model, and saying so needs a
+  probe, not an assumption. See
+  [`2026-08-29-failure-classification.md`](docs/superpowers/research/2026-08-29-failure-classification.md)
+  and [`docs/pathologies.md`](docs/pathologies.md) #2. *Reopens whenever
+  repair-loop quality is worked on again; it is the highest-yield known target
+  in that area.*
+
+- **Two data-integrity flags from the same classification (2026-08-29), both
+  unexamined.** (1) A **false `V6` void**: `plausible-wrong-fix` seed 5 was
+  recorded as harness-void while its underlying candidate actually graded
+  **13/13** — if that is a scorer defect rather than a one-off, it silently
+  removes passing cells from denominators, which is the exact class of error
+  this campaign's discipline exists to catch. (2) A **content regression at
+  seed 60** not present in the earlier Block B analysis. Both are named in the
+  classification doc and neither has been chased. *Reopens before the next
+  arm that reuses those denominators — a scorer that drops passes is worse
+  than one that drops fails, because it flatters the result.*
+
+- **Eval-system consolidation (Later half of the 2026-08-29 audit).**
+  Swift-native `swiftstar-analyze findings`/`index` verbs wired to the
+  existing `DiagnosticsAnalyzer`; port the Python campaign
+  report/taxonomy scripts into those verbs and delete the originals; a
+  zero-Metal replay tier over stored captures; a kill list of dead one-off
+  runners and superseded audit checks; `DeepSeekGrader` calibration; a second
+  fixture app and a real hard/superhard difficulty tier. None of this gates
+  the next campaign run — P26 (Now) does. *Reopens when eval infrastructure
+  work is next picked up.* Source:
+  [`2026-08-29-eval-system-audit-and-later-work.md`](docs/superpowers/research/2026-08-29-eval-system-audit-and-later-work.md).
+
+### ANE watcher tier
+
 - **The ANE watcher tier — a librarian and an inspector over Monty.** A third
   tier beside the GPU main agent and the GPU pool: AFM on the ANE (macOS 26
   CoreML, 27 CoreAI — verify) as the model, and
@@ -928,14 +813,74 @@ Deferred, each with the condition that reopens it.
   AFM-on-ANE shape — and only after the two falsifiers are measured, not
   assumed: the macOS 26 AFM invocation API is confirmed callable for text
   generation, and the fill-success rate (a primed hole type-checks and runs
-  first time) is measured.* **Split 2026-08-27:** the deterministic background files+symbols index (what feeds P24's `scout`) is P24's, not this tier's; this entry keeps the model-backed roles — the librarian's Monty reactions and the inspector as P24's ANE-only-phrases escalation when deterministic clustering isn't decision-adequate. Both stay AFM-gated. **CAG filing 2026-08-28:** the watcher's context decomposes into a stable layer (envelope + stubs + interests — preloaded once as a cached prefix), an event layer (the projected digest slice — appended per wake), and an edge layer (`kv_query` — CAG's own "preload a foundation, retrieve only edge cases" hybrid). At a 4k window (the tighter bound; the specialized-tool-subagents entry already budgets 8k on AFM3), fixed overhead is ~1–1.4k tokens, leaving ~2.5–3.3k for slice + fill — the pre-chewed project state must live **outside** the window (typed index, digest, kv), never preloaded; whole-corpus preloading is off the table (CAG's *small* config alone is 21k). Capacity answer: 4k is enough for **reaction and adjudication** (the moment-specific hole), not for indexing (already P24's, deterministic) or whole-project projection. Handoff-packet facts fork: deterministic **derived facts** (extend the packet's authored/derived `baselines` split — the dispatcher pulls from the digest, the model adjudicates only the residue), staged AFM classification slice-wise via `ask_model`, or the GPU decompose role (status quo). Deciding measurement: **pre-chew quality** — audit past decompose-authored facts for the fraction the digest could have derived; high means 4k is plenty, low means the librarian stays reaction-only. Source:
+  first time) is measured.* **Split 2026-08-27:** the deterministic background files+symbols index (what feeds P24's `scout`) is P24's, not this tier's; this entry keeps the model-backed roles — the librarian's Monty reactions and the inspector as P24's ANE-only-phrases escalation when deterministic clustering isn't decision-adequate. Both stay AFM-gated. **CAG filing 2026-08-28:** see [`2026-08-28-cag-and-the-librarian.md`](docs/superpowers/research/2026-08-28-cag-and-the-librarian.md) for the capacity analysis (4k-window sufficiency, layer decomposition, deciding measurement). Source:
   `docs/superpowers/research/2026-08-23-monty-and-the-ane-watcher-tier.md`,
   `docs/superpowers/research/2026-08-28-cag-and-the-librarian.md` (arXiv 2412.15605v2).
-- **"Swift body, Python brain"** — agent policy in a hot-reloadable uv-managed
-  peer process. *Reopens if agent policy starts changing faster than the app
-  can ship.* Source: `SWIFTSTAR.md`.
-- **A menu-bar extra.** Explicitly declined 2026-08-21. *Reopens only on a
-  direct request; the at-a-glance glance is the one thing it was good for.*
+
+### Process and tooling
+
+- **Fork branch name contradicts the fork ledger's own stated structure
+  (2026-08-29).** `.gitmodules` pins `p20-dispatch-schema`, a branch cut for
+  P20's dispatch schema (divergence #12) that has since accreted #13, #13a,
+  #13b, #14 and #15 — it is the integration line, but its name describes one
+  of six things it carries. The ledger's divergence **#6** defines the intended
+  structure as `swiftstar-integration` = `laguna-s2.1` + patch set, and a
+  branch by that name exists but is a **strict ancestor** (307 behind, 0
+  ahead), so it is a stale marker rather than an alternative. P23's plan
+  already listed *"reconcile `.gitmodules` vs the pinned branch"* as blocking
+  task 0b; it was worked around instead. Fast-forwarding `swiftstar-integration`
+  and repointing `.gitmodules` is mechanically trivial — **the cost is that
+  9+ research documents name `p20-dispatch-schema` as the branch a given
+  divergence lives on**, and those are historical records that should not be
+  rewritten, so the rename owes a ledger note saying when it happened.
+  *Belongs in P26's hygiene work, not a tired end-of-day rename.*
+
+- **The strict docs build has been failing on `main` since before 2026-08-29.**
+  `just docs` (`sphinx-build -W`) fails on two documents that are in `docs/`
+  but in no toctree (`glossary.md`, `2026-08-26-old-ui-element-inventory.md`).
+  Verified by building with and without the day's new file. Not caused by this
+  work — `docs/pathologies.md` was added to the toctree so it adds no third
+  warning — and deliberately not fixed inside an unrelated commit, since a
+  silently red gate is worth seeing. *Reopens the next time anyone relies on
+  the docs gate to mean anything.* *Fixed 2026-08-29: both documents added to
+  a toctree in `docs/index.md` (glossary into the main hidden toctree,
+  the old-UI inventory into a new "Archive" toctree); `just docs` is green.*
+
+- **Smaller items parked with it (2026-08-29).** (a) `main.swift`'s 18
+  `exit()` calls skip their `defer`s, so a FAIL orphans the engine and leaks
+  the worktree — worked around all day by the driver's reaper and sweeper,
+  never fixed at source (~1–1.5 h). (b) `RepairLoop.swift:215` returns
+  `.exhausted` on a zero-heading harvest, abandoning remaining rounds; the
+  change is ~15 min but alters repair semantics, and its **only** validation
+  surface is the Mellum fixture tier, so it should wait for P18 rather than
+  ship unvalidated. Note the *other* `contractNotFollowed` site (line 119) is
+  a deliberate refusal and must not be "fixed" by pattern-matching the
+  receipt name. (c) A second temp-dir leak class, `swiftstar-wt-*` dispatch
+  worktrees, dating to 2026-08-25 — distinct from the `agenttest-*` dirs
+  already swept, and still uncovered by any sweeper. (d) A standing guard
+  against under-specified authored prompts: **four instances in one day**
+  (P17's "exactly one file", the singular emission follow-up, the directive's
+  silence on dispatch ordering, the missing `projectContext`). Form is an open
+  question — test, lint, or review step — and picking wrong yields something
+  that gets disabled in three months.
+
+- **Golden agent capture predates the wire's `kind` field — the kind-driven
+  tool card has no fixture test.** `fixtures/agent/golden-tools.ndjson` was
+  captured before the engine's `param_begin` events carried `kind`
+  (`ds4_agent.c:9197` pins `"kind":"path"`), so `ToolParam.kind` /
+  `ToolCard.path` enrichment is verified only by the 2026-08-26 live probe
+  (`/tmp/swiftstar-probe/wire.ndjson`, Laguna-XS Q4_K_M, exact app argv) and
+  the engine's own C tests — not by any committed fixture. *Reopens as: a
+  complete clean agent run against the real binary (submodule-pinned), a
+  fresh `golden-tools` recapture with provenance, and a fixture test
+  asserting `kind`/`path`/`finished` populate from it.*
+
+- **P6 has no verification record**, unlike P1–P5 and P7–P11. Not a defect in
+  the phase — the analyzer and its fixtures are committed and tested — but the
+  house convention is a record per closed phase, and P6's absence was only
+  noticed during the 2026-08-25 P12 audit. *Reopens if the diagnostics tier is
+  ever revisited, or as cheap cleanup alongside another docs pass.*
+
 - **Warm-started metrics for `swiftstar-agenttest`.** Wall-clock elapsed and
   context/token counters currently start (`runStart = Date()`,
   `Sources/swiftstar-agenttest/main.swift`) *before* `PoolOrchestrator` is
@@ -954,6 +899,7 @@ Deferred, each with the condition that reopens it.
   already bit one such comparison this session — see
   `.superpowers/sdd/2026-08-24-p12-4-repair-role/progress.md` if that
   session's ledger is still around). Source: this session, 2026-08-25.
+
 - **Agent harness (Pi) tooling: lazy Context7 stays, Superpowers goes lazy.**
   The dev harness runs both as Pi packages (`npm:@upstash/context7-pi`,
   `git:github.com/obra/superpowers`). Context7 already ships the right shape —
@@ -977,323 +923,14 @@ Deferred, each with the condition that reopens it.
   small-context models.* Source:
   [`2026-08-27-pi-harness-context7-superpowers.md`](docs/superpowers/research/2026-08-27-pi-harness-context7-superpowers.md).
 
+### Declined
+
+- **A menu-bar extra.** Explicitly declined 2026-08-21. *Reopens only on a
+  direct request; the at-a-glance glance is the one thing it was good for.*
+
 ## Prior work
 
-Completed phases move here when the roadmap outgrows the front page.
-
-- **P0 — Scaffolding (2026-08-21).** Repository, `.gitignore`, license, docs
-  toolchain (uv + Sphinx + MyST + Furo, `just docs` / `just watch-docs`), the
-  `docs/superpowers/` structure, `BRIEF.md`, this file, and the harvest briefs.
-  The design session that produced them, including the rejected alternatives and
-  the adversarial review that corrected two of them, is recorded in
-  [`docs/superpowers/specs/2026-08-21-swiftstar-design.md`](docs/superpowers/specs/2026-08-21-swiftstar-design.md).
-
-- **P1 — The fork, consolidated (2026-08-22).** `pauleveritt/ds4` exists as a
-  fork of `antirez/ds4`; the app-required patch set (`--json-events`,
-  turn-interrupt, status marker, stale-interrupt latch, startup memory plan)
-  is absorbed into one shipped integration branch; a documented command
-  builds `ds4-server` and `ds4-agent` from the submodule; the fork ledger and
-  `docs/upstream-proposals.md` are in place; two golden captures — SSE from
-  `ds4-server`, NDJSON from `ds4-agent` — are taken from the real binaries by
-  a throwaway line-stamping script (`swiftstar-drive` did not exist yet;
-  P5 replaced the script and is the only sanctioned source of a fixture from
-  P5 onward). Spec:
-  [`docs/superpowers/specs/2026-08-21-p1-fork-consolidated-design.md`](docs/superpowers/specs/2026-08-21-p1-fork-consolidated-design.md).
-
-- **P2 — It launches and answers (2026-08-22).** `SwiftStarKit` (pure: SSE
-  parser, server argv builder, supervisor state machine, chat transcript
-  reducer, fake-engine source generator) and `SwiftStar` (the SwiftUI app:
-  five-tab window, working Chat tab, Settings scene on ⌘,) plus the fast tier
-  (tripwire-guarded `swift test`) and the integration tier
-  (`SWIFTSTAR_INTEGRATION=1 swift test`) with a fake `ds4-server` compiled from
-  P1's `golden.sse`. The app auto-starts the real engine and streams SSE; two
-  live-tier bugs the fake tier could not catch (the argv contract — `Process`
-  prepends argv[0] — and the metal-source/CWD gotcha) were found and fixed.
-  Spec: [`docs/superpowers/specs/2026-08-22-p2-it-launches-and-answers-design.md`](docs/superpowers/specs/2026-08-22-p2-it-launches-and-answers-design.md).
-
-- **P3 — It can get its weights (2026-08-22).** A chunked parallel HTTP-Range
-  downloader (`ChunkedDownload` + `DownloadBitmap`, resume-safe across
-  restarts) and `Feasibility.check` — pure arithmetic on the engine's own
-  `planned_bytes` from a real `ds4: memory:` boot line, refusing an
-  infeasible launch with an actionable message rather than a percentage
-  heuristic. Two real bugs found by the tests, not review: the range test
-  server died on SIGPIPE and served the wrong byte range on an early client
-  close; `SwiftStarAppKit` was split out of the app target because
-  `@testable import SwiftStar` (an executable importing SwiftUI) fails to
-  link — the download runner and its state moved to the testable library,
-  the app stayed thin. *(Later correction, 2026-08-22: `Feasibility.check`'s
-  design is right, but on Laguna the engine's own `planned_bytes` itself
-  omits ~6.1 GB of per-session GPU scratch — see the P3 dependency bullet
-  above and
-  `docs/superpowers/research/2026-08-22-p11-engine-constraints-and-corrections.md`.)*
-  Spec: [`docs/superpowers/specs/2026-08-22-p3-it-can-get-its-weights-design.md`](docs/superpowers/specs/2026-08-22-p3-it-can-get-its-weights-design.md).
-
-- **P4 — It shows what the machine is doing (2026-08-22).** `SwiftStarKit` gains
-  the wire telemetry model (`WireEventParser` for NDJSON `status`/`ready`, the
-  ratcheting `MetricsReducer`, and `DialLogic` — absolute context thresholds,
-  generic memory thresholds, fixed-width formatting, sanitization) plus the
-  `MachineSnapshot` type. `SwiftStarAppKit` gains `ProcessStatsCollector`
-  (`proc_pid_rusage` footprint, `host_processor_info` CPU, `IOAccelerator` GPU,
-  private `IOReport` watts — linked via `.linkedLibrary("IOReport")`) and
-  `FixtureReplay` (bundled `golden.ndjson`). `SwiftStar` gains the `MetricsModel`
-  + `MetricsView`, replacing the placeholder: a severity-colored context ring
-  with a widened hit region, fixed-width Prompt/Decode readouts, and a
-  capture-replay banner. The lead dials (`ctx_used`, throughput) are
-  fixture-replayed until P7's agent migration; memory/GPU/CPU/power are live.
-  Spec: [`docs/superpowers/specs/2026-08-22-p4-it-shows-what-the-machine-is-doing-design.md`](docs/superpowers/specs/2026-08-22-p4-it-shows-what-the-machine-is-doing-design.md).
-
-- **P5 — Capture is a program, not a lost file (2026-08-22).** `swiftstar-drive`,
-  a committed executable target, drives the real `ds4-agent` and writes the fixed
-  capture format (`wire.ndjson` + `wire.stderr` + `wire.trace` + `provenance.md` +
-  `progress.log`), byte-verbatim. Fork divergence #7 gives the `--json-events` wire
-  a version/capability `hello` handshake (first line) and a monotonic `ts` on every
-  event, retiring the P1 receive-time sidecar. `WireEventParser` enforces the
-  handshake (refuses loudly on a mismatch) and reads `ts`; `CaptureWriter` (Kit)
-  pins the format; fixtures are recaptured with the handshake + `trace` + `stderr`.
-  The `--trace` channel (compaction rebuild stats) is now captured, which is what
-  P6's "would compaction help" needs.
-  Spec: [`docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md`](docs/superpowers/specs/2026-08-22-p5-capture-is-a-program-design.md).
-
-- **P6 — Diagnostics that can't lie (2026-08-22).** `SwiftStarKit` gains
-  `TraceParser` (parses the `--trace` channel: `compacted` rebuild stats and both
-  `prefill sync done` shapes), `DiagnosticsLogic` (baseline/current prefill
-  extraction, degradation and cache-health bands, all re-anchorable constants),
-  the typed `Finding`/`CompactionVerdict` model, `DeterministicPhraser` (the
-  "compute vs. phrase" seam — a model phraser can replace it later), and
-  `DiagnosticsAnalyzer`, which computes the BRIEF's first job deterministically:
-  where you are in context, current prefill throughput, drift off your own
-  session's baseline, and — deep *and* degraded — whether compaction would help
-  (distinguishing "cache healthy → won't fix the rate" from "cache missing → may
-  recover"). The Diagnostics tab replaces its placeholder with a fixture-driven
-  list of findings. Evidence floor met: the analyzer accepts the real `golden`
-  capture and rejects a committed synthetic `pathological` fixture reproducing
-  the measured 7x curve. No live engine, no model, no engine patch.
-  Spec: [`docs/superpowers/specs/2026-08-22-p6-diagnostics-that-cant-lie-design.md`](docs/superpowers/specs/2026-08-22-p6-diagnostics-that-cant-lie-design.md).
-
-- **P7 — Agent mode (2026-08-22).** The Agent tab is real. `SwiftStarKit`
-  gains `AgentWireParser` (the NDJSON transcript parser — `hello`/`status`/
-  `ready`/`text`/`think`/`tool`/`queued`, handshake-enforced, with the `ready`
-  turn-outcome fields), `AgentTranscript` (the tool-card reducer — one card per
-  call, keyed by block-scoped `idx`; the `tool` phase appends, `param_end`/
-  `output`/`finish` mutate in place), `TurnOutcome`/`TurnOutcomeBuilder` (D12's
-  capture-grade per-turn record — model/build/sampler + task, token/context use,
-  stop reason, tool-call lifecycles), and `AgentCommand` (the one argv contract —
-  `--workspace` + `--shell`). `SwiftStar` gains `AgentController` (spawns
-  `ds4-agent`, drains the wire → transcript, writes ETX on interrupt, builds one
-  `TurnOutcome` per turn) and `AgentView` (the transcript with tool cards, the
-  composer, the interrupt button, the consent controls). The engine
-  (`ds4_agent.c`) gains `--workspace` (cwd + file-tool confinement — fail closed)
-  and `--shell` (gate `bash` in schema + dispatch), plus the turn-end `ready`
-  fields (`stop_reason`/`generated`/`ctx_used`, D12). Two fixtures: `golden.ndjson`
-  recaptured at the new SHA, `golden-tools.ndjson` new — five tool blocks
-  (`read`/`list`/`write`/`edit`/`bash`) whose five turn-end `ready` events each
-  carry `stop_reason`. The fake `ds4-agent` is generated from the real capture,
-  never hand-authored. Evidence floor met: the fixture yields turn outcomes with
-  the full tool lifecycle and a typed stop reason; the fake validates the exact
-  argv and honors ETX. Live Metrics/Diagnostics wiring deferred (D9 — see the P4
-  bullet's dated correction).
-  Spec: [`docs/superpowers/specs/2026-08-22-p7-agent-mode-design.md`](docs/superpowers/specs/2026-08-22-p7-agent-mode-design.md).
-
-- **P8 — Skills (2026-08-22).** The Superpowers bootstrap is real. `SwiftStarKit`
-  gains `SuperpowersBootstrap` — a deterministic index rendered from a skills
-  dir (`name`/`description` front-matter, sorted by name, with a generic
-  disclosure path), passed to the agent via `AgentCommand`'s new
-  `systemPrompt: String?` → `-sys <text>` (appended after `--shell`).
-  `SwiftStarAppKit` gains `SkillStager` — a recursive `FileManager` copy of the
-  skills tree into `<workspace>/.swiftstar/skills/` at spawn, idempotent
-  (removes a pre-existing destination), throwing on a missing skills dir
-  (non-fatal degrade). `AgentController` resolves the skills dir
-  (`SUPERPOWERS_SKILLS_DIR` else the default), stages (a throw logged and
-  non-fatal), builds the bootstrap, and sets `settings.systemPrompt` before the
-  spawn argv is built — so the fake's strict-argv validation carries the same
-  deterministic bootstrap. Progressive disclosure: the index names skills; the
-  agent `read`s each body on demand inside the workspace grant (D5 — never
-  fabricate a dispatch call). No engine patch (D4 — `sysprompt.kv` already
-  rebuilds on mismatch). Evidence floor met: the bootstrap names every skill;
-  the staged workspace contains them; the fake's expected argv carries the
-  bootstrap it validates.
-  Spec: [`docs/superpowers/specs/2026-08-22-p8-skills-design.md`](docs/superpowers/specs/2026-08-22-p8-skills-design.md).
-
-- **P9 — The tool-callback wire (2026-08-22).** The host owns tool execution.
-  The engine's `--host-tools` flag (fork divergence #10) makes
-  `agent_execute_tool_calls` emit one `tool_request` per call on stdout and block
-  on a matching `tool_result` from stdin (the worker thread owns the blocking
-  read, gated by `host_tool_reading` so the UI thread's prompt poll does not
-  steal the result line); a mismatched `idx` or any non-`tool_result` line is a
-  loud refusal. `hello` advertises `"tool_request"` in `caps` iff the flag is
-  set. `SwiftStarKit` gains `.toolRequest` on `AgentWireParser`, a pure
-  `ToolResultCondenser` (cap 8000, deterministic digest), and
-  `ToolCallbackResponder` (the consent matrix — file tools proceed inside the
-  workspace, escapes refuse, `bash` is shell-gated, web tools always refuse —
-  plus execution and the condensed `tool_result` line); `FakeAppSource` is the
-  fake app side (keyed canned answers + the fixed refusal). `AgentController`
-  routes `tool_request` → responder → `tool_result` over stdin and records the
-  host facts into the per-turn `TurnOutcome`. The round trip is
-  `FakeHostToolsIntegrationTests` (a fake agent compiled from `golden-tools.ndjson`
-  with `hostTools:true` ↔ a fake app; the agent emits one request per block,
-  blocks, the app answers, the agent continues to `eos`; `ok:false` still
-  continues). The live recapture at `c21b831` re-verified the bare wire is
-  unchanged (D1: `tool_request`-free, observation-only) and caught a real defect —
-  the `741f722` edit dropped the `"]"` closing the `hello` `caps` array, emitting
-  invalid JSON the wire consumer refused; the `c21b831` amend closes it and adds
-  `test_agent_emit_hello_caps_array_closes` (red-then-green). Spec:
-  [`docs/superpowers/specs/2026-08-22-p9-tool-callback-wire-design.md`](docs/superpowers/specs/2026-08-22-p9-tool-callback-wire-design.md).
-
-- **P10 — Isolation (2026-08-22).** A dispatched attempt is isolated.
-  `SwiftStarKit` gains `HandoffPacket` (`taskText`, `writableFiles` exact and
-  worktree-relative, `validationCommand`, per-file `FileBaseline` baselines —
-  `sha256` + `lineEnding` + Unix `mode` read from the worktree, never guessed —
-  and turn/tool-call budgets), `DispatchOutcome` (`.candidate(ref:turnOutcome:)`
-  | `.receipt(Receipt)`; `Receipt` = `.refusedTool`/`.budgetExceeded`/
-  `.validationFailed(exit:digest:)`/`.noChanges`), and the pure
-  `WorktreeDispatch.verdict` — the `request → verdict` mapping (revision check →
-  budget → validation → `noChanges` → candidate) plus `relativize` (strip the
-  worktree prefix so the verdict compares worktree-relative forms against
-  `writableFiles`). `SwiftStarAppKit` gains `WorktreeDispatcher.dispatch` (creates
-  a disposable worktree on a throwaway branch, reads baselines, runs the
-  validation command parent-side, commits the diff, returns the ref; the worktree
-  + branch are removed in `defer`, the commit object survives so the ref
-  resolves). `SwiftStar` gains the dispatched-attempt entry in `AgentController` —
-  a fresh, ephemeral `ds4-agent` at `--workspace <worktree>` with shell off and
-  host-tools on, the P9 responder revision-checking each mutation against
-  `packet.writableFiles` (an out-of-set `write`/`edit` is refused host-side, not
-  executed, not recorded), the finished `TurnOutcome` relativized to the worktree
-  before the pure verdict — and a minimal Dispatch tab. The caller's tree is
-  never touched; nothing merges. Evidence floor met: the candidate ref is a real
-  commit that resolves via `git rev-parse` after the worktree is removed; a
-  changed file differs from its baseline; a refused tool / exceeded budget /
-  failed validation / no changes each yields a typed receipt. No live end-to-end
-  dispatch (the app target has no test target; the pure pieces the dispatch
-  routes through are tier-tested; a real-model dispatch is out of scope for the
-  tiered oracles). No new wire — the dispatch reuses P9's `--host-tools` spawn.
-  Spec: [`docs/superpowers/specs/2026-08-22-p10-isolation-design.md`](docs/superpowers/specs/2026-08-22-p10-isolation-design.md).
-
-- **P11 — Subagent pool (2026-08-23).** Context-isolated subagents share one
-  locked engine. The engine patch (`--subagent-pool`, fork divergence #11) hosts
-  N sessions in one process on one model load, multiplexes a `worker` id on every
-  `--json-events` event (absent when N==1, so the single-session wire is
-  byte-identical — the recapture proved it), advertises a `pool` cap, and routes
-  inbound `{"t":"prompt","worker":N,"s":"..."}` prompts by worker; generation is
-  serialized by a pool mutex around `worker_run_turn` (and around worker init,
-  whose concurrent system-prompt prefill segfaulted the first live run — a Metal
-  command-buffer race caught only by the live smoke gate). `SwiftStarKit` gains
-  the wire-contract layer — `WorkerId`/`PoolWireParser`/`PoolPrompt`/
-  `DispatchReceipt` (+ the reserved `DispatchExecutor`), the pure `PoolScheduler`
-  (enqueue/start/finish/fail/inject), the `RollingDigest` reducer, `ContextAssembly`
-  (deterministic adaptation in v1; the no-think model trip is deferred with the
-  RLM tier), `EnvelopeMath` + deterministic perturbation constructors, and
-  `DispatchPacketBuilder`. `SwiftStarAppKit` gains `PoolEngine` (spawn argv,
-  `.kv` reader, `listFiles`). The app gains the `dispatch` host-tool, the
-  dispatch→queue→worker-turn→receipt-injection loop, and the smoke-gate driver.
-  The measurement gate's canonical arm is measured: **3.70x realized win vs the
-  4.2x ceiling** (deep 131k 1550 s vs 8×16k pool 419 s; overhead ratio 0.88) —
-  the sensitivity envelope (bloat/failure/count-sweep) is the follow-up pass.
-  Live evidence:
-  [`smoke gate`](docs/superpowers/research/2026-08-23-p11-smoke-gate.md),
-  [`measurement gate`](docs/superpowers/research/2026-08-23-p11-measurement-gate.md).
-  Spec: [`docs/superpowers/specs/2026-08-23-p11-subagent-pool-design.md`](docs/superpowers/specs/2026-08-23-p11-subagent-pool-design.md).
-
-- **P12 — Reliable agency (2026-08-25).** Reframed 2026-08-24 from "More
-  models" after an overnight investigation found the blocker was model
-  *agency*, not model *variety*: a local model that writes correct code still
-  fails to reliably act, and the failures traced to host-side contract and
-  prompt shape more often than to the model. One model runs a
-  role-differentiated pipeline — decompose, implement, repair — with the host
-  owning phase boundaries, budgets, permissions, validation, and recovery.
-  **Complete (2026-08-25) — all three roles evidenced live, each at small
-  n; not a reliability claim.** What shipped: P12.1 hardened the packet
-  validator/parser (schema version, CRLF, block-scalar, comment-stripping
-  fixes) and wired `thinkBudget` and path presentation as a real lever;
-  P12.2 made the Mellum Q5_0 quant loadable; P12.3 ran the prompt-shape
-  ablation for Laguna (absolute paths a real lever, n=3, real grading);
-  P12.4 added the repair role (fixture tier 3/3 ×2, plus two live
-  non-fixture repairs reaching 13/13, n=2); P12.5 ran live the same day —
-  a model-authored decompose packet set matched a hand-authored baseline's
-  phase count, orphaned nothing, passed validation, and drove the run to
-  the same final result, n=1; P12.6 met the second half of its own
-  disjunctive criterion by naming and classifying the next failure mode
-  (*completes-and-is-wrong*, not shallow exploration); P12.7 shipped its
-  first 2 of 5 pieces the same night — trace-channel capture and
-  Σprompt/Σcached/Σsuffix, live-confirmed; P12.8 wired phase-level recovery,
-  plus a same-night fix (`953d05a`) so a failed repair now retries with
-  fresh evidence instead of exiting immediately.
-  What did **not** ship, and is not claimed: **P12.0's source-of-truth
-  document was never written** and no superseded-doc banners were applied —
-  `2026-08-24-overnight-consolidation.md` still stands as unmerged staging;
-  **P12.7 shipped 2 of 5 pieces the same night** — trace-channel capture
-  and Σprompt/Σcached/Σsuffix, live-confirmed (`20260825-232102-roadmap`:
-  38014/33828/4186); no `DumbImplementer`, no stateful tokens (deliberately
-  deferred), no warm-started timing, no `docs/cool_things/` write-up —
-  **the `DumbImplementer` packet shape later shipped via P20's dumb lever**
-  (`DispatchPacketBuilder(dumb: true)`, `2011203`/`53b7ee5`);
-  P12.3's Mellum arm never ran; P12.4's live
-  end-to-end tier (three phases → 13/13 from packets, at any real n) was
-  started and stopped, so beyond those two n=2 instances the evidence is
-  fixture-tier only; P12.8's own live phase-boundary confirmation
-  specifically (a `validationFailed` receipt mid-build, retried) has not
-  recurred since the fix landed — four live attempts since have hit either
-  a clean pass or a `noChanges`/eos phase followed by an end-of-run
-  acceptance failure (P12.4's repair, not P12.8's), never the mid-build
-  validation failure P12.8 targets.
-  **Reopen condition P12.5: met 2026-08-25.** Same pattern as P13's verdict
-  naming its own reopen condition (which became P15), except this one
-  closed the same day rather than opening a new sub-phase. An earlier
-  version of this entry claimed P12.0 and P12.7 shipped; both claims were
-  false and were corrected 2026-08-25 after an audit.
-  Verdict: [`2026-08-25-p12-verdict-record.md`](docs/superpowers/research/2026-08-25-p12-verdict-record.md).
-  P12.0's deliverable, landed late and at reduced scope:
-  [`2026-08-25-local-model-agency.md`](docs/superpowers/research/2026-08-25-local-model-agency.md).
-  Plan: [`2026-08-24-p12-reliable-agency.md`](docs/superpowers/plans/2026-08-24-p12-reliable-agency.md).
-
-- **P13 — More models (2026-08-25).** Mellum 2.1 wired as a first-class
-  `Variant` (memory-gated, contract-enforced admission before any engine
-  spawn) and benchmarked live against P12's harness: path presentation × nudge
-  × seed, at Mellum's published sampler (temp 0.6, top-k 20, top-p 0.95,
-  min-p 0.0 — not a hostile setting). **Verdict: the competence gate fails —
-  Mellum reliably fails the tool-call initiation gate under the tested
-  harness** (0 tool calls across every cell of the 2×2, seed-swept). This
-  blocks shipping Mellum as a preset; it is not a claim that Mellum's agent
-  competence fails in the absolute, and the variant plumbing itself is
-  complete and correct. The verdict named its own reopen condition — the
-  out-of-phase host-controlled action mode — which became P15. Design:
-  [`2026-08-25-p13-mellum-variant-design.md`](docs/superpowers/specs/2026-08-25-p13-mellum-variant-design.md).
-  Benchmark record:
-  [`2026-08-25-p13-mellum-benchmark-record.md`](docs/superpowers/research/2026-08-25-p13-mellum-benchmark-record.md).
-
-- **P15 — Host-controlled action mode (2026-08-25).** Asked whether Mellum is
-  **harness-addressable** (a host-side fix reaches it) or content-broken, by
-  removing tool initiation from the loop: the model emits `#path` headings plus
-  file bodies as text, `LabeledBlockParser` harvests them, the host writes the
-  files and injects the paths into `TurnOutcome.mutations`, then validates and
-  grades as usual. **Verdict: harness-addressable.** Every failure mode the
-  phase found was host-side and each yielded to a host-side fix — a two-turn
-  emission protocol for turns that reason and then stop; a lenient harvest for
-  bodies emitted without fences; first-occurrence-wins plus a repeated-heading
-  abort for degenerate resampling; and captured validation output for failures
-  that previously recorded only an exit status. No engine work, no sampler
-  change, no different model.
-
-  Measured: repair **4/4 at 13/13**; build **3/9 at 13/13**, all three phases,
-  **0 tool calls** — 85–128s for the run that happens to pass, but the failed
-  attempts along the way cost wall-clock too: summed across all 9 sequential
-  runs, **≈4.7 minutes per completed app**. All nine build runs harvested (0
-  `contractNotFollowed`, previously 3 of 4). The phase's own bar asks for a
-  host-verified candidate with content-bucketed failures and explicitly defers
-  any per-model pass-rate guarantee, so 3-of-9 is a recorded measurement rather
-  than a missed bar — and it is emphatically **not** a claim of reliability.
-
-  Two numbers were retracted inside the phase after re-reading primary evidence:
-  the build arm's "1/4" was a parser artifact, and an early "3/5" did not
-  survive a larger sample. All results carry the in-band `resultClass` label
-  **"drafting quality + host orchestration, not agency"** — 0 tool calls means
-  the model never acted and the host wrote every file. Design:
-  [`2026-08-25-host-controlled-action-mode-design.md`](docs/superpowers/specs/2026-08-25-host-controlled-action-mode-design.md).
-  Plan:
-  [`2026-08-25-host-controlled-action-mode.md`](docs/superpowers/plans/2026-08-25-host-controlled-action-mode.md).
-  Verdict record:
-  [`2026-08-25-p15-verdict-record.md`](docs/superpowers/research/2026-08-25-p15-verdict-record.md).
-  Review:
-  [`2026-08-25-p15-fable-review.md`](docs/superpowers/research/2026-08-25-p15-fable-review.md).
+Completed phases P0-P15 are narrated in detail in [`docs/superpowers/research/prior-work-archive.md`](docs/superpowers/research/prior-work-archive.md); the phase table above and each phase's own verdict/closure doc carry the current status.
 
 ## Workflow
 

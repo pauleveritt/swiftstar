@@ -1,6 +1,6 @@
 # P11 addendum — the canonical agent test: first live run against Mellum 2.1 (2026-08-23)
 
-> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](2026-08-25-local-model-agency.md). Retained as the evidence record for the Mellum 2.1 live run's two distinct noChanges failure modes and the claims-vs-reality wire cross-check.
+> **Superseded as a live finding** by [`2026-08-25-local-model-agency.md`](../2026-08-25-local-model-agency.md). Retained as the evidence record for the Mellum 2.1 live run's two distinct noChanges failure modes and the claims-vs-reality wire cross-check.
 
 **Status:** first live run of `swiftstar-agenttest` against Mellum 2.1 (real Metal
 inference, ds4 engine), n=1, easy + hard spec, matching the Laguna S 2.1

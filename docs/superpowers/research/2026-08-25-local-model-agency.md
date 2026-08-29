@@ -14,7 +14,7 @@ shipped. That claim was false and is corrected (see
 This document is the honest reduced version: **an index of settled findings and
 a pointer to where current truth actually lives**, not the full merge P12.0
 described. It does not re-synthesize
-[`2026-08-24-overnight-consolidation.md`](2026-08-24-overnight-consolidation.md)
+[`2026-08-24-overnight-consolidation.md`](superseded/2026-08-24-overnight-consolidation.md)
 (134 KB of staging that still self-describes as unmerged). What it does is stop
 eleven notes from being places a reader looks for *current* truth, and say
 plainly where to look instead.

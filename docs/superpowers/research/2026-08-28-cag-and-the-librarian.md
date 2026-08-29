@@ -200,6 +200,28 @@ boundary is as much the finding as the fit itself.
 ## Filed
 
 The higher-level reading — pre-chewed project state, the librarian/RLM role
-split, and the 4k AFM capacity question — is filed in the ROADMAP's ANE
-watcher tier entry ("CAG filing 2026-08-28"). Indexing is already P24's
-deterministic job; this note's CAG mechanics sections stand unchanged.
+split, and the 4k AFM capacity question (2026-08-28, relocated here 2026-08-29
+from the ROADMAP's ANE watcher tier entry, which now just points here):
+
+The watcher's context decomposes into a **stable layer** (envelope + stubs +
+interests — preloaded once as a cached prefix), an **event layer** (the
+projected digest slice — appended per wake), and an **edge layer**
+(`kv_query` — CAG's own "preload a foundation, retrieve only edge cases"
+hybrid). At a 4k window (the tighter bound; the specialized-tool-subagents
+backlog entry already budgets 8k on AFM3), fixed overhead is ~1–1.4k tokens,
+leaving ~2.5–3.3k for slice + fill — the pre-chewed project state must live
+**outside** the window (typed index, digest, kv), never preloaded;
+whole-corpus preloading is off the table (CAG's *small* config alone is 21k).
+**Capacity answer:** 4k is enough for **reaction and adjudication** (the
+moment-specific hole), not for indexing (already P24's, deterministic) or
+whole-project projection. **Handoff-packet facts fork:** deterministic
+**derived facts** (extend the packet's authored/derived `baselines` split —
+the dispatcher pulls from the digest, the model adjudicates only the
+residue), staged AFM classification slice-wise via `ask_model`, or the GPU
+decompose role (status quo). **Deciding measurement:** *pre-chew quality* —
+audit past decompose-authored facts for the fraction the digest could have
+derived; high means 4k is plenty, low means the librarian stays
+reaction-only.
+
+Indexing is already P24's deterministic job; this note's CAG mechanics
+sections above stand unchanged.
