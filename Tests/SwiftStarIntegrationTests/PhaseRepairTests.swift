@@ -9,24 +9,8 @@ import Foundation
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct PhaseRepairTests {
 
-    private func makeFixtureRepo() throws -> URL {
-        let repo = FileManager.default.temporaryDirectory
-            .appendingPathComponent("phase-repair-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
-        func git(_ a: [String]) {
-            let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            p.arguments = ["-C", repo.path] + a
-            p.standardOutput = Pipe(); p.standardError = Pipe()
-            try? p.run(); p.waitUntilExit()
-        }
-        git(["init", "-q"]); git(["config", "user.email", "t@t"]); git(["config", "user.name", "t"])
-        try "seed\n".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        git(["add", "a.txt"]); git(["commit", "-q", "-m", "seed"])
-        return repo
-    }
-
     @Test func repairsAValidationFailedPhaseWhenTheFakeTurnFixesIt() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "phase-repair")
         defer { try? FileManager.default.removeItem(at: repo) }
         let packet = HandoffPacket(
             taskText: "fix a.txt", writableFiles: ["a.txt"], validationCommand: "true",
@@ -61,7 +45,7 @@ struct PhaseRepairTests {
     }
 
     @Test func exhaustsWhenTheRepairTurnStillFailsValidation() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "phase-repair")
         defer { try? FileManager.default.removeItem(at: repo) }
         let packet = HandoffPacket(
             taskText: "fix a.txt", writableFiles: ["a.txt"], validationCommand: "false",

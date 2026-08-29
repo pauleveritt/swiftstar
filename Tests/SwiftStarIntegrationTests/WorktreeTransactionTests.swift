@@ -9,33 +9,6 @@ import Foundation
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct WorktreeTransactionTests {
 
-    private func makeFixtureRepo() throws -> URL {
-        let repo = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agenttest-repo-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
-        _ = try git(repo, ["init"])
-        _ = try git(repo, ["config", "user.email", "swiftstar@test.local"])
-        _ = try git(repo, ["config", "user.name", "SwiftStar Test"])
-        try "seed\n".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-        _ = try git(repo, ["add", "a.txt"])
-        _ = try git(repo, ["commit", "-m", "seed"])
-        return repo
-    }
-
-    private func git(_ dir: URL, _ args: [String]) throws -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", dir.path] + args
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = Pipe()
-        try p.run()
-        p.waitUntilExit()
-        let output = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        guard p.terminationStatus == 0 else { throw NSError(domain: "git", code: Int(p.terminationStatus)) }
-        return output
-    }
-
     private func packet(_ files: [String], task: String) -> HandoffPacket {
         HandoffPacket(taskText: task, writableFiles: files, validationCommand: nil,
                       baselines: [:], turnBudget: 1000, toolCallBudget: 8)
@@ -50,7 +23,7 @@ struct WorktreeTransactionTests {
     }
 
     @Test func phasesChainAndKeepFinalWorktreeForGrading() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "agenttest-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
         let txn = WorktreeTransaction(repo: repo)
 
@@ -74,11 +47,11 @@ struct WorktreeTransactionTests {
         let gradeWT = try #require(txn.finalWorktree)
         #expect(FileManager.default.fileExists(atPath: gradeWT.url.appendingPathComponent("b.txt").path))
         #expect(!FileManager.default.fileExists(atPath: wt1.url.path))
-        let show = try git(repo, ["show", "--stat", "--name-only", ref])
+        let show = try GitFixtureRepo.git(repo, ["show", "--stat", "--name-only", ref])
         #expect(show.contains("b.txt"))
         // The final tree carries BOTH phases: a.txt (phase 1) and b.txt (phase 2).
-        #expect(try git(repo, ["show", "\(ref):a.txt"]) == "one\n")
-        #expect(try git(repo, ["show", "\(ref):b.txt"]) == "two\n")
+        #expect(try GitFixtureRepo.git(repo, ["show", "\(ref):a.txt"]) == "one\n")
+        #expect(try GitFixtureRepo.git(repo, ["show", "\(ref):b.txt"]) == "two\n")
         #expect(try String(contentsOf: repo.appendingPathComponent("a.txt"), encoding: .utf8) == "seed\n")
 
         txn.discardFinal()
@@ -95,7 +68,7 @@ struct WorktreeTransactionTests {
     }
 
     @Test func receiptStopsTheTransaction() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "agenttest-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
         let txn = WorktreeTransaction(repo: repo)
 
@@ -112,7 +85,7 @@ struct WorktreeTransactionTests {
     }
 
     @Test func adoptRepairedPhaseAdvancesHeadAndDiscardsFailedWorktree() throws {
-        let repo = try makeFixtureRepo()
+        let repo = try GitFixtureRepo.make(prefix: "agenttest-repo")
         defer { try? FileManager.default.removeItem(at: repo) }
         let txn = WorktreeTransaction(repo: repo)
 
@@ -139,7 +112,7 @@ struct WorktreeTransactionTests {
         try txn.adoptRepairedPhase(failedWorktree: wt2, repairedWorktree: repairedWT, repairedRef: repairedRef)
 
         #expect(txn.candidateRef == repairedRef)
-        #expect(txn.head == (try git(repo, ["rev-parse", repairedRef])
+        #expect(txn.head == (try GitFixtureRepo.git(repo, ["rev-parse", repairedRef])
             .trimmingCharacters(in: .whitespacesAndNewlines)))
         #expect(txn.finalWorktree?.url == repairedWT.url)
         #expect(!FileManager.default.fileExists(atPath: wt2.url.path),
