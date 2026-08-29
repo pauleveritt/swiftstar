@@ -102,14 +102,11 @@ Seed terms awaiting a definition, to be written in this repository's own
 words when the phase that needs each one lands: **patch set**, **shipped
 integration**.
 
-The defined term list — feasibility, seam, wire, capture, handshake, trace,
-fixture, finding, baseline, diagnostic, workspace, tool card, turn outcome,
-bootstrap, progressive disclosure, tool request, tool result, host tool
-execution, handoff packet, candidate ref, receipt, revision check, rolling
-digest, context assembly — moved to [`docs/glossary.md`](docs/glossary.md)
+24 terms are defined so far, moved to [`docs/glossary.md`](docs/glossary.md)
 (its "Concepts" section, plus the Mechanisms table for the P10 dispatch
-terms), alongside the app's Modes/Roles/Mechanisms vocabulary. Check new
-terms against that file at the end of each phase.
+terms), alongside the app's Modes/Roles/Mechanisms vocabulary — the single
+authoritative list, not restated here to avoid a second copy that can drift
+out of sync. Check new terms against that file at the end of each phase.
 
 ## Phases
 
@@ -819,6 +816,7 @@ group's order is not a priority order.
 
 ### Process and tooling
 
+- **`fixtures/agent/golden.{ndjson,trace}` and `Sources/SwiftStarAppKit/Resources/golden.{ndjson,trace}` are byte-identical, manually-synced duplicates, with no build-time mechanism enforcing it (2026-08-29).** A symlink was tried and confirmed to break — SwiftPM's resource-copy step preserves the symlink rather than dereferencing it, so it dangles once relocated into the `.build` bundle. Documented at the point of use (`FixtureReplay.swift`, `DiagnosticsFixture.swift`, `fixtures/agent/provenance.md`) and partially guarded by `FixtureReplayTests.bundledFixtureMatchesRepoFixture` — which itself only diffs the `.ndjson` pair, not `.trace`. The real fix is a build-time resource-generation step (a `Package.swift` plugin or a pre-build copy script) so there's exactly one file on disk. *Reopens when a recapture updates one copy and not the other, or when `Package.swift` next changes and touching the resource declaration is already on the table.*
 - **Fork branch name contradicts the fork ledger's own stated structure
   (2026-08-29).** `.gitmodules` pins `p20-dispatch-schema`, a branch cut for
   P20's dispatch schema (divergence #12) that has since accreted #13, #13a,
