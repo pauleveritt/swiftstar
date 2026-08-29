@@ -928,7 +928,6 @@ group's order is not a priority order.
 - **A menu-bar extra.** Explicitly declined 2026-08-21. *Reopens only on a
   direct request; the at-a-glance glance is the one thing it was good for.*
 
-
 ## Prior work
 
 Completed phases P0-P15 are narrated in detail in [`docs/superpowers/research/prior-work-archive.md`](docs/superpowers/research/prior-work-archive.md); the phase table above and each phase's own verdict/closure doc carry the current status.
