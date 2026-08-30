@@ -49,9 +49,37 @@ public enum TestDigest {
         return failures
     }
 
-    /// Task 5 replaces this with the pytest JSON parser. Returns nil here so
-    /// the XCTest path is the fallback; never throws.
-    static func parsePytestJSON(_ stdout: String) -> ([Failure], Int?)? { nil }
+    /// Parses `pytest --json-report` stdout: the `summary.passed` count and,
+    /// for each failed test, a `Failure` keyed by (file-from-nodeid, the last
+    /// `E   ` assertion line of `call.longrepr`). Returns nil when the stdout
+    /// is not that shape (fall back to the XCTest text path).
+    static func parsePytestJSON(_ stdout: String) -> ([Failure], Int?)? {
+        guard let data = stdout.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tests = obj["tests"] as? [[String: Any]] else { return nil }
+        var failures: [Failure] = []
+        var passed: Int? = nil
+        if let summary = obj["summary"] as? [String: Any],
+           let p = summary["passed"] as? Int { passed = p }
+        for t in tests {
+            guard t["outcome"] as? String == "failed",
+                  let nodeid = t["nodeid"] as? String else { continue }
+            let file = nodeid.components(separatedBy: "::")[0]
+            let message: String
+            if let call = t["call"] as? [String: Any],
+               let longrepr = call["longrepr"] as? String {
+                let assertionLines = longrepr.split(separator: "\n")
+                    .filter { $0.hasPrefix("E   ") }
+                message = assertionLines.last.map {
+                    String($0.dropFirst(4))
+                } ?? longrepr.split(separator: "\n").first.map(String.init) ?? "unknown failure"
+            } else {
+                message = "unknown failure"
+            }
+            failures.append(Failure(testID: nodeid, file: file, line: nil, message: message))
+        }
+        return (failures, passed)
+    }
 
     // MARK: - clustering core (shared)
 

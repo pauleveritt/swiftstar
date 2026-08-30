@@ -46,4 +46,33 @@ struct TestDigestTests {
         #expect(ToolResultCondenser.condense(d.summary) == d.summary)
         #expect(d.summary.utf8.count <= 8000)
     }
+
+    @Test func pytestJSONClustersAndCarriesPassedCount() {
+        let json = """
+        {"summary":{"passed":10,"failed":3,"error":0,"skipped":1},
+         "tests":[
+           {"nodeid":"tests/test_api.py::test_create_user","outcome":"failed","call":{"longrepr":"def test_create_user():\\n    r = client.post(\\nE   AssertionError: expected 201, got 500\\n"}},
+           {"nodeid":"tests/test_api.py::test_delete_user","outcome":"failed","call":{"longrepr":"def test_delete_user():\\nE   AssertionError: expected 201, got 500\\n"}},
+           {"nodeid":"tests/test_db.py::test_migration","outcome":"failed","call":{"longrepr":"def test_migration():\\nE   OperationalError: no such table\\n"}},
+           {"nodeid":"tests/test_api.py::test_ok","outcome":"passed","call":{"longrepr":""}}
+         ]}
+        """
+        let out = CommandOutput(stdout: json, stderr: "", exit: 1, timedOut: false)
+        let d = TestDigest.digest(out, command: "uv run pytest", artifactPath: "/runs/test-d.log")
+        #expect(d.summary.contains("test: 10 passed, 3 failed (exit 1)"))
+        #expect(d.summary.contains("[1] tests/test_api.py — 2 failures"))
+        #expect(d.summary.contains("[2] tests/test_db.py — 1 failure"))
+        #expect(d.summary.contains("AssertionError: expected 201, got 500"))
+        #expect(d.summary.contains("Ran: uv run pytest"))
+    }
+
+    @Test func nonJSONStdoutFallsBackToText() {
+        // A crashed runner wrote a traceback, not JSON — the XCTest text path
+        // finds nothing, but the digester is total and reports honestly.
+        let traceback = "Traceback (most recent call last):\n  File \"/usr/lib/runner.py\", line 9\nRuntimeError: boom\n"
+        let out = CommandOutput(stdout: traceback, stderr: "", exit: 1, timedOut: false)
+        let d = TestDigest.digest(out, command: "uv run pytest", artifactPath: "/runs/test-e.log")
+        #expect(d.summary.contains("no failures parsed"))
+        #expect(d.summary.contains("full output: /runs/test-e.log"))
+    }
 }
