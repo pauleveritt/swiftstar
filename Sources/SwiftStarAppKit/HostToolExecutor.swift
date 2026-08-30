@@ -90,6 +90,15 @@ public final class HostToolExecutor: @unchecked Sendable {
     /// per-turn UUID worktrees, so roots are disjoint for free.
     private var continuations: [String: (path: String, nextLine: Int, bare: Bool)] = [:]
     private var contextSize: Int
+    /// P24.1: per-root context override. The engine tiers its read chunk off
+    /// **the worker's** effective context (`agent_read_default_lines` takes
+    /// `agent_worker_effective_ctx_size(w)`), and P23 gave pool workers their
+    /// own, clamped to `[4096, parent]`. Because every worker shares this one
+    /// `.app` executor, a scalar `contextSize` would hand a 4k worker the
+    /// parent's 500-line, 7000-byte windows — half its context in one tool
+    /// result, the incoherence D2 exists to prevent. Keyed by worktree root,
+    /// which is already disjoint per worker (D5).
+    private var contextSizeByRoot: [String: Int] = [:]
 
     public init(policy: Policy, contextSize: Int = 32768) {
         self.policy = policy
@@ -102,10 +111,19 @@ public final class HostToolExecutor: @unchecked Sendable {
         lock.withLock { contextSize = n }
     }
 
-    /// Clears `more` continuations. Only the app's process-lifetime static
-    /// needs this; `PoolOrchestrator` gets a fresh instance per phase.
+    /// Register a pool worker's own context for reads inside its worktree, so
+    /// the read tier matches the context the worker actually runs at rather
+    /// than the parent's. Cleared with the rest of the read state.
+    public func setContextSize(_ n: Int, forRoot root: URL) {
+        let key = HostToolConfinement.realPath(root.path, workspace: root) ?? root.path
+        lock.withLock { contextSizeByRoot[key] = n }
+    }
+
+    /// Clears `more` continuations and per-root context overrides. Only the
+    /// app's process-lifetime static needs this; `PoolOrchestrator` gets a
+    /// fresh instance per phase.
     public func resetReadState() {
-        lock.withLock { continuations.removeAll() }
+        lock.withLock { continuations.removeAll(); contextSizeByRoot.removeAll() }
     }
 
     /// Synchronous entry point — used by `PoolOrchestrator.runPhase`, a
@@ -238,7 +256,7 @@ public final class HostToolExecutor: @unchecked Sendable {
               let text = String(data: data, encoding: .utf8) else {
             return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
         }
-        let ctx = lock.withLock { contextSize }
+        let ctx = lock.withLock { contextSizeByRoot[root] ?? contextSize }
         let window = ReadWindow.render(
             text: text, path: path, request: windowRequest,
             defaultLines: ReadWindow.defaultLines(contextSize: ctx),

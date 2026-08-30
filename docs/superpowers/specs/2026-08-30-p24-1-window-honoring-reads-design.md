@@ -232,6 +232,16 @@ settings yet:
 Both paths land in the same stored property. The default keeps every existing
 construction site compiling and behaving identically to the engine's large tier.
 
+**Per-worker override (added 2026-08-30 after review).** The engine tiers off
+*the worker's* effective context (`agent_read_default_lines` takes
+`agent_worker_effective_ctx_size(w)`), and P23 gave pool workers their own
+context, clamped to `[4096, parent]`. Since every worker shares the one `.app`
+executor, a single scalar would hand a 4k worker the parent's 500-line,
+7000-byte windows — exactly the incoherence D2 argues against. So the executor
+also carries `setContextSize(_:forRoot:)`, keyed by worktree root (already
+disjoint per worker, D5), and `AgentPoolTurnLoop` registers each worker's
+context at turn start.
+
 **D4 — `more` is the engine's `more`: a continuation, not a re-read.** A
 truncated read records the continuation `(path, nextLine, bare)`; a read that
 reaches EOF **clears** it. `more` reads `count` lines (default: the same tier)
@@ -246,7 +256,11 @@ worker's read retarget the main agent's next `more`. State is
 `[String: Continuation]` keyed by `request.workspace`'s resolved root. Workers
 run in per-turn UUID worktrees (`WorktreeDispatcher.swift:42-43`), so roots are
 disjoint for free. Entries are dropped on `resetReadState()` at session start /
-restart, and a worktree root's entry is dropped when that root's turn ends.
+restart. They are **not** dropped when a worktree turn ends — an earlier draft
+of this decision claimed they were, and no such cleanup was ever written. It is
+harmless (worktree roots are UUID-named, so a stale key can never be hit again)
+but it means the map grows with dispatched turns until a restart; an eviction
+rule is P24.2's to decide alongside the rest of the read state.
 
 **D6 — Progress is guaranteed even for a single over-budget line.** A line
 longer than the budget would otherwise emit nothing and leave `continue_offset`

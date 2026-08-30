@@ -840,7 +840,11 @@ final class AgentController {
     /// timeout (300s default) — the engine still blocks on the result line
     /// either way (the wire protocol is unchanged), but the app's UI stays
     /// responsive while it waits.
-    nonisolated private static let hostToolExecutor = HostToolExecutor(policy: .app)
+    // Internal, not private: `AgentPoolTurnLoop` (an extension in another file)
+    // registers each worker's own context against its worktree root (P24.1) —
+    // the same reason P23's extracted methods lost `private`. Not widened to
+    // `public`.
+    nonisolated static let hostToolExecutor = HostToolExecutor(policy: .app)
 
     nonisolated static func executeHostTool(
         _ request: ToolExecutionRequest

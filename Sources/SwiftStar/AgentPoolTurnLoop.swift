@@ -66,6 +66,15 @@ extension AgentController {
             ? WorkerContextPolicy.clamp(requested: settings.workerContextSize,
                                         parentContext: settings.contextSize)
             : nil
+        // P24.1: the worker reads through the shared `.app` executor, whose read
+        // tier is chosen from context size. Register the worker's own context
+        // against its worktree root so it gets its tier, not the parent's — the
+        // engine tiers per-worker too (`agent_read_default_lines` reads
+        // `agent_worker_effective_ctx_size`). nil means the cap was not
+        // advertised and the worker runs at the parent's context anyway.
+        if let workerCtx {
+            Self.hostToolExecutor.setContextSize(workerCtx, forRoot: worktree.url)
+        }
         workerTurn.start(
             id: worker, packet: packet, worktree: worktree,
             outcomeBuilder: TurnOutcomeBuilder(

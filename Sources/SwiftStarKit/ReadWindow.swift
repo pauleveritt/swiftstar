@@ -75,8 +75,12 @@ public enum ReadWindow {
         let startIdx = min(max(request.startLine, 1) - 1, total)
 
         // The ceiling: `whole` means "to EOF", otherwise max_lines or the tier.
-        let requested = request.maxLines ?? defaultLines
-        let ceiling = request.whole ? total - startIdx : max(requested, 1)
+        // A non-positive `max_lines` is *absent*, not a request for one line —
+        // `ds4_agent.c:8125` (`if (max_lines <= 0) max_lines = default`). Serving
+        // 1 and then advertising `call more with count=0` would be a second
+        // contract behind one tool name, and a slow-drip paging loop.
+        let requested = request.maxLines.flatMap { $0 > 0 ? $0 : nil } ?? defaultLines
+        let ceiling = request.whole ? total - startIdx : requested
         let ceilingEnd = min(total, startIdx + max(ceiling, 0))
 
         // Reserve the worst-case header so the body budget cannot overflow the
@@ -145,13 +149,34 @@ public enum ReadWindow {
         "[Read truncated at line \(lastLine) of \(total). continue_offset=\(lastLine + 1). Call more with count=\(count) to read the next chunk.]\n"
     }
 
-    /// Mirrors `agent_split_lines`: a trailing newline does not create a final
-    /// empty line, so "a\nb\n" is two lines and "a\nb" is also two.
+    /// A faithful port of `agent_split_lines` (`ds4_agent.c:7926-7944`): a line
+    /// runs to the next `\r` or `\n`; a `\r\n` pair is one terminator; the
+    /// terminator is excluded from the content; and a trailing terminator does
+    /// not create a final empty line. Splitting on `\n` alone would give a
+    /// different line *numbering* for CR and CRLF files — the coordinate system
+    /// `start_line`, `continue_offset` and `edit` all share.
     private static func splitLines(_ text: String) -> [String] {
         if text.isEmpty { return [] }
-        var parts = text.components(separatedBy: "\n")
-        if parts.last == "" { parts.removeLast() }
-        return parts
+        var lines: [String] = []
+        var current = String.UnicodeScalarView()
+        var iterator = text.unicodeScalars.makeIterator()
+        var pending: Unicode.Scalar?
+        while true {
+            let scalar = pending ?? iterator.next()
+            pending = nil
+            guard let s = scalar else { break }
+            if s == "\n" {
+                lines.append(String(current)); current = String.UnicodeScalarView()
+            } else if s == "\r" {
+                // "\r\n" is a single terminator; a lone "\r" is also one.
+                if let next = iterator.next(), next != "\n" { pending = next }
+                lines.append(String(current)); current = String.UnicodeScalarView()
+            } else {
+                current.append(s)
+            }
+        }
+        if !current.isEmpty { lines.append(String(current)) }
+        return lines
     }
 
     /// Longest prefix of `s` that fits `budget` UTF-8 bytes, cut on a codepoint

@@ -26,6 +26,44 @@ struct ReadWindowTests {
         #expect(ReadWindow.byteBudget(contextSize: 512) == 1024, "floor keeps a pathological setting readable")
     }
 
+    // MARK: - engine parity: degenerate max_lines (ds4_agent.c:8125)
+
+    /// The engine treats `max_lines <= 0` as absent and falls back to the tier
+    /// default. Serving 1 line instead — and advertising `count=0` in the
+    /// header — is a second contract behind one tool name, which D1 forbids.
+    @Test func nonPositiveMaxLinesFallsBackToTheTierDefault() {
+        for bad in [0, -5] {
+            let r = ReadWindow.render(text: sample(50), path: "a.txt",
+                request: .init(startLine: 1, maxLines: bad), defaultLines: 10)
+            #expect(r.lastLine == 10, "max_lines=\(bad) must use the tier default, not 1")
+            #expect(r.text.hasPrefix(
+                "a.txt: lines 1-10 of 50; continue_offset=11; call more with count=10 to read the next chunk\n"),
+                "the header must advertise the default, never count=\(bad)")
+        }
+    }
+
+    // MARK: - engine parity: line terminators (agent_split_lines, :7926-7944)
+
+    /// The engine terminates lines on `\r`, `\n`, or `\r\n`, excluding the
+    /// terminator from the content. Splitting on `\n` alone gives a different
+    /// line *numbering* — the coordinate system start_line/continue_offset/edit
+    /// all share.
+    @Test func carriageReturnsTerminateLinesLikeTheEngine() {
+        let crlf = ReadWindow.render(text: "alpha\r\nbeta\r\n", path: "a.txt",
+            request: .init(), defaultLines: 500)
+        #expect(crlf.totalLines == 2)
+        #expect(crlf.text.hasSuffix("1 alpha\n2 beta\n"), "CR must not survive into content")
+
+        let cr = ReadWindow.render(text: "alpha\rbeta\n", path: "a.txt",
+            request: .init(), defaultLines: 500)
+        #expect(cr.totalLines == 2, "a lone CR is a line terminator to the engine")
+        #expect(cr.text.hasSuffix("1 alpha\n2 beta\n"))
+
+        let mixed = ReadWindow.render(text: "a\r\nb\rc\nd", path: "a.txt",
+            request: .init(), defaultLines: 500)
+        #expect(mixed.totalLines == 4)
+    }
+
     // MARK: - window arithmetic
 
     @Test func servesTheRequestedWindow() {

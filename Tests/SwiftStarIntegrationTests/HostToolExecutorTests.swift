@@ -174,6 +174,29 @@ struct HostToolExecutorTests {
             .text.contains("lines 1-200 of 200\n"))
     }
 
+    /// A pool worker at its own (smaller) context must get its own read tier,
+    /// not the parent's — the executor is shared, so a scalar context would
+    /// hand a 4k worker the parent's 500-line windows.
+    @Test func perRootContextOverridesTheParentTier() throws {
+        let parent = try makeWorkspace(), worker = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: parent)
+                try? FileManager.default.removeItem(at: worker) }
+        try writeLines(200, parent)
+        try writeLines(200, worker)
+        let executor = HostToolExecutor(policy: .app, contextSize: 32768)
+        executor.setContextSize(4096, forRoot: worker)   // 120-line tier
+
+        #expect(executor.execute(request("read", [], workspace: parent, path: "big.txt"))
+            .text.contains("lines 1-200 of 200\n"), "the parent keeps the 500-line tier")
+        #expect(executor.execute(request("read", [], workspace: worker, path: "big.txt"))
+            .text.contains("lines 1-120 of 200; continue_offset=121;"),
+            "the worker root uses its own 120-line tier")
+
+        executor.resetReadState()
+        #expect(executor.execute(request("read", [], workspace: worker, path: "big.txt"))
+            .text.contains("lines 1-200 of 200\n"), "reset clears per-root overrides")
+    }
+
     /// Sibling success for the two refusal tests above (BRIEF rule 4).
     @Test func readOutsideGrantStillRefusesAndInsideStillServes() throws {
         let ws = try makeWorkspace()
