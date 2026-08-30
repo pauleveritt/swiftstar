@@ -28,6 +28,11 @@ Do not implement this design.
 > The read guard is not cancelled — it moves to **P24.2**, to be re-decided
 > against a measurement taken after windowing lands, together with the pool
 > `readCache`, which has the same bug class.
+>
+> Resolved 2026-08-30: the re-decision
+> ([`2026-08-30-p24-2-read-guard-redecision-design.md`](2026-08-30-p24-2-read-guard-redecision-design.md))
+> retired the guard (1 same-window re-read post-windowing, and it is a raw
+> re-ask a hash-keyed guard would mis-handle) and retired the `readCache`.
 
 This spec is the authority on P24.1, the first feature cycle of P24. The
 phase row ([`ROADMAP.md` P24](../../../ROADMAP.md)) names the read-guard as the

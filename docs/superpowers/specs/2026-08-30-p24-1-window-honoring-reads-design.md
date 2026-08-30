@@ -154,11 +154,17 @@ cost of redundancy.
   the starvation loop and counted its repeats as redundancy. If it returns it
   needs an honest coverage model, compaction invalidation, and an escape hatch;
   see the superseded spec's review findings.
+  (→ decided 2026-08-30 in
+  [`2026-08-30-p24-2-read-guard-redecision-design.md`](2026-08-30-p24-2-read-guard-redecision-design.md):
+  the guard does not return, and the `readCache` is retired.)
 - **The pool worker's `readCache`** (`HostToolExecutor.swift:161-181`). It
   answers `"(unchanged since last read)"` on a whole-file hash match — the same
   dishonesty, one bug class: *a hash-keyed "unchanged" answer is wrong whenever
   delivery is partial.* Untouched here to keep one idea per cycle; reopens with
   P24.2, which decides both together.
+  (→ decided 2026-08-30 in
+  [`2026-08-30-p24-2-read-guard-redecision-design.md`](2026-08-30-p24-2-read-guard-redecision-design.md):
+  the guard does not return, and the `readCache` is retired.)
 - **The `more` consent default** (`path` → `"."`). D4 attributes around it
   rather than changing read-tool consent semantics.
 - **`recall`** and the **deterministic compaction skeleton** (both "sequence
@@ -261,6 +267,8 @@ of this decision claimed they were, and no such cleanup was ever written. It is
 harmless (worktree roots are UUID-named, so a stale key can never be hit again)
 but it means the map grows with dispatched turns until a restart; an eviction
 rule is P24.2's to decide alongside the rest of the read state.
+(→ decided 2026-08-30: no eviction rule — UUID worktree roots are never
+reused, so the map's growth is bounded and harmless.)
 
 **D6 — Progress is guaranteed even for a single over-budget line.** A line
 longer than the budget would otherwise emit nothing and leave `continue_offset`
