@@ -100,6 +100,9 @@ public final class HostToolExecutor: @unchecked Sendable {
     /// which is already disjoint per worker (D5).
     private var contextSizeByRoot: [String: Int] = [:]
 
+    /// `AGENT_FILE_MAX_BYTES` (`ds4_agent.c:7884`) — 16 MiB.
+    static let fileMaxBytes = 16 * 1024 * 1024
+
     public init(policy: Policy, contextSize: Int = 32768) {
         self.policy = policy
         self.contextSize = contextSize
@@ -253,6 +256,14 @@ public final class HostToolExecutor: @unchecked Sendable {
             path = p
         }
 
+        // Engine parity (`agent_read_file_bytes`): refuse a file over
+        // AGENT_FILE_MAX_BYTES rather than loading it. The host had no cap, so
+        // a huge file was read wholly into memory before windowing ever ran.
+        if let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size]) as? Int,
+           size > Self.fileMaxBytes {
+            return ToolExecutionResult(ok: false,
+                text: "error: file too large: \(path) exceeds \(Self.fileMaxBytes) bytes")
+        }
         guard let data = FileManager.default.contents(atPath: path),
               let text = String(data: data, encoding: .utf8) else {
             return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
@@ -280,9 +291,19 @@ public final class HostToolExecutor: @unchecked Sendable {
         r.params.first(where: { $0.name == name }).flatMap { Int($0.value) }
     }
 
-    private func boolParam(_ r: ToolExecutionRequest, _ name: String) -> Bool {
-        let v = r.params.first(where: { $0.name == name })?.value.lowercased()
-        return v == "true" || v == "1"
+    /// Mirrors `agent_parse_bool_default` (`ds4_agent.c`): true/yes/1 and
+    /// false/no/0, case-insensitively, anything else the caller's default.
+    /// Accepting only "true"/"1" made `whole: "yes"` a silent no-op — a second
+    /// contract behind one tool name (D1).
+    private func boolParam(_ r: ToolExecutionRequest, _ name: String,
+                           default def: Bool = false) -> Bool {
+        guard let v = r.params.first(where: { $0.name == name })?.value,
+              !v.isEmpty else { return def }
+        switch v.lowercased() {
+        case "true", "yes", "1": return true
+        case "false", "no", "0": return false
+        default: return def
+        }
     }
 
     private func searchResult(_ request: ToolExecutionRequest) -> ToolExecutionResult {

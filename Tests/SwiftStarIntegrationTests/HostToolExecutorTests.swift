@@ -224,6 +224,59 @@ struct HostToolExecutorTests {
         #expect(sawTail, "paging must eventually pass the long line and reach line 2")
     }
 
+    /// Engine parity for `whole`/`raw` coercion (`agent_parse_bool_default`):
+    /// true/yes/1 and false/no/0, case-insensitively, anything else the default.
+    /// Accepting only "true"/"1" made `whole: "yes"` silently a no-op.
+    @Test func boolParamsMatchTheEngineCoercions() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        try writeLines(40, ws)
+        let executor = HostToolExecutor(policy: .app)
+        // `whole` past the 2-line ceiling reaches EOF only if it was honored.
+        for truthy in ["true", "TRUE", "yes", "Yes", "1"] {
+            let r = executor.execute(request("read",
+                [param("max_lines", "2"), param("whole", truthy)],
+                workspace: ws, path: "big.txt"))
+            #expect(r.text.contains("lines 1-40 of 40\n"), "whole=\(truthy) must be truthy")
+        }
+        for falsy in ["false", "FALSE", "no", "0"] {
+            let r = executor.execute(request("read",
+                [param("max_lines", "2"), param("whole", falsy)],
+                workspace: ws, path: "big.txt"))
+            #expect(r.text.contains("lines 1-2 of 40;"), "whole=\(falsy) must be falsy")
+        }
+        // Unparseable falls back to the default (false), like the engine.
+        #expect(executor.execute(request("read",
+            [param("max_lines", "2"), param("whole", "maybe")],
+            workspace: ws, path: "big.txt")).text.contains("lines 1-2 of 40;"))
+    }
+
+    /// Engine parity: `agent_read_file_bytes` refuses a file over
+    /// `AGENT_FILE_MAX_BYTES` (16 MiB) rather than loading it. The host had no
+    /// cap at all, so a huge file was read fully into memory before windowing.
+    @Test func readRefusesAFileOverTheEngineSizeCap() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        let big = ws.appendingPathComponent("huge.bin")
+        // Sparse-ish: one write of 16 MiB + 1 byte.
+        try Data(repeating: 0x61, count: 16 * 1024 * 1024 + 1).write(to: big)
+        let executor = HostToolExecutor(policy: .app)
+        let r = executor.execute(request("read", [], workspace: ws, path: "huge.bin"))
+        #expect(!r.ok)
+        #expect(r.text.contains("file too large"))
+        #expect(r.text.contains("16777216"))
+    }
+
+    /// Sibling success for the refusal above (BRIEF rule 4): a file just under
+    /// the cap still reads.
+    @Test func readServesAFileUnderTheEngineSizeCap() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        try Data(repeating: 0x61, count: 1024).write(to: ws.appendingPathComponent("small.bin"))
+        let executor = HostToolExecutor(policy: .app)
+        #expect(executor.execute(request("read", [], workspace: ws, path: "small.bin")).ok)
+    }
+
     /// Sibling success for the two refusal tests above (BRIEF rule 4).
     @Test func readOutsideGrantStillRefusesAndInsideStillServes() throws {
         let ws = try makeWorkspace()
