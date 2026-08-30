@@ -17,10 +17,7 @@ struct RepairLoopSeamTests {
         try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: repo) }
         func git(_ a: [String]) {
-            let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            p.arguments = ["-C", repo.path] + a
-            p.standardOutput = Pipe(); p.standardError = Pipe()
-            try? p.run(); p.waitUntilExit()
+            _ = try? GitProcess.run(a, in: repo)
         }
         git(["init", "-q"]); git(["config", "user.email", "t@t"]); git(["config", "user.name", "t"])
         try "broken\n".write(to: repo.appendingPathComponent("app.py"), atomically: true, encoding: .utf8)
@@ -81,10 +78,7 @@ struct RepairLoopSeamTests {
         try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: repo) }
         func git(_ a: [String]) {
-            let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            p.arguments = ["-C", repo.path] + a
-            p.standardOutput = Pipe(); p.standardError = Pipe()
-            try? p.run(); p.waitUntilExit()
+            _ = try? GitProcess.run(a, in: repo)
         }
         git(["init", "-q"]); git(["config", "user.email", "t@t"]); git(["config", "user.name", "t"])
         try "broken\n".write(to: repo.appendingPathComponent("app.py"), atomically: true, encoding: .utf8)
