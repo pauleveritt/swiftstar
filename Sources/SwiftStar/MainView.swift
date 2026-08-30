@@ -7,7 +7,9 @@ struct MainView: View {
 
     private enum Pane: String, CaseIterable, Identifiable {
         case agent, metrics, diagnostics
+
         var id: String { rawValue }
+
         var title: String {
             switch self {
             case .agent: "Agent"
@@ -22,9 +24,36 @@ struct MainView: View {
             case .diagnostics: "stethoscope"
             }
         }
+
+        var group: PaneGroup {
+            switch self {
+            case .agent: .workspace
+            case .metrics, .diagnostics: .observability
+            }
+        }
+    }
+
+    private enum PaneGroup: Equatable {
+        case workspace, observability
+
+        var title: String {
+            switch self {
+            case .workspace: "Workspace"
+            case .observability: "Observability"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .workspace: "rectangle.3.group"
+            case .observability: "waveform.path.ecg"
+            }
+        }
     }
 
     @State private var selection: Pane = .agent
+    @AppStorage("appShellWorkspaceExpanded") private var workspaceExpanded = true
+    @AppStorage("appShellObservabilityExpanded") private var observabilityExpanded = true
     // Lean-by-default: first launch shows only the detail column; the user's
     // choice persists across launches (P19.1 D1). `NavigationSplitViewVisibility`
     // is not Codable, so persist the raw string and map it through a Binding.
@@ -53,16 +82,17 @@ struct MainView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
-            List(Pane.allCases, selection: $selection) { section in
-                Label(section.title, systemImage: section.systemImage).tag(section)
+            List(selection: $selection) {
+                sidebarGroup(.workspace, isExpanded: $workspaceExpanded)
+                sidebarGroup(.observability, isExpanded: $observabilityExpanded)
             }
+            .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 180, ideal: 220)
         } detail: {
-            switch selection {
-            case .agent: AgentView(controller: agentController)
-            case .metrics: MetricsView(model: metricsModel)
-            case .diagnostics: DiagnosticsView(model: diagnosticsModel)
-            }
+            detailView
+                .id(selection)
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                .animation(.snappy(duration: 0.28, extraBounce: 0.08), value: selection)
         }
         .navigationSplitViewStyle(.prominentDetail)
         .frame(minWidth: 800, minHeight: 560)
@@ -90,6 +120,32 @@ struct MainView: View {
             // capture when the user actually looks at it.
             metricsModel.setCollecting(new == .metrics)
             if new == .diagnostics { diagnosticsModel.start(controller: agentController) }
+        }
+    }
+
+    @ViewBuilder
+    private func sidebarGroup(_ group: PaneGroup, isExpanded: Binding<Bool>) -> some View {
+        Section(isExpanded: isExpanded) {
+            ForEach(Pane.allCases.filter { $0.group == group }) { pane in
+                Label {
+                    Text(pane.title)
+                } icon: {
+                    Image(systemName: pane.systemImage)
+                        .symbolEffect(.bounce, value: selection == pane)
+                }
+                .tag(pane)
+            }
+        } header: {
+            Label(group.title, systemImage: group.systemImage)
+        }
+    }
+
+    @ViewBuilder
+    private var detailView: some View {
+        switch selection {
+        case .agent: AgentView(controller: agentController)
+        case .metrics: MetricsView(model: metricsModel)
+        case .diagnostics: DiagnosticsView(model: diagnosticsModel)
         }
     }
 }

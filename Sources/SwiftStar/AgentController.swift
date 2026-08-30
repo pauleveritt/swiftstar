@@ -631,7 +631,10 @@ final class AgentController {
                 // average across the turn's generation segments, else the
                 // engine-reported rate — never a fabricated average.
                 // `promptTPS` is the turn-end ratchet, matching the status bar.
-                decodeAccumulator.finish(finalGenerated: outcome.generatedTokens)
+                // The FINAL SEGMENT, not `outcome.generatedTokens` — that is now the
+                // turn total, and feeding a total back in as the last segment's
+                // authoritative count would double-count the whole turn.
+                decodeAccumulator.finish(finalGenerated: outcome.finalSegmentTokens)
                 let summary = TurnSummary(
                     promptTPS: lastPrefillTPS,
                     decodeTPS: decodeAccumulator.tokensPerSecond ?? lastGenTPS,

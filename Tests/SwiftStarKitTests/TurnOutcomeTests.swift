@@ -302,3 +302,83 @@ struct TurnOutcomeTests {
         #expect(outcome.sampler == "think=default")
     }
 }
+
+/// The engine resets its `generated` counter at every prefill, so a turn with
+/// tool rounds is several generation segments and the turn-closing `ready`
+/// reports only the last one. Measured on `captures/live/20260830-180004`:
+/// `ready` said 1,422 where the turn actually generated 6,034 across 39
+/// segments — a 4.2x undercount that reached `outcomes.ndjson`, the pool's
+/// candidate summaries, and (functionally, not just cosmetically)
+/// `WorktreeDispatch`'s turn-budget gate.
+///
+/// `DecodeAccumulator` already did this arithmetic for the reply bubble's
+/// `TurnSummary`; the persisted record simply never used it.
+struct TurnTotalTokenTests {
+    private func status(_ state: String, generated: Int, genTPS: Double = 20) -> AgentEvent {
+        .status(StatusSnapshot(ctxUsed: 0, ctxSize: 51_200, prefillTPS: 0, genTPS: genTPS,
+                               ts: 0, generated: generated, state: state))
+    }
+
+    /// Three segments: two closed by a prefill, one closed by `ready`. The
+    /// final segment takes `ready`'s authoritative count (status samples are
+    /// periodic and miss whatever followed the last one).
+    @Test func generatedTokensSumsEverySegment() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
+        b.apply(status("generating", generated: 50))
+        b.apply(status("generating", generated: 100))
+        b.apply(status("prefill", generated: 0))
+        b.apply(status("generating", generated: 80))
+        b.apply(status("prefill", generated: 0))
+        b.apply(status("generating", generated: 30))
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 42, ctxUsed: 900))
+        let o = b.finish()
+        #expect(o.generatedTokens == 222)   // 100 + 80 + 42(ready), not 42
+    }
+
+    /// The wire's own number stays available under its honest name — the
+    /// analyzer needs it as the final segment's authoritative count.
+    @Test func finalSegmentTokensKeepsTheWireValue() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
+        b.apply(status("generating", generated: 100))
+        b.apply(status("prefill", generated: 0))
+        b.apply(status("generating", generated: 30))
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 42, ctxUsed: 900))
+        let o = b.finish()
+        #expect(o.finalSegmentTokens == 42)
+        #expect(o.generatedTokens == 142)
+    }
+
+    /// A builder fed no status stream (the pool harnesses before this change,
+    /// and every pre-existing unit test) still records the wire's value rather
+    /// than collapsing to zero.
+    @Test func withoutAStatusStreamTheWireValueStands() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 12, ctxUsed: 120))
+        let o = b.finish()
+        #expect(o.generatedTokens == 12)
+        #expect(o.finalSegmentTokens == 12)
+    }
+
+    /// A single-segment turn (no tool rounds) is unchanged: the two numbers agree.
+    @Test func singleSegmentTurnReportsOneNumber() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
+        b.apply(status("generating", generated: 30))
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 42, ctxUsed: 120))
+        let o = b.finish()
+        #expect(o.generatedTokens == 42)
+        #expect(o.finalSegmentTokens == 42)
+    }
+
+    /// Old `outcomes.ndjson` rows predate the field; decoding must not fail,
+    /// and the wire value they carry is by definition the final segment's.
+    @Test func recordsWrittenBeforeThisFieldStillDecode() throws {
+        let legacy = """
+        {"model":"m","build":"b","sampler":"think=default","task":"t",\
+        "generatedTokens":1422,"ctxUsed":35484,"stopReason":"eos","toolCalls":[],\
+        "mutations":[],"text":"","validationRan":false}
+        """
+        let o = try JSONDecoder().decode(TurnOutcome.self, from: Data(legacy.utf8))
+        #expect(o.generatedTokens == 1422)
+        #expect(o.finalSegmentTokens == nil)
+    }
+}

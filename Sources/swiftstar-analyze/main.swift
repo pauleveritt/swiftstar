@@ -203,7 +203,12 @@ func cmdSummary(_ dir: URL) {
     print("Session \(dir.lastPathComponent): \(rows.count) turn(s), \(outcomes.count) outcome(s), \(compactionCount(trace)) compaction(s), Σsuffix \(suffixTotal(trace))")
     for (i, row) in rows.enumerated() {
         let outcome = row.outcome
-        let work = decodeWork(row.statuses, finalGenerated: outcome?.generatedTokens)
+        // The final segment, not the turn total: `decodeWork` uses it as the
+        // last segment's authoritative count. Records written before
+        // `finalSegmentTokens` existed carry the wire value in
+        // `generatedTokens`, where it means exactly that.
+        let work = decodeWork(row.statuses,
+                              finalGenerated: outcome?.finalSegmentTokens ?? outcome?.generatedTokens)
         let avg = work.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "-"
         // The accumulator's total, not the outcome's: the engine's counter
         // resets per generation segment, so a tool-heavy turn's `ready` reports
