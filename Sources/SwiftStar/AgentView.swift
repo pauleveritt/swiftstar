@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftStarKit
 
@@ -292,30 +293,7 @@ struct AgentView: View {
                     .animation(.default, value: bottomStatusText)
             }
             Spacer(minLength: 12)
-            if controller.isUp,
-               controller.lastPlannedModel == controller.settings.modelPath.lastPathComponent,
-               let footprint = controller.lastFootprintBytes,
-               let planned = controller.lastPlannedBytes, planned > 0 {
-                // Clamped at 1.0 for the ring: footprint is resident (includes
-                // the mapped model), so it can exceed the planned budget and
-                // the ring must read "full," not overflow. The color still uses
-                // the true fraction (over-budget = critical, via DialLogic).
-                ValueGaugeView(
-                    fraction: min(Double(footprint) / Double(planned), 1.0),
-                    text: nil, textFontSize: 0,
-                    trackColor: memoryRingColor(footprint: footprint, planned: planned),
-                    diameter: 15)
-                    .padding(.horizontal, 4)
-                    .contentShape(Rectangle())
-                    .help(memoryRingTooltip(footprint: footprint, planned: planned))
-                    // VoiceOver never reads `.help`, and the ring renders no
-                    // text. Keep the same current-value summary available to
-                    // assistive technology; severity is otherwise carried by
-                    // color alone.
-                    .accessibilityElement()
-                    .accessibilityLabel("Agent memory")
-                    .accessibilityValue(memoryRingTooltip(footprint: footprint, planned: planned))
-            }
+            memoryStatusWidget
             if controller.isUp, let s = controller.lastStatus, s.ctxSize > 0 {
                 ValueGaugeView(
                     fraction: Double(s.ctxUsed) / Double(s.ctxSize),
@@ -328,11 +306,43 @@ struct AgentView: View {
                     .accessibilityElement()
                     .accessibilityLabel("Context window")
                     .accessibilityValue(contextRingTooltip(s))
+                    .nativeTooltip(contextRingTooltip(s))
             }
         }
         .padding(.horizontal, 10)
         .padding(.trailing, 6)
         .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private var memoryStatusWidget: some View {
+        if controller.isUp,
+           controller.lastPlannedModel == controller.settings.modelPath.lastPathComponent,
+           let footprint = controller.lastFootprintBytes,
+           let planned = controller.lastPlannedBytes, planned > 0 {
+            // Keep the ring as a quick severity glance, but show the actual
+            // resident/planned values beside it so memory use is discoverable
+            // without requiring a hover or accessibility tooling.
+            let tooltip = memoryRingTooltip(footprint: footprint, planned: planned)
+            HStack(spacing: 4) {
+                ValueGaugeView(
+                    fraction: min(Double(footprint) / Double(planned), 1.0),
+                    text: nil, textFontSize: 0,
+                    trackColor: memoryRingColor(footprint: footprint, planned: planned),
+                    diameter: 15)
+                Text("\(memoryDisplay(footprint)) / \(memoryDisplay(planned))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+            .help(tooltip)
+            .accessibilityElement()
+            .accessibilityLabel("Agent memory")
+            .accessibilityValue(tooltip)
+            .nativeTooltip(tooltip)
+        }
     }
 
     /// Rates + activity while the agent is up, else the same state text as
@@ -370,11 +380,10 @@ struct AgentView: View {
     }
 
     private func memoryRingTooltip(footprint: Int64, planned: Int64) -> String {
-        func gb(_ b: Int64) -> String { b.formatted(.byteCount(style: .memory)) }
         let percent = Double(footprint) / Double(planned) * 100
         var text = String(
             format: "Agent memory: %@ resident of %@ planned (%.0f%%).",
-            gb(footprint), gb(planned), percent)
+            memoryDisplay(footprint), memoryDisplay(planned), percent)
         if Double(footprint) > Double(planned) {
             // Resident includes the mapped model, so over-budget is normal for
             // a large model — say so rather than letting the critical color
@@ -382,6 +391,10 @@ struct AgentView: View {
             text += " Over budget (resident includes the mapped model)."
         }
         return text
+    }
+
+    private func memoryDisplay(_ bytes: Int64) -> String {
+        bytes.formatted(.byteCount(style: .memory))
     }
 
     /// Carries the mechanism, not just the numbers: prefill speed is the
@@ -399,6 +412,41 @@ struct AgentView: View {
             text += String(format: " Current decode: %.1f tok/s.", s.genTPS)
         }
         return text
+    }
+}
+
+/// SwiftUI's `.help` does not reliably create a hover target for a small,
+/// custom-drawn view. Keep a transparent AppKit view over each status widget so
+/// macOS can provide its native tooltip while the gauge remains non-interactive.
+private struct NativeTooltipView: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        view.toolTip = text
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        nsView.toolTip = text
+    }
+}
+
+private struct NativeTooltipModifier: ViewModifier {
+    let text: String
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            NativeTooltipView(text: text)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+private extension View {
+    func nativeTooltip(_ text: String) -> some View {
+        modifier(NativeTooltipModifier(text: text))
     }
 }
 
