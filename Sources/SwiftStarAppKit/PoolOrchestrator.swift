@@ -84,8 +84,7 @@ public final class PoolOrchestrator {
             task: packet.taskText,
             think: nil)
         var toolCallCount = 0
-        var lastRefusedSignature: String?
-        var refusedStreak = 0
+        var refusalTracker = ToolRefusalTracker()
         let vettedCommands = [packet.validationCommand, packet.selfTestCommand]
             .compactMap { $0 }.filter { !$0.isEmpty }
         hostToolExecutor = HostToolExecutor(policy: .pool(vettedCommands: vettedCommands), contextSize: contextSize)
@@ -126,29 +125,9 @@ public final class PoolOrchestrator {
                         workspace: worktree, shellAllowed: true,  // bash is vetted in the executor
                         writableFiles: packet.writableFiles,
                         execute: hostToolExecutor.execute)
-                    // Repeat-refusal guard: a worker that retries an identical
-                    // refused call gets a hint after the third repeat so it
-                    // breaks the loop instead of burning the tool budget.
-                    if !response.ok {
-                        let signature = name + "|"
-                            + params.map { "\($0.name)=\($0.value)" }.joined(separator: "\u{1e}")
-                        if signature == lastRefusedSignature {
-                            refusedStreak += 1
-                            if refusedStreak >= 3 {
-                                let hint = "(hint: you have repeated this identical request \(refusedStreak) times and it was refused each time; it will not be allowed. Run one of the vetted commands exactly as given, or edit the code instead.)"
-                                response = ToolCallbackResponse(
-                                    idx: response.idx, ok: false, s: response.s + " " + hint,
-                                    mutations: response.mutations, exitStatus: response.exitStatus,
-                                    outputDigest: response.outputDigest, validationRan: response.validationRan)
-                            }
-                        } else {
-                            lastRefusedSignature = signature
-                            refusedStreak = 1
-                        }
-                    } else {
-                        lastRefusedSignature = nil
-                        refusedStreak = 0
-                    }
+                    response = refusalTracker.apply(
+                        response, name: name, params: params,
+                        hintSuffix: " Run one of the vetted commands exactly as given, or edit the code instead.")
                     stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
                     builder.recordHostVerdict(
                         idx: idx, ok: response.ok, mutations: response.mutations,
@@ -194,8 +173,7 @@ public final class PoolOrchestrator {
             model: model, build: "pooled", task: prompt)
         var dispatched: [HandoffPacket] = []
         var toolCallCount = 0
-        var lastRefusedSignature: String?
-        var refusedStreak = 0
+        var refusalTracker = ToolRefusalTracker()
         // The orchestrator is the agent's own role: full bash (`.app` policy),
         // matching the app's shell-on agent tab — not the pool worker's
         // vetted-only commands. The caller validates the final result.
@@ -247,30 +225,8 @@ public final class PoolOrchestrator {
                             workspace: worktree, shellAllowed: true,
                             writableFiles: nil,
                             execute: hostToolExecutor.execute)
-                        // Repeat-refusal guard (mirrors runPhase): a repeated
-                        // identical refusal gets a hint after the third repeat
-                        // so the orchestrator breaks the loop instead of
-                        // burning the budget.
-                        if !response.ok {
-                            let signature = name + "|"
-                                + params.map { "\($0.name)=\($0.value)" }.joined(separator: "\u{1e}")
-                            if signature == lastRefusedSignature {
-                                refusedStreak += 1
-                                if refusedStreak >= 3 {
-                                    let hint = "(hint: you have repeated this identical request \(refusedStreak) times and it was refused each time; it will not be allowed.)"
-                                    response = ToolCallbackResponse(
-                                        idx: response.idx, ok: false, s: response.s + " " + hint,
-                                        mutations: response.mutations, exitStatus: response.exitStatus,
-                                        outputDigest: response.outputDigest, validationRan: response.validationRan)
-                                }
-                            } else {
-                                lastRefusedSignature = signature
-                                refusedStreak = 1
-                            }
-                        } else {
-                            lastRefusedSignature = nil
-                            refusedStreak = 0
-                        }
+                        response = refusalTracker.apply(
+                            response, name: name, params: params)
                         stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
                         builder.recordHostVerdict(
                             idx: idx, ok: response.ok, mutations: response.mutations,
