@@ -24,6 +24,21 @@ let shell = env["CAPTURE_SHELL"]          // nil = no --shell
 // delegated to the host over the wire. Requires a workspace, because every
 // host file tool is confined to the grant and refuses without one.
 let hostTools = (env["CAPTURE_HOST_TOOLS"].map { $0 == "1" || $0.lowercased() == "true" }) ?? false
+// The engine throttle. `--power` is a SETTING, not a measurement: the engine
+// defaults to 100 and the app drops to 70 whenever power-saving is on
+// (`AgentSettings.powerSavingPercent`). A drive capture taken to reproduce an
+// app session must be able to pin the same value, or the two are not
+// comparable — on 2026-08-30 an app capture at 70 and a drive re-run at the
+// default 100 differed by ~1.7x in both prefill and decode rate on ~the same
+// volume of work, which was first read as an engine improvement.
+//
+// nil = don't append (engine default 100), keeping the P5 capture shape.
+let power = env["CAPTURE_POWER"]
+if let power, Int(power).map({ $0 < 1 || $0 > 100 }) ?? true {
+    FileHandle.standardError.write(Data(
+        "swiftstar-drive: CAPTURE_POWER must be an integer 1-100 (got \(power))\n".utf8))
+    exit(2)
+}
 if hostTools && workspace == nil {
     FileHandle.standardError.write(Data(
         "swiftstar-drive: CAPTURE_HOST_TOOLS=1 requires CAPTURE_WORKSPACE (host file tools are confined to the workspace grant)\n".utf8))
@@ -184,6 +199,9 @@ if let shell {
 // P5 capture shape and every golden fixture generated from it.
 if hostTools {
     args += ["--host-tools"]
+}
+if let power {
+    args += ["--power", power]
 }
 process.arguments = args
 process.currentDirectoryURL = engineDir
