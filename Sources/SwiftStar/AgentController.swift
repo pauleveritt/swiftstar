@@ -666,40 +666,31 @@ final class AgentController {
                 return
             }
             if name == "dispatch" {
-                if UserDefaults.standard.bool(forKey: "dispatchDumb") {
-                    // Dumb mode keeps the baseline clean: the subagent pool is
-                    // the architecture's biggest help, so a "dumb" run must not
-                    // secretly dispatch workers and still win. The orchestrator
-                    // sees the refusal and does the work itself — with the
-                    // minimal packet it was given.
-                    writeToolResult(ToolCallbackResponse(
-                        idx: idx, ok: false,
-                        s: ToolResultCondenser.condense("refused: dispatch is disabled in dumb mode")))
-                    outcomeBuilder?.recordHostVerdict(
-                        idx: idx, ok: false, mutations: [], exitStatus: nil,
-                        outputDigest: nil, validationRan: false)
-                    log("dispatch: refused (dumb mode)")
-                } else if let packet = DispatchPacketBuilder.build(
+                // P11 (D5) / P20: admit or refuse one dispatch call. The pure
+                // `DispatchAdmission.decide` gate collapses the three old
+                // refusal branches into one `.refused` case, so EVERY refusal
+                // records a host verdict (`.rejected`) — the dead-letter fix.
+                // Before this, the "malformed dispatch" and "pool full"
+                // branches wrote the result line but skipped
+                // `recordHostVerdict`, leaving a refused dispatch as
+                // "emitted" only in the turn outcome.
+                let decision = DispatchAdmission.decide(
                     params: params, digest: rollingDigest, loaded: [:],
-                    implementer: settings.modelPath.lastPathComponent) {
-                    if let workerId = PoolScheduler.availableWorker(poolState) {
-                        poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
-                        writeToolResult(ToolCallbackResponse(
-                            idx: idx, ok: true, s: "dispatched as worker \(workerId.rawValue)"))
-                        outcomeBuilder?.recordHostVerdict(
-                            idx: idx, ok: true, mutations: [], exitStatus: nil,
-                            outputDigest: nil, validationRan: false)
-                        log("dispatch: enqueued worker \(workerId.rawValue)")
-                    } else {
-                        writeToolResult(ToolCallbackResponse(
-                            idx: idx, ok: false,
-                            s: ToolResultCondenser.condense("refused: subagent pool is full")))
-                    }
-                } else {
-                    writeToolResult(ToolCallbackResponse(
-                        idx: idx, ok: false,
-                        s: ToolResultCondenser.condense("refused: malformed dispatch")))
+                    implementer: settings.modelPath.lastPathComponent,
+                    poolState: poolState,
+                    dumb: UserDefaults.standard.bool(forKey: "dispatchDumb"))
+                // Side effects the decision implies stay here; the wire result
+                // and the outcome verdict are composed together by
+                // `DispatchAdmission.apply` so neither can be written without
+                // the other (the dead letter was exactly that split).
+                switch decision {
+                case .refused(let reason):
+                    log("dispatch: refused (\(reason))")
+                case .enqueue(let packet, let worker):
+                    poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
+                    log("dispatch: enqueued worker \(worker.rawValue)")
                 }
+                writeToolResult(DispatchAdmission.apply(decision, idx: idx, into: &outcomeBuilder))
             } else {
                 // P9: the host owns execution. Route the request through the
                 // responder (consent-enforced, condenses via ToolResultCondenser,
