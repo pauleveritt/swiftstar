@@ -286,14 +286,8 @@ public enum RepairLoop {
     private static func missingFiles(_ files: [String], at ref: String, in repo: URL) throws -> [String] {
         var missing: [String] = []
         for path in files {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            p.arguments = ["-C", repo.path, "cat-file", "-e", "\(ref):\(path)"]
-            p.standardOutput = Pipe()
-            p.standardError = Pipe()
-            try p.run()
-            p.waitUntilExit()
-            if p.terminationStatus != 0 {
+            let result = try GitProcess.run(["cat-file", "-e", "\(ref):\(path)"], in: repo)
+            if result.timedOut || result.exit != 0 {
                 missing.append(path)
             }
         }

@@ -75,16 +75,9 @@ func logProgress(_ line: String) {
 }
 
 func submoduleSHA(_ dir: URL) -> String {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-    p.arguments = ["-C", dir.path, "rev-parse", "HEAD"]
-    let pipe = Pipe()
-    p.standardOutput = pipe
-    p.standardError = Pipe()
-    try? p.run()
-    p.waitUntilExit()
-    return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard let result = try? GitProcess.run(["rev-parse", "HEAD"], in: dir),
+          result.exit == 0, !result.timedOut else { return "" }
+    return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 // MARK: - Drive state (callback-driven; @unchecked Sendable for the handlers)
@@ -99,7 +92,7 @@ final class DriveState: @unchecked Sendable {
     /// what the app does, so it must see what the app sees. The `.ready` and
     /// `.refused` cases it counts are identical.
     private var parser = AgentWireParser()
-    private var lineBuf = Data()
+    private var lineBuf = LineBuffer()
     private var refusedReason: String?
 
     /// P24.1: set after the stdin pipe exists (it is created below this
@@ -120,12 +113,8 @@ final class DriveState: @unchecked Sendable {
         var refused: [(Int, String)] = []
         lock.lock()
         stdoutData.append(d)
-        lineBuf.append(d)
-        while let nl = lineBuf.firstIndex(of: 0x0A) {
-            let lineData = lineBuf[..<nl]
-            lineBuf.removeSubrange(lineBuf.startIndex...nl)
-            if let line = String(data: lineData, encoding: .utf8),
-               let event = parser.feed(line) {
+        for lineData in lineBuf.append(d) {
+            if let event = parser.feed(String(decoding: lineData, as: UTF8.self)) {
                 switch event {
                 case .ready: ready += 1
                 case .refused(let reason): if refusedReason == nil { refusedReason = reason }

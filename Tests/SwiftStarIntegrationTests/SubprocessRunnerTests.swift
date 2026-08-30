@@ -19,6 +19,15 @@ struct SubprocessRunnerTests {
         #expect(!r.timedOut)
     }
 
+    @Test func directArgvRunDoesNotReparseArgumentsThroughShell() throws {
+        let r = try SubprocessRunner.run(
+            executable: URL(fileURLWithPath: "/usr/bin/printf"),
+            arguments: ["%s", "literal; echo should-not-run"],
+            in: tmp)
+        #expect(r.exit == 0)
+        #expect(r.stdout == "literal; echo should-not-run")
+    }
+
     @Test func syncRunCapturesNonZeroExitAndStderr() throws {
         let r = try SubprocessRunner.run(">&2 echo boom; exit 3", in: tmp)
         #expect(r.exit == 3)

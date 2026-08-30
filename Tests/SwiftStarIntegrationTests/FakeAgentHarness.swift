@@ -31,6 +31,7 @@ struct FakeAgentProcess {
     let stdout: Pipe
     let stderr: Pipe
     let stdin: Pipe
+    let output: PollingLineReader
 }
 
 enum FakeAgentHarness {
@@ -72,7 +73,8 @@ enum FakeAgentHarness {
         process.standardError = err
         process.standardInput = inp
         try process.run()
-        return FakeAgentProcess(process: process, stdout: out, stderr: err, stdin: inp)
+        return FakeAgentProcess(process: process, stdout: out, stderr: err, stdin: inp,
+                                output: PollingLineReader(fd: out.fileHandleForReading.fileDescriptor))
     }
 
     static func writePrompt(_ fake: FakeAgentProcess, _ prompt: String) {
@@ -88,25 +90,27 @@ enum FakeAgentHarness {
                                until: @escaping ([PoolWireEvent]) -> Bool,
                                timeout: TimeInterval = 30) throws -> [PoolWireEvent] {
         var events: [PoolWireEvent] = []
-        let fd = fake.stdout.fileHandleForReading.fileDescriptor
         let deadline = Date().addingTimeInterval(timeout)
-        var buffer = Data()
-        var chunk = [UInt8](repeating: 0, count: 4096)
-        while Date() < deadline {
-            let n = Darwin.read(fd, &chunk, chunk.count)
-            if n == 0 { throw FakeAgentHarnessError.unexpectedEOF }
-            if n < 0 { if errno == EINTR { continue }; throw FakeAgentHarnessError.readFailed(errno: errno) }
-            buffer.append(contentsOf: chunk[0..<n])
-            while let nl = buffer.firstIndex(of: 0x0A) {
-                let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
-                buffer.removeSubrange(buffer.startIndex...nl)
-                if let event = parser.feed(line) {
-                    events.append(event)
-                    if until(events) { return events }
-                }
+        while true {
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { throw FakeAgentHarnessError.timeout(eventCount: events.count) }
+            let line: String
+            do {
+                line = try fake.output.nextLine(timeout: remaining)
+            } catch PollingLineReaderError.timedOut {
+                throw FakeAgentHarnessError.timeout(eventCount: events.count)
+            } catch PollingLineReaderError.endOfFile {
+                throw FakeAgentHarnessError.unexpectedEOF
+            } catch PollingLineReaderError.readFailed(let code) {
+                throw FakeAgentHarnessError.readFailed(errno: code)
+            } catch {
+                throw FakeAgentHarnessError.unexpectedEOF
+            }
+            if let event = parser.feed(line) {
+                events.append(event)
+                if until(events) { return events }
             }
         }
-        throw FakeAgentHarnessError.timeout(eventCount: events.count)
     }
 
     static func writeETX(_ fake: FakeAgentProcess) {
@@ -132,27 +136,26 @@ enum FakeAgentHarness {
                                 until: @escaping ([AgentEvent]) -> Bool,
                                 timeout: TimeInterval = 30) throws -> [AgentEvent] {
         var events: [AgentEvent] = []
-        let fd = fake.stdout.fileHandleForReading.fileDescriptor
         let deadline = Date().addingTimeInterval(timeout)
-        var buffer = Data()
-        var chunk = [UInt8](repeating: 0, count: 4096)
-        while Date() < deadline {
-            let n = Darwin.read(fd, &chunk, chunk.count)
-            if n == 0 { throw FakeAgentHarnessError.unexpectedEOF }
-            if n < 0 {
-                if errno == EINTR { continue }
-                throw FakeAgentHarnessError.readFailed(errno: errno)
+        while true {
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { throw FakeAgentHarnessError.timeout(eventCount: events.count) }
+            let line: String
+            do {
+                line = try fake.output.nextLine(timeout: remaining)
+            } catch PollingLineReaderError.timedOut {
+                throw FakeAgentHarnessError.timeout(eventCount: events.count)
+            } catch PollingLineReaderError.endOfFile {
+                throw FakeAgentHarnessError.unexpectedEOF
+            } catch PollingLineReaderError.readFailed(let code) {
+                throw FakeAgentHarnessError.readFailed(errno: code)
+            } catch {
+                throw FakeAgentHarnessError.unexpectedEOF
             }
-            buffer.append(contentsOf: chunk[0..<n])
-            while let nl = buffer.firstIndex(of: 0x0A) {
-                let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
-                buffer.removeSubrange(buffer.startIndex...nl)
-                if let event = parser.feed(line) {
-                    events.append(event)
-                    if until(events) { return events }
-                }
+            if let event = parser.feed(line) {
+                events.append(event)
+                if until(events) { return events }
             }
         }
-        throw FakeAgentHarnessError.timeout(eventCount: events.count)
     }
 }

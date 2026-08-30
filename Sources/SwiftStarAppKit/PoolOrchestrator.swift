@@ -94,40 +94,22 @@ public final class PoolOrchestrator {
 
         var parser = PoolWireParser()
         var result: TurnOutcome?
-        var buffer = Data()
-        var chunk = [UInt8](repeating: 0, count: 4096)
         let turnTimeout = Double(ProcessInfo.processInfo.environment["AGENTTEST_TURN_TIMEOUT"] ?? "1800") ?? 1800
         let deadline = Date().addingTimeInterval(turnTimeout)
 
-        loop: while Date() < deadline {
-            var pfd = pollfd(fd: stdoutFD, events: Int16(POLLIN), revents: 0)
-            let pr = Darwin.poll(&pfd, 1, 1000)
-            guard pr >= 0 else { continue }
-            guard (pfd.revents & Int16(POLLIN)) != 0 || (pfd.revents & Int16(POLLHUP)) != 0 else { continue }
-            let n = Darwin.read(stdoutFD, &chunk, chunk.count)
-            if n <= 0 { break loop }
-            buffer.append(contentsOf: chunk[0..<n])
-            while let nl = buffer.firstIndex(of: 0x0A) {
-                let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
-                buffer.removeSubrange(buffer.startIndex...nl)
-                // `write(contentsOf:)`, not `write(_:)`: the latter is the
-                // ObjC-era overload that RAISES on a closed/broken handle,
-                // uncatchable by `try?` — it would kill the whole harness
-                // over a capture-write failure (item 6, P22 cleanup; the same
-                // lesson SafeAppendFile documents).
-                if let capture { try? capture.write(contentsOf: Data((line + "\n").utf8)) }
-                guard let poolEvent = parser.feed(line), poolEvent.worker == worker else { continue }
-                let event = poolEvent.event
-                if ProcessInfo.processInfo.environment["AGENTTEST_DEBUG"] != nil {
-                    switch event {
-                    case .ready(_, let stop, let gen, let ctx): FileHandle.standardError.write(Data("[orch] ready stop=\(stop ?? "nil") gen=\(gen.map(String.init) ?? "nil") ctx=\(ctx.map(String.init) ?? "nil")\n".utf8))
-                    case .toolRequest(_, let name, _): FileHandle.standardError.write(Data("[orch] tool_request \(name)\n".utf8))
-                    case .text(let s): FileHandle.standardError.write(Data("[orch] text \(s.prefix(60))\n".utf8))
-                    default: break
-                    }
-                }
-                builder.apply(event)
+        let ended = pumpTurn(deadline: deadline, capture: capture) { line in
+            guard let poolEvent = parser.feed(line), poolEvent.worker == worker else { return false }
+            let event = poolEvent.event
+            if ProcessInfo.processInfo.environment["AGENTTEST_DEBUG"] != nil {
                 switch event {
+                case .ready(_, let stop, let gen, let ctx): FileHandle.standardError.write(Data("[orch] ready stop=\(stop ?? "nil") gen=\(gen.map(String.init) ?? "nil") ctx=\(ctx.map(String.init) ?? "nil")\n".utf8))
+                case .toolRequest(_, let name, _): FileHandle.standardError.write(Data("[orch] tool_request \(name)\n".utf8))
+                case .text(let s): FileHandle.standardError.write(Data("[orch] text \(s.prefix(60))\n".utf8))
+                default: break
+                }
+            }
+            builder.apply(event)
+            switch event {
                 case .toolRequest(let idx, let name, let params):
                     toolCallCount += 1
                     if toolCallCount > packet.toolCallBudget {
@@ -137,7 +119,7 @@ public final class PoolOrchestrator {
                         let r = ToolCallbackResponse(idx: idx, ok: false,
                             s: ToolResultCondenser.condense("tool budget exceeded"))
                         stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
-                        continue
+                        return false
                     }
                     var response = ToolCallbackResponder.respond(
                         idx: idx, name: name, params: params,
@@ -179,12 +161,13 @@ public final class PoolOrchestrator {
                     // v1: the first worker-N ready is the turn-end (the startup
                     // ready is worker 0, which we filter out above).
                     result = WorktreeDispatch.relativize(outcome: builder.finish(), worktree: worktree)
-                    break loop
+                    return true
                 default:
                     break
-                }
             }
+            return false
         }
+        _ = ended
         guard let result else {
             throw PoolOrchestratorError.turnDidNotEnd
         }
@@ -222,30 +205,14 @@ public final class PoolOrchestrator {
 
         var parser = PoolWireParser()
         var result: TurnOutcome?
-        var buffer = Data()
-        var chunk = [UInt8](repeating: 0, count: 4096)
         let turnTimeout = Double(ProcessInfo.processInfo.environment["AGENTTEST_TURN_TIMEOUT"] ?? "1800") ?? 1800
         let deadline = Date().addingTimeInterval(turnTimeout)
 
-        loop: while Date() < deadline {
-            var pfd = pollfd(fd: stdoutFD, events: Int16(POLLIN), revents: 0)
-            let pr = Darwin.poll(&pfd, 1, 1000)
-            if pr < 0 {
-                if errno == EINTR { continue }
-                break loop  // persistent poll error: give up, don't busy-spin
-            }
-            guard (pfd.revents & Int16(POLLIN)) != 0 || (pfd.revents & Int16(POLLHUP)) != 0 else { continue }
-            let n = Darwin.read(stdoutFD, &chunk, chunk.count)
-            if n <= 0 { break loop }
-            buffer.append(contentsOf: chunk[0..<n])
-            while let nl = buffer.firstIndex(of: 0x0A) {
-                let text = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
-                buffer.removeSubrange(buffer.startIndex...nl)
-                if let capture { try? capture.write(contentsOf: Data((text + "\n").utf8)) }
-                guard let poolEvent = parser.feed(text), poolEvent.worker == .orchestrator else { continue }
-                let event = poolEvent.event
-                builder.apply(event)
-                switch event {
+        let ended = pumpTurn(deadline: deadline, capture: capture) { text in
+            guard let poolEvent = parser.feed(text), poolEvent.worker == .orchestrator else { return false }
+            let event = poolEvent.event
+            builder.apply(event)
+            switch event {
                 case .toolRequest(let idx, let name, let params):
                     toolCallCount += 1
                     if toolCallCount > toolCallBudget {
@@ -255,7 +222,7 @@ public final class PoolOrchestrator {
                         let r = ToolCallbackResponse(idx: idx, ok: false,
                             s: ToolResultCondenser.condense("tool budget exceeded"))
                         stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
-                        continue
+                        return false
                     }
                     if name == "dispatch" {
                         if let packet = buildDispatchPacket(params) {
@@ -321,14 +288,15 @@ public final class PoolOrchestrator {
                     // `generated`/`ctx_used`) finishes the turn. Note the
                     // turn-end ready ALSO carries `planned_bytes`, so
                     // `planned_bytes` cannot discriminate the two.
-                    if stopReason == nil { continue }
+                    if stopReason == nil { return false }
                     result = WorktreeDispatch.relativize(outcome: builder.finish(), worktree: worktree)
-                    break loop
+                    return true
                 default:
                     break
-                }
             }
+            return false
         }
+        _ = ended
         guard let result else {
             throw PoolOrchestratorError.turnDidNotEnd
         }
@@ -338,6 +306,36 @@ public final class PoolOrchestrator {
     public func stop() {
         try? stdin.close()
         process.terminate()
+    }
+
+    /// Drain one line-oriented turn until its consumer recognizes the end.
+    /// The two callers intentionally keep different event policies; this
+    /// shared part only owns polling, incremental framing, and capture.
+    @discardableResult
+    private func pumpTurn(deadline: Date, capture: FileHandle?, consume: (String) -> Bool) -> Bool {
+        var framing = LineBuffer()
+        var chunk = [UInt8](repeating: 0, count: 4096)
+
+        while Date() < deadline {
+            var pfd = pollfd(fd: stdoutFD, events: Int16(POLLIN), revents: 0)
+            let polled = Darwin.poll(&pfd, 1, 1000)
+            if polled < 0 {
+                if errno == EINTR { continue }
+                return false
+            }
+            guard (pfd.revents & Int16(POLLIN)) != 0 || (pfd.revents & Int16(POLLHUP)) != 0 else { continue }
+            let count = Darwin.read(stdoutFD, &chunk, chunk.count)
+            if count <= 0 { return false }
+            for rawLine in framing.append(Data(chunk[0..<count])) {
+                if let capture {
+                    var captured = rawLine
+                    captured.append(0x0A)
+                    try? capture.write(contentsOf: captured)
+                }
+                if consume(String(decoding: rawLine, as: UTF8.self)) { return true }
+            }
+        }
+        return false
     }
 
 }

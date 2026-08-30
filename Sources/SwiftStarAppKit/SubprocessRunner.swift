@@ -32,7 +32,9 @@ public enum SubprocessRunner {
         in cwd: URL,
         timeout: TimeInterval = 300
     ) throws -> Result {
-        let launched = try launch(command, in: cwd)
+        let launched = try launch(
+            executable: URL(fileURLWithPath: "/bin/bash"),
+            arguments: ["-c", command], in: cwd)
         let deadline = Date().addingTimeInterval(timeout)
         while launched.process.isRunning && Date() < deadline {
             Thread.sleep(forTimeInterval: 0.05)
@@ -52,7 +54,42 @@ public enum SubprocessRunner {
         in cwd: URL,
         timeout: TimeInterval = 300
     ) async throws -> Result {
-        let launched = try launch(command, in: cwd)
+        let launched = try launch(
+            executable: URL(fileURLWithPath: "/bin/bash"),
+            arguments: ["-c", command], in: cwd)
+        let deadline = Date().addingTimeInterval(timeout)
+        while launched.process.isRunning && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return finish(launched)
+    }
+
+    /// Runs an executable with an argument vector, without a shell. This is
+    /// the common process seam for git, compiler, and other helper commands
+    /// whose arguments must not be re-parsed by `/bin/bash`.
+    public static func run(
+        executable: URL,
+        arguments: [String],
+        in cwd: URL,
+        timeout: TimeInterval = 300
+    ) throws -> Result {
+        let launched = try launch(executable: executable, arguments: arguments, in: cwd)
+        let deadline = Date().addingTimeInterval(timeout)
+        while launched.process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return finish(launched)
+    }
+
+    /// Async counterpart to the direct-argv runner. It shares the same
+    /// concurrent pipe draining and timeout behavior as the shell overloads.
+    public static func run(
+        executable: URL,
+        arguments: [String],
+        in cwd: URL,
+        timeout: TimeInterval = 300
+    ) async throws -> Result {
+        let launched = try launch(executable: executable, arguments: arguments, in: cwd)
         let deadline = Date().addingTimeInterval(timeout)
         while launched.process.isRunning && Date() < deadline {
             try? await Task.sleep(nanoseconds: 50_000_000)
@@ -88,10 +125,14 @@ public enum SubprocessRunner {
     /// neither can deadlock on a full 64 KiB buffer) and return the running
     /// handle. Shared by both `run` overloads — only the wait-for-completion
     /// loop differs (blocking vs. yielding).
-    private static func launch(_ command: String, in cwd: URL) throws -> Launched {
+    private static func launch(
+        executable: URL,
+        arguments: [String],
+        in cwd: URL
+    ) throws -> Launched {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", command]
+        process.executableURL = executable
+        process.arguments = arguments
         process.currentDirectoryURL = cwd
         let outPipe = Pipe()
         let errPipe = Pipe()

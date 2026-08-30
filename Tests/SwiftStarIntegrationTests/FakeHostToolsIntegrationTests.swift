@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-import Darwin
 import SwiftStarKit
 
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
@@ -86,19 +85,8 @@ struct FakeHostToolsIntegrationTests {
     /// Blocking read of one line from `fd`, with a deadline. Returns nil on
     /// EOF or timeout.
     private func readLine(fd: Int32, timeout: TimeInterval) throws -> String? {
-        var line = [UInt8]()
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            var p = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-            guard poll(&p, 1, 1000) > 0 else { continue }
-            guard (p.revents & Int16(POLLIN)) != 0 else { continue }
-            var b: UInt8 = 0
-            let n = Darwin.read(fd, &b, 1)
-            if n <= 0 { return line.isEmpty ? nil : String(decoding: line, as: UTF8.self) }
-            if b == 0x0A { return String(decoding: line, as: UTF8.self) }
-            line.append(b)
-        }
-        return nil
+        do { return try PollingLineReader(fd: fd).nextLine(timeout: timeout) }
+        catch { return nil }
     }
 
     /// Synchronous round trip: reads the agent's stdout line by line, feeding
@@ -117,36 +105,29 @@ struct FakeHostToolsIntegrationTests {
         let agentFD = agent.stdout.fileHandleForReading.fileDescriptor
         let appFD = app.stdout.fileHandleForReading.fileDescriptor
         let deadline = Date().addingTimeInterval(timeout)
-        var buffer = Data()
+        let agentReader = PollingLineReader(fd: agentFD)
+        let appReader = PollingLineReader(fd: appFD)
         var requestCount = 0
         while Date() < deadline {
-            var p = pollfd(fd: agentFD, events: Int16(POLLIN), revents: 0)
-            guard poll(&p, 1, 1000) > 0 else { continue }
-            guard (p.revents & Int16(POLLIN)) != 0 else { continue }
-            var chunk = [UInt8](repeating: 0, count: 4096)
-            let n = Darwin.read(agentFD, &chunk, chunk.count)
-            if n <= 0 { break }
-            buffer.append(contentsOf: chunk[0..<n])
-            while let nl = buffer.firstIndex(of: 0x0A) {
-                let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
-                buffer.removeSubrange(buffer.startIndex...nl)
-                if let event = parser.feed(line) {
-                    events.append(event)
-                    if case .toolRequest = event {
-                        requestCount += 1
-                        // Forward the request to the app; relay the result back.
-                        app.stdin.fileHandleForWriting.write(Data((line + "\n").utf8))
-                        if let result = try readLine(fd: appFD, timeout: 10) {
-                            agent.stdin.fileHandleForWriting.write(Data((result + "\n").utf8))
-                        }
+            let line: String
+            do { line = try agentReader.nextLine(timeout: deadline.timeIntervalSinceNow) }
+            catch { break }
+            if let event = parser.feed(line) {
+                events.append(event)
+                if case .toolRequest = event {
+                    requestCount += 1
+                    // Forward the request to the app; relay the result back.
+                    app.stdin.fileHandleForWriting.write(Data((line + "\n").utf8))
+                    if let result = try? appReader.nextLine(timeout: 10) {
+                        agent.stdin.fileHandleForWriting.write(Data((result + "\n").utf8))
                     }
-                    // Completion: all requests emitted AND the turn-end ready
-                    // (eos) that follows the last request's trailing text.
-                    if requestCount >= nRequests,
-                       case .ready(_, let stopReason, _, _) = event,
-                       stopReason == "eos" {
-                        return events
-                    }
+                }
+                // Completion: all requests emitted AND the turn-end ready
+                // (eos) that follows the last request's trailing text.
+                if requestCount >= nRequests,
+                   case .ready(_, let stopReason, _, _) = event,
+                   stopReason == "eos" {
+                    return events
                 }
             }
         }

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftStarAppKit
 
 /// Test-support: a disposable git repo with one seed commit, for integration
 /// tests that need a real `git` working tree to dispatch/repair against.
@@ -30,23 +31,11 @@ enum GitFixtureRepo {
     /// in the message) on non-zero exit.
     @discardableResult
     static func git(_ dir: URL, _ args: [String]) throws -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", dir.path] + args
-        let out = Pipe()
-        let err = Pipe()
-        p.standardOutput = out
-        p.standardError = err
-        try p.run()
-        p.waitUntilExit()
-        let output = String(data: out.fileHandleForReading.readDataToEndOfFile(),
-                            encoding: .utf8) ?? ""
-        let errorOutput = String(data: err.fileHandleForReading.readDataToEndOfFile(),
-                                 encoding: .utf8) ?? ""
-        guard p.terminationStatus == 0 else {
-            throw NSError(domain: "GitFixtureRepo.git", code: Int(p.terminationStatus),
-                          userInfo: [NSLocalizedDescriptionKey: output + errorOutput])
+        let result = try GitProcess.run(args, in: dir)
+        guard result.exit == 0, !result.timedOut else {
+            throw NSError(domain: "GitFixtureRepo.git", code: Int(result.timedOut ? 124 : result.exit),
+                          userInfo: [NSLocalizedDescriptionKey: result.stdout + result.stderr])
         }
-        return output
+        return result.stdout
     }
 }

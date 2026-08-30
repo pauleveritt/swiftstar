@@ -507,19 +507,19 @@ final class AgentController {
         stdoutTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stdoutPipe.fileHandleForReading
             let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureWireURL.path) : nil
-            var buffer = Data()
+            var lines = LineBuffer()
             while !Task.isCancelled {
                 let data = handle.availableData
                 if data.isEmpty { break }  // EOF: the child closed stdout
-                buffer.append(data)
-                while let nl = buffer.firstIndex(of: 0x0A) {
-                    let lineData = buffer[buffer.startIndex..<nl]
-                    buffer.removeSubrange(buffer.startIndex...nl)
+                for lineData in lines.append(data) {
                     capture?.append(lineData)
                     capture?.append(Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeWire(line, generation: gen)
                 }
+            }
+            if let lineData = lines.finish() {
+                await self?.consumeWire(String(decoding: lineData, as: UTF8.self), generation: gen)
             }
             capture?.close()
         }
@@ -528,20 +528,17 @@ final class AgentController {
         stderrTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stderrPipe.fileHandleForReading
             let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureStderrURL.path) : nil
-            var buffer = Data()
+            var lines = LineBuffer()
             while !Task.isCancelled {
                 let data = handle.availableData
                 if data.isEmpty { break }
-                buffer.append(data)
-                while let nl = buffer.firstIndex(of: 0x0A) {
-                    let lineData = buffer[buffer.startIndex..<nl]
-                    buffer.removeSubrange(buffer.startIndex...nl)
+                for lineData in lines.append(data) {
                     capture?.append(lineData)
                     capture?.append(Data([0x0A]))
-                    let line = String(decoding: lineData, as: UTF8.self)
-                    await self?.consumeStderr(line, generation: gen)
+                    await self?.consumeStderr(String(decoding: lineData, as: UTF8.self), generation: gen)
                 }
             }
+            _ = lines.finish()
             capture?.close()
         }
 
@@ -804,16 +801,9 @@ final class AgentController {
     /// The engine build identification (D12): the submodule SHA, resolved
     /// once per spawn — the same fact the capture provenance records.
     private static func submoduleSHA(_ engineDir: URL) -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", engineDir.path, "rev-parse", "HEAD"]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = Pipe()
-        try? p.run()
-        p.waitUntilExit()
-        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
+        guard let result = try? GitProcess.run(["rev-parse", "HEAD"], in: engineDir),
+              result.exit == 0, !result.timedOut else { return "unknown" }
+        return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func consumeStderr(_ line: String, generation: Int) {
@@ -1153,21 +1143,11 @@ final class AgentController {
     /// `workspace` on failure (the dispatch then fails at `git worktree add`
     /// with a readable error rather than a guess). `nonisolated` — runs `git`.
     nonisolated static func resolveRepoRoot(from workspace: URL) -> URL {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", workspace.path, "rev-parse", "--show-toplevel"]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = Pipe()
-        do {
-            try p.run()
-            p.waitUntilExit()
-            if p.terminationStatus == 0,
-               let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
-                let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { return URL(fileURLWithPath: trimmed) }
-            }
-        } catch {}
+        if let result = try? GitProcess.run(["rev-parse", "--show-toplevel"], in: workspace),
+           result.exit == 0, !result.timedOut {
+            let trimmed = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return URL(fileURLWithPath: trimmed) }
+        }
         return workspace
     }
 }
@@ -1255,4 +1235,3 @@ extension AgentController {
         return total
     }
 }
-
