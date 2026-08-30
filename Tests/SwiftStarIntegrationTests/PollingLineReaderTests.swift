@@ -5,16 +5,20 @@ struct PollingLineReaderTests {
 
     @Test func retainsPartialAndMultipleLines() throws {
         let pipe = Pipe()
-        defer { try? pipe.fileHandleForReading.close() }
+        let writer = Process()
+        writer.executableURL = URL(fileURLWithPath: "/bin/sh")
+        writer.arguments = ["-c", "printf 'first\\nsecond'; sleep 0.05; printf '\\nthird\\n'"]
+        writer.standardOutput = pipe
+        writer.standardError = FileHandle.standardError
+        try writer.run()
+        defer {
+            if writer.isRunning { writer.terminate() }
+            writer.waitUntilExit()
+            try? pipe.fileHandleForReading.close()
+        }
         let reader = PollingLineReader(fd: pipe.fileHandleForReading.fileDescriptor)
 
-        pipe.fileHandleForWriting.write(Data("first\nsecond".utf8))
         #expect(try reader.nextLine(timeout: 1) == "first")
-
-        DispatchQueue.global().async {
-            pipe.fileHandleForWriting.write(Data("\nthird\n".utf8))
-            try? pipe.fileHandleForWriting.close()
-        }
         #expect(try reader.nextLine(timeout: 1) == "second")
         #expect(try reader.nextLine(timeout: 1) == "third")
     }
