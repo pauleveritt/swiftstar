@@ -255,7 +255,7 @@ final class AgentController {
     /// `swiftstar-drive`'s `CaptureWriter` via `CaptureProvenance`; the facts
     /// themselves (sampler, workspace grant) stay specific to a live app
     /// session.
-    private static func renderLiveProvenance(model: String, build: String, workspace: String, contextSize: Int, sampler: String, at dir: URL) throws {
+    private static func renderLiveProvenance(model: String, build: String, workspace: String, contextSize: Int, sampler: String, power: String, at dir: URL) throws {
         let text = CaptureProvenance.render(
             title: "Live session provenance",
             facts: [
@@ -263,6 +263,11 @@ final class AgentController {
                 .init("Build (`external/ds4` SHA)", "`\(build)`"),
                 .init("Context", "\(contextSize)"),
                 .init("Sampler", sampler),
+                // The engine throttle is a spawn SETTING (`--power`), not a
+                // measurement. Unrecorded, it turned a throttled app session and
+                // an unthrottled drive re-run into an apparent 1.7x engine
+                // speedup (see AgentCommand.powerRecord).
+                .init("Power", power),
                 .init("Workspace", "`\(workspace)`"),
                 CaptureProvenance.startedAtFact(Date()),
             ],
@@ -412,8 +417,13 @@ final class AgentController {
                 workspace: settings.workspace.path, contextSize: settings.contextSize,
                 // P23: provenance is a per-SPAWN fact, and no override can have
                 // gone out yet at spawn time — the per-turn efforts live in
-                // outcomes.ndjson, which is where a per-turn fact belongs.
-                sampler: TurnThinkPolicy.samplerRecord(.useDefault), at: captureDir)
+                // outcomes.ndjson, which is where a per-turn fact belongs. What
+                // this records is the spawn's own think/throttle configuration,
+                // read off the same settings argv is built from, rather than the
+                // hardcoded `think=default` that used to sit here regardless of
+                // whether the spawn passed `--nothink`.
+                sampler: AgentCommand.samplerRecord(settings: settings),
+                power: AgentCommand.powerRecord(settings: settings), at: captureDir)
             settings.tracePath = captureDir.appendingPathComponent("agent.trace")
         }
         outcomesURL = captureEnabled ? captureDir.appendingPathComponent("outcomes.ndjson") : nil
