@@ -131,7 +131,10 @@ model doesn't have to read is measured seconds off the wall clock.
   file.
 - **"You already read that, and it hasn't changed."** Hash + mtime every file
   the agent reads; answer "unchanged since turn 7" instead of the contents — up
-  to 133s saved per avoided re-read.
+  to 133s saved per avoided re-read. *Deferred to P24.2 (2026-08-30): this is
+  only honest when the agent actually holds what it is asking for, and until
+  reads are windowed it does not — tool results are capped at 8000 bytes, so
+  the middle of a larger file never arrived. The bullet above ships first.*
 - **"Send this task where its files are already warm."** Route work to the
   session that has already prefilled what it needs.
 - **"Keep the cache hot."** Run tasks touching the same module consecutively.

@@ -1,5 +1,21 @@
 # P24.1 read-guard — the "before" measurement (2026-08-30)
 
+> **Correction 2026-08-30.** The counts below are correct and reproducible; the
+> *framing* is not. "55 redundant re-reads" counts the repeats of a starvation
+> loop as redundancy. The host ignores every window parameter and the responder
+> condenses each result at 8000 bytes
+> (`ToolCallbackResponder.swift:259,284`), so the middle of a file over 8 KB is
+> unreachable: the model asked for `AgentView.swift`'s line 252 in 22 distinct
+> windows and could never receive it. Those reads were not redundant — none of
+> them delivered what was asked for.
+>
+> **§2 below ("Window coverage is the hard part") was right**, and is the
+> premise of the superseding design,
+> [`2026-08-30-p24-1-window-honoring-reads-design.md`](../specs/2026-08-30-p24-1-window-honoring-reads-design.md).
+> **§1 ("Redundant is a ceiling") is withdrawn**: unchanged content does not
+> make a re-read redundant when the prior read never delivered the requested
+> lines.
+
 The read-guard (`don't-re-read`) is P24's first feature cycle. This note
 commits the *before* number — the re-read tax the guard attacks — as a
 reproducible measurement, not prose. It pairs with the already-committed
@@ -74,8 +90,9 @@ costing ~1,809 suffix tokens a re-read.
 
 ## The "after" measurement
 
-Same verb, plus a replay that marks which of the 55 redundant reads the guard
-short-circuits under its coverage rule. Expected: the 33 `AgentView.swift`
-re-reads → ≈ 52k suffix tokens avoided, to be confirmed at cycle end by the
-paired-bill guardrail (`swiftstar-analyze diff`) on a live session, not by
-self-report.
+Superseded. That measurement described a replay through the withdrawn guard,
+and was arithmetically incapable of returning anything but the numbers above
+(short-circuits are forced to `calls − distinct` when every read of a path
+hashes the same bytes). The successor cycle's measurement is behavioral: see
+"Live validation" in
+[the window-honoring spec](../specs/2026-08-30-p24-1-window-honoring-reads-design.md).

@@ -564,7 +564,11 @@ group's order is not a priority order.
   later turn re-read (the post-compaction AgentView.swift re-reads in the 1809
   capture). See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source:
   `2026-08-22-p11-engine-constraints-and-corrections.md` and the ds4-control
-  survey it cites.
+  survey it cites. **Deferred again 2026-08-30** — the window-honoring-reads
+  spec that superseded the original read-guard spec explicitly scopes `recall`
+  back out, "sequence after P24": see
+  [`2026-08-30-p24-1-window-honoring-reads-design.md`](docs/superpowers/specs/2026-08-30-p24-1-window-honoring-reads-design.md).
+  Still reopens on the same two conditions; P24 just isn't done yet.
 
 - **A session browser over `~/.ds4/kvcache`** — listing, metadata (tokens,
   ctx, created, last-used), and full-text search across past agent sessions,
@@ -585,6 +589,12 @@ group's order is not a priority order.
   was observed at the everyday context size with a measured cost: five in 24
   min at 28–29k, each discarding ~23k tokens (the 1809 capture). Still
   requires the `ds4_agent.c` fork. See the [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md). Source: same note.
+  **Deferred again 2026-08-30** — same window-honoring-reads spec, same
+  "sequence after P24" scoping; the 1809 capture's five compactions are now
+  understood partly as a starvation-loop artifact (see the read-guard's
+  supersession note), so the compaction-discards-needed-context reopen
+  condition should be re-verified once window-honoring reads ships and re-reads
+  drop, not assumed to still hold at its original strength.
 
 - **Recursive sub-queries — the RLM pattern as P11's third lifetime tier.**
   A project is a long-lived session; a subagent is a short-lived one sharing
@@ -617,6 +627,70 @@ group's order is not a priority order.
   seconds, versus minutes of re-prefill) with a small resident working set.
   *Reopens after P11's pool exists and a second concurrent project is
   actually wanted.* Source: same note.
+
+- **Snapshot-before-risk, rewind-on-failure.** Before a speculative multi-step
+  action (an uncertain edit sequence, a risky tool chain), `ds4_session_save_payload`
+  the session; on failure, `ds4_session_rewind`/`load_snapshot` back to the
+  checkpoint instead of asking the model to undo itself in-context (which costs
+  tokens, is unreliable, and risks forcing a compaction). Host-driven exact
+  backtracking of session state, not conversational backtracking. Unmeasured:
+  nothing in the codebase exercises `rewind`/`save_payload`/`load_snapshot`
+  today beyond `Multi-project residency`'s idle-session-eviction use above, and
+  that use is disk-swap, not undo. *Reopens when a task is observed where the
+  model's own in-context correction of a failed multi-step action is
+  measurably expensive or unreliable enough to be worth a host-side revert
+  instead.* Source: brainstorm 2026-08-30, grounded in the session primitives
+  named at [`2026-08-23-p11-subagent-pool-design.md`](docs/superpowers/specs/2026-08-23-p11-subagent-pool-design.md).
+
+- **Compare-before-commit via shared-prefix forks.** Snapshot at a decision
+  point, run two short candidate continuations from that checkpoint, keep the
+  better one, discard the other's session. **Not a concurrency win** — the
+  pool is serialized (P11 D1), so both continuations run one after another on
+  the same GPU; the benefit is a better-chosen answer per token spent (a
+  cheap shared-prefix comparison instead of committing to one plan and paying
+  a full retry later if it's wrong), not wall-clock speed. Needs a cheap
+  host-side or bounded-model judge to pick the winner, or the comparison
+  itself becomes the tax it was meant to avoid. *Reopens when a concrete
+  decision point exists where two plans are a genuine toss-up and picking
+  wrong is expensive enough to justify the extra shallow generation.* Source:
+  brainstorm 2026-08-30, same spec.
+
+- **Admission-control scheduler priced by the measured prefill-depth curve.**
+  The docs already have the KV-size formula (`49,152 × ctx + 72 MiB`) and the
+  measured prefill-depth throughput curve (231→114 tok/s, 12k→30k ctx). A
+  host-side scheduler could predict the token/time cost of a prospective
+  dispatch or route *before* committing — the same philosophy as the existing
+  memory-feasibility gate, applied to time instead of RAM — so the
+  orchestrator picks the cheapest routing deterministically instead of
+  discovering the cost after the fact. Overlaps with the already-scheduled
+  dispatch-preference rule (P20) and warm-prefix routing (above); this entry
+  is the cost-prediction piece neither of those names explicitly. *Reopens
+  when P20's dispatch-preference rule is live and a routing decision is
+  observed choosing between options with materially different prefill
+  depth.* Source: brainstorm 2026-08-30.
+
+- **`.kv`/wire captures as deterministic replay fixtures for host-tool
+  regression tests.** P24.1's Task 4 already does one instance of this — replay
+  the 1809 capture's read sequence through a fresh `ReadGuard` with no model,
+  no engine — but the trick generalizes: any real captured session (`.kv` text
+  or `wire.ndjson`) is a corpus of deterministic replay fixtures for testing
+  *any* host-side tool-logic change, cheaper than a live capture and closer to
+  production shape than a synthetic fixture. *Reopens with the next host-tool
+  behavior change that wants regression coverage beyond synthetic fixtures —
+  P24.2's re-decided read guard is a likely first customer.* Source: brainstorm
+  2026-08-30, precedent in [`2026-08-30-p24-1-read-guard.md`](docs/superpowers/plans/2026-08-30-p24-1-read-guard.md) Task 4 (superseded but the replay technique survives).
+
+- **Cross-session fact mining from historical `.kv` files.** Deterministic text
+  search over old sessions' rendered conversations (no inference) to seed a
+  project's persistent knowledge, instead of the agent re-deriving the same
+  facts fresh every session or paying a summarization pass. Cheaper than
+  compaction's model-authored summary; read-only against artifacts that
+  already exist on disk. Substantially the same substrate as the backlogged
+  `recall` tool and session browser above — this entry is the "mine it
+  proactively into memory" framing rather than "search it on demand."
+  *Reopens together with `recall`/the session browser, once either lands and a
+  concrete case shows an agent re-deriving a fact a past session already
+  established.* Source: brainstorm 2026-08-30.
 
 ### Model and engine features
 
@@ -864,6 +938,14 @@ group's order is not a priority order.
   first time) is measured.* **Split 2026-08-27:** the deterministic background files+symbols index (what feeds P24's `scout`) is P24's, not this tier's; this entry keeps the model-backed roles — the librarian's Monty reactions and the inspector as P24's ANE-only-phrases escalation when deterministic clustering isn't decision-adequate. Both stay AFM-gated. **CAG filing 2026-08-28:** see [`2026-08-28-cag-and-the-librarian.md`](docs/superpowers/research/2026-08-28-cag-and-the-librarian.md) for the capacity analysis (4k-window sufficiency, layer decomposition, deciding measurement). Source:
   `docs/superpowers/research/2026-08-23-monty-and-the-ane-watcher-tier.md`,
   `docs/superpowers/research/2026-08-28-cag-and-the-librarian.md` (arXiv 2412.15605v2).
+  **Falsifier 1 resolved 2026-08-30** — checked against Apple's public docs
+  (`developer.apple.com/documentation/foundationmodels`, `import
+  FoundationModels`, not the guessed CoreML/CoreAI naming): `LanguageModelSession`
+  is a real, stateful, multi-turn API with a documented KV cache (Apple's own
+  "Optimizing key-value caching in language model sessions" guide), append-only
+  cache-friendly turns, `prewarm(promptPrefix:)`, and transcript rehydration
+  across restarts. Not a one-shot predictor. The invocation-API falsifier is
+  cleared; the fill-success-rate falsifier is not — still needs measuring.
 
 ### Process and tooling
 
