@@ -185,12 +185,25 @@ So `condense` becomes a no-op on read results instead of the thing that silently
 removes the middle. The 1000 bytes of slack under the 8000 cap absorb the header
 (bounded by path length + ~160) with room to spare.
 
-**D3 — The line default mirrors the engine's tier, so `contextSize` is
-threaded.** `HostToolExecutor` gains a `contextSize` init parameter (default
-32768) and computes 120 / 240 / 500 by the engine's thresholds. Diverging on the
-default would put two different numbers behind one tool name for no gain; the
-threading is one parameter at two construction sites
-(`AgentController.swift:838`, `PoolOrchestrator.swift:208`).
+**D3 — The line default mirrors the engine's tier, so `contextSize` reaches the
+executor two ways.** `HostToolExecutor` computes 120 / 240 / 500 by the engine's
+thresholds. Diverging on the default would put two different numbers behind one
+tool name for no gain.
+
+The two construction sites need different mechanisms, because one of them has no
+settings yet:
+
+- `PoolOrchestrator` (`:19`, `:80`, `:208`) constructs per phase with its config
+  in hand → an `init(policy:contextSize:)` parameter, defaulting to 32768.
+- `AgentController.hostToolExecutor` (`:838`) is a **`static let`**, initialized
+  at type-initialization before any `settings` exist. It cannot take the value at
+  construction. It gets `setContextSize(_:)`, called from the session
+  start/restart block from the same `settings.contextSize` that builds the `-c`
+  argument (`AgentCommand.swift:105`) — the block that already calls
+  `resetReadState()`.
+
+Both paths land in the same stored property. The default keeps every existing
+construction site compiling and behaving identically to the engine's large tier.
 
 **D4 — `more` is the engine's `more`: a continuation, not a re-read.** A
 truncated read records the continuation `(path, nextLine, bare)`; a read that
@@ -280,7 +293,9 @@ signal the executor uses to clear the continuation (D4).
 
 ### 2. `Sources/SwiftStarAppKit/HostToolExecutor.swift` (extend)
 
-- `init(policy:contextSize:)` — `contextSize` defaults to 32768 (D3).
+- `init(policy:contextSize:)` — `contextSize` defaults to 32768; plus
+  `setContextSize(_:)` for the app's `static let`, which has no settings at
+  type-init (D3).
 - New state under the existing `lock` (`:83`):
   `private var continuations: [String: (path: String, nextLine: Int, bare: Bool)]`.
 - `readResult`, the non-`readCache` path: parse `start_line` / `max_lines` /
@@ -297,11 +312,13 @@ signal the executor uses to clear the continuation (D4).
 
 ### 3. `Sources/SwiftStar/AgentController.swift` (extend)
 
-- Pass `contextSize` when constructing the executor (`:838`), from the same
-  settings that build the `-c` argument.
-- Call `Self.hostToolExecutor.resetReadState()` in the session start/restart
-  block, alongside the existing `outcomeBuilder` (`:380`) and `poolState`
-  (`:384`) resets.
+- In the session start/restart block, alongside the existing `outcomeBuilder`
+  (`:380`) and `poolState` (`:384`) resets, call both
+  `Self.hostToolExecutor.setContextSize(settings.contextSize)` and
+  `Self.hostToolExecutor.resetReadState()`. The static executor cannot be
+  constructed with settings (D3), so this block is the only place the app's
+  context size can reach it — and it is the correct place, since a restart is
+  exactly when a changed context size takes effect.
 
 ### 4. `Sources/SwiftStarAppKit/PoolOrchestrator.swift` (one argument)
 
