@@ -3,7 +3,8 @@ import Foundation
 /// `AgentController.defaultSettings()`'s pure logic, extracted (item 5b, P22
 /// cleanup) so it is unit-testable: `Sources/SwiftStar` has no test target,
 /// so the resolution logic — engine dir, model (through `VariantResolver`),
-/// context clamp, workspace, shell posture — was untestable in place. Takes
+/// context clamp, workspace, shell posture, and power-saving default — was
+/// untestable in place. Takes
 /// its implicit inputs explicitly (`UserDefaults`, the environment
 /// dictionary, and the caller's resolved `projectRoot` — the one input that
 /// isn't a parameter here because it depends on `Bundle.main`/the app's own
@@ -95,6 +96,9 @@ public enum AgentDefaultSettings {
         }
         // D2: the app's default posture is deny — shell off until granted.
         let shellAllowed = defaults.bool(forKey: "agentShellAllowed")
+        // Power savings is enabled by default. Read the object so an unset key
+        // differs from an explicitly stored false.
+        let powerSavingEnabled = defaults.object(forKey: "agentPowerSavingEnabled") as? Bool ?? true
         // P23: a standing guardrail against a runaway think loop. The
         // 2026-08-28 probe reproduced a turn that spent 15,873 of 16,384
         // tokens reasoning and never answered (the failure P20's closure
@@ -111,6 +115,7 @@ public enum AgentDefaultSettings {
             contextSize: contextSize,
             workspace: workspace,
             shellAllowed: shellAllowed,
+            powerSavingEnabled: powerSavingEnabled,
             thinkBudget: thinkBudget,
             workerContextSize: workerContextSize,
             runtime: variant?.runtime

@@ -10,6 +10,7 @@ struct SettingsView: View {
     // Agent pane (2026-08-26): the shell toggle moved here from the Agent tab;
     // the transcript font size applies immediately.
     @AppStorage("agentShellAllowed") private var shellAllowed = false
+    @AppStorage("agentPowerSavingEnabled") private var powerSavingEnabled = true
     @AppStorage("agentThinkBudget") private var agentThinkBudget = 2048
     @AppStorage("workerContextSize") private var workerContextSize = WorkerContextPolicy.defaultContext
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
@@ -121,6 +122,10 @@ struct SettingsView: View {
             Section("Agent") {
                 Toggle("Allow shell commands", isOn: $shellAllowed)
                 Text("Applies when the agent next starts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Enable power savings", isOn: $powerSavingEnabled)
+                Text("Targets 70% GPU duty cycle to reduce heat, fan noise, and battery use. Applies when the agent next starts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Stepper("Think budget: \(agentThinkBudget == 0 ? "off" : "\(agentThinkBudget) tokens")",

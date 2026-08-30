@@ -42,9 +42,7 @@ struct AgentView: View {
         Button(action: pickWorkspace) {
             HStack(spacing: 4) {
                 Image(systemName: "folder")
-                Text(PathAbbreviation.abbreviate(
-                    controller.settings.workspace,
-                    home: FileManager.default.homeDirectoryForCurrentUser))
+                Text(PathAbbreviation.leafName(controller.settings.workspace))
             }
             .font(.caption)
         }
@@ -101,7 +99,17 @@ struct AgentView: View {
                 // value-type rows, so comparing it fires on that in-place growth.
                 let last = controller.transcript.rows.count - 1
                 guard last >= 0 else { return }
-                withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                // Streamed rows change height many times per second. Starting
+                // an animated scroll for each mutation continually interrupts
+                // the previous animation, producing the visible up/down
+                // oscillation. Follow the latest row in a transaction that
+                // explicitly disables animation instead.
+                var transaction = Transaction()
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    proxy.scrollTo(last, anchor: .bottom)
+                }
             }
         }
     }
@@ -302,10 +310,10 @@ struct AgentView: View {
                     // the ring renders no text. Without these the two facts the
                     // status bar exists for are invisible to assistive tech —
                     // and severity is carried by color alone.
-                    .help(memoryRingTooltip(footprint: footprint, planned: planned))
                     .accessibilityElement()
                     .accessibilityLabel("Agent memory")
                     .accessibilityValue(memoryRingTooltip(footprint: footprint, planned: planned))
+                    .help(memoryRingTooltip(footprint: footprint, planned: planned))
             }
             if controller.isUp, let s = controller.lastStatus, s.ctxSize > 0 {
                 ValueGaugeView(
@@ -314,10 +322,10 @@ struct AgentView: View {
                     trackColor: contextRingColor(ctxUsed: s.ctxUsed),
                     diameter: 15)
                     .contentShape(Rectangle())
-                    .help(contextRingTooltip(s))
                     .accessibilityElement()
                     .accessibilityLabel("Context window")
                     .accessibilityValue(contextRingTooltip(s))
+                    .help(contextRingTooltip(s))
             }
         }
         .padding(.horizontal, 10)

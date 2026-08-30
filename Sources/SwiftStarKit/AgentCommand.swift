@@ -11,6 +11,10 @@ public struct AgentSettings: Equatable, Sendable {
     /// The shell toggle (D1/D2): false = `--shell off` (bash removed from
     /// schema and refused in dispatch). The app's default posture is deny.
     public var shellAllowed: Bool
+    /// Whether the engine should target a reduced GPU duty cycle. The app's
+    /// persisted setting defaults on; explicit value-type callers retain the
+    /// engine default unless they opt in.
+    public var powerSavingEnabled: Bool
     /// Per-round generation cap (`-n`): bounds a single assistant round's
     /// tokens (thinking + text). 0 = engine default. The agent test sets this
     /// to bound a think-loop that otherwise fills the whole context.
@@ -64,12 +68,18 @@ public struct AgentSettings: Equatable, Sendable {
     /// variant; nil = engine defaults. Wired into argv (P13 Laguna XS arm).
     public var runtime: EngineRuntimeConfig?
 
+    /// The moderate duty-cycle target used by the app's power-saving mode.
+    /// The engine documents 70% as a useful compromise between sustained load
+    /// and throughput, without changing model output.
+    public static let powerSavingPercent = 70
+
     public init(
         engineDir: URL,
         modelPath: URL,
         contextSize: Int = 32768,
         workspace: URL,
         shellAllowed: Bool = false,
+        powerSavingEnabled: Bool = false,
         maxTokens: Int = 0,
         noThink: Bool = false,
         thinkBudget: Int = 0,
@@ -85,6 +95,7 @@ public struct AgentSettings: Equatable, Sendable {
         self.contextSize = contextSize
         self.workspace = workspace
         self.shellAllowed = shellAllowed
+        self.powerSavingEnabled = powerSavingEnabled
         self.maxTokens = maxTokens
         self.noThink = noThink
         self.thinkBudget = thinkBudget
@@ -117,6 +128,9 @@ public enum AgentCommand {
             // without it fails loudly at option-parse, never silently.
             "--per-turn-think",
         ]
+        if settings.powerSavingEnabled {
+            argv.append(contentsOf: ["--power", String(AgentSettings.powerSavingPercent)])
+        }
         if settings.maxTokens > 0 {
             argv.append(contentsOf: ["-n", String(settings.maxTokens)])
         }
