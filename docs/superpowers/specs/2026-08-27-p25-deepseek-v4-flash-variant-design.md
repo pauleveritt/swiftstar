@@ -184,7 +184,10 @@ deserves its own cycle.
 - **The picker is derived.** `ModelChoice.list(variants:)` maps
   `VariantRegistry.all` ([`ModelChoice.swift:22-26`](../../../Sources/SwiftStarKit/ModelChoice.swift)),
   so the menu row appears with no UI work.
-- **No download.** Both copies are on disk, byte-identical at 97,591,747,456 B.
+- **No download.** The `-0731` file the app actually resolves to is on disk
+  at 97,591,747,456 B. **Corrected 2026-08-29:** the second copy this bullet
+  originally called "identical" is a different model checkpoint — see the
+  correction under "Gardenable facts" below.
 - **The default context needs no special-casing.** The app's 51,200 default
   ([`AgentDefaultSettings.swift:79`](../../../Sources/SwiftStarKit/AgentDefaultSettings.swift))
   falls inside the variant's supported range, unlike Mellum/XS whose
@@ -197,11 +200,30 @@ Read directly from
 during this session.
 
 - **Artifact:** GGUF v3, **1,328 tensors, 62 metadata keys**, 97,591,747,456
-  bytes (90.8894 GiB). A byte-identical copy under the pre-`-0731` legacy name
-  sits in `external/ds4/gguf/` (gitignored inside the submodule); both copies'
-  bytes match the published Hugging Face SHA-256 per
-  [`antirez/ds4#635`](https://github.com/antirez/ds4/issues/635) — no download
-  needed. Found by cross-referencing `docs/laptop-ai.md` against the
+  bytes (90.8894 GiB). A copy under the pre-`-0731` legacy name sits in
+  `external/ds4/gguf/` (gitignored inside the submodule); assumed
+  byte-identical here because the file sizes match and
+  [`antirez/ds4#635`](https://github.com/antirez/ds4/issues/635) was
+  (mis)read as confirming a shared published SHA-256 — no download
+  needed. **Corrected 2026-08-29: the assumption was wrong, unverified from
+  day one, and propagated uncorrected through three review passes and a
+  repo-hygiene audit before being checked.** Full SHA-256 differs
+  (`edabc92a…` vs `659e22fb…`); the two GGUF headers were parsed properly
+  (1,328 tensors, identical names/dimensions/offsets, identical
+  tensor-data-start offset 5,333,824 in both — only two build-provenance
+  metadata strings differ, `quantize.imatrix.file`/`.dataset`); hashing just
+  the ~91 GiB of tensor data past that offset still gives two different
+  digests (`12896dee…` vs `9885976b…`). The GitHub issue's own title —
+  "DeepSeek-V4-Flash-**0731** support" — names a distinct, dated Hugging
+  Face release, not a rebuild of the same weights: the two files are
+  different model checkpoints sharing one architecture and tensor layout,
+  not one model in two places. The pre-`-0731` copy is not on
+  `locateModel`'s search path and `VariantRegistry` names the `-0731`
+  filename explicitly, so nothing here changes what the app actually loads
+  — "no download needed" still holds for the file the app uses — but the
+  pre-`-0731` copy is a superseded checkpoint, not a spare copy of the
+  current one, and was deleted from `external/ds4/gguf/` on that basis
+  (91 GiB reclaimed). Found by cross-referencing `docs/laptop-ai.md` against the
   predecessor `~/projects/ds4-control`, which ran this exact model
   successfully (2026-08-27 research); a prefilled KV-cache directory from
   DS4 Control's prior use (13 checkpoint files) is further proof it ran.
