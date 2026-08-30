@@ -23,6 +23,7 @@ struct ActiveWorkerTurn {
     var worktree: WorktreeDispatcher.Worktree?
     var outcomeBuilder: TurnOutcomeBuilder?
     var watchdog: Task<Void, Never>?
+    private var toolBudget = ToolCallBudgetTracker(budget: 0)
 
     var activeId: WorkerId? { state.active?.id }
     var activePacket: HandoffPacket? { state.active?.packet }
@@ -35,6 +36,7 @@ struct ActiveWorkerTurn {
         state.start(id: id, packet: packet)
         self.worktree = worktree
         self.outcomeBuilder = outcomeBuilder
+        self.toolBudget = ToolCallBudgetTracker(budget: packet.toolCallBudget)
     }
 
     /// End the active turn (finished, failed, or a session restart): cancels
@@ -48,6 +50,7 @@ struct ActiveWorkerTurn {
         worktree = nil
         outcomeBuilder = nil
         watchdog = nil
+        toolBudget = ToolCallBudgetTracker(budget: 0)
     }
 
     mutating func markConsult(_ id: WorkerId) {
@@ -60,5 +63,12 @@ struct ActiveWorkerTurn {
 
     func isConsult(_ id: WorkerId) -> Bool {
         state.isConsult(id)
+    }
+
+    /// Admit one emitted worker request against the packet's per-turn budget.
+    /// The tracker is reset with the active turn and cleared with it, so a
+    /// worker cannot inherit calls from a prior packet.
+    mutating func admitToolCall() -> Bool {
+        toolBudget.admit()
     }
 }

@@ -24,6 +24,21 @@ let shell = env["CAPTURE_SHELL"]          // nil = no --shell
 // delegated to the host over the wire. Requires a workspace, because every
 // host file tool is confined to the grant and refuses without one.
 let hostTools = (env["CAPTURE_HOST_TOOLS"].map { $0 == "1" || $0.lowercased() == "true" }) ?? false
+// The engine throttle. `--power` is a SETTING, not a measurement: the engine
+// defaults to 100 and the app drops to 70 whenever power-saving is on
+// (`AgentSettings.powerSavingPercent`). A drive capture taken to reproduce an
+// app session must be able to pin the same value, or the two are not
+// comparable — on 2026-08-30 an app capture at 70 and a drive re-run at the
+// default 100 differed by ~1.7x in both prefill and decode rate on ~the same
+// volume of work, which was first read as an engine improvement.
+//
+// nil = don't append (engine default 100), keeping the P5 capture shape.
+let power = env["CAPTURE_POWER"]
+if let power, Int(power).map({ $0 < 1 || $0 > 100 }) ?? true {
+    FileHandle.standardError.write(Data(
+        "swiftstar-drive: CAPTURE_POWER must be an integer 1-100 (got \(power))\n".utf8))
+    exit(2)
+}
 if hostTools && workspace == nil {
     FileHandle.standardError.write(Data(
         "swiftstar-drive: CAPTURE_HOST_TOOLS=1 requires CAPTURE_WORKSPACE (host file tools are confined to the workspace grant)\n".utf8))
@@ -75,16 +90,9 @@ func logProgress(_ line: String) {
 }
 
 func submoduleSHA(_ dir: URL) -> String {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-    p.arguments = ["-C", dir.path, "rev-parse", "HEAD"]
-    let pipe = Pipe()
-    p.standardOutput = pipe
-    p.standardError = Pipe()
-    try? p.run()
-    p.waitUntilExit()
-    return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard let result = try? GitProcess.run(["rev-parse", "HEAD"], in: dir),
+          result.exit == 0, !result.timedOut else { return "" }
+    return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 // MARK: - Drive state (callback-driven; @unchecked Sendable for the handlers)
@@ -99,7 +107,7 @@ final class DriveState: @unchecked Sendable {
     /// what the app does, so it must see what the app sees. The `.ready` and
     /// `.refused` cases it counts are identical.
     private var parser = AgentWireParser()
-    private var lineBuf = Data()
+    private var lineBuf = LineBuffer()
     private var refusedReason: String?
 
     /// P24.1: set after the stdin pipe exists (it is created below this
@@ -120,12 +128,8 @@ final class DriveState: @unchecked Sendable {
         var refused: [(Int, String)] = []
         lock.lock()
         stdoutData.append(d)
-        lineBuf.append(d)
-        while let nl = lineBuf.firstIndex(of: 0x0A) {
-            let lineData = lineBuf[..<nl]
-            lineBuf.removeSubrange(lineBuf.startIndex...nl)
-            if let line = String(data: lineData, encoding: .utf8),
-               let event = parser.feed(line) {
+        for lineData in lineBuf.append(d) {
+            if let event = parser.feed(String(decoding: lineData, as: UTF8.self)) {
                 switch event {
                 case .ready: ready += 1
                 case .refused(let reason): if refusedReason == nil { refusedReason = reason }
@@ -195,6 +199,9 @@ if let shell {
 // P5 capture shape and every golden fixture generated from it.
 if hostTools {
     args += ["--host-tools"]
+}
+if let power {
+    args += ["--power", power]
 }
 process.arguments = args
 process.currentDirectoryURL = engineDir

@@ -77,20 +77,12 @@ struct WorktreeDispatchFakeAgentTests {
             var mutations: Set<String> = []
             var wroteSeed = false
             var done = false
-            let handle = fake.stdout.fileHandleForReading
+            let reader = PollingLineReader(fd: fake.stdout.fileHandleForReading.fileDescriptor)
             let deadline = Date().addingTimeInterval(30)
-            var buffer = Data()
-            var chunk = [UInt8](repeating: 0, count: 4096)
             while Date() < deadline && !done {
-                let n = Darwin.read(handle.fileDescriptor, &chunk, chunk.count)
-                if n == 0 { break }
-                if n < 0 { if errno == EINTR { continue }; break }
-                buffer.append(contentsOf: chunk[0..<n])
-                while let nl = buffer.firstIndex(of: 0x0A) {
-                    let line = String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self)
-                    buffer.removeSubrange(buffer.startIndex...nl)
-                    guard let event = parser.feed(line) else { continue }
-                    switch event {
+                guard let line = try? reader.nextLine(timeout: deadline.timeIntervalSinceNow),
+                      let event = parser.feed(line) else { break }
+                switch event {
                     case .toolRequest(let idx, let name, let params):
                         sawRequest = true
                         if name == "write" || name == "edit" {
@@ -115,7 +107,6 @@ struct WorktreeDispatchFakeAgentTests {
                         if wroteSeed && stopReason != nil { done = true }
                     default:
                         break
-                    }
                 }
             }
             #expect(sawRequest)
@@ -136,16 +127,9 @@ struct WorktreeDispatchFakeAgentTests {
         #expect(!baselines.isEmpty)  // F6: the enriched packet carried the baseline
         // The ref must resolve to a commit whose seed.txt was actually mutated
         // (the fake agent's write/edit tool_requests went through the host).
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", repo.path, "show", "\(ref):seed.txt"]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = Pipe()
-        try p.run()
-        p.waitUntilExit()
-        #expect(p.terminationStatus == 0)
-        let content = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let result = try GitProcess.run(["show", "\(ref):seed.txt"], in: repo)
+        #expect(result.exit == 0)
+        let content = result.stdout
         #expect(content != "seed", "seed.txt should have been mutated by the attempt")
     }
 }

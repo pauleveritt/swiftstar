@@ -71,16 +71,6 @@ def test_append_row():
             assert fh.readlines() == ['x\ty\n', '1\t2\n']
 
 
-def test_family_key():
-    assert cc.family_key(['fixture', 'rounds', 'seed', 'outcome']) == 'fixture'
-    assert cc.family_key(['spec', 'think', 'seed', 'outcome']) == 'spec'
-    try:
-        cc.family_key(['unknown', 'columns'])
-        assert False, 'expected ValueError'
-    except ValueError:
-        pass
-
-
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
     for t in tests:

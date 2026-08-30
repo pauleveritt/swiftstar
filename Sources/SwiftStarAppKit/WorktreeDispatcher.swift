@@ -241,24 +241,13 @@ public enum WorktreeDispatcher {
 
     /// Run `git -C <dir> <args>`, returning stdout. Throws on a non-zero exit.
     private static func git(_ dir: URL, _ args: [String]) throws -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", dir.path] + args
-        let out = Pipe()
-        let err = Pipe()
-        p.standardOutput = out
-        p.standardError = err
-        try p.run()
-        p.waitUntilExit()
-        let output = String(data: out.fileHandleForReading.readDataToEndOfFile(),
-                            encoding: .utf8) ?? ""
-        let errorOutput = String(data: err.fileHandleForReading.readDataToEndOfFile(),
-                                 encoding: .utf8) ?? ""
-        guard p.terminationStatus == 0 else {
+        let result = try GitProcess.run(args, in: dir)
+        guard result.exit == 0, !result.timedOut else {
             throw WorktreeDispatcherError.gitFailed(
-                status: p.terminationStatus, output: output, error: errorOutput)
+                status: result.timedOut ? 124 : result.exit,
+                output: result.stdout, error: result.stderr)
         }
-        return output
+        return result.stdout
     }
 
     /// Parse the octal mode out of a `git ls-files -s` line, masked to the

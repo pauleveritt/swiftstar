@@ -29,6 +29,7 @@ struct AgentPromptBubble: View {
 struct ThinkingDisclosure: View {
     let text: String
     @State private var expanded = false
+    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -37,10 +38,10 @@ struct ThinkingDisclosure: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2)
+                        .font(.system(size: transcriptFontSize - 2))
                         .frame(width: 10)
                     Label("Thinking", systemImage: "brain")
-                        .font(.caption)
+                        .font(.system(size: transcriptFontSize))
                 }
                 .foregroundStyle(.secondary)
                 .contentShape(Rectangle())
@@ -66,12 +67,13 @@ struct ThinkingDisclosure: View {
 struct ConsultedAnswerView: View {
     let worker: WorkerId
     let text: String
+    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Worker answer · worker \(worker.rawValue)",
                   systemImage: "arrow.triangle.branch")
-                .font(.caption.weight(.medium))
+                .font(.system(size: transcriptFontSize).weight(.medium))
                 .foregroundStyle(.secondary)
             MarkdownText(text)
         }

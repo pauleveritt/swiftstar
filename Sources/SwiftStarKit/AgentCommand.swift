@@ -110,6 +110,38 @@ public struct AgentSettings: Equatable, Sendable {
 /// `Process` prepends the executable path as argv[0]) and what the fake agent
 /// validates. The binary path itself is NOT part of the returned array.
 public enum AgentCommand {
+    /// The engine throttle this spawn uses, for `provenance.md`.
+    ///
+    /// `--power` is a setting, not a measurement: the engine's `power_percent`
+    /// defaults to 100 and the app drops to 70 whenever power-saving is on. It
+    /// reaches the wire on every `status` event, but a reader who does not know
+    /// to grep for it sees only the consequence. On
+    /// `captures/live/20260830-180004` (app, `--power 70`) against a
+    /// `swiftstar-drive` re-run of the same prompt and model (engine default
+    /// 100), prefill and decode were both ~1.7x faster in the drive run on ~the
+    /// same volume of work — a gap first read as an engine improvement.
+    /// Recording it here is what makes two captures comparable at a glance.
+    public static func powerRecord(settings: AgentSettings) -> String {
+        settings.powerSavingEnabled
+            ? "\(AgentSettings.powerSavingPercent) (`--power \(AgentSettings.powerSavingPercent)`)"
+            : "100 (engine default; no `--power`)"
+    }
+
+    /// The spawn's think configuration, for `provenance.md`. Reports what argv
+    /// actually passes — including the CLAMPED think budget, which
+    /// `clampThinkBudget` may halve against `maxTokens`.
+    ///
+    /// Per-turn overrides (P23) are deliberately not here: they postdate the
+    /// spawn and belong in `outcomes.ndjson`, which records them per turn. What
+    /// this replaces is a hardcoded `think=default` that read as "engine
+    /// defaults" on sessions that were spawned with `--nothink`.
+    public static func samplerRecord(settings: AgentSettings) -> String {
+        var s = settings.noThink ? "think=none (`--nothink`)" : "think=default"
+        let budget = AgentSettings.clampThinkBudget(settings)
+        if budget > 0 { s += ", budget=\(budget)" }
+        return s
+    }
+
     public static func argv(settings: AgentSettings) -> [String] {
         var argv: [String] = [
             "-m", settings.modelPath.path,

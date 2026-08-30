@@ -50,7 +50,7 @@ public struct DecodeAccumulator: Equatable, Sendable {
     /// The segment still generating, if any.
     private var open: StatusSnapshot?
     /// The `ready` event's authoritative token count for the final segment.
-    private var finalGenerated: Int?
+    private var finalSegment: Int?
 
     public init() {}
 
@@ -71,12 +71,12 @@ public struct DecodeAccumulator: Equatable, Sendable {
     /// final segment ONLY — the engine resets its counter at every prefill, so
     /// `ready` alone undercounts a tool-heavy turn (measured on
     /// `fixtures/agent/tool-rounds.ndjson`: 298 reported against 714 generated).
-    public mutating func finish(finalGenerated: Int?) {
+    public mutating func finish(finalSegment: Int?) {
         if let open {
             segments.append(open)
             self.open = nil
         }
-        self.finalGenerated = finalGenerated
+        self.finalSegment = finalSegment
     }
 
     /// Tokens and decode seconds across every segment. The final segment takes
@@ -89,7 +89,7 @@ public struct DecodeAccumulator: Equatable, Sendable {
         for (index, segment) in all.enumerated() {
             guard segment.genTPS > 0, segment.genTPS.isFinite else { continue }
             let isFinal = index == all.count - 1
-            let count = (isFinal ? finalGenerated : nil) ?? segment.generated
+            let count = (isFinal ? finalSegment : nil) ?? segment.generated
             guard count > 0 else { continue }
             tokens += count
             seconds += Double(count) / segment.genTPS

@@ -101,6 +101,36 @@ struct WorktreeDispatchTests {
 
     // MARK: - budget: tool-call count or turn tokens over the caps
 
+    /// The turn-budget gate reads `generatedTokens`, which until 2026-08-30 was
+    /// the wire's FINAL generation segment rather than the turn's total — so a
+    /// subagent that blew its budget across tool rounds was admitted as long as
+    /// its closing segment was small. Measured on
+    /// `captures/live/20260830-180004`: 1,422 reported against 6,034 generated.
+    /// This is the end-to-end proof, built through the real builder rather than
+    /// from a hand-made outcome.
+    @Test func turnBudgetCountsEverySegmentNotJustTheLast() {
+        func status(_ state: String, generated: Int) -> AgentEvent {
+            .status(StatusSnapshot(ctxUsed: 0, ctxSize: 51_200, prefillTPS: 0, genTPS: 20,
+                                   ts: 0, generated: generated, state: state))
+        }
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
+        for segment in [400, 400, 400] {              // 1,200 across three rounds
+            b.apply(status("generating", generated: segment))
+            b.apply(status("prefill", generated: 0))
+        }
+        b.apply(status("generating", generated: 10))
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 50, ctxUsed: 900))
+        let oc = b.finish()
+
+        #expect(oc.generatedTokens == 1_250)   // 400*3 + 50
+        #expect(oc.finalSegmentTokens == 50)   // what the gate used to see
+
+        let p = packet(turnBudget: 1_000)
+        let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],
+                                               turnOutcome: oc, validation: nil)
+        #expect(result == .receipt(.budgetExceeded))
+    }
+
     @Test func toolCallBudgetExceeded() {
         let p = packet(toolCallBudget: 2)
         let result = WorktreeDispatch.verdict(packet: p, allowedMutations: ["a.txt"],

@@ -67,18 +67,3 @@ def ensure_header(results_path: str, header: list) -> None:
 def append_row(results_path: str, fields: list) -> None:
     with open(results_path, 'a') as fh:
         fh.write('\t'.join(fields) + '\n')
-
-
-# The column name campaign-report.py groups rows by, chosen from the row's
-# own header rather than inferred from which keys happen to be present.
-_FAMILY_KEY_BY_PREFIX = {
-    ('fixture', 'rounds', 'seed'): 'fixture',
-    ('spec', 'think', 'seed'): 'spec',
-}
-
-
-def family_key(header: list) -> str:
-    prefix = tuple(header[:3])
-    if prefix in _FAMILY_KEY_BY_PREFIX:
-        return _FAMILY_KEY_BY_PREFIX[prefix]
-    raise ValueError(f'unrecognized results header prefix: {prefix!r}')

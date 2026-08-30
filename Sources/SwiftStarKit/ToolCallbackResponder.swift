@@ -118,6 +118,35 @@ public enum ToolCallbackResponder {
     /// to `writableFiles`; the read aids stay free.
     private static let mutatingTools: Set<String> = ["write", "edit"]
 
+    /// Every tool the host will actually execute *in this session*, sorted —
+    /// named in the unknown-tool refusal so a model that guessed a name can
+    /// correct in one round instead of guessing again.
+    ///
+    /// Honors the shell toggle: the engine already drops the bash family from
+    /// the advertised schema when the shell is off (`agent_schemas_for`), so
+    /// offering `bash` here would contradict the schema the model was given
+    /// and buy nothing but a second refusal.
+    static func executableTools(shellAllowed: Bool) -> [String] {
+        let base = fileTools.union(["dispatch"])
+        return (shellAllowed ? base.union(shellTools) : base).sorted()
+    }
+
+    /// Names a model is liable to reach for when it means a real tool. These
+    /// are **suggested, never accepted**: aliasing them would hide a genuine
+    /// model error and let the host drift from the schema the engine actually
+    /// advertises (`agent_glm_tool_schemas` names `bash`, not `shell`).
+    ///
+    /// `shell` is not hypothetical — `captures/live/20260830-155556` called it,
+    /// got a bare "unknown or unsupported tool: shell", never retried with
+    /// `bash`, and so never ran the `swift build` it intended. The rest are the
+    /// shell-command names nearest to each read aid.
+    private static let nearMisses: [String: String] = [
+        "shell": "bash", "sh": "bash", "zsh": "bash", "run": "bash", "exec": "bash",
+        "cat": "read", "head": "read", "tail": "read", "open": "read",
+        "ls": "list", "dir": "list",
+        "grep": "search", "rg": "search", "find": "search", "glob": "search",
+    ]
+
     /// The pure consent check (D1/D6): given the request, the workspace grant,
     /// and the shell toggle, decide whether the host may execute. File tools are
     /// confined to `workspace` (an absolute path or a `..` escape is refused);
@@ -189,7 +218,19 @@ public enum ToolCallbackResponder {
                 name: name, params: params, workspace: wsStd, resolvedPath: nil))
         }
 
-        return .refuse("refused: unknown or unsupported tool: \(name)")
+        // An unactionable refusal costs a whole session: the model has no way
+        // to tell a wrong name from a denied capability, so it stops trying.
+        // Name the tools that exist, and point at the intended one when the
+        // guess is a recognizable near-miss.
+        let available = Self.executableTools(shellAllowed: shellAllowed)
+        var reason = "refused: unknown or unsupported tool: \(name)"
+        // Only suggest a tool this session can actually run — pointing at a
+        // denied one just costs another round-trip for a second refusal.
+        if let intended = Self.nearMisses[name.lowercased()], available.contains(intended) {
+            reason += " (did you mean \(intended)?)"
+        }
+        reason += " — available: \(available.joined(separator: ", "))"
+        return .refuse(reason)
     }
 
     /// The consent-check step shared by both `respond` overloads (item 3, P22
@@ -316,5 +357,14 @@ public enum ToolCallbackResponder {
             return #"{"idx":\#(response.idx),"ok":false,"s":"","t":"tool_result"}"#
         }
         return json
+    }
+
+    /// The common host response for a request that crossed its per-turn
+    /// budget. The caller still records the rejected verdict separately so
+    /// the finished outcome retains the emitted request.
+    public static func budgetExceeded(idx: Int) -> ToolCallbackResponse {
+        ToolCallbackResponse(
+            idx: idx, ok: false,
+            s: ToolResultCondenser.condense("tool budget exceeded"))
     }
 }

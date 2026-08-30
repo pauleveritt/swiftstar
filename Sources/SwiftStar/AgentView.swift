@@ -7,6 +7,7 @@ struct AgentView: View {
     @State private var input = ""
     @FocusState private var inputFocused: Bool
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
+    @Environment(\.transcriptFontSize) private var envTranscriptFontSize: CGFloat
 
     var body: some View {
         VStack(spacing: 0) {
@@ -45,7 +46,11 @@ struct AgentView: View {
                 Image(systemName: "folder")
                 Text(PathAbbreviation.leafName(controller.settings.workspace))
             }
-            .font(.caption)
+            .font(.system(size: envTranscriptFontSize))
+            // Keep the toolbar item at its natural width as the transcript
+            // font grows, then add breathing room around the label.
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 8)
         }
         .buttonStyle(.borderless)
         .help("Workspace: the directory the agent may touch (applied at next start)")
@@ -142,7 +147,7 @@ struct AgentView: View {
         case .consulted(let worker, let text):
             ConsultedAnswerView(worker: worker, text: text)
         case .system(let text):
-            Text(text).font(.caption).foregroundStyle(.tertiary)
+            Text(text).font(.system(size: envTranscriptFontSize)).foregroundStyle(.tertiary)
         }
     }
 
@@ -151,7 +156,7 @@ struct AgentView: View {
             if let error = errorText {
                 HStack {
                     Text(error)
-                        .font(.caption)
+                        .font(.system(size: envTranscriptFontSize))
                         .foregroundStyle(.red)
                     Spacer()
                 }
@@ -168,7 +173,7 @@ struct AgentView: View {
                     ProgressView()
                         .controlSize(.small)
                     Text("Consulting a worker…")
-                        .font(.caption)
+                        .font(.system(size: envTranscriptFontSize))
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
@@ -277,14 +282,14 @@ struct AgentView: View {
             // non-empty, matching the composer's existing red-error styling.
             if let engineError = controller.lastStatus?.error, !engineError.isEmpty {
                 Text("Engine error: \(engineError)")
-                    .font(.caption)
+                    .font(.system(size: envTranscriptFontSize))
                     .foregroundStyle(.red)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(engineError)
             } else {
                 Text(bottomStatusText)
-                    .font(.caption)
+                    .font(.system(size: envTranscriptFontSize))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)

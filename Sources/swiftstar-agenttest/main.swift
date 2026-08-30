@@ -492,22 +492,12 @@ if case .invalid(let reasons) = HandoffPacketValidator.validate(repairPacket(syn
 }
 
 func git(_ dir: URL, _ a: [String]) {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-    p.arguments = ["-C", dir.path] + a
-    p.standardOutput = Pipe()
-    p.standardError = Pipe()
-    try? p.run()
-    p.waitUntilExit()
+    _ = try? GitProcess.run(a, in: dir)
 }
 
 func gitOutput(_ dir: URL, _ a: [String]) throws -> String {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-    p.arguments = ["-C", dir.path] + a
-    let out = Pipe(); p.standardOutput = out; p.standardError = Pipe()
-    try p.run(); p.waitUntilExit()
-    return String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let result = try GitProcess.run(a, in: dir)
+    return result.stdout
 }
 
 /// Overlay a fixture tree onto an already-populated repo, replacing files that

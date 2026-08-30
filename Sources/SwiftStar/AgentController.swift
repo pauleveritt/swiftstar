@@ -56,7 +56,6 @@ final class AgentController {
     @ObservationIgnored private var memoryTask: Task<Void, Never>?
     /// The in-flight turn's decode work, accumulated per generation segment on
     /// the engine's own clock. Reset at each turn's start and end.
-    private var decodeAccumulator = DecodeAccumulator()
 
     /// The running agent's pid, if the child process is alive.
     var runningPid: pid_t? { process?.processIdentifier }
@@ -119,6 +118,8 @@ final class AgentController {
     // read is tracked. Same treatment as `outcomeBuilder`, which is mutated
     // just as often (per wire event) and stays tracked.
     var workerTurn = ActiveWorkerTurn()
+    private var orchestratorToolBudget = ToolCallBudgetTracker(
+        budget: ToolCallBudgetTracker.defaultBudget)
     private var sentInterrupt = false
     var buildSHA = "unknown"
     private let logHandle: FileHandle?
@@ -253,7 +254,7 @@ final class AgentController {
     /// `swiftstar-drive`'s `CaptureWriter` via `CaptureProvenance`; the facts
     /// themselves (sampler, workspace grant) stay specific to a live app
     /// session.
-    private static func renderLiveProvenance(model: String, build: String, workspace: String, contextSize: Int, sampler: String, at dir: URL) throws {
+    private static func renderLiveProvenance(model: String, build: String, workspace: String, contextSize: Int, sampler: String, power: String, at dir: URL) throws {
         let text = CaptureProvenance.render(
             title: "Live session provenance",
             facts: [
@@ -261,6 +262,11 @@ final class AgentController {
                 .init("Build (`external/ds4` SHA)", "`\(build)`"),
                 .init("Context", "\(contextSize)"),
                 .init("Sampler", sampler),
+                // The engine throttle is a spawn SETTING (`--power`), not a
+                // measurement. Unrecorded, it turned a throttled app session and
+                // an unthrottled drive re-run into an apparent 1.7x engine
+                // speedup (see AgentCommand.powerRecord).
+                .init("Power", power),
                 .init("Workspace", "`\(workspace)`"),
                 CaptureProvenance.startedAtFact(Date()),
             ],
@@ -376,9 +382,10 @@ final class AgentController {
         lastPlannedBytes = nil
         lastPlannedModel = nil
         lastFootprintBytes = nil
-        decodeAccumulator = DecodeAccumulator()
         outcomeBuilder = nil
         sentInterrupt = false
+        orchestratorToolBudget = ToolCallBudgetTracker(
+            budget: ToolCallBudgetTracker.defaultBudget)
         // A restart is a fresh engine = a fresh pool: stale pending workers and
         // consult bookkeeping must not survive into the new session.
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
@@ -408,8 +415,13 @@ final class AgentController {
                 workspace: settings.workspace.path, contextSize: settings.contextSize,
                 // P23: provenance is a per-SPAWN fact, and no override can have
                 // gone out yet at spawn time — the per-turn efforts live in
-                // outcomes.ndjson, which is where a per-turn fact belongs.
-                sampler: TurnThinkPolicy.samplerRecord(.useDefault), at: captureDir)
+                // outcomes.ndjson, which is where a per-turn fact belongs. What
+                // this records is the spawn's own think/throttle configuration,
+                // read off the same settings argv is built from, rather than the
+                // hardcoded `think=default` that used to sit here regardless of
+                // whether the spawn passed `--nothink`.
+                sampler: AgentCommand.samplerRecord(settings: settings),
+                power: AgentCommand.powerRecord(settings: settings), at: captureDir)
             settings.tracePath = captureDir.appendingPathComponent("agent.trace")
         }
         outcomesURL = captureEnabled ? captureDir.appendingPathComponent("outcomes.ndjson") : nil
@@ -507,20 +519,20 @@ final class AgentController {
         stdoutTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stdoutPipe.fileHandleForReading
             let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureWireURL.path) : nil
-            var buffer = Data()
+            var lines = LineBuffer()
             while !Task.isCancelled {
                 let data = handle.availableData
                 if data.isEmpty { break }  // EOF: the child closed stdout
-                buffer.append(data)
-                while let nl = buffer.firstIndex(of: 0x0A) {
-                    let lineData = buffer[buffer.startIndex..<nl]
-                    buffer.removeSubrange(buffer.startIndex...nl)
+                for lineData in lines.append(data) {
                     capture?.append(lineData)
                     capture?.append(Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consumeWire(line, generation: gen)
                 }
             }
+            // An incomplete final line is not a wire record. Keep EOF
+            // handling diagnostic-only; the old reader discarded this tail.
+            _ = lines.finish()
             capture?.close()
         }
 
@@ -528,20 +540,17 @@ final class AgentController {
         stderrTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stderrPipe.fileHandleForReading
             let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureStderrURL.path) : nil
-            var buffer = Data()
+            var lines = LineBuffer()
             while !Task.isCancelled {
                 let data = handle.availableData
                 if data.isEmpty { break }
-                buffer.append(data)
-                while let nl = buffer.firstIndex(of: 0x0A) {
-                    let lineData = buffer[buffer.startIndex..<nl]
-                    buffer.removeSubrange(buffer.startIndex...nl)
+                for lineData in lines.append(data) {
                     capture?.append(lineData)
                     capture?.append(Data([0x0A]))
-                    let line = String(decoding: lineData, as: UTF8.self)
-                    await self?.consumeStderr(line, generation: gen)
+                    await self?.consumeStderr(String(decoding: lineData, as: UTF8.self), generation: gen)
                 }
             }
+            _ = lines.finish()
             capture?.close()
         }
 
@@ -597,10 +606,6 @@ final class AgentController {
             // and its rates are ratcheted (never blanked by a zero).
             onTelemetry?(.status(snapshot))
             lastStatus = snapshot
-            // P21: the turn's decode work accumulates per generation segment on
-            // the engine's own clock (see DecodeAccumulator) — wall time between
-            // statuses includes prefill and tool round trips, which is not decode.
-            decodeAccumulator.apply(snapshot)
             lastPrefillTPS = AgentStatusText.ratchet(previous: lastPrefillTPS, new: snapshot.prefillTPS)
             lastGenTPS = AgentStatusText.ratchet(previous: lastGenTPS, new: snapshot.genTPS)
             break
@@ -626,18 +631,18 @@ final class AgentController {
                 completedTurns += 1
                 log("turn outcome: \(outcome)")
                 appendOutcome(outcome)
-                // Freeze the turn's summary onto its reply bubble: the decode
-                // average across the turn's generation segments, else the
-                // engine-reported rate — never a fabricated average.
-                // `promptTPS` is the turn-end ratchet, matching the status bar.
-                decodeAccumulator.finish(finalGenerated: outcome.generatedTokens)
+                // Freeze the turn's summary onto its reply bubble. Both figures
+                // come off the outcome, which computed them together from the
+                // status stream the builder was already being fed (:578) — the
+                // controller keeps no accumulator of its own, so there is no
+                // opportunity here to pair a rate with the wrong token count.
+                // `promptTPS` is the turn-end ratchet, matching the status bar;
+                // a turn with no usable decode work falls back to the engine's
+                // last reported rate rather than a fabricated average.
                 let summary = TurnSummary(
                     promptTPS: lastPrefillTPS,
-                    decodeTPS: decodeAccumulator.tokensPerSecond ?? lastGenTPS,
-                    // The accumulator's total, not the outcome's: the engine
-                    // resets its counter per generation segment, so a turn with
-                    // tool rounds reports only its last segment on the wire.
-                    generatedTokens: decodeAccumulator.generatedTokens,
+                    decodeTPS: outcome.decodeTPS ?? lastGenTPS,
+                    generatedTokens: outcome.generatedTokens,
                     ctxUsed: outcome.ctxUsed)
                 transcript.attachSummary(summary)
                 // The status bar's Prompt/Decode readout resets at turn end: a
@@ -646,7 +651,6 @@ final class AgentController {
                 // turn's start — this covers the idle window).
                 lastPrefillTPS = 0
                 lastGenTPS = 0
-                decodeAccumulator = DecodeAccumulator()
             }
             // P11 (D4): the orchestrator's turn ended — run any workers it
             // dispatched.
@@ -654,41 +658,42 @@ final class AgentController {
         case .text, .think, .tool:
             transcript.apply(event)
         case .toolRequest(let idx, let name, let params):
+            guard orchestratorToolBudget.admit() else {
+                let response = ToolCallbackResponder.budgetExceeded(idx: idx)
+                writeToolResult(response)
+                outcomeBuilder?.recordHostVerdict(
+                    idx: idx, ok: false, mutations: [], exitStatus: nil,
+                    outputDigest: nil, validationRan: false)
+                rollingDigest = RollingDigestReducer.recordHostVerdict(
+                    rollingDigest, mutations: [], exitStatus: nil, validationRan: false)
+                return
+            }
             if name == "dispatch" {
-                if UserDefaults.standard.bool(forKey: "dispatchDumb") {
-                    // Dumb mode keeps the baseline clean: the subagent pool is
-                    // the architecture's biggest help, so a "dumb" run must not
-                    // secretly dispatch workers and still win. The orchestrator
-                    // sees the refusal and does the work itself — with the
-                    // minimal packet it was given.
-                    writeToolResult(ToolCallbackResponse(
-                        idx: idx, ok: false,
-                        s: ToolResultCondenser.condense("refused: dispatch is disabled in dumb mode")))
-                    outcomeBuilder?.recordHostVerdict(
-                        idx: idx, ok: false, mutations: [], exitStatus: nil,
-                        outputDigest: nil, validationRan: false)
-                    log("dispatch: refused (dumb mode)")
-                } else if let packet = DispatchPacketBuilder.build(
+                // P11 (D5) / P20: admit or refuse one dispatch call. The pure
+                // `DispatchAdmission.decide` gate collapses the three old
+                // refusal branches into one `.refused` case, so EVERY refusal
+                // records a host verdict (`.rejected`) — the dead-letter fix.
+                // Before this, the "malformed dispatch" and "pool full"
+                // branches wrote the result line but skipped
+                // `recordHostVerdict`, leaving a refused dispatch as
+                // "emitted" only in the turn outcome.
+                let decision = DispatchAdmission.decide(
                     params: params, digest: rollingDigest, loaded: [:],
-                    implementer: settings.modelPath.lastPathComponent) {
-                    if let workerId = PoolScheduler.availableWorker(poolState) {
-                        poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
-                        writeToolResult(ToolCallbackResponse(
-                            idx: idx, ok: true, s: "dispatched as worker \(workerId.rawValue)"))
-                        outcomeBuilder?.recordHostVerdict(
-                            idx: idx, ok: true, mutations: [], exitStatus: nil,
-                            outputDigest: nil, validationRan: false)
-                        log("dispatch: enqueued worker \(workerId.rawValue)")
-                    } else {
-                        writeToolResult(ToolCallbackResponse(
-                            idx: idx, ok: false,
-                            s: ToolResultCondenser.condense("refused: subagent pool is full")))
-                    }
-                } else {
-                    writeToolResult(ToolCallbackResponse(
-                        idx: idx, ok: false,
-                        s: ToolResultCondenser.condense("refused: malformed dispatch")))
+                    implementer: settings.modelPath.lastPathComponent,
+                    poolState: poolState,
+                    dumb: UserDefaults.standard.bool(forKey: "dispatchDumb"))
+                // Side effects the decision implies stay here; the wire result
+                // and the outcome verdict are composed together by
+                // `DispatchAdmission.apply` so neither can be written without
+                // the other (the dead letter was exactly that split).
+                switch decision {
+                case .refused(let reason):
+                    log("dispatch: refused (\(reason))")
+                case .enqueue(let packet, let worker):
+                    poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
+                    log("dispatch: enqueued worker \(worker.rawValue)")
                 }
+                writeToolResult(DispatchAdmission.apply(decision, idx: idx, into: &outcomeBuilder))
             } else {
                 // P9: the host owns execution. Route the request through the
                 // responder (consent-enforced, condenses via ToolResultCondenser,
@@ -804,16 +809,9 @@ final class AgentController {
     /// The engine build identification (D12): the submodule SHA, resolved
     /// once per spawn — the same fact the capture provenance records.
     private static func submoduleSHA(_ engineDir: URL) -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", engineDir.path, "rev-parse", "HEAD"]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = Pipe()
-        try? p.run()
-        p.waitUntilExit()
-        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
+        guard let result = try? GitProcess.run(["rev-parse", "HEAD"], in: engineDir),
+              result.exit == 0, !result.timedOut else { return "unknown" }
+        return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func consumeStderr(_ line: String, generation: Int) {
@@ -889,9 +887,10 @@ final class AgentController {
         // snapshot of this turn (the previous turn's trailing status was the
         // old baseline, which the engine's per-turn counter reset made garbage
         // from turn 2 on).
-        decodeAccumulator = DecodeAccumulator()
         state = .generating
         sentInterrupt = false
+        orchestratorToolBudget = ToolCallBudgetTracker(
+            budget: ToolCallBudgetTracker.defaultBudget)
         // P23: the decision authority resolves the request against the family
         // and the advertised caps. The outcome record carries the effort
         // actually used — the old "engine-defaults" literal became false the
@@ -1138,7 +1137,8 @@ final class AgentController {
         transcript.appendSystem("→ consulting: \(trimmed)")
         let packet = HandoffPacket(
             taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
-            baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
+            baselines: [:], turnBudget: 100_000,
+            toolCallBudget: ToolCallBudgetTracker.defaultBudget)
         poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
         workerTurn.markConsult(workerId)
         // Run the worker now in the SAME engine (a context-isolated session) —
@@ -1153,21 +1153,11 @@ final class AgentController {
     /// `workspace` on failure (the dispatch then fails at `git worktree add`
     /// with a readable error rather than a guess). `nonisolated` — runs `git`.
     nonisolated static func resolveRepoRoot(from workspace: URL) -> URL {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["-C", workspace.path, "rev-parse", "--show-toplevel"]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = Pipe()
-        do {
-            try p.run()
-            p.waitUntilExit()
-            if p.terminationStatus == 0,
-               let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
-                let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { return URL(fileURLWithPath: trimmed) }
-            }
-        } catch {}
+        if let result = try? GitProcess.run(["rev-parse", "--show-toplevel"], in: workspace),
+           result.exit == 0, !result.timedOut {
+            let trimmed = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return URL(fileURLWithPath: trimmed) }
+        }
         return workspace
     }
 }
@@ -1255,4 +1245,3 @@ extension AgentController {
         return total
     }
 }
-

@@ -7,6 +7,7 @@ import SwiftStarKit
 //   swiftstar-analyze summary [DIR | --latest]   per-turn table: decode average, tokens, ctx, tools, Σsuffix
 //   swiftstar-analyze trace  [DIR | --latest]    the prefill-sync/cache + compaction story
 //   swiftstar-analyze diff A B                   paired-bill comparison (Σsuffix)
+//   swiftstar-analyze validate [DIR | --latest]  capture validity as JSON
 //
 // All parsers are the production ones (WireEventParser, TraceParser,
 // TurnSummary); this is ~150 lines of plumbing, not re-derived math.
@@ -49,11 +50,29 @@ func captureDirs() -> [CaptureDir] {
     return out.sorted { $0.modified > $1.modified }
 }
 
-func isUnusable(_ d: CaptureDir) -> Bool {
+/// Why a capture cannot answer "what did my last session do".
+enum Unusable: String {
+    /// No wire at all, or a zero-byte one.
+    case emptyWire = "empty/missing wire.ndjson"
+    /// A non-empty wire that records no turn the user started — the shape of an
+    /// agent spawned and left idle (handshake + statuses + the engine's
+    /// field-less startup ready). Size alone cannot tell this from a real
+    /// session: `live/20260830-163255` carried 4 KB of handshake and zero
+    /// turns, and under the old size-only predicate it shadowed
+    /// `live/20260830-155556` — 3 real turns, 53 tool calls — as `--latest`.
+    case noWork = "no work recorded (idle spawn)"
+}
+
+func unusableReason(_ d: CaptureDir) -> Unusable? {
     let wire = d.dir.appendingPathComponent("wire.ndjson")
     let size = (try? FileManager.default.attributesOfItem(atPath: wire.path)[.size]) as? Int
-    return (size ?? 0) == 0
+    if (size ?? 0) == 0 { return .emptyWire }
+    let lines = (try? String(contentsOf: wire, encoding: .utf8))?
+        .split(whereSeparator: \.isNewline).map(String.init) ?? []
+    return CaptureUsability.recordsWork(wireLines: lines) ? nil : .noWork
 }
+
+func isUnusable(_ d: CaptureDir) -> Bool { unusableReason(d) != nil }
 
 func resolveDir(_ spec: String) -> URL {
     if spec == "--latest" {
@@ -127,10 +146,10 @@ func parseOutcomes(_ dir: URL) -> [TurnOutcome] {
 
 /// The turn's decode work with the app's own math (`DecodeAccumulator`): per
 /// generation segment, on the engine's clock.
-func decodeWork(_ turn: [StatusSnapshot], finalGenerated: Int?) -> DecodeAccumulator {
+func decodeWork(_ turn: [StatusSnapshot], finalSegment: Int?) -> DecodeAccumulator {
     var acc = DecodeAccumulator()
     for s in turn { acc.apply(s) }
-    acc.finish(finalGenerated: finalGenerated)
+    acc.finish(finalSegment: finalSegment)
     return acc
 }
 
@@ -150,8 +169,24 @@ func compactionCount(_ trace: [TraceEvent]) -> Int {
 
 func cmdList() {
     for d in captureDirs() {
-        let flag = isUnusable(d) ? "  [unusable: empty/missing wire.ndjson]" : ""
+        let flag = unusableReason(d).map { "  [unusable: \($0.rawValue)]" } ?? ""
         print("\(d.kind)/\(d.name)\(flag)")
+    }
+}
+
+/// Emit the capture-validity contract consumed by the fixture harness. Keep
+/// this command JSON-only so the harness never has to scrape human output.
+func cmdValidate(_ dir: URL) {
+    let wire = try? String(
+        contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8)
+    let result = CaptureValidity.audit(wire: wire)
+    do {
+        let data = try JSONEncoder().encode(result)
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch {
+        FileHandle.standardError.write(Data("validation failed: \(error)\n".utf8))
+        exit(1)
     }
 }
 
@@ -168,15 +203,43 @@ func cmdSummary(_ dir: URL) {
     print("Session \(dir.lastPathComponent): \(rows.count) turn(s), \(outcomes.count) outcome(s), \(compactionCount(trace)) compaction(s), Σsuffix \(suffixTotal(trace))")
     for (i, row) in rows.enumerated() {
         let outcome = row.outcome
-        let work = decodeWork(row.statuses, finalGenerated: outcome?.generatedTokens)
-        let avg = work.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "-"
-        // The accumulator's total, not the outcome's: the engine's counter
-        // resets per generation segment, so a tool-heavy turn's `ready` reports
-        // only its last segment.
-        let gen = work.generatedTokens
+        // Prefer the outcome's own figures: the builder computed the rate and
+        // the token total together, from one accumulator. Re-deriving them here
+        // would mean choosing which of the outcome's two token counts to feed
+        // back in, and choosing wrong double-counts the turn.
+        //
+        // Records written before those fields existed are re-derived from the
+        // statuses. In those, `generatedTokens` holds the wire value, which is
+        // the final segment — exactly what `finalSegment` wants.
+        let avg: String
+        let gen: Int
+        if let outcome, let rate = outcome.decodeTPS {
+            avg = String(format: "%.1f", rate)
+            gen = outcome.generatedTokens
+        } else {
+            let work = decodeWork(row.statuses,
+                                  finalSegment: outcome?.finalSegmentTokens ?? outcome?.generatedTokens)
+            avg = work.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "-"
+            gen = work.generatedTokens
+        }
         let ctx = outcome?.ctxUsed ?? row.statuses.last?.ctxUsed ?? 0
         let tools = outcome?.toolCalls.count ?? 0
-        print(String(format: "  %2d  decode %@ tok/s  tokens %d  ctx %d  tools %d", i + 1, avg, gen, ctx, tools))
+        // The turn's own duration, not the capture's wire span: an app capture
+        // opens the wire at engine start and the turn does not begin until the
+        // human has finished typing, where a drive capture submits at once.
+        // Reporting the span as a turn time overstates an app turn and invents
+        // a difference when the two harnesses are compared (see TurnSpan).
+        var timing = ""
+        if let span = TurnSpan.measure(row.statuses) {
+            timing = String(format: "  turn %.1fs", span.workSeconds)
+            // Never silently drop it — a reader handed only the corrected
+            // number cannot tell that a correction happened.
+            if span.leadInSeconds >= 0.05 {
+                timing += String(format: " (+%.1fs pre-prompt)", span.leadInSeconds)
+            }
+        }
+        print(String(format: "  %2d  decode %@ tok/s  tokens %d  ctx %d  tools %d%@",
+                     i + 1, avg, gen, ctx, tools, timing))
     }
     let workers = workerStatusCounts(dir)
     if !workers.isEmpty {
@@ -330,11 +393,328 @@ func cmdRereads(_ dir: URL) {
     }
 }
 
+// MARK: - findings and campaign analysis
+
+/// Render the same typed findings the app's Diagnostics tab renders. Keeping
+/// this in the CLI means a capture is not interpreted by a second diagnostics
+/// implementation when it is reviewed outside the app.
+func cmdFindings(_ dir: URL) {
+    let findings = DiagnosticsAnalyzer().analyze(
+        events: parseWire(dir), trace: parseTrace(dir))
+    guard !findings.isEmpty else {
+        print("no findings in \(dir.lastPathComponent)")
+        return
+    }
+    let phraser = DeterministicPhraser()
+    for finding in findings {
+        print(phraser.phrase(finding))
+    }
+}
+
+private struct TaxonomyWorker {
+    var events: [String: Int] = [:]
+    var tools: [String: Int] = [:]
+    var errors: [String: Int] = [:]
+
+    mutating func countEvent(_ name: String) {
+        events[name, default: 0] += 1
+    }
+
+    mutating func countTool(_ name: String) {
+        tools[name, default: 0] += 1
+    }
+
+    mutating func countError(_ error: String) {
+        errors[error, default: 0] += 1
+    }
+}
+
+/// Stable presentation order for count maps. Dictionary iteration order is
+/// deliberately unspecified, so count-only sorting makes equal-frequency
+/// entries change places between analyzer runs.
+private func countEntries(_ counts: [String: Int]) -> [(key: String, value: Int)] {
+    counts.sorted {
+        if $0.value != $1.value { return $0.value > $1.value }
+        return $0.key < $1.key
+    }
+}
+
+/// Summarize the pooled wire by worker using the production parser. This is
+/// the Swift replacement for the retired directive-taxonomy script; worker
+/// streams are never folded together because that creates a session that never
+/// existed.
+func cmdTaxonomy(_ dir: URL) {
+    let url = dir.appendingPathComponent("wire.ndjson")
+    guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+        print("no wire.ndjson in \(dir.lastPathComponent)")
+        return
+    }
+
+    var parser = PoolWireParser()
+    var byWorker: [WorkerId: TaxonomyWorker] = [:]
+    var unparsable = 0
+    for raw in text.split(whereSeparator: \.isNewline) {
+        let line = String(raw)
+        guard let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            unparsable += 1
+            continue
+        }
+        guard let parsed = parser.feed(line) else { continue }
+        let worker = parsed.worker
+        let type = object["t"] as? String ?? "?"
+        byWorker[worker, default: TaxonomyWorker()].countEvent(type)
+        if type == "tool_request", let name = object["name"] as? String {
+            byWorker[worker, default: TaxonomyWorker()].countTool(name)
+        }
+        if case .status(let status) = parsed.event, !status.error.isEmpty {
+            byWorker[worker, default: TaxonomyWorker()].countError(status.error)
+        }
+    }
+
+    print("== \(dir.lastPathComponent)")
+    let config = ["campaign.json", "run-config.json"].lazy
+        .map { dir.appendingPathComponent($0) }
+        .compactMap { try? Data(contentsOf: $0) }
+        .compactMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        .first
+    if let config {
+        let seed = config["seed"] ?? "?"
+        let think = config["think_budget"] ?? config["repairThink"] ?? "?"
+        let outcome = config["outcome"] ?? "?"
+        let seconds = config["seconds"] ?? "?"
+        print("   seed=\(seed) think=\(think) outcome=\(outcome) \(seconds)s")
+    }
+    let dispatches = byWorker[.orchestrator]?.tools["dispatch"] ?? 0
+    print("   dispatches: \(dispatches)")
+    for worker in byWorker.keys.sorted() {
+        let report = byWorker[worker] ?? TaxonomyWorker()
+        let role = worker == .orchestrator ? "orchestrator" : "worker \(worker.rawValue)"
+        let toolRequests = report.tools.values.reduce(0, +)
+        let toolText = countEntries(report.tools)
+            .map { "\($0.key)x\($0.value)" }.joined(separator: ", ")
+        let paddedRole = padRight(role, width: 14)
+        let paddedThink = padLeft(String(report.events["think"] ?? 0), width: 5)
+        let paddedText = padLeft(String(report.events["text"] ?? 0), width: 4)
+        let paddedTools = padLeft(String(toolRequests), width: 3)
+        print("   \(paddedRole) think=\(paddedThink) text=\(paddedText) tool_requests=\(paddedTools)  [\(toolText.isEmpty ? "none" : toolText)]")
+        if !report.errors.isEmpty {
+            print("   engine errors:")
+            for (error, count) in countEntries(report.errors).prefix(5) {
+                print(String(format: "     %4d x %@", count, String(error.prefix(90))))
+            }
+        }
+    }
+    if unparsable > 0 { print("   WARNING: \(unparsable) unparsable wire line(s)") }
+}
+
+private func wilsonInterval(passes: Int, total: Int) -> (Double, Double) {
+    guard total > 0 else { return (0, 0) }
+    let z = 1.96
+    let p = Double(passes) / Double(total)
+    let denominator = 1 + z * z / Double(total)
+    let centre = (p + z * z / (2 * Double(total))) / denominator
+    let half = z * sqrt(p * (1 - p) / Double(total)
+        + z * z / (4 * Double(total * total))) / denominator
+    return (max(0, centre - half), min(1, centre + half))
+}
+
+private func tsvRows(_ url: URL) -> (header: [String], rows: [[String: String]])? {
+    guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+    let lines = text.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
+    guard let first = lines.first else { return nil }
+    let header = first.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+    let rows = lines.dropFirst().map { line -> [String: String] in
+        let fields = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        return Dictionary(uniqueKeysWithValues: header.enumerated().map { index, key in
+            (key, index < fields.count ? fields[index] : "")
+        })
+    }
+    return (header, rows)
+}
+
+/// Report pass rates and failure modes from either campaign TSV schema. The
+/// closure rule intentionally excludes harness voids/timeouts from the
+/// denominator, matching the preregistration and both existing runners.
+func cmdReport(_ paths: [URL]) {
+    print("\n=== campaign report ===\n")
+    for url in paths {
+        guard let table = tsvRows(url) else {
+            print("  (no results file yet: \(url.lastPathComponent))\n")
+            continue
+        }
+        let key: String
+        switch Array(table.header.prefix(3)) {
+        case ["fixture", "rounds", "seed"]: key = "fixture"
+        case ["spec", "think", "seed"]: key = "spec"
+        default:
+            print("  (unrecognized results header: \(url.lastPathComponent))\n")
+            continue
+        }
+        let families = Dictionary(grouping: table.rows, by: { $0[key] ?? "" })
+        print("  \(url.lastPathComponent) — \(table.rows.count) cells recorded")
+        var totalPasses = 0
+        var totalGraded = 0
+        for family in families.keys.sorted() {
+            let rows = families[family] ?? []
+            let outcomes = rows.map { $0["outcome"] ?? "" }
+            let voids = outcomes.filter { $0 == "harness-void" || $0 == "timeout" }.count
+            let graded = rows.count - voids
+            let passes = outcomes.filter { $0 == "pass" }.count
+            totalPasses += passes
+            totalGraded += graded
+            if graded > 0 {
+                let interval = wilsonInterval(passes: passes, total: graded)
+                let label = padRight(family, width: 24)
+                let rate = String(format: "%.0f", Double(passes) / Double(graded) * 100)
+                let lower = String(format: "%.0f", interval.0 * 100)
+                let upper = String(format: "%.0f", interval.1 * 100)
+                let excluded = voids > 0 ? "  (\(voids) void/timeout excluded)" : ""
+                print("    \(label) \(passes)/\(graded) = \(rate)%  [\(lower)%, \(upper)%]\(excluded)")
+            } else {
+                print("    \(family) — no graded cells")
+            }
+        }
+        if families.count > 1, totalGraded > 0 {
+            let interval = wilsonInterval(passes: totalPasses, total: totalGraded)
+            let rate = String(format: "%.0f", Double(totalPasses) / Double(totalGraded) * 100)
+            let lower = String(format: "%.0f", interval.0 * 100)
+            let upper = String(format: "%.0f", interval.1 * 100)
+            print("    \(padRight("POOLED", width: 24)) \(totalPasses)/\(totalGraded) = \(rate)%  [\(lower)%, \(upper)%]")
+        }
+        let failures = table.rows.filter { ($0["outcome"] ?? "") != "pass" }
+        if !failures.isEmpty {
+            var counts: [String: Int] = [:]
+            for row in failures { counts[row["outcome"] ?? "", default: 0] += 1 }
+            print("    failure modes:")
+            for (outcome, count) in countEntries(counts) {
+                print("      \(padRight(outcome, width: 14)) \(count)")
+            }
+            var details: [String: Int] = [:]
+            for row in failures {
+                if let detail = row["detail"], !detail.isEmpty {
+                    details[detail, default: 0] += 1
+                }
+            }
+            for (detail, count) in countEntries(details).prefix(8) {
+                print("        \(String(format: "%3d", count))x  \(String(detail.prefix(88)))")
+            }
+            if table.header.contains("dispatches") {
+                let noDispatch = failures.filter {
+                    ($0["outcome"] ?? "") == "fail" && $0["dispatches"] == "0"
+                }.count
+                if noDispatch > 0 {
+                    print("        \(noDispatch) graded failure(s) never dispatched a phase")
+                }
+            }
+        }
+        print()
+    }
+    print("Pre-registration: docs/superpowers/research/2026-08-28-overnight-campaign-preregistration.md")
+}
+
+private func escapedTSV(_ value: String) -> String {
+    value.replacingOccurrences(of: "\t", with: " ")
+        .replacingOccurrences(of: "\n", with: " ")
+}
+
+private func padLeft(_ value: String, width: Int) -> String {
+    guard value.count < width else { return value }
+    return String(repeating: " ", count: width - value.count) + value
+}
+
+private func padRight(_ value: String, width: Int) -> String {
+    guard value.count < width else { return value }
+    return value + String(repeating: " ", count: width - value.count)
+}
+
+private func captureConfig(_ dir: URL) -> [String: Any]? {
+    ["campaign.json", "run-config.json"].lazy
+        .map { dir.appendingPathComponent($0) }
+        .compactMap { try? Data(contentsOf: $0) }
+        .compactMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        .first
+}
+
+/// Return an explicitly recorded engine identity. Missing metadata stays
+/// blank: the analyzer must not turn a capture's location or model into a
+/// guessed engine pin.
+private func enginePin(_ dir: URL, config: [String: Any]?) -> String {
+    var configs = config.map { [$0] } ?? []
+    for name in ["campaign.json", "run-config.json"] {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent(name)),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { continue }
+        configs.append(object)
+    }
+    for config in configs {
+        for key in ["engine_pin", "enginePin", "engine", "engine_sha",
+                    "engineSHA", "submodule_sha", "submoduleSHA"] {
+            if let value = config[key] as? String, !value.isEmpty { return value }
+        }
+    }
+
+    guard let text = try? String(contentsOf: dir.appendingPathComponent("provenance.md"), encoding: .utf8) else {
+        return ""
+    }
+    let markers = [
+        "Submodule (`external/ds4`) SHA:",
+        "Engine pin:",
+        "Engine SHA:"
+    ]
+    for rawLine in text.split(whereSeparator: \.isNewline) {
+        let line = String(rawLine)
+        for marker in markers {
+            guard let range = line.range(of: marker) else { continue }
+            let value = line[range.upperBound...].trimmingCharacters(in: .whitespaces)
+            if value.first == "`", let end = value.dropFirst().firstIndex(of: "`") {
+                let pin = String(value[value.index(after: value.startIndex)..<end])
+                if !pin.isEmpty { return pin }
+            }
+        }
+    }
+    return ""
+}
+
+/// Write a cheap, re-derivable index rather than introducing a second
+/// database/query layer. The output is ignored with the capture tree and can
+/// always be regenerated from the same capture directories.
+func cmdIndex(to output: URL) throws {
+    let columns = ["kind", "name", "usable", "wire_bytes", "turns", "outcomes",
+                   "workers", "sum_suffix", "variant", "seed", "outcome", "engine_pin"]
+    var rows = [columns.joined(separator: "\t")]
+    for capture in captureDirs() {
+        let wire = capture.dir.appendingPathComponent("wire.ndjson")
+        let wireBytes = (try? Data(contentsOf: wire).count) ?? 0
+        let outcomes = parseOutcomes(capture.dir)
+        let workers = workerStatusCounts(capture.dir).keys.sorted()
+            .map { String($0.rawValue) }.joined(separator: ",")
+        let config = captureConfig(capture.dir)
+        let fields = [
+            capture.kind, capture.name, isUnusable(capture) ? "0" : "1",
+            String(wireBytes), String(parseWire(capture.dir).filter {
+                if case .ready(_, let stop, _, _) = $0 { return stop != nil }
+                return false
+            }.count), String(outcomes.count), workers,
+            String(suffixTotal(parseTrace(capture.dir))),
+            "\(config?["variant"] ?? "")", "\(config?["seed"] ?? "")",
+            "\(config?["outcome"] ?? "")", enginePin(capture.dir, config: config)
+        ].map(escapedTSV)
+        rows.append(fields.joined(separator: "\t"))
+    }
+    try FileManager.default.createDirectory(at: output.deletingLastPathComponent(),
+                                             withIntermediateDirectories: true)
+    try rows.joined(separator: "\n").appending("\n")
+        .write(to: output, atomically: true, encoding: .utf8)
+    print("wrote \(rows.count - 1) capture row(s) to \(output.path)")
+}
+
 // MARK: - main
 
 let args = CommandLine.arguments
 func usage() -> Never {
-    FileHandle.standardError.write(Data("usage: swiftstar-analyze list | summary [DIR|--latest] | trace [DIR|--latest] | diff A B | rereads [DIR|--latest]\n".utf8))
+    FileHandle.standardError.write(Data("usage: swiftstar-analyze list | summary [DIR|--latest] | trace [DIR|--latest] | diff A B | rereads [DIR|--latest] | findings [DIR|--latest] | taxonomy [DIR|--latest] | validate [DIR|--latest] | report [TSV ...] | index [OUTPUT]\n".utf8))
     exit(2)
 }
 guard args.count >= 2 else { usage() }
@@ -353,6 +733,36 @@ case "diff":
 case "rereads":
     guard args.count >= 3 else { usage() }
     cmdRereads(resolveDir(args[2]))
+case "findings":
+    guard args.count >= 3 else { usage() }
+    cmdFindings(resolveDir(args[2]))
+case "taxonomy":
+    guard args.count >= 3 else { usage() }
+    cmdTaxonomy(resolveDir(args[2]))
+case "validate":
+    guard args.count >= 3 else { usage() }
+    cmdValidate(resolveDir(args[2]))
+case "report":
+    let paths: [URL]
+    if args.count > 2 {
+        paths = Array(args.dropFirst(2)).map { URL(fileURLWithPath: $0) }
+    } else {
+        let research = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("docs/superpowers/research")
+        paths = [
+            research.appendingPathComponent("experiment-results-editing-n20.tsv"),
+            research.appendingPathComponent("experiment-results-orchestrate.tsv")
+        ]
+    }
+    cmdReport(paths)
+case "index":
+    let output = args.count > 2
+        ? URL(fileURLWithPath: args[2])
+        : captureRoot().appendingPathComponent("index.tsv")
+    do { try cmdIndex(to: output) } catch {
+        FileHandle.standardError.write(Data("index failed: \(error)\n".utf8))
+        exit(1)
+    }
 default:
     usage()
 }

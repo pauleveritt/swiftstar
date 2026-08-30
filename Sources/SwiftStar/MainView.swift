@@ -92,4 +92,5 @@ struct MainView: View {
             if new == .diagnostics { diagnosticsModel.start(controller: agentController) }
         }
     }
+
 }
