@@ -222,11 +222,82 @@ func cmdDiff(_ a: URL, _ b: URL) {
     }
 }
 
+/// A `read`/`more` tool_request reduced to what the read-guard cares about:
+/// the worker (which session read it) and the path (what it read). Windowed
+/// reads (`start_line`/`max_lines`/`offset`/`end_line`) are flagged because the
+/// guard can only short-circuit a re-read of the *same* window, not any window
+/// of an unchanged file — a distinction the design must honor, so the
+/// measurement records it rather than folding it away.
+struct ReadRequest {
+    let worker: WorkerId
+    let path: String
+    let windowed: Bool
+}
+
+/// Every `read`/`more` tool_request on the wire, per worker, from the raw
+/// NDJSON via the production pooled parser — no engine, no model. The
+/// read-guard's "before" evidence is a function of these counts: a redundant
+/// re-read (same session, same path, unchanged content) is the re-entry the
+/// guard short-circuits. `more` carries no `path` — it continues the file the
+/// session last `read` — so it is attributed to that path, flagged windowed.
+func readRequests(_ dir: URL) -> [ReadRequest] {
+    guard let text = try? String(contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8) else { return [] }
+    var parser = PoolWireParser()
+    var out: [ReadRequest] = []
+    var lastPath: [WorkerId: String] = [:]
+    for line in text.split(whereSeparator: \.isNewline) {
+        guard let e = parser.feed(String(line)),
+              case .toolRequest(_, let name, let params) = e.event,
+              name == "read" || name == "more" else { continue }
+        var path = ""
+        var windowed = name == "more"
+        for p in params {
+            if p.name == "path" { path = p.value }
+            if p.name == "start_line" || p.name == "max_lines" || p.name == "offset" || p.name == "end_line" { windowed = true }
+        }
+        if path.isEmpty { path = lastPath[e.worker] ?? "" }
+        guard !path.isEmpty else { continue }
+        lastPath[e.worker] = path
+        out.append(ReadRequest(worker: e.worker, path: path, windowed: windowed))
+    }
+    return out
+}
+
+/// The read-guard's "before" evidence, measured from the capture alone:
+/// how many read/more calls each session made, how many were re-reads of a
+/// path that session had already read, and the top offenders. Redundant count
+/// is `calls - distinct` — a ceiling on the guard's short-circuits, since a
+/// re-read is only short-circuitable when the content is unchanged between the
+/// two reads (a fact the wire cannot prove; a session with zero mutations is
+/// the common case where every redundant read is of unchanged content).
+func cmdRereads(_ dir: URL) {
+    let reads = readRequests(dir)
+    guard !reads.isEmpty else {
+        print("no read/more tool_requests in \(dir.lastPathComponent)")
+        return
+    }
+    let workers = Set(reads.map { $0.worker }).sorted()
+    for worker in workers {
+        let mine = reads.filter { $0.worker == worker }
+        var byPath: [String: (count: Int, windowed: Int)] = [:]
+        for r in mine {
+            byPath[r.path, default: (0, 0)].count += 1
+            if r.windowed { byPath[r.path, default: (0, 0)].windowed += 1 }
+        }
+        let redundant = mine.count - byPath.count
+        print("worker \(worker.rawValue): \(mine.count) read/more call(s) across \(byPath.count) distinct path(s) — \(redundant) redundant re-read(s)")
+        for (path, c) in byPath.sorted(by: { $0.value.count > $1.value.count }) where c.count > 1 {
+            let w = c.windowed > 0 ? "  (windowed: \(c.windowed))" : ""
+            print(String(format: "  %3d  %@%@", c.count, path, w))
+        }
+    }
+}
+
 // MARK: - main
 
 let args = CommandLine.arguments
 func usage() -> Never {
-    FileHandle.standardError.write(Data("usage: swiftstar-analyze list | summary [DIR|--latest] | trace [DIR|--latest] | diff A B\n".utf8))
+    FileHandle.standardError.write(Data("usage: swiftstar-analyze list | summary [DIR|--latest] | trace [DIR|--latest] | diff A B | rereads [DIR|--latest]\n".utf8))
     exit(2)
 }
 guard args.count >= 2 else { usage() }
@@ -242,6 +313,9 @@ case "trace":
 case "diff":
     guard args.count >= 4 else { usage() }
     cmdDiff(resolveDir(args[2]), resolveDir(args[3]))
+case "rereads":
+    guard args.count >= 3 else { usage() }
+    cmdRereads(resolveDir(args[2]))
 default:
     usage()
 }
