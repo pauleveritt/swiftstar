@@ -33,6 +33,21 @@ struct AgentCommandTests {
         ])
     }
 
+    @Test func argvAddsThePowerSavingDutyCycleWhenEnabled() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        var settings = makeSettings(workspace: ws)
+        settings.powerSavingEnabled = true
+        let argv = AgentCommand.argv(settings: settings)
+        let index = argv.firstIndex(of: "--power")
+        #expect(index != nil)
+        #expect(index.map { argv[argv.index(after: $0)] } == String(AgentSettings.powerSavingPercent))
+    }
+
+    @Test func argvOmitsPowerSavingWhenDisabled() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--power"))
+    }
+
     @Test func argvAllowsShell() {
         let ws = URL(fileURLWithPath: "/tmp/ws")
         let argv = AgentCommand.argv(settings: makeSettings(workspace: ws, shellAllowed: true))

@@ -246,6 +246,25 @@ struct AgentDefaultSettingsTests {
         #expect(settings.shellAllowed == true)
     }
 
+    // MARK: - power savings
+
+    @Test func powerSavingsDefaultsToEnabled() {
+        let (defaults, scratchName) = scratchDefaults()
+        defer { cleanUp(defaults, scratchName) }
+        let settings = AgentDefaultSettings.resolve(defaults: defaults, environment: [:], projectRoot: nil)
+        #expect(settings.powerSavingEnabled == true)
+        #expect(AgentCommand.argv(settings: settings).contains("--power"))
+    }
+
+    @Test func powerSavingsHonorsAnExplicitOptOut() {
+        let (defaults, scratchName) = scratchDefaults()
+        defer { cleanUp(defaults, scratchName) }
+        defaults.set(false, forKey: "agentPowerSavingEnabled")
+        let settings = AgentDefaultSettings.resolve(defaults: defaults, environment: [:], projectRoot: nil)
+        #expect(settings.powerSavingEnabled == false)
+        #expect(!AgentCommand.argv(settings: settings).contains("--power"))
+    }
+
     // MARK: - think budget (P23)
 
     /// The app sets a think budget by default. It is a guardrail, not a tuning

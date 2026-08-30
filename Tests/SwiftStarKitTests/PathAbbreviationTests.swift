@@ -5,6 +5,15 @@ import Testing
 struct PathAbbreviationTests {
     let home = URL(fileURLWithPath: "/Users/me")
 
+    @Test func leafNameUsesOnlyTheLastDirectoryComponent() {
+        let path = URL(fileURLWithPath: "/Users/me/projects/swiftstar")
+        #expect(PathAbbreviation.leafName(path) == "swiftstar")
+    }
+
+    @Test func leafNameFallsBackToRootPath() {
+        #expect(PathAbbreviation.leafName(URL(fileURLWithPath: "/")) == "/")
+    }
+
     @Test func homeItselfIsTilde() {
         #expect(PathAbbreviation.abbreviate(home, home: home) == "~")
     }
