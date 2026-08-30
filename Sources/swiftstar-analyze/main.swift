@@ -49,11 +49,29 @@ func captureDirs() -> [CaptureDir] {
     return out.sorted { $0.modified > $1.modified }
 }
 
-func isUnusable(_ d: CaptureDir) -> Bool {
+/// Why a capture cannot answer "what did my last session do".
+enum Unusable: String {
+    /// No wire at all, or a zero-byte one.
+    case emptyWire = "empty/missing wire.ndjson"
+    /// A non-empty wire that records no turn the user started — the shape of an
+    /// agent spawned and left idle (handshake + statuses + the engine's
+    /// field-less startup ready). Size alone cannot tell this from a real
+    /// session: `live/20260830-163255` carried 4 KB of handshake and zero
+    /// turns, and under the old size-only predicate it shadowed
+    /// `live/20260830-155556` — 3 real turns, 53 tool calls — as `--latest`.
+    case noWork = "no work recorded (idle spawn)"
+}
+
+func unusableReason(_ d: CaptureDir) -> Unusable? {
     let wire = d.dir.appendingPathComponent("wire.ndjson")
     let size = (try? FileManager.default.attributesOfItem(atPath: wire.path)[.size]) as? Int
-    return (size ?? 0) == 0
+    if (size ?? 0) == 0 { return .emptyWire }
+    let lines = (try? String(contentsOf: wire, encoding: .utf8))?
+        .split(whereSeparator: \.isNewline).map(String.init) ?? []
+    return CaptureUsability.recordsWork(wireLines: lines) ? nil : .noWork
 }
+
+func isUnusable(_ d: CaptureDir) -> Bool { unusableReason(d) != nil }
 
 func resolveDir(_ spec: String) -> URL {
     if spec == "--latest" {
@@ -150,7 +168,7 @@ func compactionCount(_ trace: [TraceEvent]) -> Int {
 
 func cmdList() {
     for d in captureDirs() {
-        let flag = isUnusable(d) ? "  [unusable: empty/missing wire.ndjson]" : ""
+        let flag = unusableReason(d).map { "  [unusable: \($0.rawValue)]" } ?? ""
         print("\(d.kind)/\(d.name)\(flag)")
     }
 }
