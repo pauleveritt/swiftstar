@@ -77,12 +77,19 @@ struct TurnSummaryTests {
 
     @Test func lineDoesNotTrapOnNonFinite() {
         let s = TurnSummary(promptTPS: .infinity, decodeTPS: .infinity, generatedTokens: 10, ctxUsed: 100)
-        #expect(s.line == "Decode 0 tok/s · 10 tok · ctx 100")
+        #expect(s.line == "10 tok · ctx 100")
     }
 
     @Test func lineFormatIsFixed() {
         let s = TurnSummary(promptTPS: 1200, decodeTPS: 47.3, generatedTokens: 512, ctxUsed: 9_580)
-        #expect(s.line == "Decode 47 tok/s · 512 tok · ctx 9,580")
+        #expect(s.line == "Prompt 1200 tok/s · Decode 47 tok/s · 512 tok · ctx 9,580")
+    }
+
+    @Test func lineIncludesElapsedTimeAndStopReasonWhenKnown() {
+        let s = TurnSummary(
+            promptTPS: 1200, decodeTPS: 47.3, generatedTokens: 512, ctxUsed: 9_580,
+            elapsedSeconds: 12.4, stopReason: .limit)
+        #expect(s.line == "Prompt 1200 tok/s · Decode 47 tok/s · 512 tok · ctx 9,580 · 12s · stop limit")
     }
 
     private func fixture(_ name: String) throws -> [StatusSnapshot] {

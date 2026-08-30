@@ -259,10 +259,14 @@ extension AgentController {
             // send is refused, and leaving the receipt pending lets the next
             // drain fold the answer in via `injectionPrompt()`.
             let answer = receipt.answerText.flatMap { $0.isEmpty ? nil : $0 } ?? receipt.summary
-            if sendConsulted(answer, worker: worker) {
+            let stats = ConsultedRowStats(
+                generatedTokens: outcome.generatedTokens,
+                decodeTPS: outcome.decodeTPS,
+                ctxUsed: outcome.ctxUsed)
+            if sendConsulted(answer, worker: worker, stats: stats) {
                 poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
             } else {
-                transcript.append(.consulted(worker, answer))
+                transcript.append(.consulted(worker, answer, stats: stats))
             }
         }
         log("worker \(worker.rawValue): \(receipt.summary)")

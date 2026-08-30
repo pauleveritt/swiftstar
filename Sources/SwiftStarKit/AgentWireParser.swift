@@ -26,6 +26,23 @@ public struct AgentToolEvent: Equatable, Sendable {
     public let value: String?
     public let status: String?
     public let calls: Int?
+    /// The wire's monotonic timestamp, when the engine included one. Tool
+    /// cards use the start/finish pair to show a real execution duration.
+    public let ts: UInt64?
+
+    public init(phase: AgentToolPhase, idx: Int, name: String?, paramKind: String?,
+                paramName: String?, value: String?, status: String?, calls: Int?,
+                ts: UInt64? = nil) {
+        self.phase = phase
+        self.idx = idx
+        self.name = name
+        self.paramKind = paramKind
+        self.paramName = paramName
+        self.value = value
+        self.status = status
+        self.calls = calls
+        self.ts = ts
+    }
 }
 
 /// One modelled event from the NDJSON agent wire. `.ignored` carries the raw
@@ -154,23 +171,28 @@ public struct AgentWireParser: Sendable {
         switch phase {
         case .tool:
             return AgentToolEvent(phase: phase, idx: idx, name: object["name"] as? String,
-                                  paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)
+                                  paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         case .paramBegin:
             return AgentToolEvent(phase: phase, idx: idx, name: nil,
                                   paramKind: object["kind"] as? String, paramName: object["name"] as? String,
-                                  value: nil, status: nil, calls: nil)
+                                  value: nil, status: nil, calls: nil,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         case .paramValue, .output:
             return AgentToolEvent(phase: phase, idx: idx, name: nil,
                                   paramKind: nil, paramName: nil, value: object["s"] as? String,
-                                  status: nil, calls: nil)
+                                  status: nil, calls: nil,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         case .finish:
             return AgentToolEvent(phase: phase, idx: idx, name: nil,
                                   paramKind: nil, paramName: nil, value: nil,
                                   status: object["status"] as? String,
-                                  calls: (object["calls"] as? NSNumber)?.intValue)
+                                  calls: (object["calls"] as? NSNumber)?.intValue,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         case .start, .paramEnd:
             return AgentToolEvent(phase: phase, idx: idx, name: nil,
-                                  paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)
+                                  paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         }
     }
 

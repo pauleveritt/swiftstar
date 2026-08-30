@@ -138,13 +138,49 @@ struct AgentTranscriptTests {
     @Test func systemRowAppends() {
         var t = AgentTranscript()
         t.appendSystem("> hello")
-        #expect(t.rows == [.system("> hello")])
+        guard case .system("> hello", let stats) = t.rows[0] else {
+            Issue.record("expected a system row")
+            return
+        }
+        #expect(stats != nil)
     }
 
     @Test func consultedRowAppends() {
         var t = AgentTranscript()
         t.append(.consulted(WorkerId(1), "the worker's answer"))
         #expect(t.rows == [.consulted(WorkerId(1), "the worker's answer")])
+    }
+
+    @Test func compactionRowPreservesRebuildFacts() {
+        let summary = CompactionSummary(
+            reason: "soft limit before tool continuation", oldTokens: 150_000,
+            newTokens: 45_000, tailStart: 42_000, tailTokens: 3_000)
+        var t = AgentTranscript()
+        t.append(.compaction(summary))
+        #expect(t.rows == [.compaction(summary)])
+        #expect(summary.retainedTokens == 48_000)
+        #expect(summary.discardedTokens == 102_000)
+        #expect(summary.line == "ctx 150,000 → 45,000 + 3,000 tail = 48,000 tok · −102,000")
+    }
+
+    @Test func toolTimestampsMeasureDuration() {
+        var t = AgentTranscript()
+        t.apply(.tool(AgentToolEvent(
+            phase: .start, idx: 0, name: nil, paramKind: nil, paramName: nil,
+            value: nil, status: nil, calls: nil, ts: 100)))
+        t.apply(.tool(AgentToolEvent(
+            phase: .tool, idx: 0, name: "bash", paramKind: nil, paramName: nil,
+            value: nil, status: nil, calls: nil, ts: 1_000_000)))
+        t.apply(.tool(AgentToolEvent(
+            phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil,
+            value: nil, status: nil, calls: 1, ts: 2_500_100)))
+        guard case .tool(let card) = t.rows[0] else {
+            Issue.record("expected a tool row")
+            return
+        }
+        #expect(card.startedAt == 1_000_000)
+        #expect(card.finishedAt == 2_500_100)
+        #expect(card.durationSeconds == 1.5001)
     }
 
     @Test func reducerIsAppendOnly() {

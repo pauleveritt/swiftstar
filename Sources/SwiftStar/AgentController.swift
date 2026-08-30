@@ -54,6 +54,9 @@ final class AgentController {
     /// which is also what lets it be `nonisolated`: the `@Observable` macro
     /// cannot apply `nonisolated` to a *tracked* stored property.
     @ObservationIgnored private var memoryTask: Task<Void, Never>?
+    /// Tails the engine's trace side-channel so compaction becomes a persistent
+    /// transcript row instead of only a Diagnostics finding.
+    @ObservationIgnored private var traceTask: Task<Void, Never>?
     /// The in-flight turn's decode work, accumulated per generation segment on
     /// the engine's own clock. Reset at each turn's start and end.
 
@@ -102,6 +105,9 @@ final class AgentController {
     var generation = 0
     // D12 turn-outcome state.
     private var outcomeBuilder: TurnOutcomeBuilder?
+    /// Status samples for the active orchestrator turn. `TurnSpan` turns these
+    /// into elapsed work time without counting the user's typing time.
+    private var turnStatuses: [StatusSnapshot] = []
     // P11 (D4) worker-turn state: everything that exists only while one
     // worker turn is in flight, consolidated into one value (item 1 of the
     // P22 cleanup) so there is exactly one place that creates/clears it —
@@ -144,6 +150,7 @@ final class AgentController {
         // and be genuinely checked again.
         process?.terminate()
         memoryTask?.cancel()
+        traceTask?.cancel()
         try? logHandle?.close()
     }
 
@@ -291,6 +298,54 @@ final class AgentController {
         return (wire, tracePath)
     }
 
+    /// Read complete lines from the append-only trace without doing file I/O on
+    /// the MainActor. The trace may not exist until the engine opens it, so the
+    /// tailer retries the open and keeps the file handle at its current offset.
+    private func startTracePolling(path: URL, generation: Int) {
+        traceTask?.cancel()
+        traceTask = Task.detached(priority: .utility) { [weak self] in
+            var handle: FileHandle?
+            var pending = Data()
+            var parser = TraceParser()
+            var didInitialSeek = false
+            while !Task.isCancelled {
+                if handle == nil {
+                    handle = try? FileHandle(forReadingFrom: path)
+                    if handle != nil, !didInitialSeek {
+                        // A same-second restart can reuse an append-only
+                        // capture directory. Start at this spawn's live tail,
+                        // otherwise old compactions would be replayed.
+                        _ = try? handle?.seekToEnd()
+                        didInitialSeek = true
+                    }
+                }
+                if let handle,
+                   let chunk = try? handle.read(upToCount: 64 * 1024),
+                   !chunk.isEmpty {
+                    pending.append(chunk)
+                    while let newline = pending.firstIndex(of: 0x0A) {
+                        let line = pending.prefix(upTo: newline)
+                        pending.removeSubrange(...newline)
+                        let text = String(decoding: line, as: UTF8.self)
+                        if let event = parser.feed(text) {
+                            await self?.consumeTrace(event, generation: generation)
+                        }
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            try? handle?.close()
+        }
+    }
+
+    private func consumeTrace(_ event: TraceEvent, generation: Int) {
+        guard generation == self.generation else { return }
+        guard case .compaction(let reason, let old, let new, let tailStart, let tail) = event else { return }
+        transcript.append(.compaction(CompactionSummary(
+            reason: reason, oldTokens: old, newTokens: new,
+            tailStart: tailStart, tailTokens: tail, observedAt: Date())))
+    }
+
     /// Persist one finished turn's outcome as an appended line in the session's
     /// outcomes.ndjson (P21): captures become self-contained evidence. Item 6
     /// (P22 cleanup): routed through `SafeAppendFile` — a fresh one per call
@@ -391,6 +446,9 @@ final class AgentController {
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
         workerTurn.watchdog?.cancel()
         workerTurn = ActiveWorkerTurn()
+        traceTask?.cancel()
+        traceTask = nil
+        turnStatuses = []
         // P24.1 (D3/D5): the executor is a process-lifetime `static let`, so it
         // cannot take the context size at construction, and its `more`
         // continuations would otherwise outlive the session that made them.
@@ -485,6 +543,7 @@ final class AgentController {
                 guard let self else { return }
                 self.process = nil
                 self.memoryTask?.cancel()
+                self.traceTask?.cancel()
                 self.lastFootprintBytes = nil
                 // The engine's failure mode is exiting (stderr boot lines are
                 // normal — the memory plan lives there); a mid-start or
@@ -505,6 +564,9 @@ final class AgentController {
             return
         }
         startMemoryPolling()
+        if let tracePath = settings.tracePath {
+            startTracePolling(path: tracePath, generation: gen)
+        }
 
         // Item 6 (P22 cleanup): both tees route through `SafeAppendFile`
         // (shared with swiftstar-agenttest's own wire.ndjson capture) instead
@@ -606,6 +668,7 @@ final class AgentController {
             // and its rates are ratcheted (never blanked by a zero).
             onTelemetry?(.status(snapshot))
             lastStatus = snapshot
+            if outcomeBuilder != nil { turnStatuses.append(snapshot) }
             lastPrefillTPS = AgentStatusText.ratchet(previous: lastPrefillTPS, new: snapshot.prefillTPS)
             lastGenTPS = AgentStatusText.ratchet(previous: lastGenTPS, new: snapshot.genTPS)
             break
@@ -643,8 +706,11 @@ final class AgentController {
                     promptTPS: lastPrefillTPS,
                     decodeTPS: outcome.decodeTPS ?? lastGenTPS,
                     generatedTokens: outcome.generatedTokens,
-                    ctxUsed: outcome.ctxUsed)
+                    ctxUsed: outcome.ctxUsed,
+                    elapsedSeconds: TurnSpan.measure(turnStatuses)?.workSeconds,
+                    stopReason: outcome.stopReason)
                 transcript.attachSummary(summary)
+                turnStatuses = []
                 // The status bar's Prompt/Decode readout resets at turn end: a
                 // permanent "last observed" must not pose as "current" while
                 // the agent idles between turns (send() also zeros at the next
@@ -857,7 +923,9 @@ final class AgentController {
         // (worker receipts injected into the orchestrator's next turn) is a
         // quiet system row — the user never typed it, so it must not look like
         // they did.
-        let row: AgentTranscriptRow = asUser ? .user(trimmed) : .system(trimmed)
+        let row: AgentTranscriptRow = asUser
+            ? .user(trimmed, stats: UserRowStats.forText(trimmed))
+            : .system(trimmed, stats: SystemRowStats())
         return inject(trimmed, row: row)
     }
 
@@ -866,11 +934,12 @@ final class AgentController {
     /// rendered as its own `.consulted` panel — a delegated artifact, not
     /// the main agent's prose.
     @discardableResult
-    func sendConsulted(_ answer: String, worker: WorkerId) -> Bool {
+    func sendConsulted(_ answer: String, worker: WorkerId,
+                       stats: ConsultedRowStats? = nil) -> Bool {
         let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         let wireText = "→ consulted: \(trimmed)"
-        return inject(wireText, row: .consulted(worker, trimmed))
+        return inject(wireText, row: .consulted(worker, trimmed, stats: stats))
     }
 
     private func inject(_ wireText: String, row: AgentTranscriptRow,
@@ -878,6 +947,7 @@ final class AgentController {
         guard canSend, !wireText.isEmpty, let process,
               let pipe = process.standardInput as? Pipe else { return false }
         transcript.append(row)
+        turnStatuses = []
         // A new turn starts with honest zeros: the previous turn's ratcheted
         // rates would mislead ("Prompt 1200" while prefill is actually 0) in
         // the brief window before fresh status events arrive.
@@ -1100,7 +1170,7 @@ final class AgentController {
                 "→ /quick unavailable: this engine build does not advertise \(TurnThinkPolicy.overrideCap)")
             return
         }
-        _ = inject(trimmed, row: .user(trimmed), think: .off)
+        _ = inject(trimmed, row: .user(trimmed, stats: UserRowStats.forText(trimmed)), think: .off)
     }
 
     /// The running model's `ModelFamily` for `TurnThinkPolicy` (P23): from the

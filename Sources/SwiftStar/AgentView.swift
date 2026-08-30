@@ -123,8 +123,8 @@ struct AgentView: View {
     @ViewBuilder
     private func rowView(_ row: AgentTranscriptRow) -> some View {
         switch row {
-        case .user(let text):
-            AgentPromptBubble(text: text)
+        case .user(let text, let stats):
+            AgentPromptBubble(text: text, stats: stats)
         case .thinking(let text):
             ThinkingDisclosure(text: text)
         case .content(let text, let summary):
@@ -144,10 +144,20 @@ struct AgentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
             AgentToolCardView(card: card, workspace: controller.settings.workspace)
-        case .consulted(let worker, let text):
-            ConsultedAnswerView(worker: worker, text: text)
-        case .system(let text):
-            Text(text).font(.system(size: envTranscriptFontSize)).foregroundStyle(.tertiary)
+        case .consulted(let worker, let text, let stats):
+            ConsultedAnswerView(worker: worker, text: text, stats: stats)
+        case .system(let text, let stats):
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text).font(.system(size: envTranscriptFontSize)).foregroundStyle(.tertiary)
+                if let stats {
+                    Text(stats.timestamp.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(.quaternary)
+                        .monospacedDigit()
+                }
+            }
+        case .compaction(let summary):
+            CompactionRow(summary: summary)
         }
     }
 

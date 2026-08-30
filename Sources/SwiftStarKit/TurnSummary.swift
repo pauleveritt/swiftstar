@@ -9,20 +9,46 @@ public struct TurnSummary: Equatable, Sendable {
     public let decodeTPS: Double
     public let generatedTokens: Int
     public let ctxUsed: Int
+    /// Wall-clock work duration measured from the wire's monotonic status
+    /// samples. Nil when the turn did not provide a usable status span.
+    public let elapsedSeconds: Double?
+    /// The engine's reason for closing the turn, when the ready event carried
+    /// one (older engines may omit it).
+    public let stopReason: TurnStopReason?
 
-    public init(promptTPS: Double, decodeTPS: Double, generatedTokens: Int, ctxUsed: Int) {
+    public init(promptTPS: Double, decodeTPS: Double, generatedTokens: Int, ctxUsed: Int,
+                elapsedSeconds: Double? = nil, stopReason: TurnStopReason? = nil) {
         self.promptTPS = promptTPS
         self.decodeTPS = decodeTPS
         self.generatedTokens = generatedTokens
         self.ctxUsed = ctxUsed
+        self.elapsedSeconds = elapsedSeconds
+        self.stopReason = stopReason
     }
 
-    /// "Decode 47 tok/s · 512 tok · ctx 9,580" — the static line under the
+    /// "Prompt 1,200 tok/s · Decode 47 tok/s · 512 tok · ctx 9,580 · 2.4s · stop eos" — the static line under the
     /// bubble, fixed once the turn completes. Never traps on a non-finite
     /// rate (a garbage wire value renders as a dash, not a crash).
     public var line: String {
-        let rate = decodeTPS.isFinite ? Int(decodeTPS.rounded()) : 0
-        return "Decode \(rate) tok/s · \(generatedTokens) tok · ctx \(ctxUsed.formatted())"
+        var parts: [String] = []
+        if promptTPS.isFinite, promptTPS > 0 {
+            parts.append("Prompt \(Int(promptTPS.rounded())) tok/s")
+        }
+        if decodeTPS.isFinite, decodeTPS > 0 {
+            parts.append("Decode \(Int(decodeTPS.rounded())) tok/s")
+        }
+        parts.append("\(generatedTokens) tok")
+        if ctxUsed > 0 { parts.append("ctx \(ctxUsed.formatted())") }
+        if let elapsedSeconds, elapsedSeconds.isFinite, elapsedSeconds >= 0 {
+            parts.append(Self.duration(elapsedSeconds))
+        }
+        if let stopReason { parts.append("stop \(stopReason.rawValue)") }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func duration(_ seconds: Double) -> String {
+        if seconds < 10 { return String(format: "%.1fs", seconds) }
+        return String(format: "%.0fs", seconds)
     }
 }
 

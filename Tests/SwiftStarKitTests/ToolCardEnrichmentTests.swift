@@ -60,9 +60,13 @@ struct ToolCardEnrichmentTests {
     @Test func userRowAppends() {
         var t = AgentTranscript()
         t.appendUser("hello")
-        #expect(t.rows == [.user("hello")])
+        guard case .user("hello", let stats) = t.rows[0] else {
+            Issue.record("expected a user row"); return
+        }
+        #expect(stats?.characterCount == 5)
         // A subsequent content row is a separate row, not coalesced into the user row.
         t.apply(.text("reply"))
-        #expect(t.rows == [.user("hello"), .content("reply", summary: nil)])
+        #expect(t.rows.count == 2)
+        #expect(t.rows[1] == .content("reply", summary: nil))
     }
 }

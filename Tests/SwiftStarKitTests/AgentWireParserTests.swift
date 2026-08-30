@@ -52,26 +52,26 @@ struct AgentWireParserTests {
         var p = AgentWireParser()
         _ = p.feed(Self.helloLine)
         let start = p.feed(#"{"t":"tool","phase":"start","idx":0,"ts":10}"#)
-        #expect(start == .tool(AgentToolEvent(phase: .start, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
+        #expect(start == .tool(AgentToolEvent(phase: .start, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil, ts: 10)))
         let tool = p.feed(#"{"t":"tool","phase":"tool","idx":0,"name":"read","ts":11}"#)
-        #expect(tool == .tool(AgentToolEvent(phase: .tool, idx: 0, name: "read", paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
+        #expect(tool == .tool(AgentToolEvent(phase: .tool, idx: 0, name: "read", paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil, ts: 11)))
         let pb = p.feed(#"{"t":"tool","phase":"param_begin","idx":0,"kind":"path","name":"path","ts":12}"#)
-        #expect(pb == .tool(AgentToolEvent(phase: .paramBegin, idx: 0, name: nil, paramKind: "path", paramName: "path", value: nil, status: nil, calls: nil)))
+        #expect(pb == .tool(AgentToolEvent(phase: .paramBegin, idx: 0, name: nil, paramKind: "path", paramName: "path", value: nil, status: nil, calls: nil, ts: 12)))
         let pv = p.feed(#"{"t":"tool","phase":"param_value","idx":0,"s":"seed.txt","ts":13}"#)
-        #expect(pv == .tool(AgentToolEvent(phase: .paramValue, idx: 0, name: nil, paramKind: nil, paramName: nil, value: "seed.txt", status: nil, calls: nil)))
+        #expect(pv == .tool(AgentToolEvent(phase: .paramValue, idx: 0, name: nil, paramKind: nil, paramName: nil, value: "seed.txt", status: nil, calls: nil, ts: 13)))
         let pe = p.feed(#"{"t":"tool","phase":"param_end","idx":0,"ts":14}"#)
-        #expect(pe == .tool(AgentToolEvent(phase: .paramEnd, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)))
+        #expect(pe == .tool(AgentToolEvent(phase: .paramEnd, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil, ts: 14)))
         let finish = p.feed(#"{"t":"tool","phase":"finish","idx":0,"calls":1,"ts":15}"#)
-        #expect(finish == .tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: 1)))
+        #expect(finish == .tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: nil, calls: 1, ts: 15)))
         let output = p.feed(#"{"t":"tool","phase":"output","idx":0,"s":"1 hello from golden-tools\n","ts":16}"#)
-        #expect(output == .tool(AgentToolEvent(phase: .output, idx: 0, name: nil, paramKind: nil, paramName: nil, value: "1 hello from golden-tools\n", status: nil, calls: nil)))
+        #expect(output == .tool(AgentToolEvent(phase: .output, idx: 0, name: nil, paramKind: nil, paramName: nil, value: "1 hello from golden-tools\n", status: nil, calls: nil, ts: 16)))
     }
 
     @Test func finishCarriesInterruptedStatus() {
         var p = AgentWireParser()
         _ = p.feed(Self.helloLine)
         let line = #"{"t":"tool","phase":"finish","idx":0,"calls":1,"status":"[tool call interrupted]\n","ts":20}"#
-        #expect(p.feed(line) == .tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: "[tool call interrupted]\n", calls: 1)))
+        #expect(p.feed(line) == .tool(AgentToolEvent(phase: .finish, idx: 0, name: nil, paramKind: nil, paramName: nil, value: nil, status: "[tool call interrupted]\n", calls: 1, ts: 20)))
     }
 
     @Test func textAndThinkParse() {

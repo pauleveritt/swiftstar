@@ -32,6 +32,13 @@ struct AgentToolCardView: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            if let line = Self.metadataLine(card) {
+                Text(line)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .textSelection(.enabled)
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -110,6 +117,25 @@ struct AgentToolCardView: View {
     /// no empty region or placeholder for it.
     static func isBodyEmpty(_ card: ToolCard) -> Bool {
         Self.visibleParams(card).isEmpty && card.output == nil
+    }
+
+    /// A compact facts line under the card. Counts come from the structured
+    /// parameter/output values; duration comes only from wire timestamps.
+    static func metadataLine(_ card: ToolCard) -> String? {
+        var parts: [String] = []
+        if let duration = card.durationSeconds, duration.isFinite, duration >= 0 {
+            parts.append(Self.duration(duration))
+        }
+        if card.finished { parts.append(card.status == nil ? "succeeded" : "failed") }
+        else { parts.append("running") }
+        if card.inputBytes > 0 { parts.append("in \(card.inputBytes.formatted()) B") }
+        if card.outputBytes > 0 { parts.append("out \(card.outputBytes.formatted()) B") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private static func duration(_ seconds: Double) -> String {
+        if seconds < 10 { return String(format: "%.1fs", seconds) }
+        return String(format: "%.0fs", seconds)
     }
 
     /// Every param except the ones already surfaced in the header.
