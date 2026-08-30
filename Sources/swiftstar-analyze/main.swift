@@ -146,10 +146,10 @@ func parseOutcomes(_ dir: URL) -> [TurnOutcome] {
 
 /// The turn's decode work with the app's own math (`DecodeAccumulator`): per
 /// generation segment, on the engine's clock.
-func decodeWork(_ turn: [StatusSnapshot], finalGenerated: Int?) -> DecodeAccumulator {
+func decodeWork(_ turn: [StatusSnapshot], finalSegment: Int?) -> DecodeAccumulator {
     var acc = DecodeAccumulator()
     for s in turn { acc.apply(s) }
-    acc.finish(finalGenerated: finalGenerated)
+    acc.finish(finalSegment: finalSegment)
     return acc
 }
 
@@ -203,17 +203,25 @@ func cmdSummary(_ dir: URL) {
     print("Session \(dir.lastPathComponent): \(rows.count) turn(s), \(outcomes.count) outcome(s), \(compactionCount(trace)) compaction(s), Σsuffix \(suffixTotal(trace))")
     for (i, row) in rows.enumerated() {
         let outcome = row.outcome
-        // The final segment, not the turn total: `decodeWork` uses it as the
-        // last segment's authoritative count. Records written before
-        // `finalSegmentTokens` existed carry the wire value in
-        // `generatedTokens`, where it means exactly that.
-        let work = decodeWork(row.statuses,
-                              finalGenerated: outcome?.finalSegmentTokens ?? outcome?.generatedTokens)
-        let avg = work.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "-"
-        // The accumulator's total, not the outcome's: the engine's counter
-        // resets per generation segment, so a tool-heavy turn's `ready` reports
-        // only its last segment.
-        let gen = work.generatedTokens
+        // Prefer the outcome's own figures: the builder computed the rate and
+        // the token total together, from one accumulator. Re-deriving them here
+        // would mean choosing which of the outcome's two token counts to feed
+        // back in, and choosing wrong double-counts the turn.
+        //
+        // Records written before those fields existed are re-derived from the
+        // statuses. In those, `generatedTokens` holds the wire value, which is
+        // the final segment — exactly what `finalSegment` wants.
+        let avg: String
+        let gen: Int
+        if let outcome, let rate = outcome.decodeTPS {
+            avg = String(format: "%.1f", rate)
+            gen = outcome.generatedTokens
+        } else {
+            let work = decodeWork(row.statuses,
+                                  finalSegment: outcome?.finalSegmentTokens ?? outcome?.generatedTokens)
+            avg = work.tokensPerSecond.map { String(format: "%.1f", $0) } ?? "-"
+            gen = work.generatedTokens
+        }
         let ctx = outcome?.ctxUsed ?? row.statuses.last?.ctxUsed ?? 0
         let tools = outcome?.toolCalls.count ?? 0
         // The turn's own duration, not the capture's wire span: an app capture

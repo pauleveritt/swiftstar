@@ -382,3 +382,71 @@ struct TurnTotalTokenTests {
         #expect(o.finalSegmentTokens == nil)
     }
 }
+
+/// The builder's two token counts are not interchangeable, and until now
+/// nothing pinned which consumer got which. Both consumers of the wire value
+/// (the reply bubble's accumulator and swiftstar-analyze) could be rewired to
+/// the turn total — double-counting the whole turn — with all 871 tests still
+/// green. Verified by mutation, 2026-08-30.
+///
+/// The fix is to stop making them choose: the outcome carries the turn's decode
+/// rate, computed once beside the token total by the code that owns both. A
+/// consumer with nothing to pass cannot pass the wrong thing.
+struct TurnDecodeRateTests {
+    private func status(_ state: String, generated: Int, genTPS: Double) -> AgentEvent {
+        .status(StatusSnapshot(ctxUsed: 0, ctxSize: 51_200, prefillTPS: 0, genTPS: genTPS,
+                               ts: 0, generated: generated, state: state))
+    }
+
+    /// Three segments at three different rates: 100 tok @ 25/s (4s), 80 @ 20/s
+    /// (4s), 42 @ 10.5/s (4s). 222 tokens of decode in 12 seconds is 18.5 tok/s
+    /// — an average no single segment reports.
+    @Test func decodeRateAveragesSegmentsOnTheEnginesOwnClock() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
+        b.apply(status("generating", generated: 100, genTPS: 25))
+        b.apply(status("prefill", generated: 0, genTPS: 0))
+        b.apply(status("generating", generated: 80, genTPS: 20))
+        b.apply(status("prefill", generated: 0, genTPS: 0))
+        b.apply(status("generating", generated: 30, genTPS: 10.5))
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 42, ctxUsed: 900))
+        let o = b.finish()
+        #expect(o.generatedTokens == 222)
+        #expect(o.decodeTPS != nil)
+        #expect(abs((o.decodeTPS ?? 0) - 18.5) < 0.001)
+    }
+
+    /// A turn with no usable decode work reports no rate rather than a
+    /// fabricated one — the caller then falls back to the engine's last
+    /// reported figure.
+    @Test func aTurnWithNoDecodeWorkHasNoRate() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 0, ctxUsed: 10))
+        let o = b.finish()
+        #expect(o.decodeTPS == nil)
+    }
+
+    /// The rate must be computed from the SAME accumulator state as the token
+    /// total — a rate over 222 tokens paired with a count of 42 would be two
+    /// different turns' arithmetic reported as one.
+    @Test func rateAndTotalDescribeTheSameTurn() {
+        var b = TurnOutcomeBuilder(model: "m", build: "b", task: "t")
+        b.apply(status("generating", generated: 100, genTPS: 25))
+        b.apply(status("prefill", generated: 0, genTPS: 0))
+        b.apply(status("generating", generated: 30, genTPS: 10.5))
+        b.apply(.ready(plannedBytes: nil, stopReason: "eos", generated: 42, ctxUsed: 900))
+        let o = b.finish()
+        let seconds = Double(o.generatedTokens) / (o.decodeTPS ?? 1)
+        #expect(abs(seconds - 8.0) < 0.001)   // 100/25 + 42/10.5
+    }
+
+    /// Old records carry no rate; decoding must not fail.
+    @Test func recordsWrittenBeforeThisFieldStillDecode() throws {
+        let legacy = """
+        {"model":"m","build":"b","sampler":"think=default","task":"t",\
+        "generatedTokens":1422,"ctxUsed":35484,"stopReason":"eos","toolCalls":[],\
+        "mutations":[],"text":"","validationRan":false}
+        """
+        let o = try JSONDecoder().decode(TurnOutcome.self, from: Data(legacy.utf8))
+        #expect(o.decodeTPS == nil)
+    }
+}

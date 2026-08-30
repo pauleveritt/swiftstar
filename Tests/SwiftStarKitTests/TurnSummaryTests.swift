@@ -53,7 +53,7 @@ struct TurnSummaryTests {
         acc.apply(status("generating", generated: 100, genTPS: 50))
         acc.apply(status("prefill", generated: 0, genTPS: 0))
         acc.apply(status("generating", generated: 40, genTPS: 50))
-        acc.finish(finalGenerated: 60)
+        acc.finish(finalSegment: 60)
         #expect(acc.generatedTokens == 160)      // 100 closed + 60 authoritative
         #expect(acc.tokensPerSecond == 50)
     }
@@ -141,7 +141,7 @@ struct TurnSummaryTests {
         let statuses = try fixture("tool-rounds.ndjson")
         var acc = DecodeAccumulator()
         for s in statuses { acc.apply(s) }
-        acc.finish(finalGenerated: 298)  // the fixture's terminal ready
+        acc.finish(finalSegment: 298)  // the fixture's terminal ready
 
         #expect(acc.generatedTokens == 714)
         let avg = try #require(acc.tokensPerSecond)

@@ -58,6 +58,17 @@ public struct TurnOutcome: Equatable, Sendable, Codable {
     /// segments. Optional because records written before this field existed
     /// carry only the wire value, in `generatedTokens`, where it means this.
     public var finalSegmentTokens: Int? = nil
+    /// The turn's decode average across its generation segments, on the
+    /// engine's own clock (see `DecodeAccumulator`), or nil when no segment
+    /// produced usable work.
+    ///
+    /// Carried here so no consumer has to re-derive it — deriving it means
+    /// choosing between `generatedTokens` and `finalSegmentTokens`, and the two
+    /// are not interchangeable: feeding the turn total in as the final
+    /// segment's authoritative count double-counts the turn. Both consumers
+    /// could be wired that way with the whole suite green (mutation-verified,
+    /// 2026-08-30). A consumer with nothing to pass cannot pass the wrong thing.
+    public var decodeTPS: Double? = nil
 
     public init(model: String, build: String, sampler: String, task: String,
                 generatedTokens: Int, ctxUsed: Int, stopReason: TurnStopReason,
@@ -215,7 +226,7 @@ public struct TurnOutcomeBuilder {
         // reported a zero/garbage rate. Reporting the accumulator's 0 over the
         // wire's own count would trade an undercount for a total loss.
         var acc = decode
-        acc.finish(finalGenerated: generated)
+        acc.finish(finalSegment: generated)
         let turnTokens = (sawStatus && acc.generatedTokens > 0) ? acc.generatedTokens : generated
         var outcome = TurnOutcome(
             model: model, build: build, sampler: sampler, task: task,
@@ -229,6 +240,9 @@ public struct TurnOutcomeBuilder {
         outcome.validationRan = self.validationRan
         outcome.text = self.text
         outcome.finalSegmentTokens = generated
+        // From the SAME accumulator state as `turnTokens` above: a rate and a
+        // total that describe different turns would be worse than either alone.
+        outcome.decodeTPS = acc.tokensPerSecond
         return outcome
     }
 

@@ -56,7 +56,6 @@ final class AgentController {
     @ObservationIgnored private var memoryTask: Task<Void, Never>?
     /// The in-flight turn's decode work, accumulated per generation segment on
     /// the engine's own clock. Reset at each turn's start and end.
-    private var decodeAccumulator = DecodeAccumulator()
 
     /// The running agent's pid, if the child process is alive.
     var runningPid: pid_t? { process?.processIdentifier }
@@ -383,7 +382,6 @@ final class AgentController {
         lastPlannedBytes = nil
         lastPlannedModel = nil
         lastFootprintBytes = nil
-        decodeAccumulator = DecodeAccumulator()
         outcomeBuilder = nil
         sentInterrupt = false
         orchestratorToolBudget = ToolCallBudgetTracker(
@@ -608,10 +606,6 @@ final class AgentController {
             // and its rates are ratcheted (never blanked by a zero).
             onTelemetry?(.status(snapshot))
             lastStatus = snapshot
-            // P21: the turn's decode work accumulates per generation segment on
-            // the engine's own clock (see DecodeAccumulator) — wall time between
-            // statuses includes prefill and tool round trips, which is not decode.
-            decodeAccumulator.apply(snapshot)
             lastPrefillTPS = AgentStatusText.ratchet(previous: lastPrefillTPS, new: snapshot.prefillTPS)
             lastGenTPS = AgentStatusText.ratchet(previous: lastGenTPS, new: snapshot.genTPS)
             break
@@ -637,21 +631,18 @@ final class AgentController {
                 completedTurns += 1
                 log("turn outcome: \(outcome)")
                 appendOutcome(outcome)
-                // Freeze the turn's summary onto its reply bubble: the decode
-                // average across the turn's generation segments, else the
-                // engine-reported rate — never a fabricated average.
-                // `promptTPS` is the turn-end ratchet, matching the status bar.
-                // The FINAL SEGMENT, not `outcome.generatedTokens` — that is now the
-                // turn total, and feeding a total back in as the last segment's
-                // authoritative count would double-count the whole turn.
-                decodeAccumulator.finish(finalGenerated: outcome.finalSegmentTokens)
+                // Freeze the turn's summary onto its reply bubble. Both figures
+                // come off the outcome, which computed them together from the
+                // status stream the builder was already being fed (:578) — the
+                // controller keeps no accumulator of its own, so there is no
+                // opportunity here to pair a rate with the wrong token count.
+                // `promptTPS` is the turn-end ratchet, matching the status bar;
+                // a turn with no usable decode work falls back to the engine's
+                // last reported rate rather than a fabricated average.
                 let summary = TurnSummary(
                     promptTPS: lastPrefillTPS,
-                    decodeTPS: decodeAccumulator.tokensPerSecond ?? lastGenTPS,
-                    // The accumulator's total, not the outcome's: the engine
-                    // resets its counter per generation segment, so a turn with
-                    // tool rounds reports only its last segment on the wire.
-                    generatedTokens: decodeAccumulator.generatedTokens,
+                    decodeTPS: outcome.decodeTPS ?? lastGenTPS,
+                    generatedTokens: outcome.generatedTokens,
                     ctxUsed: outcome.ctxUsed)
                 transcript.attachSummary(summary)
                 // The status bar's Prompt/Decode readout resets at turn end: a
@@ -660,7 +651,6 @@ final class AgentController {
                 // turn's start — this covers the idle window).
                 lastPrefillTPS = 0
                 lastGenTPS = 0
-                decodeAccumulator = DecodeAccumulator()
             }
             // P11 (D4): the orchestrator's turn ended — run any workers it
             // dispatched.
@@ -897,7 +887,6 @@ final class AgentController {
         // snapshot of this turn (the previous turn's trailing status was the
         // old baseline, which the engine's per-turn counter reset made garbage
         // from turn 2 on).
-        decodeAccumulator = DecodeAccumulator()
         state = .generating
         sentInterrupt = false
         orchestratorToolBudget = ToolCallBudgetTracker(
