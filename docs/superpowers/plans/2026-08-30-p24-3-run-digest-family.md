@@ -517,7 +517,7 @@ public enum TestDigest {
 
     /// `swift test` emits `<file>:<line>: error: <testID> : <message>` lines.
     static func parseXCTestText(_ stdout: String) -> [Failure] {
-        let pattern = #"^(.*\.swift):(\d+): error: (\[.*\]) : (.*)$"#
+        let pattern = #"^(.*\.swift):(\d+): error: (.+?) : (.*)$"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         var failures: [Failure] = []
         for line in stdout.split(separator: "\n") {
@@ -541,6 +541,13 @@ public enum TestDigest {
     // MARK: - clustering core (shared)
 
     typealias Cluster = (key: (file: String, message: String), failures: [Failure])
+
+    /// Absolute paths (XCTest) display as basenames; relative paths (pytest
+    /// nodeids) display as-is. The cluster *key* always keeps the full path —
+    /// two same-named files in different directories are different fixes.
+    static func displayFile(_ file: String) -> String {
+        file.hasPrefix("/") ? URL(fileURLWithPath: file).lastPathComponent : file
+    }
 
     static func makeClusters(_ failures: [Failure]) -> [Cluster] {
         var byKey: [(key: (file: String, message: String), failures: [Failure])] = []
