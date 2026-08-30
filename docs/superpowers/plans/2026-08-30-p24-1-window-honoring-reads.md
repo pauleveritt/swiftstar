@@ -31,8 +31,12 @@ existing `HostToolExecutor`/`ToolCallbackResponder` machinery, Swift Testing
   improve the wording — a divergence is a second contract behind one tool name.
 - **The D2 invariant is the point of the whole cycle:** the header's line range
   always names exactly the lines present in the body, and the rendered result
-  never exceeds `byteBudget` (7000). Task 2 Step 6 pins it; Task 3 keeps it true
-  through the executor.
+  never exceeds `byteBudget`. Task 2 pins it; Task 3 keeps it true through the
+  executor.
+- **`byteBudget` scales with context** (D2): `min(7000, max(1024, contextSize / 2))`
+  — 7000 at the app's 32768, 2048 at a 4k AFM tier. A constant budget would put
+  half a small model's entire context in one tool result. The executor derives
+  it per read; only tests pass it explicitly.
 - **`readCache` is untouched** (D7). The `.pool` branch
   (`HostToolExecutor.swift:161-181`) stays byte-for-byte identical; its existing
   tests must pass unmodified.
@@ -176,6 +180,7 @@ public struct ReadWindowResult: Equatable, Sendable {
 
 public enum ReadWindow {
     public static func defaultLines(contextSize: Int) -> Int
+    public static func byteBudget(contextSize: Int) -> Int
     public static func render(text: String, path: String,
                               request: ReadWindowRequest,
                               defaultLines: Int,
@@ -207,6 +212,15 @@ struct ReadWindowTests {
         #expect(ReadWindow.defaultLines(contextSize: 16384) == 240)
         #expect(ReadWindow.defaultLines(contextSize: 32768) == 500)
         #expect(ReadWindow.defaultLines(contextSize: 8193) == 240)
+    }
+
+    /// D2: a fixed budget is incoherent at 4k — 7000 bytes is half that
+    /// model's entire context in one tool result.
+    @Test func byteBudgetScalesWithContextAndIsCappedByTheCondenser() {
+        #expect(ReadWindow.byteBudget(contextSize: 4096) == 2048)
+        #expect(ReadWindow.byteBudget(contextSize: 8192) == 4096)
+        #expect(ReadWindow.byteBudget(contextSize: 32768) == 7000, "capped at the condenser's headroom")
+        #expect(ReadWindow.byteBudget(contextSize: 512) == 1024, "floor keeps a pathological setting readable")
     }
 
     // MARK: - window arithmetic
@@ -433,6 +447,15 @@ public enum ReadWindow {
         if contextSize > 0 && contextSize <= 8192 { return 120 }
         if contextSize > 0 && contextSize <= 16384 { return 240 }
         return 500
+    }
+
+    /// D2: the byte budget scales with context for the same reason the line
+    /// default does. `contextSize / 2` bytes is ≈ `contextSize / 8` tokens, so
+    /// one tool result is ~12.5% of context at any tier — never half of a 4k
+    /// window. The ceiling is the condenser's 8000-byte cap less header
+    /// headroom; the floor keeps a pathological setting from starving the read.
+    public static func byteBudget(contextSize: Int) -> Int {
+        min(7000, max(1024, contextSize / 2))
     }
 
     public static func render(text: String, path: String,
@@ -834,9 +857,11 @@ In `Sources/SwiftStarAppKit/HostToolExecutor.swift`:
               let text = String(data: data, encoding: .utf8) else {
             return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
         }
-        let tier = ReadWindow.defaultLines(contextSize: lock.withLock { contextSize })
-        let window = ReadWindow.render(text: text, path: path,
-                                       request: windowRequest, defaultLines: tier)
+        let ctx = lock.withLock { contextSize }
+        let window = ReadWindow.render(
+            text: text, path: path, request: windowRequest,
+            defaultLines: ReadWindow.defaultLines(contextSize: ctx),
+            byteBudget: ReadWindow.byteBudget(contextSize: ctx))
         lock.withLock {
             // Mirrors agent_worker_set_more (ds4_agent.c:8167-8170): record on
             // a truncated read, CLEAR at EOF so a later `more` refuses honestly.

@@ -1,0 +1,12 @@
+Read Sources/SwiftStar/AgentView.swift and describe exactly what the bottomStatusBar property renders, listing each subview in order.
+In AgentView.swift, what does bottomStatusBar show when the agent is mid-turn versus idle? Quote the relevant lines.
+Still in AgentView.swift, how does the composer area relate to bottomStatusBar in the view hierarchy? Give line numbers.
+List every private var in AgentView.swift that returns some View, with its line number.
+Read Sources/SwiftStar/AgentController.swift and summarise what startAgent does, in five bullets.
+In AgentController.swift, which state is reset on a restart? Name each property and its line.
+Compare bottomStatusBar in AgentView.swift with the status handling in AgentController.swift. Where do they meet?
+Read Sources/SwiftStarKit/ReadWindow.swift and explain the byte budget rule and why it exists.
+Go back to AgentView.swift and re-check the bottomStatusBar definition. Did you describe it correctly earlier?
+Read ROADMAP.md and summarise what phase P24 is about, in four sentences.
+In AgentView.swift again, list the lines around bottomStatusBar that reference status or progress.
+Summarise everything you have learned about AgentView.swift's bottom bar in one paragraph.

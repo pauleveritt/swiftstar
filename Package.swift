@@ -45,7 +45,9 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
         ),
-        .executableTarget(name: "swiftstar-drive", dependencies: ["SwiftStarKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
+        // SwiftStarAppKit (P24.1): the host-tool loop needs `HostToolExecutor`,
+        // the same executor the app runs — matching swiftstar-agenttest below.
+        .executableTarget(name: "swiftstar-drive", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .executableTarget(name: "swiftstar-agenttest", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .executableTarget(name: "swiftstar-analyze", dependencies: ["SwiftStarKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(

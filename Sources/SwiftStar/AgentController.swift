@@ -384,6 +384,11 @@ final class AgentController {
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
         workerTurn.watchdog?.cancel()
         workerTurn = ActiveWorkerTurn()
+        // P24.1 (D3/D5): the executor is a process-lifetime `static let`, so it
+        // cannot take the context size at construction, and its `more`
+        // continuations would otherwise outlive the session that made them.
+        Self.hostToolExecutor.setContextSize(settings.contextSize)
+        Self.hostToolExecutor.resetReadState()
         // D12: the build identification is resolved once per spawn (the
         // submodule SHA — the same fact the capture provenance records).
         buildSHA = AgentController.submoduleSHA(settings.engineDir)
@@ -835,7 +840,11 @@ final class AgentController {
     /// timeout (300s default) — the engine still blocks on the result line
     /// either way (the wire protocol is unchanged), but the app's UI stays
     /// responsive while it waits.
-    nonisolated private static let hostToolExecutor = HostToolExecutor(policy: .app)
+    // Internal, not private: `AgentPoolTurnLoop` (an extension in another file)
+    // registers each worker's own context against its worktree root (P24.1) —
+    // the same reason P23's extracted methods lost `private`. Not widened to
+    // `public`.
+    nonisolated static let hostToolExecutor = HostToolExecutor(policy: .app)
 
     nonisolated static func executeHostTool(
         _ request: ToolExecutionRequest

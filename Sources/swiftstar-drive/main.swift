@@ -1,5 +1,6 @@
 import Foundation
 import SwiftStarKit
+import SwiftStarAppKit
 
 // swiftstar-drive: the committed live-capture program (P5). Drives the real
 // ds4-agent, tees stdout/stderr byte-for-byte, and writes the fixed capture
@@ -19,6 +20,15 @@ let turnTimeout = Double(env["CAPTURE_TURN_TIMEOUT"] ?? "900") ?? 900
 // P7 consent knobs (nil = P5 shape: no --workspace/--shell appended).
 let workspace = env["CAPTURE_WORKSPACE"]  // nil = no --workspace
 let shell = env["CAPTURE_SHELL"]          // nil = no --shell
+// P24.1: CAPTURE_HOST_TOOLS=1 drives the engine the way the app does — tools
+// delegated to the host over the wire. Requires a workspace, because every
+// host file tool is confined to the grant and refuses without one.
+let hostTools = (env["CAPTURE_HOST_TOOLS"].map { $0 == "1" || $0.lowercased() == "true" }) ?? false
+if hostTools && workspace == nil {
+    FileHandle.standardError.write(Data(
+        "swiftstar-drive: CAPTURE_HOST_TOOLS=1 requires CAPTURE_WORKSPACE (host file tools are confined to the workspace grant)\n".utf8))
+    exit(2)
+}
 
 let repoRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let engineDir = repoRoot.appendingPathComponent("external/ds4", isDirectory: true)
@@ -84,12 +94,30 @@ final class DriveState: @unchecked Sendable {
     private var stdoutData = Data()
     private var stderrData = Data()
     private var ready = 0
-    private var parser = WireEventParser()
+    /// P24.1: `AgentWireParser`, not `WireEventParser` — the app's own parser,
+    /// and the only one that surfaces `tool_request`. Drive exists to capture
+    /// what the app does, so it must see what the app sees. The `.ready` and
+    /// `.refused` cases it counts are identical.
+    private var parser = AgentWireParser()
     private var lineBuf = Data()
     private var refusedReason: String?
 
+    /// P24.1: set after the stdin pipe exists (it is created below this
+    /// declaration). nil = the P5 shape: no host tools, requests unanswered.
+    var onToolRequest: ((Int, String, [ToolParam]) -> Void)?
+    /// A `tool_request` the parser could not read. The engine has already
+    /// emitted it and is blocking on a result, so the host must answer
+    /// `ok:false` or the turn deadlocks (`AgentWireParser:47-52`).
+    var onToolRequestRefused: ((Int, String) -> Void)?
+
     /// Called only from the stdout readabilityHandler (serial per handle).
     func onStdoutData(_ d: Data) {
+        // Tool requests are dispatched AFTER the lock is released: answering
+        // one does file I/O, and the engine is blocked until it is answered —
+        // holding the parse lock across that would stall this handler against
+        // itself.
+        var pending: [(Int, String, [ToolParam])] = []
+        var refused: [(Int, String)] = []
         lock.lock()
         stdoutData.append(d)
         lineBuf.append(d)
@@ -101,11 +129,17 @@ final class DriveState: @unchecked Sendable {
                 switch event {
                 case .ready: ready += 1
                 case .refused(let reason): if refusedReason == nil { refusedReason = reason }
+                case .toolRequest(let idx, let name, let params):
+                    pending.append((idx, name, params))
+                case .toolRequestRefused(let idx, let reason):
+                    refused.append((idx, reason))
                 default: break
                 }
             }
         }
         lock.unlock()
+        for (idx, reason) in refused { onToolRequestRefused?(idx, reason) }
+        for (idx, name, params) in pending { onToolRequest?(idx, name, params) }
     }
 
     func onStderrData(_ d: Data) {
@@ -151,6 +185,17 @@ if let workspace {
 if let shell {
     args += ["--shell", shell]
 }
+// P24.1: `--host-tools` makes the engine delegate read/write/list/search/more
+// to the host instead of running them itself. This is the path the app always
+// takes (`AgentCommand.swift:105-113`) and the only one that exercises
+// `HostToolExecutor` — without it a capture measures the engine's own tool
+// implementations, which is how P24.1's first measurement attempt went wrong.
+//
+// Opt-in, and off by default: appending this unconditionally would change the
+// P5 capture shape and every golden fixture generated from it.
+if hostTools {
+    args += ["--host-tools"]
+}
 process.arguments = args
 process.currentDirectoryURL = engineDir
 var engineEnv = ProcessInfo.processInfo.environment
@@ -183,6 +228,32 @@ process.standardError = stderrPipe
 
 let stdoutHandle = stdoutPipe.fileHandleForReading
 let stderrHandle = stderrPipe.fileHandleForReading
+
+// P24.1: the host-tool loop. The engine emits one `tool_request` and blocks on
+// stdin until a `tool_result` with the same idx arrives, so every request must
+// be answered — including malformed ones. Uses the same pure responder and the
+// same `.app`-policy executor the app uses, so a capture taken here exercises
+// exactly the code path a real session does.
+if hostTools {
+    let executor = HostToolExecutor(policy: .app, contextSize: ctx)
+    let workspaceURL = URL(fileURLWithPath: workspace!, isDirectory: true)
+    let shellAllowed = shell != nil
+    func writeResult(_ response: ToolCallbackResponse) {
+        try? stdinPipe.fileHandleForWriting.write(
+            contentsOf: Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
+    }
+    state.onToolRequest = { idx, name, params in
+        let response = ToolCallbackResponder.respond(
+            idx: idx, name: name, params: params,
+            workspace: workspaceURL, shellAllowed: shellAllowed,
+            execute: executor.execute)
+        writeResult(response)
+    }
+    state.onToolRequestRefused = { idx, reason in
+        writeResult(ToolCallbackResponse(idx: idx, ok: false, s: "error: \(reason)"))
+    }
+    logProgress("host tools ON (workspace \(workspace!), shell \(shellAllowed ? "on" : "off"))")
+}
 
 logProgress("spawning \(engineBinary.lastPathComponent) -m \(modelSlug) -c \(ctx)")
 try process.run()

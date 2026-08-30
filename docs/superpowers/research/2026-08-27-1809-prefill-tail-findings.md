@@ -103,6 +103,16 @@ with a named culprit instead of a diffuse curve.
 
 ## What this schedules
 
+> **Correction 2026-08-30 — item 1 below was overturned.** The measurements in
+> this document stand; the schedule item does not. Review found that every host
+> tool result is condensed at 8000 bytes before it reaches the model
+> (`ToolCallbackResponder.swift:259,284`), so the 1809 re-reads were not the
+> model discarding a file it held — they were the model unable to reach the
+> middle of one, asking 22 different ways. **P24.1 is window-honoring reads**
+> ([spec](../specs/2026-08-30-p24-1-window-honoring-reads-design.md)); the
+> read-guard moves to P24.2, to be re-decided against a measurement taken after
+> windowing lands. Items 2 onward are unaffected.
+
 1. **P24 absorbs the read-guard (`don't-re-read`).** The Context-economy
    backlog entry's reopen condition ("reopens with P9 — the host must own
    tool results to substitute them") is satisfied: P9's host tools shipped

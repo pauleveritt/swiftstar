@@ -83,8 +83,50 @@ public final class HostToolExecutor: @unchecked Sendable {
     private let lock = NSLock()
     private var readCacheStorage: [String: String] = [:]
 
-    public init(policy: Policy) {
+    /// P24.1 (D5): `more` continuation per workspace root. The `.app` executor
+    /// is a process-lifetime static shared by the main agent and every pool
+    /// worker (`AgentPoolTurnLoop.swift:138`), so a single scalar would let a
+    /// worker's read retarget the main agent's next `more`. Workers run in
+    /// per-turn UUID worktrees, so roots are disjoint for free.
+    private var continuations: [String: (path: String, nextLine: Int, bare: Bool, byteOffset: Int)] = [:]
+    private var contextSize: Int
+    /// P24.1: per-root context override. The engine tiers its read chunk off
+    /// **the worker's** effective context (`agent_read_default_lines` takes
+    /// `agent_worker_effective_ctx_size(w)`), and P23 gave pool workers their
+    /// own, clamped to `[4096, parent]`. Because every worker shares this one
+    /// `.app` executor, a scalar `contextSize` would hand a 4k worker the
+    /// parent's 500-line, 7000-byte windows — half its context in one tool
+    /// result, the incoherence D2 exists to prevent. Keyed by worktree root,
+    /// which is already disjoint per worker (D5).
+    private var contextSizeByRoot: [String: Int] = [:]
+
+    /// `AGENT_FILE_MAX_BYTES` (`ds4_agent.c:7884`) — 16 MiB.
+    static let fileMaxBytes = 16 * 1024 * 1024
+
+    public init(policy: Policy, contextSize: Int = 32768) {
         self.policy = policy
+        self.contextSize = contextSize
+    }
+
+    /// D3: the app's executor is a `static let` with no settings at type-init,
+    /// so it takes its context size at session start instead of construction.
+    public func setContextSize(_ n: Int) {
+        lock.withLock { contextSize = n }
+    }
+
+    /// Register a pool worker's own context for reads inside its worktree, so
+    /// the read tier matches the context the worker actually runs at rather
+    /// than the parent's. Cleared with the rest of the read state.
+    public func setContextSize(_ n: Int, forRoot root: URL) {
+        let key = HostToolConfinement.realPath(root.path, workspace: root) ?? root.path
+        lock.withLock { contextSizeByRoot[key] = n }
+    }
+
+    /// Clears `more` continuations and per-root context overrides. Only the
+    /// app's process-lifetime static needs this; `PoolOrchestrator` gets a
+    /// fresh instance per phase.
+    public func resetReadState() {
+        lock.withLock { continuations.removeAll(); contextSizeByRoot.removeAll() }
     }
 
     /// Synchronous entry point — used by `PoolOrchestrator.runPhase`, a
@@ -179,16 +221,89 @@ public final class HostToolExecutor: @unchecked Sendable {
             }
             return ToolExecutionResult(ok: true, text: text)
         }
-        // The app's shape: confinement and the read are separate guards, each
-        // with its own message (the read failure names the path).
-        guard let path = HostToolConfinement.realPath(request) else {
-            return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+        // P24.1: the app's shape — windowed, in the engine's format
+        // (ds4_agent.c:8102-8174), byte-budgeted so the responder's condenser
+        // never has to cut it (D2). Confinement and the read stay separate
+        // guards, each with its own message (the read failure names the path).
+        let root = HostToolConfinement.realPath(request.workspace.path,
+                                                workspace: request.workspace)
+            ?? request.workspace.path
+        var windowRequest = ReadWindowRequest(
+            startLine: intParam(request, "start_line") ?? 1,
+            maxLines: intParam(request, "max_lines"),
+            whole: boolParam(request, "whole"),
+            raw: boolParam(request, "raw"))
+        let path: String
+
+        if request.name == "more" {
+            // D4: `more` continues; it never re-reads. Consent defaults its
+            // missing `path` to the workspace root, so the recorded
+            // continuation — not `resolvedPath` — is the authority.
+            guard let c = lock.withLock({ continuations[root] }) else {
+                return ToolExecutionResult(ok: false,
+                    text: "error: no previous output to continue")
+            }
+            path = c.path
+            windowRequest = ReadWindowRequest(
+                startLine: c.nextLine,
+                maxLines: intParam(request, "count"),
+                whole: false, raw: c.bare,
+                startByteOffset: c.byteOffset)
+        } else {
+            guard let p = HostToolConfinement.realPath(request) else {
+                return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
+            }
+            path = p
+        }
+
+        // Engine parity (`agent_read_file_bytes`): refuse a file over
+        // AGENT_FILE_MAX_BYTES rather than loading it. The host had no cap, so
+        // a huge file was read wholly into memory before windowing ever ran.
+        if let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size]) as? Int,
+           size > Self.fileMaxBytes {
+            return ToolExecutionResult(ok: false,
+                text: "error: file too large: \(path) exceeds \(Self.fileMaxBytes) bytes")
         }
         guard let data = FileManager.default.contents(atPath: path),
               let text = String(data: data, encoding: .utf8) else {
             return ToolExecutionResult(ok: false, text: "error: could not read \(path)")
         }
-        return ToolExecutionResult(ok: true, text: text)
+        let ctx = lock.withLock { contextSizeByRoot[root] ?? contextSize }
+        let window = ReadWindow.render(
+            text: text, path: path, request: windowRequest,
+            defaultLines: ReadWindow.defaultLines(contextSize: ctx),
+            byteBudget: ReadWindow.byteBudget(contextSize: ctx))
+        lock.withLock {
+            // Mirrors agent_worker_set_more (ds4_agent.c:8167-8170): record on
+            // a truncated read, CLEAR at EOF so a later `more` refuses honestly.
+            if let next = window.nextLine {
+                continuations[root] = (path: path, nextLine: next,
+                                       bare: windowRequest.raw,
+                                       byteOffset: window.nextByteOffset ?? 0)
+            } else {
+                continuations.removeValue(forKey: root)
+            }
+        }
+        return ToolExecutionResult(ok: true, text: window.text)
+    }
+
+    private func intParam(_ r: ToolExecutionRequest, _ name: String) -> Int? {
+        r.params.first(where: { $0.name == name }).flatMap { Int($0.value) }
+    }
+
+    /// Mirrors `agent_parse_bool_default` (`ds4_agent.c`): true/yes/1 and
+    /// false/no/0, case-insensitively, anything else the caller's default.
+    /// Accepting only "true"/"1" made `whole: "yes"` a silent no-op — a second
+    /// contract behind one tool name (D1).
+    private func boolParam(_ r: ToolExecutionRequest, _ name: String,
+                           default def: Bool = false) -> Bool {
+        guard let v = r.params.first(where: { $0.name == name })?.value,
+              !v.isEmpty else { return def }
+        switch v.lowercased() {
+        case "true", "yes", "1": return true
+        case "false", "no", "0": return false
+        default: return def
+        }
     }
 
     private func searchResult(_ request: ToolExecutionRequest) -> ToolExecutionResult {

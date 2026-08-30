@@ -1,7 +1,14 @@
 # SwiftStar P24.1 design: window-honoring reads
 
 **Date:** 2026-08-30
-**Status:** proposed
+**Status:** implemented (2026-08-30). A paired control arm (only `readResult`
+reverted) reproduced the loop on demand: 12 reads of one file and a turn killed
+at the 240 s timeout, against 3 reads and a completed turn. **The numeric
+falsifier is post-hoc, not pre-registered** — the committed threshold was
+revised after the treatment tripped it; see the
+[after-measurement](../research/2026-08-30-p24-1-window-honoring-after-measurement.md),
+which also records that the measurement protocol is not yet reproducible from
+the repo
 **Phase:** P24 — Digested first-class tools (feature cycle 1)
 
 This spec **supersedes**
@@ -185,6 +192,26 @@ So `condense` becomes a no-op on read results instead of the thing that silently
 removes the middle. The 1000 bytes of slack under the 8000 cap absorb the header
 (bounded by path length + ~160) with room to spare.
 
+**The budget scales with context, because a constant is incoherent at 4k.**
+`defaultLines` already tiers off context size; a fixed byte budget alongside it
+would not. At `contextSize: 4096` — the AFM tier the watcher-tier Backlog entry
+anticipates — 7000 bytes is ~1,750 tokens, **half the model's entire context in
+one tool result**, and 120 lines of dense Swift is routinely 6–8 KB, so the byte
+bound would bind and deliver exactly that. The rule is therefore
+
+```
+byteBudget(contextSize) = min(7000, max(1024, contextSize / 2))
+```
+
+— `contextSize / 2` bytes is ≈ `contextSize / 8` tokens, so one tool result is
+~12.5% of context at any tier; the 7000 ceiling is the condenser's cap, and the
+1024 floor keeps a pathological setting from starving the read entirely. At the
+app's 32768 this is 7000 and nothing changes; at 4096 it is 2048.
+
+This does not make small-context models *good* at reading large files — see D9's
+note on pagination thrash — it makes the budget honest at every tier instead of
+hard-coding a 32k assumption into the tool contract.
+
 **D3 — The line default mirrors the engine's tier, so `contextSize` reaches the
 executor two ways.** `HostToolExecutor` computes 120 / 240 / 500 by the engine's
 thresholds. Diverging on the default would put two different numbers behind one
@@ -205,6 +232,16 @@ settings yet:
 Both paths land in the same stored property. The default keeps every existing
 construction site compiling and behaving identically to the engine's large tier.
 
+**Per-worker override (added 2026-08-30 after review).** The engine tiers off
+*the worker's* effective context (`agent_read_default_lines` takes
+`agent_worker_effective_ctx_size(w)`), and P23 gave pool workers their own
+context, clamped to `[4096, parent]`. Since every worker shares the one `.app`
+executor, a single scalar would hand a 4k worker the parent's 500-line,
+7000-byte windows — exactly the incoherence D2 argues against. So the executor
+also carries `setContextSize(_:forRoot:)`, keyed by worktree root (already
+disjoint per worker, D5), and `AgentPoolTurnLoop` registers each worker's
+context at turn start.
+
 **D4 — `more` is the engine's `more`: a continuation, not a re-read.** A
 truncated read records the continuation `(path, nextLine, bare)`; a read that
 reaches EOF **clears** it. `more` reads `count` lines (default: the same tier)
@@ -219,7 +256,11 @@ worker's read retarget the main agent's next `more`. State is
 `[String: Continuation]` keyed by `request.workspace`'s resolved root. Workers
 run in per-turn UUID worktrees (`WorktreeDispatcher.swift:42-43`), so roots are
 disjoint for free. Entries are dropped on `resetReadState()` at session start /
-restart, and a worktree root's entry is dropped when that root's turn ends.
+restart. They are **not** dropped when a worktree turn ends — an earlier draft
+of this decision claimed they were, and no such cleanup was ever written. It is
+harmless (worktree roots are UUID-named, so a stale key can never be hit again)
+but it means the map grows with dispatched turns until a restart; an eviction
+rule is P24.2's to decide alongside the rest of the read state.
 
 **D6 — Progress is guaranteed even for a single over-budget line.** A line
 longer than the budget would otherwise emit nothing and leave `continue_offset`
@@ -258,6 +299,17 @@ clustered on one region of one file is the signature of the loop, and it must be
 gone.** A Σsuffix *increase* is an acceptable outcome if the turn now completes —
 that is the paired-bill guardrail applied honestly rather than as a token race.
 
+**A limit this cycle does not remove: pagination thrash at small context.**
+Windowing makes a large file *reachable* by a small-context model; it does not
+make it *practical*. At `contextSize: 4096`, a 427-line file is four windows of
+~500 tokens each (D2's scaled budget), and the model compacts between them — it
+has lost window 1 before it reaches window 3. That is the starvation loop
+wearing a different hat, and `more`-pagination is the wrong primitive for it.
+The right one is targeted retrieval: locate the line, then read one small window
+around it — which is what P24's `scout` is for. **Reopen condition:** when the
+ANE/AFM tier's falsifiers pass and a small-context worker is real, measure a
+paginated read on it before assuming windowing serves that tier.
+
 ## Components
 
 ### 1. `Sources/SwiftStarKit/ReadWindow.swift` (new, pure)
@@ -285,6 +337,10 @@ public enum ReadWindow {
 
     /// The engine's tier (ds4_agent.c:8090, :7885-7889).
     public static func defaultLines(contextSize: Int) -> Int
+
+    /// D2: min(7000, max(1024, contextSize / 2)) — one tool result is ~12.5%
+    /// of context at any tier, never half of a 4k window.
+    public static func byteBudget(contextSize: Int) -> Int
 }
 ```
 
