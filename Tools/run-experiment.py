@@ -22,7 +22,12 @@ Outcome per cell:
 referencing an undefined `cell_dir`) were retired along with v5. See
 docs/superpowers/research/goal-ledger-v5.md entry (closure) for why.
 """
-import glob, json, os, re, subprocess, sys
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
 
 import campaign_common
 
@@ -34,30 +39,28 @@ MANIFEST = os.environ.get('EXP_MANIFEST',
 RESULTS = os.environ.get('EXP_RESULTS',
                          os.path.join(ROOT, 'docs/superpowers/research/experiment-results.tsv'))
 BIN = os.path.join(ROOT, '.build/arm64-apple-macosx/debug/swiftstar-agenttest')
-
-sys.path.insert(0, os.path.join(ROOT, 'Tools'))
-_aud = open(os.path.join(ROOT, 'Tools/audit-goal-invariants.py')).read().split('def main()')[0]
-_ns = {'__name__': 'aud'}
-exec(compile(_aud, 'audit-goal-invariants.py', 'exec'), _ns)
-check_v5, check_v6 = _ns['check_v5'], _ns['check_v6']
+ANALYZER_BIN = os.environ.get(
+    'ANALYZER_BIN',
+    os.path.join(ROOT, '.build/arm64-apple-macosx/debug/swiftstar-analyze'))
 
 
 def rows():
     out = []
-    for line in open(MANIFEST):
-        line = line.rstrip('\n')
-        if not line or line.startswith('#') or line.startswith('fixture\t'):
-            continue
-        parts = line.split('\t')
-        # An optional 4th column names the ARM, which selects a prompt variant
-        # via env. Manifests without it are unaffected — the arm defaults to
-        # 'plural', the shipped behaviour. This exists so two wordings can be
-        # interleaved on ONE binary: comparing a new arm against a frozen
-        # baseline leaves a binary-drift confound and caps power at the old
-        # baseline's n, whatever n the new arm uses.
-        if len(parts) == 3:
-            parts.append('plural')
-        out.append(parts[:4])
+    with open(MANIFEST) as manifest:
+        for line in manifest:
+            line = line.rstrip('\n')
+            if not line or line.startswith(('#', 'fixture\t')):
+                continue
+            parts = line.split('\t')
+            # An optional 4th column names the ARM, which selects a prompt variant
+            # via env. Manifests without it are unaffected — the arm defaults to
+            # 'plural', the shipped behaviour. This exists so two wordings can be
+            # interleaved on ONE binary: comparing a new arm against a frozen
+            # baseline leaves a binary-drift confound and caps power at the old
+            # baseline's n, whatever n the new arm uses.
+            if len(parts) == 3:
+                parts.append('plural')
+            out.append(parts[:4])
     return out
 
 
@@ -80,19 +83,47 @@ def last_grade(cell):
     fs = sorted(glob.glob(os.path.join(cell, 'repair-round-*.json')),
                 key=lambda p: int(re.search(r'(\d+)', os.path.basename(p)).group(1)))
     for f in reversed(fs):
-        g = json.load(open(f)).get('grade')
+        with open(f) as grade_file:
+            g = json.load(grade_file).get('grade')
         if g:
             return g
     return None
 
 
+def validate_capture(cell):
+    try:
+        p = subprocess.run(
+            [ANALYZER_BIN, 'validate', cell],
+            cwd=ROOT, capture_output=True, text=True, timeout=30, check=False)
+    except subprocess.TimeoutExpired:
+        return None, 'analyzer timed out'
+    except OSError as exc:
+        return None, f'analyzer unavailable: {exc}'
+    if p.returncode != 0:
+        detail = p.stderr.strip() or p.stdout.strip() or f'exit={p.returncode}'
+        return None, f'analyzer failed: {detail[:120]}'
+    try:
+        result = json.loads(p.stdout)
+    except json.JSONDecodeError as exc:
+        return None, f'analyzer returned invalid JSON: {exc.msg}'
+    if not isinstance(result, dict):
+        return None, 'analyzer returned a non-object result'
+    for name in ('v5', 'v6'):
+        check = result.get(name)
+        if not isinstance(check, dict) or check.get('status') not in {
+                'pass', 'fail', 'unauditable'}:
+            return None, f'analyzer result missing valid {name} status'
+    return result, None
+
+
 def classify(cell):
-    v5, why5 = check_v5(cell)
-    if v5 == 'fail':
-        return 'harness-void', f'V5 {why5}'
-    v6, why6 = check_v6(cell)
-    if v6 == 'fail':
-        return 'harness-void', f'V6 {why6}'
+    result, error = validate_capture(cell)
+    if error:
+        return 'harness-void', error
+    for name in ('v5', 'v6'):
+        check = result[name]
+        if check['status'] == 'fail':
+            return 'harness-void', f'{name.upper()} {check.get("detail")}'
     g = last_grade(cell)
     if g is None:
         return 'fail', 'no graded round recorded (e.g. contractNotFollowed)'
@@ -124,7 +155,8 @@ def main():
             env.pop('AGENTTEST_SINGULAR_FOLLOWUP', None)
         print(f'[run ] {fixture}/rounds={rnd}/seed={seed}/arm={arm}', flush=True)
         p = subprocess.run([BIN, '--fixture', fixture, '--variant', 'mellum-2.1'],
-                           env=env, capture_output=True, text=True, cwd=ROOT)
+                           env=env, capture_output=True, text=True, cwd=ROOT,
+                           check=False)
         out = p.stdout + p.stderr
         m = re.search(r'capture=(\S+)', out)
         cell = m.group(1) if m else ''

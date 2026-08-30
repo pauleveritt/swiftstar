@@ -7,6 +7,7 @@ import SwiftStarKit
 //   swiftstar-analyze summary [DIR | --latest]   per-turn table: decode average, tokens, ctx, tools, Σsuffix
 //   swiftstar-analyze trace  [DIR | --latest]    the prefill-sync/cache + compaction story
 //   swiftstar-analyze diff A B                   paired-bill comparison (Σsuffix)
+//   swiftstar-analyze validate [DIR | --latest]  capture validity as JSON
 //
 // All parsers are the production ones (WireEventParser, TraceParser,
 // TurnSummary); this is ~150 lines of plumbing, not re-derived math.
@@ -170,6 +171,22 @@ func cmdList() {
     for d in captureDirs() {
         let flag = unusableReason(d).map { "  [unusable: \($0.rawValue)]" } ?? ""
         print("\(d.kind)/\(d.name)\(flag)")
+    }
+}
+
+/// Emit the capture-validity contract consumed by the fixture harness. Keep
+/// this command JSON-only so the harness never has to scrape human output.
+func cmdValidate(_ dir: URL) {
+    let wire = try? String(
+        contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8)
+    let result = CaptureValidity.audit(wire: wire)
+    do {
+        let data = try JSONEncoder().encode(result)
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data("\n".utf8))
+    } catch {
+        FileHandle.standardError.write(Data("validation failed: \(error)\n".utf8))
+        exit(1)
     }
 }
 
@@ -659,7 +676,7 @@ func cmdIndex(to output: URL) throws {
 
 let args = CommandLine.arguments
 func usage() -> Never {
-    FileHandle.standardError.write(Data("usage: swiftstar-analyze list | summary [DIR|--latest] | trace [DIR|--latest] | diff A B | rereads [DIR|--latest] | findings [DIR|--latest] | taxonomy [DIR|--latest] | report [TSV ...] | index [OUTPUT]\n".utf8))
+    FileHandle.standardError.write(Data("usage: swiftstar-analyze list | summary [DIR|--latest] | trace [DIR|--latest] | diff A B | rereads [DIR|--latest] | findings [DIR|--latest] | taxonomy [DIR|--latest] | validate [DIR|--latest] | report [TSV ...] | index [OUTPUT]\n".utf8))
     exit(2)
 }
 guard args.count >= 2 else { usage() }
@@ -684,6 +701,9 @@ case "findings":
 case "taxonomy":
     guard args.count >= 3 else { usage() }
     cmdTaxonomy(resolveDir(args[2]))
+case "validate":
+    guard args.count >= 3 else { usage() }
+    cmdValidate(resolveDir(args[2]))
 case "report":
     let paths: [URL]
     if args.count > 2 {
