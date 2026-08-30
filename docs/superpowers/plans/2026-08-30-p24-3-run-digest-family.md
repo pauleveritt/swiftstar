@@ -15,7 +15,7 @@
 - **The model names no command string.** Every command is host-derived (`ProjectCommandResolver`); the model supplies at most a `test` `selector` (Evidence 1 of the spec).
 - Every digest summary fits ≤8000 UTF-8 bytes — the condenser is a no-op.
 - A digester is a **total function** over `CommandOutput` — never crashes; non-JSON stdout falls back to the text path / bounded summary.
-- Selector is charset-validated to `[A-Za-z0-9_./-]` before append; anything else is refused.
+- Selector is charset-validated to `[A-Za-z0-9_./:-]` (`:` is pytest's `::` node-id separator, shell-safe) before append; anything else is refused.
 - `ok` for `test`/`lint` = "runner executed" (`!timedOut && exit != 127`); `bash` keeps `exit == 0 && !timedOut`. Failures live in the digest + `exitStatus`.
 - Artifacts at `.swiftstar/runs/<tool>-<sha256-of-content>.log` (raw combined output); pruned to the last 20 per tool at write time.
 - `outputDigest` = `sha256(stdout)`, `"sha256:"`-prefixed lowercase hex (matches `HostToolExecutor.bashResult`).
