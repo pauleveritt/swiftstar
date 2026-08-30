@@ -303,16 +303,31 @@ signal the executor uses to clear the continuation (D4).
   block, alongside the existing `outcomeBuilder` (`:380`) and `poolState`
   (`:384`) resets.
 
-### 4. `Sources/SwiftStarAppKit/PoolOrchestrator.swift` (one line)
+### 4. `Sources/SwiftStarAppKit/PoolOrchestrator.swift` (one argument)
 
-`:208` is the second `HostToolExecutor(policy: .app)` construction site — the
-agenttest harness. It takes the `contextSize` default (D3) unless the harness
-already knows its own, in which case it passes it. Named here because the
-superseded plan's construction-site audit missed this site entirely and would
-have changed agenttest behavior silently; the fourth campaign arm is still
-unrun (`ROADMAP.md:15`). Windowing **does** change what the orchestrator's reads
-return, so the campaign's arms must not straddle this cycle: re-baseline, or
-finish the outstanding arm first.
+This is not a second executor implementation. `HostToolExecutor` lives once and
+is shared with `AgentController` (the P22 item-4 cleanup, recorded at `:14-19`);
+`PoolOrchestrator` holds a single `hostToolExecutor` field and reassigns it per
+phase, because a fresh instance *is* the per-phase reset of the `.pool` read
+cache and vetted-commands allowlist. Three construction sites, one class, two
+policies: `:19`/`:80` give worker phases `.pool(vettedCommands:)`, `:208` gives
+the orchestrator role `.app` (the agent's own role — full bash, not a worker's
+allowlist). It is consumed by the `swiftstar-agenttest` binary
+(`Package.swift:49`), not by the app.
+
+What this cycle owes it is one argument — `contextSize` at each site (D3) — and
+one warning. Windowing **changes what the orchestrator's reads return**, and the
+fourth campaign arm is still unrun (`ROADMAP.md:15`). The arms must not straddle
+this cycle: finish the outstanding arm first, or re-baseline all four. The
+superseded plan's construction-site audit (`grep -rn "Policy("`) missed this
+site and would have changed the instrument silently — the fourth such near-miss
+the ROADMAP records.
+
+**This also bounds D5.** Because `PoolOrchestrator` gets a fresh instance per
+phase, its continuation map dies with the instance and needs no reset.
+`resetReadState()` exists solely for the app's process-lifetime
+`static let` (`AgentController.swift:838`), which is the only executor that
+outlives a session.
 
 No turn counter, no ordinal, no model-facing number that the model has no way to
 interpret — the superseded spec's D5 has no successor here.
