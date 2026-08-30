@@ -543,3 +543,44 @@ struct UnknownToolRefusalTests {
         #expect(!reason.contains("unknown"))
     }
 }
+
+/// The available-tools list must reflect the session's actual capability. The
+/// engine already drops the bash family from the advertised schema when the
+/// shell is off (`agent_schemas_for`), so a refusal that still lists `bash`
+/// contradicts the schema the model was given and sends it at a tool that will
+/// only be refused again — the same unactionable-refusal trap, one level up.
+struct RefusalRespectsTheShellToggleTests {
+    private let ws = URL(fileURLWithPath: "/tmp/swiftstar-consent-ws")
+
+    private func refusalReason(_ name: String, shellAllowed: Bool) -> String {
+        let consent = ToolCallbackResponder.consent(
+            idx: 0, name: name, params: [], workspace: ws, shellAllowed: shellAllowed)
+        guard case .refuse(let reason) = consent else { return "<proceeded>" }
+        return reason
+    }
+
+    @Test func withShellOffTheBashFamilyIsNotOffered() {
+        let reason = refusalReason("frobnicate", shellAllowed: false)
+        #expect(!reason.contains("bash"))
+        for tool in ["read", "write", "edit", "search", "list", "more", "dispatch"] {
+            #expect(reason.contains(tool), "should still offer \(tool): \(reason)")
+        }
+    }
+
+    @Test func withShellOnTheBashFamilyIsOffered() {
+        let reason = refusalReason("frobnicate", shellAllowed: true)
+        #expect(reason.contains("bash"))
+    }
+
+    @Test func withShellOffAGuessIsNotPointedAtAnUnusableTool() {
+        // `shell` still refuses, but pointing at `bash` when bash is denied
+        // would just cost another round-trip for a second refusal.
+        let reason = refusalReason("shell", shellAllowed: false)
+        #expect(!reason.contains("did you mean"))
+    }
+
+    @Test func withShellOffANonShellNearMissStillSuggests() {
+        // The toggle only gates the bash family; `cat`→`read` is unaffected.
+        #expect(refusalReason("cat", shellAllowed: false).contains("did you mean read"))
+    }
+}

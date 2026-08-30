@@ -118,11 +118,17 @@ public enum ToolCallbackResponder {
     /// to `writableFiles`; the read aids stay free.
     private static let mutatingTools: Set<String> = ["write", "edit"]
 
-    /// Every tool the host will actually execute, sorted — named in the
-    /// unknown-tool refusal so a model that guessed a name can correct in one
-    /// round instead of guessing again.
-    static var executableTools: [String] {
-        (fileTools.union(shellTools).union(["dispatch"])).sorted()
+    /// Every tool the host will actually execute *in this session*, sorted —
+    /// named in the unknown-tool refusal so a model that guessed a name can
+    /// correct in one round instead of guessing again.
+    ///
+    /// Honors the shell toggle: the engine already drops the bash family from
+    /// the advertised schema when the shell is off (`agent_schemas_for`), so
+    /// offering `bash` here would contradict the schema the model was given
+    /// and buy nothing but a second refusal.
+    static func executableTools(shellAllowed: Bool) -> [String] {
+        let base = fileTools.union(["dispatch"])
+        return (shellAllowed ? base.union(shellTools) : base).sorted()
     }
 
     /// Names a model is liable to reach for when it means a real tool. These
@@ -216,11 +222,14 @@ public enum ToolCallbackResponder {
         // to tell a wrong name from a denied capability, so it stops trying.
         // Name the tools that exist, and point at the intended one when the
         // guess is a recognizable near-miss.
+        let available = Self.executableTools(shellAllowed: shellAllowed)
         var reason = "refused: unknown or unsupported tool: \(name)"
-        if let intended = Self.nearMisses[name.lowercased()] {
+        // Only suggest a tool this session can actually run — pointing at a
+        // denied one just costs another round-trip for a second refusal.
+        if let intended = Self.nearMisses[name.lowercased()], available.contains(intended) {
             reason += " (did you mean \(intended)?)"
         }
-        reason += " — available: \(Self.executableTools.joined(separator: ", "))"
+        reason += " — available: \(available.joined(separator: ", "))"
         return .refuse(reason)
     }
 
