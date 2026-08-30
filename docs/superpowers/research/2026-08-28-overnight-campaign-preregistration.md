@@ -54,9 +54,13 @@ Progress: `tail -f /tmp/overnight-campaign.log`. Abort before the next cell (nev
 mid-cell): `touch /tmp/campaign-stop`. In the morning:
 
 ```bash
-python3 Tools/campaign-report.py
-python3 Tools/directive-taxonomy.py
+swift run swiftstar-analyze report
+swift run swiftstar-analyze taxonomy captures/agenttest/<failing-cell>
 ```
+
+Run `taxonomy` once for each failing capture. These are the Swift-native
+replacements for the retired Python reporting scripts; `report` reads the
+committed result TSVs by default.
 
 Both blocks are resumable — recorded cells are skipped and void cells are not
 recorded as closed — so a second night continues rather than restarts.
@@ -93,7 +97,8 @@ absence made the original 0/40 Mellum result describe the harness rather than
 the model.
 
 **Deliverable.** A pass rate with a Wilson interval, plus a failure taxonomy
-built from the captures of the failing cells (`Tools/directive-taxonomy.py`).
+built from the captures of the failing cells (`swiftstar-analyze taxonomy
+<capture-dir>`).
 The failure modes are P27's cycle inputs.
 
 ## Block B — firm up Mellum's 15/17 on editing

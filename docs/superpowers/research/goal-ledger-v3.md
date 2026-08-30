@@ -1,5 +1,12 @@
 # Goal ledger v3 — P16 stage 2 (apparatus trustworthiness)
 
+> Historical note: the V1–V6 Python auditor used by these entries was retired
+> after this closed goal. Current capture validation covers the live V5/V6
+> checks via `swift run swiftstar-analyze validate <capture-dir>`; its unit
+> coverage is `swift test --filter CaptureValidityTests`. The audit output
+> below is preserved as historical evidence and is not a rerunnable command
+> transcript.
+
 > **Goal: an apparatus that can attribute a failure.** Done when ONE batch of
 > ≥8 Mellum cells satisfies all four:
 >
@@ -118,7 +125,8 @@ carried-forward "valid" cells.**
 **evidence:**
 
 ```
-$ python3 Tools/audit-goal-invariants.py --self-test
+# Historical self-test output from the retired V1–V6 auditor (not rerunnable).
+# Current V5/V6 implementation coverage: `swift test --filter CaptureValidityTests`
   [ok] V6 20260826-112536-roadmap/-: expected fail, got fail
        (known-bad: round-1 emission had 6 headings, prose under each, zero fences)
   [ok] V6 20260826-105529-roadmap/-: expected pass, got pass
@@ -232,7 +240,8 @@ ruling: three frozen fixtures refute it.**
 ✔ HarvestCaptureReplayTests —  4 tests passed   (all three zero-fence captures still harvest)
 $ swift test                          # 545 tests, 74 suites — passed
 $ SWIFTSTAR_INTEGRATION=1 swift test  # 545 tests, 74 suites — passed
-$ python3 Tools/audit-goal-invariants.py --self-test   # PASS
+# Historical self-test output from the retired V1–V6 auditor (not rerunnable).
+# Current V5/V6 implementation coverage: `swift test --filter CaptureValidityTests`
 ```
 
 Re-audit under the widened check:
@@ -314,7 +323,8 @@ is void** — it is retracted, not merely disabled.
 **evidence:**
 
 ```
-$ python3 Tools/audit-goal-invariants.py --self-test
+# Historical self-test output from the retired V1–V6 auditor (not rerunnable).
+# Current V5/V6 implementation coverage: `swift test --filter CaptureValidityTests`
   [ok] V6 20260826-104811-roadmap/-: expected fail, got fail  (widened clause)
   [ok] V6 20260826-105529-roadmap/-: expected pass, got pass
 self-test: PASS
@@ -356,7 +366,8 @@ result the old check produced on a multi-round capture is void.**
 **evidence:**
 
 ```
-$ python3 Tools/audit-goal-invariants.py --self-test
+# Historical self-test output from the retired V1–V6 auditor (not rerunnable).
+# Current V5/V6 implementation coverage: `swift test --filter CaptureValidityTests`
   [ok] V1 20260826-050316/repair-phase1: expected fail, got fail   (known-bad, unchanged)
   [ok] V1 20260826-085813/repair-phase1: expected pass, got pass
   [ok] V1 20260826-112121/repair-phase1: expected pass, got pass   (current-batch known-good)
@@ -592,7 +603,8 @@ to a single sha.**
 # after
 ✔ MachineEvidenceTests — 16 tests passed
 $ swift test                                        # 550 tests — passed
-$ python3 Tools/audit-goal-invariants.py --self-test # PASS
+# Historical self-test output from the retired V1–V6 auditor (not rerunnable).
+# Current V5/V6 implementation coverage: `swift test --filter CaptureValidityTests`
 ```
 
 Against the three real probe captures — the pair that matched by luck and the
@@ -663,7 +675,8 @@ has now evaluated real captures for the first time.**
 **evidence:**
 
 ```
-$ python3 Tools/audit-goal-invariants.py --self-test
+# Historical self-test output from the retired V1–V6 auditor (not rerunnable).
+# Current V5/V6 implementation coverage: `swift test --filter CaptureValidityTests`
   13 fixture checks [ok]      self-test: PASS
 
 live confirm run, AGENTTEST_SEED=1 --spec roadmap --batch 1 --variant mellum-2.1:

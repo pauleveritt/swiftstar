@@ -7,7 +7,10 @@
 > the invariant it enforced — so the cell count was measuring an unknown.
 > Continued in [`goal-ledger-v3.md`](goal-ledger-v3.md) under a goal about the
 > apparatus rather than the count. **Entries 7, 12 and 13 are required reading
-> before touching `Tools/audit-goal-invariants.py`.**
+> before interpreting the historical V1–V4 audit below.** The V1–V4 auditor was
+> later retired with this closed goal; current V5/V6 capture validation is
+> `swift run swiftstar-analyze validate <capture-dir>`, with implementation
+> coverage in `swift test --filter CaptureValidityTests`.
 
 > **Goal: ≥10 valid Mellum cells** — pipeline runs whose outcome is
 > attributable to the model under every validity invariant below — spanning
@@ -376,9 +379,8 @@ fix after that.
 **did:** Fable review of the whole P16 loop. Two of the five invariant checks
 were broken; one of them had certified the loop's headline result. Rewrote the
 auditor, proved every check against a known-bad *and* a known-good cell, and
-re-ran. The auditor now lives in the repo at
-[`Tools/audit-goal-invariants.py`](../../../Tools/audit-goal-invariants.py)
-rather than a session scratchpad, so these numbers stay reproducible.
+re-ran. The numbers below are the historical output of the then-current
+auditor; that V1–V4 implementation was later retired with this closed goal.
 
 **RETRACTED — "the first valid Mellum pipeline cell."** `20260826-085813` is
 **blocked by V2**, the invariant it was reported as satisfying. V2 reads: *"no
@@ -410,7 +412,7 @@ does. Worse, `main.swift:716` captures only `phases[0]`, so phase 2/3 briefs are
 never in the capture at all — V4 as written cannot be executed against these
 runs either way. It now reports UNAUDITABLE, which is not a pass.
 
-**Corrected cell counts** (`Tools/audit-goal-invariants.py`, self-test passing):
+**Corrected cell counts** (historical V1–V4 audit, self-test passing):
 
 ```
 === laguna: 38 valid / 40 total ===
@@ -555,7 +557,8 @@ attributable to the model. This is the rule that iteration 5 lacked.)
 **evidence:**
 
 ```
-$ python3 Tools/audit-goal-invariants.py captures/agenttest/20260826-101531-roadmap
+# Historical V1–V4 aggregate audit output; it is not rerunnable.
+# Current per-capture V5/V6 check: `swift run swiftstar-analyze validate <capture-dir>`
 === 20260826-101531-roadmap: BLOCKED ===
     V2: acceptance: repair-packet-1.json: dispatched evidence is a bare collection error
     V4: UNAUDITABLE — only phases[0] packet is captured (main.swift:716)
@@ -605,7 +608,7 @@ whether a run passed.
 
 $ swift test                          # 540 tests, 74 suites — passed
 $ SWIFTSTAR_INTEGRATION=1 swift test  # 540 tests, 74 suites — passed
-$ python3 Tools/audit-goal-invariants.py --self-test   # PASS
+# Current V5/V6 implementation coverage: `swift test --filter CaptureValidityTests`
 ```
 
 The test reproduces the real gate chain (`app.py` present, `models.py` absent)
@@ -697,7 +700,7 @@ already refuses a round when any single writable file exceeds `fileCap`.
 
 $ swift test                          # 542 tests, 74 suites — passed
 $ SWIFTSTAR_INTEGRATION=1 swift test  # 542 tests, 74 suites — passed
-$ python3 Tools/audit-goal-invariants.py --self-test   # PASS
+# Current V5/V6 implementation coverage: `swift test --filter CaptureValidityTests`
 ```
 
 **One honest caveat:** the first integration run after this change reported
@@ -741,12 +744,12 @@ met; only the count is short.
 **evidence:**
 
 ```
-$ GOAL_MANIFEST=/tmp/measure-manifest.tsv python3 Tools/audit-goal-invariants.py
+# Historical V1–V4 aggregate output; run `swiftstar-analyze validate` per capture for current V5/V6 checks.
 === mellum: 3 valid / 4 total ===
     blocked:     {'V5': 1}
     unauditable: {'V4': 4}   (NOT passes)
 
-$ python3 Tools/audit-goal-invariants.py --self-test
+# Current V5/V6 implementation coverage: `swift test --filter CaptureValidityTests`
 self-test: PASS          # 8/8 fixtures, re-run after making MANIFEST env-overridable
 
 model: line, from round records only
@@ -854,7 +857,7 @@ graded model result to report. `repair-round-N.json` exists only under
 **evidence:**
 
 ```
-$ GOAL_MANIFEST=/tmp/measure-manifest-r5.tsv python3 Tools/audit-goal-invariants.py
+# Historical V1–V4 aggregate output; run `swiftstar-analyze validate` per capture for current V5/V6 checks.
 === mellum: 3 valid / 4 total ===
     blocked:     {'V1': 1}
     unauditable: {'V4': 4}   (NOT passes)
