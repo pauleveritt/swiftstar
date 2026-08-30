@@ -22,7 +22,9 @@ Outcome per cell:
 referencing an undefined `cell_dir`) were retired along with v5. See
 docs/superpowers/research/goal-ledger-v5.md entry (closure) for why.
 """
-import csv, glob, json, os, re, subprocess, sys
+import glob, json, os, re, subprocess, sys
+
+import campaign_common
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Overridable so a follow-up pre-registration runs against its own manifest and
@@ -60,8 +62,6 @@ def rows():
 
 
 def done():
-    if not os.path.exists(RESULTS):
-        return set()
     # Only a GRADED cell is closed. A `harness-void` row records a run the
     # harness could not use, so its cell must stay re-runnable — otherwise one
     # broken engine voids every remaining cell in seconds and permanently fixes
@@ -71,14 +71,9 @@ def done():
     # Keyed on (fixture, rounds, seed, arm): the same cell run under a
     # different prompt arm is a DIFFERENT cell, not a repeat. Legacy 6-column
     # rows predate the arm column and are read as the shipped 'plural' arm.
-    closed = set()
-    for r in csv.reader(open(RESULTS), delimiter='\t'):
-        if not r or r[0] == 'fixture' or len(r) <= 3:
-            continue
-        if r[3] not in ('pass', 'fail'):
-            continue
-        closed.add((r[0], r[1], r[2], r[6] if len(r) > 6 else 'plural'))
-    return closed
+    # See campaign_common.done_cells' docstring — same rule, shared code.
+    return campaign_common.done_cells(
+        RESULTS, [(0, None), (1, None), (2, None), (6, 'plural')])
 
 
 def last_grade(cell):
@@ -110,9 +105,8 @@ def classify(cell):
 def main():
     sel = dict(a.split('=') for a in sys.argv[1:] if '=' in a)
     have = done()
-    if not os.path.exists(RESULTS):
-        with open(RESULTS, 'w') as fh:
-            fh.write('fixture\trounds\tseed\toutcome\tdetail\tcapture\tarm\n')
+    campaign_common.ensure_header(
+        RESULTS, ['fixture', 'rounds', 'seed', 'outcome', 'detail', 'capture', 'arm'])
     for fixture, rnd, seed, arm in rows():
         if sel.get('fixture') and fixture != sel['fixture']:
             continue
@@ -136,8 +130,8 @@ def main():
         cell = m.group(1) if m else ''
         outcome, detail = ('harness-void', 'no capture produced') if not (cell and os.path.isdir(cell)) \
             else classify(cell)
-        with open(RESULTS, 'a') as fh:
-            fh.write(f'{fixture}\t{rnd}\t{seed}\t{outcome}\t{detail}\t{os.path.basename(cell)}\t{arm}\n')
+        campaign_common.append_row(
+            RESULTS, [fixture, rnd, seed, outcome, detail, os.path.basename(cell), arm])
         print(f'[done] {fixture}/{rnd}/{seed}/{arm} -> {outcome}: {detail}', flush=True)
 
 

@@ -19,6 +19,8 @@ import os
 import sys
 from collections import Counter, defaultdict
 
+import campaign_common
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESEARCH = os.path.join(ROOT, 'docs/superpowers/research')
 DEFAULTS = [
@@ -53,8 +55,9 @@ def report(path: str) -> None:
         print(f'  (empty: {os.path.basename(path)})\n')
         return
 
-    # Block B keys on fixture; Block A is one family keyed on spec.
-    key = 'fixture' if 'fixture' in rows[0] else 'spec'
+    # The row's own header determines the family key — no sniffing which
+    # dict keys happen to be present. See campaign_common.family_key.
+    key = campaign_common.family_key(list(rows[0].keys()))
     families: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         families[r[key]].append(r)

@@ -23,7 +23,6 @@ own process group and a timeout kills the whole group.
 Env: CAMPAIGN_MANIFEST, CAMPAIGN_RESULTS, RUN_CAP (per-cell seconds, default
      1500), STOP_FILE (touch to abort before the next cell).
 """
-import csv
 import fcntl
 import json
 import os
@@ -34,6 +33,8 @@ import subprocess
 import sys
 import tempfile
 import time
+
+import campaign_common
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESEARCH = os.path.join(ROOT, 'docs/superpowers/research')
@@ -78,17 +79,9 @@ def done():
     row": a `timeout` or `harness-void` row records a run the harness could not
     grade, and treating it as closed would permanently burn that seed. The
     realistic bad night is an orphaned engine voiding cells 4-30 in seconds;
-    tomorrow's resume must re-run them, not accept n=3 forever."""
-    if not os.path.exists(RESULTS):
-        return set()
-    closed = set()
-    with open(RESULTS) as fh:
-        for r in csv.reader(fh, delimiter='\t'):
-            if not r or r[0] == 'spec' or len(r) < 4:
-                continue
-            if r[3] in ('pass', 'fail'):
-                closed.add((r[0], r[1], r[2]))
-    return closed
+    tomorrow's resume must re-run them, not accept n=3 forever. See
+    campaign_common.done_cells' docstring — same rule, shared code."""
+    return campaign_common.done_cells(RESULTS, [(0, None), (1, None), (2, None)])
 
 
 def newest_capture(spec: str, since: float) -> str:
@@ -281,9 +274,7 @@ def main() -> None:
     if not os.path.exists(BIN):
         sys.exit(f'harness binary missing: {BIN}')
     _lock = acquire_lock()
-    if not os.path.exists(RESULTS):
-        with open(RESULTS, 'w') as fh:
-            fh.write('\t'.join(HEADER) + '\n')
+    campaign_common.ensure_header(RESULTS, HEADER)
 
     have = done()
     for spec, think, seed in rows():
@@ -300,8 +291,7 @@ def main() -> None:
         print(f'[blockA] {time.strftime("%H:%M:%S")} seed={seed} think={think} start',
               flush=True)
         r = run_cell(spec, think, seed)
-        with open(RESULTS, 'a') as fh:
-            fh.write('\t'.join(r[k] for k in HEADER) + '\n')
+        campaign_common.append_row(RESULTS, [r[k] for k in HEADER])
         print(f'[blockA] {time.strftime("%H:%M:%S")} seed={seed} -> {r["outcome"]} '
               f'({r["seconds"]}s, dispatches={r["dispatches"] or "?"}, '
               f'acc={r["acceptance_exit"] or "?"}) capture={r["capture"]}'

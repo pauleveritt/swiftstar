@@ -51,6 +51,14 @@ So the spike was **SwiftStar-side plus verification**, not an engine merge.
 Run headless via the canonical harness (`swiftstar-agenttest --variant
 laguna-xs-2.1`), graded by the real 13-test acceptance suite.
 
+**Flagged 2026-08-29:** the "grader verdict `good`" calls below and the "GLM
+5.3... APPROVE" line above are `DeepSeekGrader`, an uncalibrated LLM judge
+with no calibration set anywhere in this repo. Treat them as advisory
+pending calibration or an n≥3 rerun against the 13-test acceptance oracle
+(see [`2026-08-29-eval-system-audit-and-later-work.md`](2026-08-29-eval-system-audit-and-later-work.md)),
+not as reliability figures — the 13/13 exit-code results they accompany are
+the actual acceptance evidence.
+
 **Smoke / load gate (also closed the open memory question):**
 - XS21 loads and generates with `--ssd-streaming` in the pinned fork — clears
   the "merged ≠ verified-merged" caveat (GLM 5.2) for the load path.
