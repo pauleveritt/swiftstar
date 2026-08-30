@@ -1,30 +1,58 @@
 # P24.1 window-honoring reads — the "after" measurement (2026-08-30)
 
-**Status: the pre-registered falsifier was not tripped, and a paired control
-arm reproduced the loop on demand.** With only `readResult` reverted to its
-pre-P24.1 body, the identical prompt took 12 reads of one file and timed out;
-with P24.1 it took 3 and completed. Limits recorded below.
+**Status: a paired control arm reproduced the loop on demand — that is the
+result this note stands on.** With only `readResult` reverted to its pre-P24.1
+body, the identical prompt took 12 reads of one file and the turn was killed at
+the timeout; with P24.1 it took 3 and completed.
 
-## The falsifier, as pre-registered
+**The numeric falsifier is post-hoc and must not be cited as pre-registered.**
+See the section below; the honest claim is the behavioral difference, not the
+metric.
 
-The spec's Live validation names the failure condition:
+## The falsifier: what was pre-registered, and what was not
+
+**Pre-registered (spec, Live validation, written before implementation):** a
+prose criterion —
 
 > many distinct windows clustered on one region of one file
 
-That is two measurements, not one, and the first attempt at this note got it
-wrong by counting only the first half. Distinct windows alone are *healthy* — a
-model walking a file asks a different range each time. The starvation loop has
-both of:
+**Not pre-registered:** the numbers. The first operationalization, committed in
+`00aa6e2` as `Tools/window-spread.py`, was `distinct >= 5 AND calls >= 8` per
+path — it ignored the word "clustered" entirely. **The treatment run trips that
+threshold** (8 calls, 8 distinct on `AgentView.swift`). It was then rewritten in
+`1ca240a` — the same commit that reports the treatment as passing — to
+`repeat_rate >= 1.3 AND concentration >= 0.5`, under which the treatment passes.
 
-- **repeat rate** — the same window asked again, because the answer never
-  contained what was asked for;
-- **concentration** — the asks piling onto one narrow band, the region the model
-  cannot reach.
+So: the metric was revised after seeing the data it then cleared. The revision
+is defensible on the merits — the prose criterion says *clustered*, and the
+original code measured no such thing — but revising a threshold against the run
+under test is not a pre-registered result, and this note previously claimed it
+was.
 
-`Tools/window-spread.py` measures both. It is validated against the 1809
-baseline, where it trips on `AgentView.swift` and **only** on
-`AgentView.swift` — matching the documented finding that one file was the
-culprit, and not firing on `ROADMAP.md` or the p12 plan.
+Three specific weaknesses in the revised metric, which the numbers above should
+be read through:
+
+1. **The concentration leg does not discriminate in this experiment.** The 12
+   prompts direct the model at `bottomStatusBar` in one file, so clustering is
+   guaranteed by design in *both* arms — treatment 57%, control 71%, both over
+   the 0.5 bar. The verdict rides on repeat rate alone.
+2. **Repeat rate is largely a bare-read counter.** `window-spread.py` treats
+   `(start=-, max=-)` as one window, so the control's 1.38 comes mostly from its
+   4 parameterless whole-file reads; among its 7 *windowed* reads all 7 were
+   distinct (repeat 1.00). Bare re-reads after failed windows are real loop
+   behavior, so the reading survives — but it is a narrower signal than "repeat
+   rate" suggests.
+3. **The thresholds sit next to the observations.** 1.3 and 0.5 are 0.08 and
+   0.07 from the measured values, and were written with both arms' data visible.
+   A plausible healthy session (bare read → edit → bare re-read → three
+   clustered verify windows: 6 calls / 4 distinct = 1.5, high concentration)
+   false-trips; a starvation loop of purely distinct shrinking windows — like 17
+   of the 1809 baseline's 22 — evades. The baseline's second path sits at
+   exactly 1.10 / 50%, one repeat from a false trip.
+
+The detector does trip on the 1809 baseline and only on `AgentView.swift`, which
+is the file the baseline documented as the culprit. That is a genuine check, but
+it is one point of validation, not a calibration.
 
 ## Result
 
@@ -84,20 +112,26 @@ test.
 | concentration | **71%** (lines 1–101) | 57% |
 | falsifier | **TRIPPED** | not tripped |
 
-The control's twelve calls, in order, all against the same file:
+The control's **read/more** calls, in order, all against the same file:
 
 ```
 (bare)  1/80  80/80  more  (bare)  150/100  (bare)  100/50  1/10  200/50  60/50  (bare)
 ```
 
-That is the 1809 pathology reproduced live and on demand: window after window,
-a `more` attempt (which the pre-P24.1 host errors on), falling back to bare
-re-reads, never converging, until the turn was killed. The treatment answered
-the identical prompt with `(bare) → 150/320 → 275/200` and moved on.
+**That is the read subset of a 27-tool-call turn**, not the whole turn: the
+control also issued 5 `edit` calls, a `dispatch`, a `visit_page`, and a
+`bash_status`. An earlier revision of this note described the twelve reads as if
+they were the turn, which overstated the tidiness of the picture. The flailing
+across other tools is consistent with a starved model, but it is not evidence
+this measurement isolates.
 
-Because only `readResult` differs between the two runs, this is the paired
-evidence the earlier revision said was outstanding, and it is stronger than a
-token comparison: the control **could not complete the task at all**.
+The treatment answered the identical prompt with `(bare) → 150/320 → 275/200`
+and moved on, making no writes or edits at all (16 read, 7 search, 2 bash with
+shell off) — so the reused workspace was not contaminated between arms.
+
+Because only `readResult` differs between the two runs, this is paired evidence,
+and it is stronger than a token comparison: the control **could not complete the
+task at all**.
 
 ## What is still weak about this, stated plainly
 
@@ -116,6 +150,18 @@ token comparison: the control **could not complete the task at all**.
 4. **One session per arm, one seed.** P20's closure verdict recorded seed
    dependence on a comparable claim; this has the same exposure. The control
    tripping on its first turn makes a fluke less likely, not impossible.
+5. **"Timed out" is relative to a timeout nobody can see.** Both arms ran with
+   `CAPTURE_TURN_TIMEOUT=240`, well under the tool's own 900 s default, and the
+   provenance files do not record it. Nothing here rules out the control
+   converging at 400 s. The claim is "did not finish in 240 s while the
+   treatment finished in ~33 s," not "cannot finish."
+6. **The protocol is not reproducible from the repo — the P26 lesson,
+   repeated.** The 12 prompts, the run invocation, and the control's reverted
+   `readResult` all lived in an ephemeral scratchpad, and the control branch was
+   deleted after the run. Nobody can re-run either arm, or audit the diff that
+   defined the control, from what is committed. **Committing the protocol is the
+   next task**, and until it is done these numbers are a report rather than an
+   experiment.
 
 ## What made the measurement possible
 

@@ -1,10 +1,14 @@
 # SwiftStar P24.1 design: window-honoring reads
 
 **Date:** 2026-08-30
-**Status:** implemented (2026-08-30) — falsifier not tripped, and a paired
-control arm (only `readResult` reverted) reproduced the loop on demand: 12 reads
-of one file and a timed-out turn, against 3 reads and a completed one. See the
-[after-measurement](../research/2026-08-30-p24-1-window-honoring-after-measurement.md)
+**Status:** implemented (2026-08-30). A paired control arm (only `readResult`
+reverted) reproduced the loop on demand: 12 reads of one file and a turn killed
+at the 240 s timeout, against 3 reads and a completed turn. **The numeric
+falsifier is post-hoc, not pre-registered** — the committed threshold was
+revised after the treatment tripped it; see the
+[after-measurement](../research/2026-08-30-p24-1-window-honoring-after-measurement.md),
+which also records that the measurement protocol is not yet reproducible from
+the repo
 **Phase:** P24 — Digested first-class tools (feature cycle 1)
 
 This spec **supersedes**
