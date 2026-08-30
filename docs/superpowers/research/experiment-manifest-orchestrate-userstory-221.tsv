@@ -1,0 +1,85 @@
+# Pre-registered manifest — orchestrate-loop generalization arm, third attempt
+# on roadmap-user-story. Written BEFORE the first cell of this arm. Separate
+# arm, separate results file; neither of the two earlier arms is amended or
+# re-labeled.
+#
+# WHY A THIRD ARM, NOT A CONTINUATION OF EITHER EARLIER ONE.
+# Arm 1 (experiment-manifest-orchestrate-userstory.tsv, seeds 201-204): 4/4
+# lost to `runDirectiveOnce` never passing `sharedContext` (mission +
+# tech-stack.md, which pins `fastapi[standard]`) into the prompt — the
+# orchestrator built the entire app in Flask and failed the acceptance
+# suite's `from app import app` at collection time. Fixed in
+# `OrchestrateDirective.build` (gained an optional `projectContext`
+# parameter); confirmed present on the wire, but not yet graded live at the
+# time arm 2 was written.
+# Arm 2 (experiment-manifest-orchestrate-userstory-fixed.tsv, seeds 211-220):
+# 5/5 lost (seeds 211-215; 216-220 never ran) to a SECOND, independent bug —
+# the engine's degeneracy guard aborted legitimate writes whose tail was a
+# 64-dash comment separator, a false positive. Fixed as fork divergence #15;
+# unit-verified across a 13-case table and both test tiers (785 tests), but
+# — like the projectContext fix before it — never run against a live model
+# before this arm.
+#
+# Seeds 211-220 are burnt (215 used, the arm abandoned once the cause was
+# confirmed — the stop went in before any further cell's result was known,
+# same instrument-integrity discipline as arm 1's stop). This arm uses
+# 221-230: disjoint from 201-210 (arm 1, projectContext bug), 211-220 (arm 2,
+# degeneracy-guard bug), 101-130 and 42 (roadmap-spec Block A), so no cell
+# here was ever run under either broken prior state.
+#
+# PROVENANCE: repo HEAD 3dac58a (P26 gate cleared same day — see ROADMAP.md's
+# P26 row) + both fixes above, already on main before this arm's first cell.
+# ds4 pin unchanged from the two earlier arms (1a2dddf). TURN_TIMEOUT=1500,
+# RUN_CAP=3600 — same as both earlier arms, so timeout policy is not a
+# variable across any of the three.
+#
+# DESIGN: same task (roadmap-user-story), same n=10 as both earlier attempts,
+# same decision rule, unpooled with either earlier arm (each measures a
+# different harness state).
+#
+# CELL 1 IS A PLUMBING CHECK, NOT JUST A MEASUREMENT. Both fixes are live-
+# unvalidated going into this arm. Inspect cell 1's outcome and capture by
+# hand before letting cells 2-10 run unattended — if it fails on either
+# earlier bug's signature (Flask in the app tree, or a degeneracy-guard abort
+# on a legitimate write), stop immediately rather than burning the rest of
+# the arm on a fix that didn't actually land.
+#
+# PRIMARY ENDPOINT: pass rate on roadmap-user-story under both fixes, Wilson
+# 95% interval, read against Block A's roadmap-spec baseline 27/29=93% (still
+# not pooled — different task, per the original design's reasoning carried
+# forward from arm 2).
+#
+# DECISION RULE, unchanged from arms 1 and 2:
+#  1. >=8/10 (80%): the loop generalizes across this task shift once given
+#     the same project context the phase loop already gets and the
+#     degeneracy-guard false positive is gone.
+#  2. 5-7/10: a real signal that task framing matters beyond the two fixed
+#     bugs; underpowered to size it further at this n.
+#  3. <=4/10: reliability is task-specific even with both fixes; the 93%
+#     figure keeps its "measured on one task" caveat, and failures feed the
+#     Backlog "Orchestrate-loop generalization" entry directly.
+#
+# Additionally: if ANY cell in this arm still substitutes Flask, or aborts on
+# a legitimate write via the degeneracy guard, that is reported explicitly
+# and separately from the pass rate — it would mean a fix is necessary but
+# not sufficient, a different finding than "the loop doesn't generalize."
+#
+# WHAT THIS CANNOT CONCLUDE: anything about tasks other than roadmap and
+# roadmap-user-story; a precise rate at n=10; whether other gaps exist
+# between directive mode and the phase loop besides the two fixed so far.
+#
+# Runner: TURN_TIMEOUT=1500 RUN_CAP=3600 \
+#   CAMPAIGN_MANIFEST=<this> \
+#   CAMPAIGN_RESULTS=docs/superpowers/research/experiment-results-orchestrate-userstory-221.tsv \
+#   python3 Tools/run-orchestrate-campaign.py
+spec	think	seed
+roadmap-user-story	1500	221
+roadmap-user-story	1500	222
+roadmap-user-story	1500	223
+roadmap-user-story	1500	224
+roadmap-user-story	1500	225
+roadmap-user-story	1500	226
+roadmap-user-story	1500	227
+roadmap-user-story	1500	228
+roadmap-user-story	1500	229
+roadmap-user-story	1500	230
