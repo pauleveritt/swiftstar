@@ -317,4 +317,13 @@ public enum ToolCallbackResponder {
         }
         return json
     }
+
+    /// The common host response for a request that crossed its per-turn
+    /// budget. The caller still records the rejected verdict separately so
+    /// the finished outcome retains the emitted request.
+    public static func budgetExceeded(idx: Int) -> ToolCallbackResponse {
+        ToolCallbackResponse(
+            idx: idx, ok: false,
+            s: ToolResultCondenser.condense("tool budget exceeded"))
+    }
 }

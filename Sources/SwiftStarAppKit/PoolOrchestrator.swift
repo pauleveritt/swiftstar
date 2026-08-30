@@ -83,7 +83,7 @@ public final class PoolOrchestrator {
             model: model, build: "pooled",
             task: packet.taskText,
             think: nil)
-        var toolCallCount = 0
+        var toolBudget = ToolCallBudgetTracker(budget: packet.toolCallBudget)
         var refusalTracker = ToolRefusalTracker()
         let vettedCommands = [packet.validationCommand, packet.selfTestCommand]
             .compactMap { $0 }.filter { !$0.isEmpty }
@@ -110,14 +110,15 @@ public final class PoolOrchestrator {
             builder.apply(event)
             switch event {
                 case .toolRequest(let idx, let name, let params):
-                    toolCallCount += 1
-                    if toolCallCount > packet.toolCallBudget {
+                    if !toolBudget.admit() {
                         // Enforce the budget during the turn (D8): refuse the call,
                         // don't execute it, so a thrashing worker is cut off instead
                         // of filling the context.
-                        let r = ToolCallbackResponse(idx: idx, ok: false,
-                            s: ToolResultCondenser.condense("tool budget exceeded"))
+                        let r = ToolCallbackResponder.budgetExceeded(idx: idx)
                         stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
+                        builder.recordHostVerdict(
+                            idx: idx, ok: false, mutations: [], exitStatus: nil,
+                            outputDigest: nil, validationRan: false)
                         return false
                     }
                     var response = ToolCallbackResponder.respond(
@@ -164,7 +165,7 @@ public final class PoolOrchestrator {
     public func runOrchestrator(
         prompt: String,
         worktree: URL,
-        toolCallBudget: Int = 64,
+        toolCallBudget: Int = ToolCallBudgetTracker.defaultBudget,
         capture: FileHandle? = nil,
         buildDispatchPacket: @escaping ([ToolParam]) -> HandoffPacket?
     ) throws -> (outcome: TurnOutcome, dispatched: [HandoffPacket]) {
@@ -172,7 +173,7 @@ public final class PoolOrchestrator {
             // The orchestrator's own turn is a normal agent turn: no override.
             model: model, build: "pooled", task: prompt)
         var dispatched: [HandoffPacket] = []
-        var toolCallCount = 0
+        var toolBudget = ToolCallBudgetTracker(budget: toolCallBudget)
         var refusalTracker = ToolRefusalTracker()
         // The orchestrator is the agent's own role: full bash (`.app` policy),
         // matching the app's shell-on agent tab — not the pool worker's
@@ -192,14 +193,15 @@ public final class PoolOrchestrator {
             builder.apply(event)
             switch event {
                 case .toolRequest(let idx, let name, let params):
-                    toolCallCount += 1
-                    if toolCallCount > toolCallBudget {
+                    if !toolBudget.admit() {
                         // Enforce the budget (D8, mirrors runPhase): refuse the
                         // call so a thrashing orchestrator is cut off instead of
                         // burning the whole turn timeout.
-                        let r = ToolCallbackResponse(idx: idx, ok: false,
-                            s: ToolResultCondenser.condense("tool budget exceeded"))
+                        let r = ToolCallbackResponder.budgetExceeded(idx: idx)
                         stdin.write(Data((ToolCallbackResponder.resultLine(r) + "\n").utf8))
+                        builder.recordHostVerdict(
+                            idx: idx, ok: false, mutations: [], exitStatus: nil,
+                            outputDigest: nil, validationRan: false)
                         return false
                     }
                     if name == "dispatch" {

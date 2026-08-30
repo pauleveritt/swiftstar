@@ -16,7 +16,7 @@ public enum DispatchPacketBuilder {
         loaded: [String: String],
         implementer: String,
         turnBudget: Int = 100_000,
-        toolCallBudget: Int = 64,
+        toolCallBudget: Int = ToolCallBudgetTracker.defaultBudget,
         dumb: Bool = false
     ) -> HandoffPacket? {
         guard let objective = params.first(where: { $0.name == "taskText" })?.value,

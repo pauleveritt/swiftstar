@@ -119,6 +119,8 @@ final class AgentController {
     // read is tracked. Same treatment as `outcomeBuilder`, which is mutated
     // just as often (per wire event) and stays tracked.
     var workerTurn = ActiveWorkerTurn()
+    private var orchestratorToolBudget = ToolCallBudgetTracker(
+        budget: ToolCallBudgetTracker.defaultBudget)
     private var sentInterrupt = false
     var buildSHA = "unknown"
     private let logHandle: FileHandle?
@@ -379,6 +381,8 @@ final class AgentController {
         decodeAccumulator = DecodeAccumulator()
         outcomeBuilder = nil
         sentInterrupt = false
+        orchestratorToolBudget = ToolCallBudgetTracker(
+            budget: ToolCallBudgetTracker.defaultBudget)
         // A restart is a fresh engine = a fresh pool: stale pending workers and
         // consult bookkeeping must not survive into the new session.
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
@@ -651,6 +655,16 @@ final class AgentController {
         case .text, .think, .tool:
             transcript.apply(event)
         case .toolRequest(let idx, let name, let params):
+            guard orchestratorToolBudget.admit() else {
+                let response = ToolCallbackResponder.budgetExceeded(idx: idx)
+                writeToolResult(response)
+                outcomeBuilder?.recordHostVerdict(
+                    idx: idx, ok: false, mutations: [], exitStatus: nil,
+                    outputDigest: nil, validationRan: false)
+                rollingDigest = RollingDigestReducer.recordHostVerdict(
+                    rollingDigest, mutations: [], exitStatus: nil, validationRan: false)
+                return
+            }
             if name == "dispatch" {
                 if UserDefaults.standard.bool(forKey: "dispatchDumb") {
                     // Dumb mode keeps the baseline clean: the subagent pool is
@@ -882,6 +896,8 @@ final class AgentController {
         decodeAccumulator = DecodeAccumulator()
         state = .generating
         sentInterrupt = false
+        orchestratorToolBudget = ToolCallBudgetTracker(
+            budget: ToolCallBudgetTracker.defaultBudget)
         // P23: the decision authority resolves the request against the family
         // and the advertised caps. The outcome record carries the effort
         // actually used — the old "engine-defaults" literal became false the
@@ -1128,7 +1144,8 @@ final class AgentController {
         transcript.appendSystem("→ consulting: \(trimmed)")
         let packet = HandoffPacket(
             taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
-            baselines: [:], turnBudget: 100_000, toolCallBudget: 64)
+            baselines: [:], turnBudget: 100_000,
+            toolCallBudget: ToolCallBudgetTracker.defaultBudget)
         poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
         workerTurn.markConsult(workerId)
         // Run the worker now in the SAME engine (a context-isolated session) —

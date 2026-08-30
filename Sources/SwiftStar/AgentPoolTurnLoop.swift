@@ -139,6 +139,16 @@ extension AgentController {
         workerTurn.outcomeBuilder?.apply(event)
         switch event {
         case .toolRequest(let idx, let name, let params):
+            guard workerTurn.admitToolCall() else {
+                let response = ToolCallbackResponder.budgetExceeded(idx: idx)
+                writeToolResult(response)
+                workerTurn.outcomeBuilder?.recordHostVerdict(
+                    idx: idx, ok: false, mutations: [], exitStatus: nil,
+                    outputDigest: nil, validationRan: false)
+                rollingDigest = RollingDigestReducer.recordHostVerdict(
+                    rollingDigest, mutations: [], exitStatus: nil, validationRan: false)
+                return
+            }
             let response = await ToolCallbackResponder.respond(
                 idx: idx, name: name, params: params,
                 workspace: workerTurn.worktree?.url ?? settings.workspace,

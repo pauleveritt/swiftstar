@@ -10,6 +10,14 @@ import Foundation
 /// execute → condense → response), the `tool_result` line (D2), and the
 /// builder's host-mode verdict + host-fact accumulation (D5).
 struct ToolCallbackResponderTests {
+    @Test func budgetExceededResponseIsAHostRefusal() {
+        let response = ToolCallbackResponder.budgetExceeded(idx: 7)
+
+        #expect(response.idx == 7)
+        #expect(response.ok == false)
+        #expect(response.s == "tool budget exceeded")
+    }
+
     private let ws = URL(fileURLWithPath: "/tmp/swiftstar-consent-ws")
 
     private func param(_ name: String, _ value: String) -> ToolParam {
