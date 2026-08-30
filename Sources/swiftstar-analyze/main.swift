@@ -385,8 +385,9 @@ private struct TaxonomyWorker {
 }
 
 /// Summarize the pooled wire by worker using the production parser. This is
-/// the Swift replacement for `Tools/directive-taxonomy.py`; worker streams are
-/// never folded together because that creates a session that never existed.
+/// the Swift replacement for the retired directive-taxonomy script; worker
+/// streams are never folded together because that creates a session that never
+/// existed.
 func cmdTaxonomy(_ dir: URL) {
     let url = dir.appendingPathComponent("wire.ndjson")
     guard let text = try? String(contentsOf: url, encoding: .utf8) else {
