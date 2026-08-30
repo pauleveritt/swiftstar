@@ -14,7 +14,7 @@ Backlog, not into the current phase.*
 
 **P25: DeepSeek V4 Flash — moved up (2026-08-27):** the flagship rung is wanted now; implementation is in progress (offline cycles 1–3, 4a are safe unattended; 4b shipped and closed 2026-08-28 (see the row); cycle 5 live run skipped by decision; cycle 6 SSD deferred). See the P25 row and its design doc.
 
-**Orchestrate-loop generalization arm 3 staged, not yet run (2026-08-29).** Now that P26's gate is cleared, [`experiment-manifest-orchestrate-userstory-221.tsv`](docs/superpowers/research/experiment-manifest-orchestrate-userstory-221.tsv) pre-registers seeds 221–230 on `roadmap-user-story`, retrying the two prior arms' task after both their harness bugs (missing `projectContext`, the degeneracy-guard false positive) are fixed. Cell 1 must be inspected before letting 222–230 run unattended — neither fix has been graded live yet. Run with `CAMPAIGN_MANIFEST=docs/superpowers/research/experiment-manifest-orchestrate-userstory-221.tsv CAMPAIGN_RESULTS=docs/superpowers/research/experiment-results-orchestrate-userstory-221.tsv TURN_TIMEOUT=1500 RUN_CAP=3600 python3 Tools/run-orchestrate-campaign.py`.
+**Orchestrate-loop generalization arm 3 complete (2026-08-30) — 6/9 = 67% [35%, 88%], band 2 ("signal, underpowered"), not the ≥8/10 that would confirm generalization.** Both prior arms' harness bugs (missing `projectContext`, the degeneracy-guard false positive) were verified live-fixed — neither recurred in any of the 10 captures. Two of three graded failures share one content signature (form off the board, wrong markup, dropped seed text); the third (seed 223) is flagged ambiguous, not a clean model failure — see the Evaluation-and-measurement backlog entry for the full breakdown and what a fourth arm needs before it can pool with Block A's 93%.
 
 **Mellum is INACTIVE until 2026-09-05 (2026-08-29 decision).** No Mellum measurement, tuning, or fixture work for one week — the line is parked, not cancelled. Why now: 2026-08-29 overturned P17's 15/17 (real editing rate ~68% pooled, and the flat-depth-profile claim is dead), which leaves Mellum's competence **contested rather than settled** — and a full day of arms chasing it returned mostly harness and engine defects rather than model facts. Parking it stops that loop. **What this defers with it:** the `RepairLoop` zero-heading abort (its only validation surface is the Mellum fixture tier), the "talks itself out of the diagnosis" probe, and the two data-integrity flags — all Backlog entries below, none blocked on anything else. **What it does not touch:** Laguna S work, P24, P25, or P26's remaining hygiene, none of which need Mellum. **When it reopens, P18's job has changed** — see the note in its row.
 
@@ -717,36 +717,72 @@ group's order is not a priority order.
 ### Evaluation and measurement
 
 - **Orchestrate-loop generalization: does 93% hold on a second task?
-  (parked 2026-08-29, end of day — two fixes landed, neither yet validated
-  live.)** Block A measured the `/orchestrate` loop at **27/29 = 93%
+  (arm 3 complete 2026-08-30 — verdict: signal, not confirmation; still
+  open.)** Block A measured the `/orchestrate` loop at **27/29 = 93%
   [78%, 98%]** — but every one of those cells ran the **same task**
   (`roadmap` spec, one synthetic app, one 13-test oracle). Thirty seeds on one
   task measures seed variance, not task variance, and `/goal` v5's
   byte-identical-prompt swing (2/3 → 0/3) is a standing warning that
   task-to-task variance may be the larger term. **The 93% figure should carry
   "measured on one task" until this closes.**
-  *Two attempts were made and both were stopped deliberately, each having
-  found a real defect rather than an answer:*
+  *Two earlier attempts were stopped deliberately, each having found a real
+  harness defect rather than an answer:*
   1. **Seeds 201–204** — 4/4 lost to the orchestrator building the app in
      **Flask instead of FastAPI**: `runDirectiveOnce` never passed
      `sharedContext` (mission + `tech-stack.md`) into the prompt, though the
      non-directive phase loop always had. **Fixed** (`OrchestrateDirective.build`
-     gained `projectContext`); confirmed present on the wire, but no cell has
-     yet been *graded* with it.
+     gained `projectContext`).
   2. **Seeds 211–215** — 5/5 lost to an **engine false positive**: the
      degeneracy guard aborted legitimate writes whose tail was a 64-dash
      comment separator. **Fixed** as fork divergence **#15**; unit-verified
-     across a 13-case table and both test tiers (785 tests), but **never run
-     against a live model**.
-  *To resume:* fresh pre-registration, seeds **221–230** (211–220 are burnt —
-  215 used, and the arm they belong to is abandoned), `roadmap-user-story`,
-  n=10, `TURN_TIMEOUT=1500`, `RUN_CAP=3600`. The decision rule is already
-  written in `experiment-manifest-orchestrate-userstory-fixed.tsv` and can be
-  copied verbatim: ≥8/10 generalizes, 5–7 signal-but-underpowered, ≤4
-  task-specific. **First cell must be inspected before the rest run** — both
-  fixes are live-unvalidated, so cell 1 is a plumbing check as much as a
-  measurement. ~3–5 h. *Reopens whenever there is a clean morning; nothing
-  else is blocked on it.*
+     across a 13-case table and both test tiers (785 tests).
+  **Arm 3 (seeds 221–230, `roadmap-user-story`, n=10) ran both fixes live for
+  the first time.** Manifest:
+  [`experiment-manifest-orchestrate-userstory-221.tsv`](docs/superpowers/research/experiment-manifest-orchestrate-userstory-221.tsv);
+  results:
+  [`experiment-results-orchestrate-userstory-221.tsv`](docs/superpowers/research/experiment-results-orchestrate-userstory-221.tsv).
+  **Neither fixed bug recurred** — zero Flask substitutions, zero
+  degeneracy-guard aborts across all 10 captures; both fixes verified live,
+  not just unit-tested. **Graded rate: 6/9 = 67% [35%, 88%]** (seed 222 is
+  `harness-void` — a 1501s turn timeout at the 1500s cap, mid-write, not a
+  grade — excluded from the denominator per the pre-registration's own rule;
+  scoring it as a fail gives 6/10 = 60%, same band). Block A's 93% CI and
+  this arm's CI overlap, so **arm 3 does not establish a difference from
+  Block A, only that the ≥8/10 generalization bar was not reached** —
+  **verdict: band 2, "real signal that task framing matters beyond the two
+  fixed bugs, underpowered to size it further at n=9."** Three graded
+  failures, reconstructed by wire-replay against the real acceptance suite
+  since the harness prints no failure detail for directive cells (a gap
+  worth fixing before the next arm — `main.swift:1352` already has
+  `finalGrade`'s report, it just isn't printed on this path):
+  - **Seed 223 — ambiguous, do not count as a clean model failure.** Seeded
+    `complaints` in a startup/lifespan hook instead of at module import, so
+    acceptance's `TestClient(app)` (no `with`) sees an empty store at
+    snapshot time. The user-story spec never says seeding must happen *at
+    import* — only `roadmap.md` (the other spec) does — so this is plausibly
+    a fair reading of the prompt failing an oracle written for the other
+    spec's stricter contract, not a model competence gap. It's also a
+    **double failure**: `dispatches=0` (the orchestrator built the whole app
+    itself), which independently fails the harness's own `dispatches >= 1`
+    pass bar — at n=9 one cell like this moves the rate 11 points on its
+    own. Left in the denominator (per the pre-registration's rule) but
+    flagged here rather than treated as settled evidence.
+  - **Seed 226 — genuine content miss.** Form on its own page/route instead
+    of on the board; wrong markup (`list-group` not cards); dropped the
+    verbatim seed string "Scope creep never ends." All three are stated
+    explicitly in the user-story spec, so this is a fair grade.
+  - **Seed 228 — same shape as 226**, independently: separate submit page,
+    wrong markup, wrong heading, dropped seed string. Two of three graded
+    failures share this signature — a real, consistent pattern, not noise.
+  *What this cannot conclude:* anything about tasks other than `roadmap` and
+  `roadmap-user-story`; a precise rate at n=10 (the CI spans 35–88 points);
+  whether other directive-vs-phase-loop gaps exist beyond the two now fixed.
+  *Reopens as:* a fourth arm with 223's ambiguity resolved (either fix the
+  acceptance oracle to accept startup-hook seeding, or make the user-story
+  spec explicit about import-time seeding, so a future cell can't fail on
+  spec/grader mismatch) and the directive-cell failure-detail gap closed
+  first, then a larger n on `roadmap-user-story` alone before pooling with
+  Block A. Nothing else is blocked on it.
 
 - **The largest single failure population is not the one the campaign chased
   (2026-08-29).** The 2026-08-29 failure classification of 24 non-passing
