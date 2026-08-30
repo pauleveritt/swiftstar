@@ -185,6 +185,26 @@ So `condense` becomes a no-op on read results instead of the thing that silently
 removes the middle. The 1000 bytes of slack under the 8000 cap absorb the header
 (bounded by path length + ~160) with room to spare.
 
+**The budget scales with context, because a constant is incoherent at 4k.**
+`defaultLines` already tiers off context size; a fixed byte budget alongside it
+would not. At `contextSize: 4096` — the AFM tier the watcher-tier Backlog entry
+anticipates — 7000 bytes is ~1,750 tokens, **half the model's entire context in
+one tool result**, and 120 lines of dense Swift is routinely 6–8 KB, so the byte
+bound would bind and deliver exactly that. The rule is therefore
+
+```
+byteBudget(contextSize) = min(7000, max(1024, contextSize / 2))
+```
+
+— `contextSize / 2` bytes is ≈ `contextSize / 8` tokens, so one tool result is
+~12.5% of context at any tier; the 7000 ceiling is the condenser's cap, and the
+1024 floor keeps a pathological setting from starving the read entirely. At the
+app's 32768 this is 7000 and nothing changes; at 4096 it is 2048.
+
+This does not make small-context models *good* at reading large files — see D9's
+note on pagination thrash — it makes the budget honest at every tier instead of
+hard-coding a 32k assumption into the tool contract.
+
 **D3 — The line default mirrors the engine's tier, so `contextSize` reaches the
 executor two ways.** `HostToolExecutor` computes 120 / 240 / 500 by the engine's
 thresholds. Diverging on the default would put two different numbers behind one
@@ -258,6 +278,17 @@ clustered on one region of one file is the signature of the loop, and it must be
 gone.** A Σsuffix *increase* is an acceptable outcome if the turn now completes —
 that is the paired-bill guardrail applied honestly rather than as a token race.
 
+**A limit this cycle does not remove: pagination thrash at small context.**
+Windowing makes a large file *reachable* by a small-context model; it does not
+make it *practical*. At `contextSize: 4096`, a 427-line file is four windows of
+~500 tokens each (D2's scaled budget), and the model compacts between them — it
+has lost window 1 before it reaches window 3. That is the starvation loop
+wearing a different hat, and `more`-pagination is the wrong primitive for it.
+The right one is targeted retrieval: locate the line, then read one small window
+around it — which is what P24's `scout` is for. **Reopen condition:** when the
+ANE/AFM tier's falsifiers pass and a small-context worker is real, measure a
+paginated read on it before assuming windowing serves that tier.
+
 ## Components
 
 ### 1. `Sources/SwiftStarKit/ReadWindow.swift` (new, pure)
@@ -285,6 +316,10 @@ public enum ReadWindow {
 
     /// The engine's tier (ds4_agent.c:8090, :7885-7889).
     public static func defaultLines(contextSize: Int) -> Int
+
+    /// D2: min(7000, max(1024, contextSize / 2)) — one tool result is ~12.5%
+    /// of context at any tier, never half of a 4k window.
+    public static func byteBudget(contextSize: Int) -> Int
 }
 ```
 
