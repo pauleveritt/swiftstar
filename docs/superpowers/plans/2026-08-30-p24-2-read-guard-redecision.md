@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Retire the `.pool` `readCache` (unify reads on the windowed path), and make `swiftstar-analyze rereads` report same-window re-reads instead of the misleading same-path count — the two code changes behind the spec's verdict that the read-guard does not return.
+**Goal:** Retire the `.pool` `readCache` (unify reads on the windowed path), and make `swiftstar-analyze rereads` report same-window re-reads of the *effective* window — the two code changes behind the spec's verdict that the read-guard does not return.
 
-**Architecture:** Two deletions-plus-one-addition, no live runs. Task 1 deletes the `readCache` policy field, its storage, and the `.pool` branch of `readResult`, so `.pool` and `.app` share one windowed read path. Task 2 extracts a pure `ReadRepeatCounter` into `SwiftStarKit` and re-points the `rereads` verb's counting at it. Task 3 records the decisions in the docs.
+**Architecture:** Two deletions-plus-one-addition, no live runs. Task 1 deletes the `readCache` policy field, its storage, and the `.pool` branch of `readResult`, so `.pool` and `.app` share one windowed read path. Task 2 extracts a pure `ReadRepeatCounter` into `SwiftStarKit` (it resolves bare reads to the context tier and counts same-window repeats deterministically) and re-points the `rereads` verb at it. Task 3 records the decisions in the docs.
 
 **Tech Stack:** Swift 6, `SwiftStarKit` + `SwiftStarAppKit` + `swiftstar-analyze`, Swift Testing (`import Testing`). No model, no network, no subprocess, no engine change, no recapture.
 
@@ -24,6 +24,11 @@
   a pass/fail bar. Do not add one.
 - **An instrument change is recorded, not hidden** (rule 5): Task 1 is an
   agenttest-instrument change; Task 3's ROADMAP edit says so explicitly.
+- **The window key is the effective window** — `start_line ?? 1`,
+  `max_lines ?? ReadWindow.defaultLines(contextSize:)`. A bare read and
+  `start=1,max=<tier>` are the *same* window. `raw`/`whole` are not in the key.
+- **Deterministic output** — the per-path table is sorted by calls desc, then
+  path asc, so equal-count paths cannot scramble across runs.
 - **Fast tier only** — both tasks' tests run under plain `swift test` (the
   `HostToolExecutorTests` suite is not `SWIFTSTAR_INTEGRATION`-gated; it is
   pure file I/O).
@@ -35,7 +40,7 @@
 ### Task 1: Retire the `.pool` `readCache`
 
 **Files:**
-- Modify: `Sources/SwiftStarAppKit/HostToolExecutor.swift` (Policy struct, storage, `readResult`)
+- Modify: `Sources/SwiftStarAppKit/HostToolExecutor.swift` (Policy struct, class doc comment, storage, `readResult`)
 - Modify: `Sources/SwiftStarAppKit/PoolOrchestrator.swift` (one comment)
 - Test: `Tests/SwiftStarIntegrationTests/HostToolExecutorTests.swift`
 
@@ -43,7 +48,7 @@
 - Consumes: `Policy` (`:47`), `readResult` (`:202`), test helpers `makeWorkspace()`/`request(_:_:workspace:path:)`/`param(_:_:)`/`writeLines(_:_:prefix:)` — all existing.
 - Produces: `Policy` with **no** `readCache` member and a 5-argument `init` (no `readCache`); `Policy.app` and `Policy.pool(vettedCommands:)` unchanged in shape except the removed argument; `readResult` with a single windowed path and **no** `if policy.readCache` fork. `SHA256`/`CryptoKit` stay (still used by `writeResult` at `:407`).
 
-- [ ] **Step 1: Update the three pool-read tests and add one, so they fail against the current code**
+- [ ] **Step 1: Update the three pool-read tests and add two, so they fail against the current code**
 
 In `Tests/SwiftStarIntegrationTests/HostToolExecutorTests.swift`:
 
@@ -88,7 +93,7 @@ In `Tests/SwiftStarIntegrationTests/HostToolExecutorTests.swift`:
     }
 ```
 
-(e) Add (after (b)):
+(e) Add (after (b)) — the success sibling for (f):
 
 ```swift
     @Test func poolPolicyReadHonorsWindows() throws {
@@ -106,15 +111,29 @@ In `Tests/SwiftStarIntegrationTests/HostToolExecutorTests.swift`:
     }
 ```
 
+(f) Add (after (e)) — the new `.pool` confinement refusal (was folded into the
+generic "could not read" before unification):
+
+```swift
+    @Test func poolPolicyReadOutsideWorkspaceRefusesWithGrantMessage() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        let executor = HostToolExecutor(policy: .pool(vettedCommands: []))
+        let result = executor.execute(request("read", [], workspace: ws, path: nil))
+        #expect(!result.ok)
+        #expect(result.text.contains("outside the workspace grant"))
+    }
+```
+
 - [ ] **Step 2: Run the suite to verify the new tests fail**
 
 Run: `swift test --filter HostToolExecutorTests`
 
-Expected: FAIL — `poolPolicyReadHasNoCache` (the `.pool` read still returns the bare `"hello"`, not the windowed format), `poolPolicyReadHonorsWindows` (whole file returned, no `lines 10-12 of 40` header), and `poolPolicyReadMissingFileNamesThePathInTheError` (`"error: could not read"` contains no path). The deleted test no longer appears.
+Expected: FAIL — `poolPolicyReadHasNoCache` (the `.pool` read still returns the bare `"hello"`, not the windowed format), `poolPolicyReadHonorsWindows` (whole file returned, no `lines 10-12 of 40` header), `poolPolicyReadMissingFileNamesThePathInTheError` (`"error: could not read"` contains no path), and `poolPolicyReadOutsideWorkspaceRefusesWithGrantMessage` (the folded `"error: could not read"` has no grant message). The deleted test no longer appears.
 
 - [ ] **Step 3: Delete the cache from `HostToolExecutor.swift`**
 
-Four edits:
+Five edits:
 
 (a) `Policy` struct — remove the field and init parameter:
 
@@ -245,6 +264,45 @@ becomes:
         // its own message (the read failure names the path).
 ```
 
+(e) The class doc comment — the "two call sites" bullet still claims the pool
+worker "has a per-turn read cache." Replace that bullet pair:
+
+```swift
+/// The two call sites have real, deliberate policy differences, captured in
+/// `Policy` rather than dropped:
+/// - the pool worker (`.pool`) has a per-turn read cache (an unchanged re-read
+///   answers "(unchanged since last read)"), confines `bash` to a vetted-
+///   commands allowlist (not the app's `shellAllowed` boolean gate — that gate
+///   is enforced earlier, in `ToolCallbackResponder.consent`, before `execute`
+///   ever runs), and creates parent directories before `write` (a fresh
+///   worktree may not have the target directory yet);
+/// - the app (`.app`) has no cache, `bash` just runs (already gated by
+///   `shellAllowed` upstream), `search` honors a `case_sensitive` param and
+///   prefixes its output with a match-count header, and `bash_status`/
+///   `bash_stop` get an explicit descriptive refusal rather than falling
+///   through to "unknown tool" (the pool worker is never offered those tools
+///   at all, so it never needs the distinction).
+```
+becomes:
+```swift
+/// The two call sites have real, deliberate policy differences, captured in
+/// `Policy` rather than dropped:
+/// - the pool worker (`.pool`) confines `bash` to a vetted-commands allowlist
+///   (not the app's `shellAllowed` boolean gate — that gate is enforced
+///   earlier, in `ToolCallbackResponder.consent`, before `execute` ever runs)
+///   and creates parent directories before `write` (a fresh worktree may not
+///   have the target directory yet);
+/// - the app (`.app`) `bash` just runs (already gated by `shellAllowed`
+///   upstream), `search` honors a `case_sensitive` param and prefixes its
+///   output with a match-count header, and `bash_status`/`bash_stop` get an
+///   explicit descriptive refusal rather than falling through to "unknown
+///   tool" (the pool worker is never offered those tools at all, so it never
+///   needs the distinction).
+///
+/// P24.2 (D2): reads no longer differ by policy — the `.pool` per-turn read
+/// cache was retired and both policies share one windowed read path.
+```
+
 - [ ] **Step 4: Update the `PoolOrchestrator.swift` comment**
 
 ```swift
@@ -268,7 +326,7 @@ becomes:
 - [ ] **Step 5: Run the suite to verify it passes**
 
 Run: `swift test --filter HostToolExecutorTests`
-Expected: PASS — the three new/updated tests pass; every pre-existing `.app` read test is unchanged and green.
+Expected: PASS — the four new/updated tests pass; every pre-existing `.app` read test is unchanged and green.
 
 - [ ] **Step 6: Run the full fast tier**
 
@@ -292,8 +350,8 @@ git commit -m "P24.2: retire the .pool readCache (unify reads on the windowed pa
 - Modify: `Sources/swiftstar-analyze/main.swift` (`ReadRequest`, `readRequests`, `cmdRereads`)
 
 **Interfaces:**
-- Consumes: `ToolParam`, `WorkerId`, `PoolWireParser`, `AgentWireParser` (existing SwiftStarKit types); the capture dirs `captures/20260830-104542-laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf` (treatment) and `captures/20260830-105947-laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf` (control).
-- Produces: `ReadWindowKey` (public struct: `startLine: Int?`, `maxLines: Int?`), `ReadRepeatReport` (+ nested `PathRow`, `RepeatedWindow`), `ReadRepeatCounter.summarize(_: [(path: String, window: ReadWindowKey)]) -> ReadRepeatReport`.
+- Consumes: `ToolParam`, `WorkerId`, `PoolWireParser`, `AgentWireParser`, `StatusSnapshot` (existing SwiftStarKit types); `ReadWindow.defaultLines(contextSize:)`; the capture dirs `captures/20260830-104542-laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf` (treatment) and `captures/20260830-105947-laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf` (control).
+- Produces: `ReadRepeatReport` (+ nested `PathRow`, `RepeatedWindow` with effective `startLine: Int`, `maxLines: Int`), `ReadRepeatCounter.summarize(_ reads: [(path: String, startLine: Int?, maxLines: Int?)], contextSize: Int) -> ReadRepeatReport`. There is **no** public `ReadWindowKey` — the effective key is internal to `summarize`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -305,58 +363,78 @@ import Testing
 
 struct ReadRepeatCounterTests {
     @Test func identicalWindowReaskedCountsAsSameWindowReRead() {
-        let reads = [
-            (path: "a.swift", window: ReadWindowKey(startLine: 250, maxLines: 90)),
-            (path: "a.swift", window: ReadWindowKey(startLine: 250, maxLines: 90)),
+        let reads: [(path: String, startLine: Int?, maxLines: Int?)] = [
+            (path: "a.swift", startLine: 250, maxLines: 90),
+            (path: "a.swift", startLine: 250, maxLines: 90),
         ]
-        let report = ReadRepeatCounter.summarize(reads)
+        let report = ReadRepeatCounter.summarize(reads, contextSize: 32768)
         #expect(report.calls == 2)
         #expect(report.distinctPairs == 1)
         #expect(report.sameWindowRepeats == 1)
         #expect(report.paths.count == 1)
         #expect(report.paths[0].repeatedWindows == [
-            ReadRepeatReport.RepeatedWindow(
-                window: ReadWindowKey(startLine: 250, maxLines: 90), count: 2)
+            ReadRepeatReport.RepeatedWindow(startLine: 250, maxLines: 90, count: 2)
         ])
     }
 
     @Test func distinctWindowsOnOnePathAreNotRepeats() {
         // The 255/90 -> 257/90 walk-forward from the treatment capture: two
         // different windows of one file are healthy, not a same-window re-read.
-        let reads = [
-            (path: "a.swift", window: ReadWindowKey(startLine: 255, maxLines: 90)),
-            (path: "a.swift", window: ReadWindowKey(startLine: 257, maxLines: 90)),
+        let reads: [(path: String, startLine: Int?, maxLines: Int?)] = [
+            (path: "a.swift", startLine: 255, maxLines: 90),
+            (path: "a.swift", startLine: 257, maxLines: 90),
         ]
-        let report = ReadRepeatCounter.summarize(reads)
+        let report = ReadRepeatCounter.summarize(reads, contextSize: 32768)
         #expect(report.sameWindowRepeats == 0)
         #expect(report.distinctPairs == 2)
         #expect(report.paths[0].repeatedWindows.isEmpty)
     }
 
-    @Test func bareReadIsItsOwnWindow() {
+    @Test func bareReadCollidesWithExplicitTierRead() {
+        // The load-bearing rule: a bare read and `start=1,max=500` deliver the
+        // same head of the file at the 32768 tier, so they are ONE window.
+        let reads: [(path: String, startLine: Int?, maxLines: Int?)] = [
+            (path: "a.swift", startLine: nil, maxLines: nil),
+            (path: "a.swift", startLine: 1, maxLines: 500),
+        ]
+        let report = ReadRepeatCounter.summarize(reads, contextSize: 32768)
+        #expect(report.distinctPairs == 1)
+        #expect(report.sameWindowRepeats == 1)
+    }
+
+    @Test func bareReReadsCountAsSameWindowRepeats() {
         // The control's "4x bare" signature: three whole-file re-asks are three
         // same-window re-reads; a windowed read of the same path is a distinct
         // window, not a repeat of the bare read.
-        let reads = [
-            (path: "a.swift", window: ReadWindowKey(startLine: nil, maxLines: nil)),
-            (path: "a.swift", window: ReadWindowKey(startLine: nil, maxLines: nil)),
-            (path: "a.swift", window: ReadWindowKey(startLine: nil, maxLines: nil)),
-            (path: "a.swift", window: ReadWindowKey(startLine: 1, maxLines: 80)),
+        let reads: [(path: String, startLine: Int?, maxLines: Int?)] = [
+            (path: "a.swift", startLine: nil, maxLines: nil),
+            (path: "a.swift", startLine: nil, maxLines: nil),
+            (path: "a.swift", startLine: nil, maxLines: nil),
+            (path: "a.swift", startLine: 1, maxLines: 80),
         ]
-        let report = ReadRepeatCounter.summarize(reads)
+        let report = ReadRepeatCounter.summarize(reads, contextSize: 32768)
         #expect(report.calls == 4)
         #expect(report.distinctPairs == 2)
         #expect(report.sameWindowRepeats == 2)
     }
 
     @Test func sameWindowOnDifferentPathsAreNotRepeats() {
-        let reads = [
-            (path: "a.swift", window: ReadWindowKey(startLine: 1, maxLines: 10)),
-            (path: "b.swift", window: ReadWindowKey(startLine: 1, maxLines: 10)),
+        let reads: [(path: String, startLine: Int?, maxLines: Int?)] = [
+            (path: "a.swift", startLine: 1, maxLines: 10),
+            (path: "b.swift", startLine: 1, maxLines: 10),
         ]
-        let report = ReadRepeatCounter.summarize(reads)
+        let report = ReadRepeatCounter.summarize(reads, contextSize: 32768)
         #expect(report.sameWindowRepeats == 0)
         #expect(report.distinctPairs == 2)
+    }
+
+    @Test func equalCountPathsSortByPathDeterministically() {
+        let reads: [(path: String, startLine: Int?, maxLines: Int?)] = [
+            (path: "b.swift", startLine: 1, maxLines: 10),
+            (path: "a.swift", startLine: 1, maxLines: 10),
+        ]
+        let report = ReadRepeatCounter.summarize(reads, contextSize: 32768)
+        #expect(report.paths.map(\.path) == ["a.swift", "b.swift"])
     }
 }
 ```
@@ -364,7 +442,7 @@ struct ReadRepeatCounterTests {
 - [ ] **Step 2: Run to verify the tests fail (compile error)**
 
 Run: `swift test --filter ReadRepeatCounterTests`
-Expected: FAIL — "cannot find type 'ReadWindowKey' in scope" (the new type does not exist yet). This is the expected first red.
+Expected: FAIL — "cannot find type 'ReadRepeatCounter' in scope" (the new type does not exist yet). This is the expected first red.
 
 - [ ] **Step 3: Create the pure counter**
 
@@ -373,27 +451,11 @@ Create `Sources/SwiftStarKit/ReadRepeatCounter.swift`:
 ```swift
 import Foundation
 
-/// The window identity of one `read` request, for same-window repeat counting.
-/// A re-read is only redundant when the *same* window of the same path is asked
-/// again; distinct windows on one path are a healthy walk, not waste.
-public struct ReadWindowKey: Hashable, Sendable, CustomStringConvertible {
-    public let startLine: Int?
-    public let maxLines: Int?
-
-    public init(startLine: Int?, maxLines: Int?) {
-        self.startLine = startLine
-        self.maxLines = maxLines
-    }
-
-    public var description: String {
-        "\(startLine.map(String.init) ?? "-")/\(maxLines.map(String.init) ?? "-")"
-    }
-}
-
 /// The same-window repeat count for a capture's `read` calls.
 public struct ReadRepeatReport: Equatable, Sendable {
     public struct RepeatedWindow: Equatable, Sendable {
-        public let window: ReadWindowKey
+        public let startLine: Int     // effective, ≥ 1
+        public let maxLines: Int      // effective, tier-resolved
         public let count: Int
     }
     public struct PathRow: Equatable, Sendable {
@@ -410,36 +472,49 @@ public struct ReadRepeatReport: Equatable, Sendable {
 
 /// P24.2 (D3): the same-window repeat count, extracted pure so it is fast-tier
 /// testable rather than buried in `swiftstar-analyze/main.swift`.
+///
+/// The key is the **effective** window: a `nil` `startLine` resolves to 1 and a
+/// `nil`/non-positive `maxLines` resolves to the engine's context tier, so a
+/// bare read and `start=1,max=<tier>` are the *same* window (they deliver the
+/// same head of the file). `raw`/`whole` are not part of the key — they change
+/// the rendering, not the covered lines.
 public enum ReadRepeatCounter {
-    /// One `(path, window)` per `read` call (`more` is not passed here — a
-    /// continuation is never a re-read). Returns the headline numbers and the
-    /// per-path window table. Pure and deterministic.
+    /// `read` calls only (`more` is a continuation, never a re-read — the
+    /// caller filters it). Pure and deterministic: the per-path table is sorted
+    /// by calls desc then path asc, so equal-count paths do not scramble.
     public static func summarize(
-        _ reads: [(path: String, window: ReadWindowKey)]
+        _ reads: [(path: String, startLine: Int?, maxLines: Int?)],
+        contextSize: Int
     ) -> ReadRepeatReport {
-        var seen = Set<String>()
-        var byPath: [String: (calls: Int, windows: [ReadWindowKey: Int])] = [:]
-        for (path, window) in reads {
-            let start = window.startLine.map(String.init) ?? "-"
-            let max = window.maxLines.map(String.init) ?? "-"
-            seen.insert("\(path)\u{0}\(start)\u{0}\(max)")
+        struct Key: Hashable { let path: String; let start: Int; let max: Int }
+        let tier = ReadWindow.defaultLines(contextSize: contextSize)
+        var seen = Set<Key>()
+        var byPath: [String: (calls: Int, windows: [Key: Int])] = [:]
+        for (path, startLine, maxLines) in reads {
+            let start = max(startLine ?? 1, 1)
+            let max = maxLines.flatMap { $0 > 0 ? $0 : nil } ?? tier
+            let key = Key(path: path, start: start, max: max)
+            seen.insert(key)
             byPath[path, default: (0, [:])].calls += 1
-            byPath[path, default: (0, [:])].windows[window, default: 0] += 1
+            byPath[path, default: (0, [:])].windows[key, default: 0] += 1
         }
         let rows: [ReadRepeatReport.PathRow] = byPath
             .map { entry in
                 let (path, data) = entry
                 let repeated = data.windows
                     .filter { $0.value > 1 }
-                    .map { ReadRepeatReport.RepeatedWindow(window: $0.key, count: $0.value) }
-                    .sorted { ($0.window.startLine ?? 0, $0.window.maxLines ?? 0)
-                              < ($1.window.startLine ?? 0, $1.window.maxLines ?? 0) }
+                    .map { ReadRepeatReport.RepeatedWindow(
+                        startLine: $0.key.start, maxLines: $0.key.max, count: $0.value) }
+                    .sorted { ($0.startLine, $0.maxLines) < ($1.startLine, $1.maxLines) }
                 return ReadRepeatReport.PathRow(
                     path: path, calls: data.calls,
                     distinctWindows: data.windows.count,
                     repeatedWindows: repeated)
             }
-            .sorted { $0.calls > $1.calls }
+            .sorted {
+                if $0.calls != $1.calls { return $0.calls > $1.calls }
+                return $0.path < $1.path
+            }
         return ReadRepeatReport(
             calls: reads.count,
             distinctPairs: seen.count,
@@ -452,29 +527,38 @@ public enum ReadRepeatCounter {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --filter ReadRepeatCounterTests`
-Expected: PASS — 4/4.
+Expected: PASS — 6/6.
 
 - [ ] **Step 5: Rewire `main.swift`**
 
 Three edits in `Sources/swiftstar-analyze/main.swift`:
 
-(a) `ReadRequest` struct and its doc comment — replace `windowed: Bool` with the window identity:
+(a) `ReadRequest` struct and its doc comment — carry raw params plus an `isMore` flag:
 
 ```swift
 /// A `read`/`more` tool_request reduced to what the measurement cares about:
-/// the worker (which session read it), the path (what it read), and the window
-/// identity for same-window repeat counting (P24.2, D3). A `more` has no window
-/// — it is a continuation, never a re-read — so its `window` is `nil`.
+/// the worker (which session read it), the path (what it read), and the raw
+/// window parameters for same-window counting (P24.2, D3). `isMore` marks a
+/// continuation, which is attributed to a path but never counted as a re-read.
 struct ReadRequest {
     let worker: WorkerId
     let path: String
-    let window: ReadWindowKey?
+    let startLine: Int?    // nil for a bare read
+    let maxLines: Int?     // nil for a bare read
+    let isMore: Bool
 }
 ```
 
-(b) `record` inside `readRequests` — parse `start_line`/`max_lines` into the key:
+(b) `readRequests` — capture `ctx_size` from `status` events and return it alongside the reads:
 
 ```swift
+func readRequests(_ dir: URL) -> (contextSize: Int, reads: [ReadRequest]) {
+    guard let text = try? String(contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8) else { return (0, []) }
+    let lines = text.split(whereSeparator: \.isNewline).map(String.init)
+    var out: [ReadRequest] = []
+    var lastPath: [WorkerId: String] = [:]
+    var ctxSize = 0
+
     func record(worker: WorkerId, name: String, params: [ToolParam]) {
         var path = ""
         var startLine: Int? = nil
@@ -487,26 +571,53 @@ struct ReadRequest {
         if path.isEmpty { path = lastPath[worker] ?? "" }
         guard !path.isEmpty else { return }
         lastPath[worker] = path
-        let window: ReadWindowKey? = (name == "more")
-            ? nil
-            : ReadWindowKey(startLine: startLine, maxLines: maxLines)
-        out.append(ReadRequest(worker: worker, path: path, window: window))
+        out.append(ReadRequest(worker: worker, path: path,
+                               startLine: startLine, maxLines: maxLines,
+                               isMore: name == "more"))
     }
+
+    var pooled = PoolWireParser()
+    for line in lines {
+        guard let e = pooled.feed(line) else { continue }
+        if case .status(let s) = e.event, ctxSize == 0 { ctxSize = s.ctxSize }
+        guard case .toolRequest(_, let name, let params) = e.event,
+              name == "read" || name == "more" else { continue }
+        record(worker: e.worker, name: name, params: params)
+    }
+    if !out.isEmpty { return (ctxSize, out) }
+
+    // Single-session fallback: a `swiftstar-drive` capture carries no
+    // worker-tagged envelopes, so `PoolWireParser` sees nothing in it. Before
+    // this, the committed verb could not analyse the committed capture
+    // program's own output — the gap that made P24.1's measurement reach for a
+    // one-off script. Everything is attributed to the orchestrator.
+    var plain = AgentWireParser()
+    for line in lines {
+        guard let e = plain.feed(line) else { continue }
+        if case .status(let s) = e, ctxSize == 0 { ctxSize = s.ctxSize }
+        guard case .toolRequest(_, let name, let params) = e,
+              name == "read" || name == "more" else { continue }
+        record(worker: .orchestrator, name: name, params: params)
+    }
+    return (ctxSize, out)
+}
 ```
 
-(c) `cmdRereads` and its doc comment — report the same-window count:
+(c) `cmdRereads` and its doc comment — report the effective-window count:
 
 ```swift
 /// P24.2 (D3) read evidence: how many `read` calls each session made, how many
-/// were same-window re-reads — the *same* `(path, start_line, max_lines)` asked
-/// again — and the top offenders, with repeated windows listed per path.
+/// were same-window re-reads — the *same effective* `(path, start_line,
+/// max_lines)` asked again — and the top offenders, with repeated windows
+/// listed per path.
 ///
-/// Same-window is the number that decides the read-guard question; the old
-/// same-path count (`calls - distinct paths`) labelled the model's healthy walk
-/// across a file as redundant. `more` is attributed to a path but never counted
-/// as a re-read (a continuation is not a repeat).
+/// Same-window of the *effective* window is the number that decides the
+/// read-guard question: a bare read and `start=1,max=<tier>` are one window,
+/// not two. The old same-path count (`calls - distinct paths`) labelled the
+/// model's healthy walk across a file as redundant. `more` is attributed to a
+/// path but never counted as a re-read (a continuation is not a repeat).
 func cmdRereads(_ dir: URL) {
-    let reads = readRequests(dir)
+    let (ctxSize, reads) = readRequests(dir)
     guard !reads.isEmpty else {
         print("no read/more tool_requests in \(dir.lastPathComponent)")
         return
@@ -514,31 +625,30 @@ func cmdRereads(_ dir: URL) {
     let workers = Set(reads.map { $0.worker }).sorted()
     for worker in workers {
         let mine = reads.filter { $0.worker == worker }
-        let moreCount = mine.filter { $0.window == nil }.count
+        let moreCount = mine.filter { $0.isMore }.count
         let report = ReadRepeatCounter.summarize(
-            mine.compactMap { r in r.window.map { (path: r.path, window: $0) } })
+            mine.compactMap { $0.isMore ? nil : (path: $0.path, startLine: $0.startLine, maxLines: $0.maxLines) },
+            contextSize: ctxSize)
         let moreSuffix = moreCount > 0 ? " [\(moreCount) more call(s)]" : ""
         print("worker \(worker.rawValue): \(report.calls) read call(s), \(report.distinctPairs) distinct (path, window) pair(s) — \(report.sameWindowRepeats) same-window re-read(s)\(moreSuffix)")
         for row in report.paths where row.calls > 1 {
             print(String(format: "  %3d  %@  [%d distinct window(s)]",
                          row.calls, row.path, row.distinctWindows))
             for item in row.repeatedWindows {
-                print("          \(item.count)x  start_line=\(item.window.startLine.map(String.init) ?? "-") max_lines=\(item.window.maxLines.map(String.init) ?? "-")")
+                print("          \(item.count)x  start_line=\(item.startLine) max_lines=\(item.maxLines)")
             }
         }
     }
 }
 ```
 
-Also update the `readRequests` doc comment's last sentence — it still says reads are "flagged windowed". Replace that sentence with: *"Windowed reads carry their `(start_line, max_lines)` identity for same-window counting; `more` carries `nil`."*
-
 - [ ] **Step 6: Verify against both committed captures**
 
 Run: `swift run swiftstar-analyze rereads 20260830-104542-laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf`
-Expected: `worker 0: 16 read call(s), 16 distinct (path, window) pair(s) — 0 same-window re-read(s)` — the treatment capture's 8 distinct `AgentView.swift` windows are no longer called "redundant".
+Expected: `worker 0: 16 read call(s), 15 distinct (path, window) pair(s) — 1 same-window re-read(s)` — the bare read and the raw `start=1,max=500` of `AgentView.swift` collapse to one effective window; the 8 healthy distinct windows are no longer called "redundant".
 
 Run: `swift run swiftstar-analyze rereads 20260830-105947-laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf`
-Expected: `worker 0: 11 read call(s), 8 distinct (path, window) pair(s) — 3 same-window re-read(s) [1 more call(s)]` — the control's three bare whole-file re-asks are the same-window repeats.
+Expected: `worker 0: 11 read call(s), 8 distinct (path, window) pair(s) — 3 same-window re-read(s) [1 more call(s)]` — the control's four bare whole-file re-asks are 3 same-window repeats (4 asks of one effective window).
 
 - [ ] **Step 7: Run the full fast tier**
 
@@ -549,7 +659,7 @@ Expected: all green.
 
 ```bash
 git add Sources/SwiftStarKit/ReadRepeatCounter.swift Tests/SwiftStarKitTests/ReadRepeatCounterTests.swift Sources/swiftstar-analyze/main.swift
-git commit -m "P24.2: rereads reports same-window re-reads, not same-path"
+git commit -m "P24.2: rereads reports same-window re-reads of the effective window"
 ```
 
 ---
@@ -557,7 +667,7 @@ git commit -m "P24.2: rereads reports same-window re-reads, not same-path"
 ### Task 3: Record the decisions in the docs
 
 **Files:**
-- Modify: `ROADMAP.md` (P24 status cell)
+- Modify: `ROADMAP.md` (P24 status cell **and** description cell)
 - Modify: `docs/superpowers/specs/2026-08-30-p24-1-window-honoring-reads-design.md` (scope pointers)
 - Modify: `docs/superpowers/specs/2026-08-30-p24-1-read-guard-design.md` (resolution pointer)
 
@@ -572,10 +682,44 @@ Replace:
 with:
 
 ```
-**P24.1 CLOSED 2026-08-30** (merged to main, 799 tests; paired control reproduced the loop; numeric falsifier post-hoc; protocol committed). **P24.2 decided 2026-08-30** — the read-guard does not return (0 same-window re-reads post-windowing, 3 in the control; every benefit case empty or self-contradictory) and the `.pool` `readCache` is retired (reads unify on the windowed path — an agenttest-instrument change, recorded for the cleanup cycle's keep/drop/port table). See [`2026-08-30-p24-2-read-guard-redecision-design.md`](docs/superpowers/specs/2026-08-30-p24-2-read-guard-redecision-design.md). **Only the instrument-reconciliation cleanup cycle remains**
+**P24.1 CLOSED 2026-08-30** (merged to main, 799 tests; paired control reproduced the loop; numeric falsifier post-hoc; protocol committed). **P24.2 decided 2026-08-30** — the read-guard does not return (1 same-window re-read post-windowing — a bare read + raw `start=1,max=500` of one file — vs 3 in the control; every *withholding* benefit case is empty or self-contradictory) and the `.pool` `readCache` is retired (reads unify on the windowed path — an agenttest-instrument change recorded for the cleanup cycle's keep/drop/port table, with a re-baseline note covering all prior `.pool` measurements). See [`2026-08-30-p24-2-read-guard-redecision-design.md`](docs/superpowers/specs/2026-08-30-p24-2-read-guard-redecision-design.md). **Only the instrument-reconciliation cleanup cycle remains**
 ```
 
-- [ ] **Step 2: Window-honoring spec — resolve the two deferred scope bullets**
+- [ ] **Step 2: ROADMAP P24 description cell — mark the guard and `readCache` retired**
+
+Three replacements in the P24 row's Direction cell:
+
+(a) The tool-list guard entry:
+
+```
+**the `read`-guard** (`don't-re-read`: hash+mtime every file, answer an unchanged re-read "unchanged since turn N" — the 1809 capture's direct fix, absorbed from the Context-economy backlog entry whose P9 reopen condition shipped)
+```
+becomes:
+```
+**~~the `read`-guard~~** (retired 2026-08-30 by P24.2 — window-honoring reads took its slot; see the status cell)
+```
+
+(b) The P24.2 scheduling sentence:
+
+```
+**P24.2** re-decides the read-guard *and* the pool worker's `readCache` together against a measurement taken after windowing — one bug class: a hash-keyed "unchanged" answer is dishonest whenever delivery is partial.
+```
+becomes:
+```
+**P24.2 decided 2026-08-30** — the re-decision retired the read-guard and retired the pool worker's `readCache` (one bug class: a hash-keyed "unchanged" answer is dishonest whenever delivery is partial); see the status cell.
+```
+
+(c) The "P24.1 did NOT settle" sentence's forward reference:
+
+```
+and the `.pool` `readCache` branch keeps both its whole-file delivery and its hash-keyed "unchanged" dishonesty — P24.2 decides those together with the read-guard, one bug class.
+```
+becomes:
+```
+and the `.pool` `readCache` branch kept both its whole-file delivery and its hash-keyed "unchanged" dishonesty — P24.2 retired both (guard and cache), one bug class.
+```
+
+- [ ] **Step 3: Window-honoring spec — resolve the two deferred scope bullets**
 
 In `docs/superpowers/specs/2026-08-30-p24-1-window-honoring-reads-design.md`, the **Out** section's two bullets end with "reopens as **P24.2**…" and "reopens with P24.2, which decides both together." Append to the end of each bullet:
 
@@ -585,18 +729,25 @@ In `docs/superpowers/specs/2026-08-30-p24-1-window-honoring-reads-design.md`, th
 the guard does not return, and the `readCache` is retired.)
 ```
 
-- [ ] **Step 3: Superseded read-guard spec — point at the resolution**
+Also resolve the D5 eviction deferral — its last sentence "an eviction rule is P24.2's to decide alongside the rest of the read state" gets:
+
+```
+(→ decided 2026-08-30: no eviction rule — UUID worktree roots are never
+reused, so the map's growth is bounded and harmless.)
+```
+
+- [ ] **Step 4: Superseded read-guard spec — point at the resolution**
 
 In `docs/superpowers/specs/2026-08-30-p24-1-read-guard-design.md`, the "Why this was withdrawn" paragraph ends with "The read guard is not cancelled — it moves to **P24.2**, to be re-decided against a measurement taken after windowing lands, together with the pool `readCache`, which has the same bug class." Append:
 
 ```
 Resolved 2026-08-30: the re-decision
 ([`2026-08-30-p24-2-read-guard-redecision-design.md`](2026-08-30-p24-2-read-guard-redecision-design.md))
-retired the guard (0 same-window re-reads post-windowing) and retired the
-`readCache`.
+retired the guard (1 same-window re-read post-windowing, and it is a raw re-ask
+a hash-keyed guard would mis-handle) and retired the `readCache`.
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add ROADMAP.md docs/superpowers/specs/2026-08-30-p24-1-window-honoring-reads-design.md docs/superpowers/specs/2026-08-30-p24-1-read-guard-design.md
