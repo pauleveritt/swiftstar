@@ -216,7 +216,22 @@ func cmdSummary(_ dir: URL) {
         let gen = work.generatedTokens
         let ctx = outcome?.ctxUsed ?? row.statuses.last?.ctxUsed ?? 0
         let tools = outcome?.toolCalls.count ?? 0
-        print(String(format: "  %2d  decode %@ tok/s  tokens %d  ctx %d  tools %d", i + 1, avg, gen, ctx, tools))
+        // The turn's own duration, not the capture's wire span: an app capture
+        // opens the wire at engine start and the turn does not begin until the
+        // human has finished typing, where a drive capture submits at once.
+        // Reporting the span as a turn time overstates an app turn and invents
+        // a difference when the two harnesses are compared (see TurnSpan).
+        var timing = ""
+        if let span = TurnSpan.measure(row.statuses) {
+            timing = String(format: "  turn %.1fs", span.workSeconds)
+            // Never silently drop it — a reader handed only the corrected
+            // number cannot tell that a correction happened.
+            if span.leadInSeconds >= 0.05 {
+                timing += String(format: " (+%.1fs pre-prompt)", span.leadInSeconds)
+            }
+        }
+        print(String(format: "  %2d  decode %@ tok/s  tokens %d  ctx %d  tools %d%@",
+                     i + 1, avg, gen, ctx, tools, timing))
     }
     let workers = workerStatusCounts(dir)
     if !workers.isEmpty {
