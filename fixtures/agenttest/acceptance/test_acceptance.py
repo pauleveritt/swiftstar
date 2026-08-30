@@ -20,6 +20,9 @@ import models
 from models import Complaint
 
 client = TestClient(app)
+client.__enter__()  # run FastAPI lifespan/startup before SEED_COMPLAINTS
+# snapshots below — otherwise seeding via a startup hook (a valid reading of
+# both specs' "module-level list" wording) looks identical to an empty store.
 
 TAGLINE = "Come in. Sit down. Tell us about your human."
 SEED_COMPLAINT = "Scope creep never ends."
