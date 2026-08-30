@@ -210,8 +210,8 @@ silently changed.
    `pyproject.toml` → `uv run pytest`; Swift wins in mixed repos. The selector is
    charset-validated (`[A-Za-z0-9_./-]`, reject everything else) and appended.
 5. `SubprocessRunner.run`; timeout 300s.
-6. Full stdout+stderr written to `.swiftstar/runs/test-<sha256>.log` (`.json`
-   when the reporter emitted JSON).
+6. Full stdout+stderr written to `.swiftstar/runs/test-<sha256>.log` (the artifact is
+   always `.log` — it is the raw combined output, not a JSON document).
 7. `CommandOutput` → pure `TestDigest.digest` → `ToolDigest`.
 8. Assemble `ToolExecutionResult{text: summary, exitStatus, outputDigest:
    sha256(stdout), validationRan: true}`.
@@ -234,9 +234,11 @@ tool at write time (deterministic, cheap).
 
 One fork-ledger row:
 
-- Add `test` + `lint` schemas to the shared `agent_glm_tool_schemas` blob
-  (GLM/Laguna/Mellum) and to the DSML block (DeepSeek), following the `dispatch`
-  precedent (fork divergence #12: advertise only under `--host-tools`).
+- Add `test` + `lint` schema constants and append them in `agent_schemas_for`
+  under `--host-tools`, following the `dispatch` precedent exactly (fork
+  divergence #12). The DSML/DeepSeek block is **untouched** — the same way
+  `dispatch` itself is handled; DeepSeek visibility is a separate decision,
+  flagged here and not decided.
 - Tweak the `bash` schema description to say output is digested.
 - Golden recapture + provenance note (standing rule: every submodule bump owes a
   recapture).
@@ -248,7 +250,7 @@ One fork-ledger row:
 |---|---|---|---|
 | 1 | Pure core: `CommandOutput`, `ToolDigest`, `ProjectCommandResolver`, `TestDigest` (XCTest + pytest parsers), `RuffDigest`, `BashDigest`, `ToolCallbackResponder.deterministicTools` | fast tier green, **red first** | none |
 | 2 | Wiring: `CommandToolRunner` (run/archive/assemble), `HostToolExecutor` `test`/`lint` cases + `bash` → `BashDigest` | integration tests green; artifact, timeout, not-installed, consent pins | low |
-| 3 | Engine patch: `test`/`lint` schemas + `bash` description, fork-ledger row, golden recapture, schema-presence assertion | recapture clean; schema assertion green | medium (engine change) |
+| 3 | Engine patch: `test`/`lint` schema constants + `agent_schemas_for` append (dispatch precedent; DSML untouched) + `bash` description, fork-ledger row, golden recapture, schema-presence assertion | recapture clean; schema assertion green | medium (engine change) |
 | 4 | Measurement: paired-bill `swiftstar-analyze diff` replay vs control arm, pre-registered falsifier, research note | note committed with the falsifier answered either way | the cycle's one live step |
 
 ## Tests
