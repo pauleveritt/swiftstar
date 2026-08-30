@@ -14,7 +14,7 @@ Backlog, not into the current phase.*
 
 **P25: DeepSeek V4 Flash — moved up (2026-08-27):** the flagship rung is wanted now; implementation is in progress (offline cycles 1–3, 4a are safe unattended; 4b shipped and closed 2026-08-28 (see the row); cycle 5 live run skipped by decision; cycle 6 SSD deferred). See the P25 row and its design doc.
 
-**Orchestrate-loop generalization arm 3 complete (2026-08-30) — 6/9 = 67% [35%, 88%], band 2 ("signal, underpowered"), not the ≥8/10 that would confirm generalization.** Both prior arms' harness bugs (missing `projectContext`, the degeneracy-guard false positive) were verified live-fixed — neither recurred in any of the 10 captures. Two of three graded failures share one content signature (form off the board, wrong markup, dropped seed text); the third (seed 223) is flagged ambiguous, not a clean model failure — see the Evaluation-and-measurement backlog entry for the full breakdown and what a fourth arm needs before it can pool with Block A's 93%.
+**Orchestrate-loop generalization arm 3 complete (2026-08-30) — 6/9 = 67% [35%, 88%], band 2 ("signal, underpowered"), not the ≥8/10 that would confirm generalization.** Both prior arms' harness bugs (missing `projectContext`, the degeneracy-guard false positive) were verified live-fixed — neither recurred in any of the 10 captures. Two of three graded failures share one content signature (form off the board, wrong markup, dropped seed text); the third (seed 223) was flagged ambiguous rather than a clean model failure, and **its cause is now fixed at the oracle** (`test_acceptance.py` didn't run FastAPI's lifespan before snapshotting seed data, so startup-hook seeding graded as an empty board) — verified against seed 223's own capture (13/13 post-fix vs. 2/13 pre-fix) and against the reference solution (still 13/13, no regression for static seeding). **A fourth arm still needs to run live under the fixed oracle before anything pools with Block A's 93%** — this was a code fix, not a re-measurement. See the Evaluation-and-measurement backlog entry for the full breakdown.
 
 **Mellum is INACTIVE until 2026-09-05 (2026-08-29 decision).** No Mellum measurement, tuning, or fixture work for one week — the line is parked, not cancelled. Why now: 2026-08-29 overturned P17's 15/17 (real editing rate ~68% pooled, and the flat-depth-profile claim is dead), which leaves Mellum's competence **contested rather than settled** — and a full day of arms chasing it returned mostly harness and engine defects rather than model facts. Parking it stops that loop. **What this defers with it:** the `RepairLoop` zero-heading abort (its only validation surface is the Mellum fixture tier), the "talks itself out of the diagnosis" probe, and the two data-integrity flags — all Backlog entries below, none blocked on anything else. **What it does not touch:** Laguna S work, P24, P25, or P26's remaining hygiene, none of which need Mellum. **When it reopens, P18's job has changed** — see the note in its row.
 
@@ -777,12 +777,23 @@ group's order is not a priority order.
   *What this cannot conclude:* anything about tasks other than `roadmap` and
   `roadmap-user-story`; a precise rate at n=10 (the CI spans 35–88 points);
   whether other directive-vs-phase-loop gaps exist beyond the two now fixed.
-  *Reopens as:* a fourth arm with 223's ambiguity resolved (either fix the
-  acceptance oracle to accept startup-hook seeding, or make the user-story
-  spec explicit about import-time seeding, so a future cell can't fail on
-  spec/grader mismatch) and the directive-cell failure-detail gap closed
-  first, then a larger n on `roadmap-user-story` alone before pooling with
-  Block A. Nothing else is blocked on it.
+  **223's ambiguity resolved 2026-08-30**, oracle side:
+  [`test_acceptance.py`](fixtures/agenttest/acceptance/test_acceptance.py)'s
+  `client = TestClient(app)` now calls `client.__enter__()` before
+  `SEED_COMPLAINTS` snapshots the store, so a startup-hook seeder (seed 223's
+  own pattern, and the idiom its own `tests/test_app.py` used independently)
+  is no longer graded as an empty board. Verified by replaying seed 223's
+  actual capture files against the fixed oracle: **13/13**, where the
+  pre-fix oracle scored 2/13 failing on the identical solution; the
+  reference (static-seeding) solution still scores 13/13, so this is not a
+  regression for the other seeding style. **This is a code fix, not a live
+  measurement** — no cell has been re-run under it, and seed 223's own
+  cell is not retroactively reclassified as a pass in the results table
+  above (append-only). *Reopens as:* a fourth arm on `roadmap-user-story`
+  (fresh seeds, disjoint from 201–230) run under the fixed oracle — ideally
+  once the directive-cell failure-detail gap is also closed so causes don't
+  again require manual wire-replay — before pooling anything with Block A.
+  Nothing else is blocked on it.
 
 - **The largest single failure population is not the one the campaign chased
   (2026-08-29).** The 2026-08-29 failure classification of 24 non-passing
