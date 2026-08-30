@@ -197,6 +197,33 @@ struct HostToolExecutorTests {
             .text.contains("lines 1-200 of 200\n"), "reset clears per-root overrides")
     }
 
+    /// End-to-end: an over-budget single line is fully recoverable by paging
+    /// with `more`, and the paging terminates.
+    @Test func moreWalksThroughAnOverBudgetLine() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        try (String(repeating: "z", count: 9000) + "\ntail\n")
+            .write(to: ws.appendingPathComponent("long.txt"), atomically: true, encoding: .utf8)
+        // 4096 ctx -> 2048-byte budget, so the 9000-byte line needs several passes.
+        let executor = HostToolExecutor(policy: .app, contextSize: 4096)
+
+        // Count the payload only: the header carries the workspace path, and a
+        // macOS temp path can itself contain "z".
+        func payloadZs(_ text: String) -> Int {
+            text.drop(while: { $0 != "\n" }).filter { $0 == "z" }.count
+        }
+        var zs = payloadZs(executor.execute(request("read", [], workspace: ws, path: "long.txt")).text)
+        var sawTail = false
+        for _ in 0..<20 {
+            let r = executor.execute(request("more", [], workspace: ws, path: nil))
+            guard r.ok else { break }
+            zs += payloadZs(r.text)
+            if r.text.contains("tail") { sawTail = true; break }
+        }
+        #expect(zs == 9000, "every byte of the long line must be reachable (got \(zs))")
+        #expect(sawTail, "paging must eventually pass the long line and reach line 2")
+    }
+
     /// Sibling success for the two refusal tests above (BRIEF rule 4).
     @Test func readOutsideGrantStillRefusesAndInsideStillServes() throws {
         let ws = try makeWorkspace()

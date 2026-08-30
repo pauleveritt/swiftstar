@@ -180,14 +180,58 @@ struct ReadWindowTests {
 
     // MARK: - D6: progress is guaranteed
 
-    @Test func aSingleOverBudgetLineIsTruncatedInBandAndAdvances() {
+    @Test func aSingleOverBudgetLineIsTruncatedInBandAndStaysTheContinuation() {
         let huge = String(repeating: "z", count: 9000) + "\nnext\n"
         let r = ReadWindow.render(text: huge, path: "a.txt",
             request: .init(startLine: 1), defaultLines: 500, byteBudget: 2000)
         #expect(r.text.utf8.count <= 2000)
         #expect(r.text.contains("[line 1 truncated at "))
         #expect(r.lastLine == 1)
-        #expect(r.nextLine == 2, "continue_offset must advance or `more` loops forever")
+        // The window ended INSIDE line 1, so line 1 is still where to continue.
+        // Advancing to line 2 here is what made the rest of the line
+        // unreachable by any read/more combination.
+        #expect(r.nextLine == 1)
+        #expect((r.nextByteOffset ?? 0) > 0, "progress must be recorded or `more` loops forever")
+    }
+
+    /// The rest of an over-budget line must be reachable. Before this, a line
+    /// longer than the budget was truncated in-band and `nextLine` advanced
+    /// past it (or, if it was the last line, went nil with an EOF-shaped
+    /// header) — the remainder unreachable by any read/more combination. That
+    /// is the original P24.1 bug in miniature; minified files are the realistic
+    /// victim.
+    @Test func anOverBudgetLineIsReachableInFullByPaging() {
+        let huge = String(repeating: "z", count: 9000) + "\nnext\n"
+        var offset = 0, chunks = 0, recovered = 0
+        var line = 1
+        while chunks < 20 {
+            let r = ReadWindow.render(text: huge, path: "a.txt",
+                request: .init(startLine: line, maxLines: 1, startByteOffset: offset),
+                defaultLines: 500, byteBudget: 2000)
+            #expect(r.text.utf8.count <= 2000)
+            chunks += 1
+            // Count the z's actually delivered in this chunk.
+            recovered += r.text.filter { $0 == "z" }.count
+            guard let next = r.nextLine else { break }
+            if next == line, let off = r.nextByteOffset {
+                #expect(off > offset, "a mid-line continuation must advance")
+                offset = off
+            } else {
+                break   // moved past line 1
+            }
+            line = next
+        }
+        #expect(recovered == 9000, "every byte of the long line must be reachable (got \(recovered))")
+        #expect(chunks > 1, "a 9000-byte line cannot fit one 2000-byte budget")
+    }
+
+    /// A truncated *final* line must not report itself as EOF.
+    @Test func aTruncatedFinalLineStillOffersAContinuation() {
+        let r = ReadWindow.render(text: String(repeating: "z", count: 9000) + "\n",
+            path: "a.txt", request: .init(), defaultLines: 500, byteBudget: 2000)
+        #expect(r.nextLine == 1, "still on line 1 — the rest of it is unread")
+        #expect((r.nextByteOffset ?? 0) > 0)
+        #expect(r.text.contains("continue_offset"), "must not use the EOF header shape")
     }
 
     // MARK: - raw mode (ds4_agent.c:8138-8143)

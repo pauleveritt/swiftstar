@@ -88,7 +88,7 @@ public final class HostToolExecutor: @unchecked Sendable {
     /// worker (`AgentPoolTurnLoop.swift:138`), so a single scalar would let a
     /// worker's read retarget the main agent's next `more`. Workers run in
     /// per-turn UUID worktrees, so roots are disjoint for free.
-    private var continuations: [String: (path: String, nextLine: Int, bare: Bool)] = [:]
+    private var continuations: [String: (path: String, nextLine: Int, bare: Bool, byteOffset: Int)] = [:]
     private var contextSize: Int
     /// P24.1: per-root context override. The engine tiers its read chunk off
     /// **the worker's** effective context (`agent_read_default_lines` takes
@@ -244,7 +244,8 @@ public final class HostToolExecutor: @unchecked Sendable {
             windowRequest = ReadWindowRequest(
                 startLine: c.nextLine,
                 maxLines: intParam(request, "count"),
-                whole: false, raw: c.bare)
+                whole: false, raw: c.bare,
+                startByteOffset: c.byteOffset)
         } else {
             guard let p = HostToolConfinement.realPath(request) else {
                 return ToolExecutionResult(ok: false, text: "error: path is outside the workspace grant")
@@ -265,7 +266,9 @@ public final class HostToolExecutor: @unchecked Sendable {
             // Mirrors agent_worker_set_more (ds4_agent.c:8167-8170): record on
             // a truncated read, CLEAR at EOF so a later `more` refuses honestly.
             if let next = window.nextLine {
-                continuations[root] = (path: path, nextLine: next, bare: windowRequest.raw)
+                continuations[root] = (path: path, nextLine: next,
+                                       bare: windowRequest.raw,
+                                       byteOffset: window.nextByteOffset ?? 0)
             } else {
                 continuations.removeValue(forKey: root)
             }

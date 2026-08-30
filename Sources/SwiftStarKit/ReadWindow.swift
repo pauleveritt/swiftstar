@@ -20,13 +20,19 @@ public struct ReadWindowRequest: Equatable, Sendable {
     public let maxLines: Int?
     public let whole: Bool
     public let raw: Bool
+    /// Byte offset **within `startLine`** to resume from. Non-zero only when a
+    /// previous window truncated that line mid-way because it alone exceeded
+    /// the budget; it is how the rest of an over-long line stays reachable.
+    public let startByteOffset: Int
 
     public init(startLine: Int = 1, maxLines: Int? = nil,
-                whole: Bool = false, raw: Bool = false) {
+                whole: Bool = false, raw: Bool = false,
+                startByteOffset: Int = 0) {
         self.startLine = startLine
         self.maxLines = maxLines
         self.whole = whole
         self.raw = raw
+        self.startByteOffset = max(0, startByteOffset)
     }
 }
 
@@ -40,12 +46,17 @@ public struct ReadWindowResult: Equatable, Sendable {
     /// body is empty).
     public let lastLine: Int
     public let totalLines: Int
+    /// When non-nil, `nextLine` is the line already partly delivered and this
+    /// is the byte offset within it to resume from.
+    public let nextByteOffset: Int?
 
-    public init(text: String, nextLine: Int?, lastLine: Int, totalLines: Int) {
+    public init(text: String, nextLine: Int?, lastLine: Int, totalLines: Int,
+                nextByteOffset: Int? = nil) {
         self.text = text
         self.nextLine = nextLine
         self.lastLine = lastLine
         self.totalLines = totalLines
+        self.nextByteOffset = nextByteOffset
     }
 }
 
@@ -86,31 +97,48 @@ public enum ReadWindow {
         // Reserve the worst-case header so the body budget cannot overflow the
         // total. The real header is never longer than this one.
         let reserved = request.raw
-            ? bareNote(lastLine: total, total: total, count: requested).utf8.count
-            : header(path: path, start: startIdx + 1, end: total,
-                     total: total, truncated: true, count: requested).utf8.count
+            ? bareNote(lastLine: total, total: total, continueAt: total + 1,
+                       count: requested).utf8.count
+            : header(path: path, start: startIdx + 1, end: total, total: total,
+                     continueAt: total + 1, truncated: true, count: requested).utf8.count
         let bodyBudget = max(0, byteBudget - reserved)
 
         var body = ""
         var used = 0
         var endIdx = startIdx
+        // Set when the first line was delivered only in part: the byte offset
+        // within it to resume from. The rest of an over-long line has to stay
+        // reachable, or the window budget recreates the very bug P24.1 fixes
+        // (content the model can ask for and never receive).
+        var partialResume: Int?
+
         while endIdx < ceilingEnd {
+            // Only the first line of the window can carry a resume offset.
+            let dropped = endIdx == startIdx ? request.startByteOffset : 0
+            let content = dropped > 0 ? utf8Drop(lines[endIdx], bytes: dropped) : lines[endIdx]
             let rendered = request.raw
-                ? lines[endIdx] + "\n"
-                : "\(endIdx + 1) \(lines[endIdx])\n"
+                ? content + "\n"
+                : "\(endIdx + 1) \(content)\n"
             let cost = rendered.utf8.count
             if used + cost > bodyBudget {
-                // D6: always make progress. A first line that alone exceeds the
-                // budget is truncated in-band rather than dropped, so
-                // continue_offset can advance and `more` cannot loop forever.
+                // D6: always make progress. A line that alone exceeds the budget
+                // is truncated in-band and becomes the continuation point, so
+                // the next `more` resumes inside it rather than skipping it.
                 if endIdx == startIdx {
-                    let marker = "[line \(endIdx + 1) truncated at "
-                    let room = max(0, bodyBudget - marker.utf8.count - 32)
-                    let cut = utf8Prefix(lines[endIdx], budget: room)
-                    body += (request.raw ? cut : "\(endIdx + 1) \(cut)")
-                    body += "\n[line \(endIdx + 1) truncated at \(cut.utf8.count)"
-                    body += " of \(lines[endIdx].utf8.count) bytes]\n"
-                    endIdx += 1
+                    let lineBytes = lines[endIdx].utf8.count
+                    // Reserve the marker at its worst case (both counts at their
+                    // largest) plus the line-number prefix, so the cut can never
+                    // push the result past the budget. Measured, not guessed —
+                    // a magic reserve here overflowed by 8 bytes.
+                    let worstMarker = markerLine(line: endIdx + 1, shown: lineBytes,
+                                                 total: lineBytes)
+                    let prefix = request.raw ? "" : "\(endIdx + 1) "
+                    let room = max(0, bodyBudget - worstMarker.utf8.count - prefix.utf8.count)
+                    let cut = utf8Prefix(content, budget: room)
+                    let shown = dropped + cut.utf8.count
+                    body += prefix + cut
+                    body += markerLine(line: endIdx + 1, shown: shown, total: lineBytes)
+                    if shown < lineBytes { partialResume = shown } else { endIdx += 1 }
                 }
                 break
             }
@@ -119,34 +147,61 @@ public enum ReadWindow {
             endIdx += 1
         }
 
-        let truncated = endIdx < total
-        let lastLine = endIdx
+        // A partly-delivered line is not behind us: the window ends *inside* it.
+        let truncated = partialResume != nil || endIdx < total
+        let lastLine = partialResume != nil ? startIdx + 1 : endIdx
+        let continueAt = partialResume != nil ? startIdx + 1 : lastLine + 1
         let out: String
         if request.raw {
             out = body + (truncated
-                ? bareNote(lastLine: lastLine, total: total, count: requested)
+                ? bareNote(lastLine: lastLine, total: total,
+                           continueAt: continueAt, count: requested)
                 : "")
         } else {
             out = header(path: path, start: total == 0 ? 0 : startIdx + 1,
-                         end: lastLine, total: total,
+                         end: lastLine, total: total, continueAt: continueAt,
                          truncated: truncated, count: requested) + body
         }
         return ReadWindowResult(text: out,
-                                nextLine: truncated ? lastLine + 1 : nil,
-                                lastLine: lastLine, totalLines: total)
+                                nextLine: truncated ? continueAt : nil,
+                                lastLine: lastLine, totalLines: total,
+                                nextByteOffset: partialResume)
     }
 
     // MARK: - the engine's strings (ds4_agent.c:8138-8154), ported verbatim
 
+    /// `continueAt` is normally `end + 1`, but equals `end` when the window
+    /// stopped *inside* that line — the engine has no such case (it has no byte
+    /// budget), so this is the one place the format carries a value the engine
+    /// would not produce, with the same shape.
     private static func header(path: String, start: Int, end: Int, total: Int,
-                               truncated: Bool, count: Int) -> String {
+                               continueAt: Int, truncated: Bool, count: Int) -> String {
         truncated
-            ? "\(path): lines \(start)-\(end) of \(total); continue_offset=\(end + 1); call more with count=\(count) to read the next chunk\n"
+            ? "\(path): lines \(start)-\(end) of \(total); continue_offset=\(continueAt); call more with count=\(count) to read the next chunk\n"
             : "\(path): lines \(start)-\(end) of \(total)\n"
     }
 
-    private static func bareNote(lastLine: Int, total: Int, count: Int) -> String {
-        "[Read truncated at line \(lastLine) of \(total). continue_offset=\(lastLine + 1). Call more with count=\(count) to read the next chunk.]\n"
+    private static func bareNote(lastLine: Int, total: Int, continueAt: Int,
+                                 count: Int) -> String {
+        "[Read truncated at line \(lastLine) of \(total). continue_offset=\(continueAt). Call more with count=\(count) to read the next chunk.]\n"
+    }
+
+    /// The in-band notice that a single line was delivered only in part.
+    private static func markerLine(line: Int, shown: Int, total: Int) -> String {
+        "\n[line \(line) truncated at \(shown) of \(total) bytes; call more to continue this line]\n"
+    }
+
+    /// Drop `bytes` UTF-8 bytes from the front of `s`, on a codepoint boundary.
+    private static func utf8Drop(_ s: String, bytes: Int) -> String {
+        if bytes <= 0 { return s }
+        if bytes >= s.utf8.count { return "" }
+        var used = 0
+        var idx = s.startIndex
+        while idx < s.endIndex, used < bytes {
+            used += String(s[idx]).utf8.count
+            idx = s.index(after: idx)
+        }
+        return String(s[idx...])
     }
 
     /// A faithful port of `agent_split_lines` (`ds4_agent.c:7926-7944`): a line
