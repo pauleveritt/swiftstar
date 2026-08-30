@@ -13,8 +13,8 @@ public final class PoolOrchestrator {
     private let model: String
     /// Item 4 (P22 cleanup): the host-tool execution itself now lives once, in
     /// `HostToolExecutor`, shared with `AgentController` — a fresh instance
-    /// per phase (the `.pool` policy's per-turn read cache and vetted-commands
-    /// allowlist), mirroring the old `readCache.removeAll()` +
+    /// per phase (resetting the `.pool` policy's vetted-commands allowlist and
+    /// the read continuation map with the instance), mirroring the old
     /// `vettedCommands = [...]` reset at the top of `runPhase`.
     private var hostToolExecutor = HostToolExecutor(policy: .pool(vettedCommands: []))
 

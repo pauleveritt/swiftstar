@@ -13,18 +13,20 @@ import SwiftStarKit
 ///
 /// The two call sites have real, deliberate policy differences, captured in
 /// `Policy` rather than dropped:
-/// - the pool worker (`.pool`) has a per-turn read cache (an unchanged re-read
-///   answers "(unchanged since last read)"), confines `bash` to a vetted-
-///   commands allowlist (not the app's `shellAllowed` boolean gate — that gate
-///   is enforced earlier, in `ToolCallbackResponder.consent`, before `execute`
-///   ever runs), and creates parent directories before `write` (a fresh
-///   worktree may not have the target directory yet);
-/// - the app (`.app`) has no cache, `bash` just runs (already gated by
-///   `shellAllowed` upstream), `search` honors a `case_sensitive` param and
-///   prefixes its output with a match-count header, and `bash_status`/
-///   `bash_stop` get an explicit descriptive refusal rather than falling
-///   through to "unknown tool" (the pool worker is never offered those tools
-///   at all, so it never needs the distinction).
+/// - the pool worker (`.pool`) confines `bash` to a vetted-commands allowlist
+///   (not the app's `shellAllowed` boolean gate — that gate is enforced
+///   earlier, in `ToolCallbackResponder.consent`, before `execute` ever runs)
+///   and creates parent directories before `write` (a fresh worktree may not
+///   have the target directory yet);
+/// - the app (`.app`) `bash` just runs (already gated by `shellAllowed`
+///   upstream), `search` honors a `case_sensitive` param and prefixes its
+///   output with a match-count header, and `bash_status`/`bash_stop` get an
+///   explicit descriptive refusal rather than falling through to "unknown
+///   tool" (the pool worker is never offered those tools at all, so it never
+///   needs the distinction).
+///
+/// P24.2 (D2): reads no longer differ by policy — the `.pool` per-turn read
+/// cache was retired and both policies share one windowed read path.
 ///
 /// Both a sync and an async `execute` are provided (item 3, P22 cleanup):
 /// `PoolOrchestrator.runPhase` is a deliberately synchronous poll-loop harness
@@ -44,17 +46,15 @@ public final class HostToolExecutor: @unchecked Sendable {
     }
 
     public struct Policy: Sendable {
-        public var readCache: Bool
         public var searchSupportsCaseSensitiveParam: Bool
         public var searchIncludesCountHeader: Bool
         public var createParentDirectoriesOnWrite: Bool
         public var bash: BashPolicy
         public var explicitBashStatusStopRefusal: Bool
 
-        public init(readCache: Bool, searchSupportsCaseSensitiveParam: Bool,
+        public init(searchSupportsCaseSensitiveParam: Bool,
                     searchIncludesCountHeader: Bool, createParentDirectoriesOnWrite: Bool,
                     bash: BashPolicy, explicitBashStatusStopRefusal: Bool) {
-            self.readCache = readCache
             self.searchSupportsCaseSensitiveParam = searchSupportsCaseSensitiveParam
             self.searchIncludesCountHeader = searchIncludesCountHeader
             self.createParentDirectoriesOnWrite = createParentDirectoriesOnWrite
@@ -64,16 +64,16 @@ public final class HostToolExecutor: @unchecked Sendable {
 
         /// `AgentController`'s Agent-tab policy.
         public static let app = Policy(
-            readCache: false, searchSupportsCaseSensitiveParam: true,
+            searchSupportsCaseSensitiveParam: true,
             searchIncludesCountHeader: true, createParentDirectoriesOnWrite: false,
             bash: .allowAny, explicitBashStatusStopRefusal: true)
 
         /// `PoolOrchestrator`'s pool-worker policy for one phase. Construct a
-        /// fresh instance per phase (like the old `readCache`/`vettedCommands`
-        /// reset at the top of `runPhase`) — `vettedCommands` is the packet's
-        /// validation/self-test commands for that phase only.
+        /// fresh instance per phase (resetting the vetted-commands allowlist and
+        /// the read continuation map with the instance) — `vettedCommands` is
+        /// the packet's validation/self-test commands for that phase only.
         public static func pool(vettedCommands: [String]) -> Policy {
-            Policy(readCache: true, searchSupportsCaseSensitiveParam: false,
+            Policy(searchSupportsCaseSensitiveParam: false,
                   searchIncludesCountHeader: false, createParentDirectoriesOnWrite: true,
                   bash: .vettedOnly(vettedCommands), explicitBashStatusStopRefusal: false)
         }
@@ -81,7 +81,6 @@ public final class HostToolExecutor: @unchecked Sendable {
 
     private let policy: Policy
     private let lock = NSLock()
-    private var readCacheStorage: [String: String] = [:]
 
     /// P24.1 (D5): `more` continuation per workspace root. The `.app` executor
     /// is a process-lifetime static shared by the main agent and every pool
@@ -200,31 +199,13 @@ public final class HostToolExecutor: @unchecked Sendable {
     }
 
     private func readResult(_ request: ToolExecutionRequest) -> ToolExecutionResult {
-        if policy.readCache {
-            // The pool worker's shape: confinement and the read itself share
-            // one guard and one generic message (no path named) — an
-            // unchanged re-read answers "(unchanged since last read)" instead
-            // of re-paying the context cost.
-            guard let path = HostToolConfinement.realPath(request),
-                  let data = FileManager.default.contents(atPath: path),
-                  let text = String(data: data, encoding: .utf8) else {
-                return ToolExecutionResult(ok: false, text: "error: could not read")
-            }
-            let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            let unchanged: Bool = lock.withLock {
-                if readCacheStorage[path] == hash { return true }
-                readCacheStorage[path] = hash
-                return false
-            }
-            if unchanged {
-                return ToolExecutionResult(ok: true, text: "(unchanged since last read)")
-            }
-            return ToolExecutionResult(ok: true, text: text)
-        }
-        // P24.1: the app's shape — windowed, in the engine's format
-        // (ds4_agent.c:8102-8174), byte-budgeted so the responder's condenser
-        // never has to cut it (D2). Confinement and the read stay separate
-        // guards, each with its own message (the read failure names the path).
+        // P24.2 (D2): one read path for both policies — windowed, in the
+        // engine's format (ds4_agent.c:8102-8174), byte-budgeted so the
+        // responder's condenser never has to cut it (D2). The `.pool` hash
+        // cache was retired: its whole-file delivery starved the model and its
+        // "(unchanged since last read)" was dishonest once delivery is
+        // partial. Confinement and the read stay separate guards, each with
+        // its own message (the read failure names the path).
         let root = HostToolConfinement.realPath(request.workspace.path,
                                                 workspace: request.workspace)
             ?? request.workspace.path

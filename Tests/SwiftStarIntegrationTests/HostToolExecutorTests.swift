@@ -289,9 +289,9 @@ struct HostToolExecutorTests {
         #expect(executor.execute(request("read", [], workspace: ws, path: "a.txt")).ok)
     }
 
-    // MARK: - read/more: pool policy (per-turn cache, folded generic error)
+    // MARK: - read/more: pool policy (P24.2 — unified windowed path, no cache)
 
-    @Test func poolPolicyReadCachesAnUnchangedFile() throws {
+    @Test func poolPolicyReadHasNoCache() throws {
         let ws = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: ws) }
         try "hello".write(to: ws.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
@@ -300,31 +300,43 @@ struct HostToolExecutorTests {
 
         let first = executor.execute(req)
         let second = executor.execute(req)
-        #expect(first.text == "hello")
-        #expect(second.text == "(unchanged since last read)")
+        // P24.2 (D2): the `.pool` hash cache is retired — reads unify on the
+        // windowed path, so an unchanged re-read serves the window again, never
+        // "(unchanged since last read)".
+        #expect(first.text.hasSuffix(": lines 1-1 of 1\n1 hello\n"))
+        #expect(second.text == first.text)
     }
 
-    @Test func poolPolicyReadCacheInvalidatesOnChange() throws {
+    @Test func poolPolicyReadHonorsWindows() throws {
         let ws = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: ws) }
-        let file = ws.appendingPathComponent("a.txt")
-        try "hello".write(to: file, atomically: true, encoding: .utf8)
+        try writeLines(40, ws)
         let executor = HostToolExecutor(policy: .pool(vettedCommands: []))
-        let req = request("read", [], workspace: ws, path: "a.txt")
-
-        _ = executor.execute(req)
-        try "changed".write(to: file, atomically: true, encoding: .utf8)
-        let afterChange = executor.execute(req)
-        #expect(afterChange.text == "changed")
+        let r = executor.execute(request("read",
+            [param("start_line", "10"), param("max_lines", "3")],
+            workspace: ws, path: "big.txt"))
+        #expect(r.ok)
+        #expect(r.text.contains("lines 10-12 of 40; continue_offset=13;"))
+        #expect(r.text.contains("10 l10\n11 l11\n12 l12\n"))
+        #expect(!r.text.contains("13 l13"))
     }
 
-    @Test func poolPolicyReadMissingFileUsesGenericMessageWithNoPath() throws {
+    @Test func poolPolicyReadOutsideWorkspaceRefusesWithGrantMessage() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        let executor = HostToolExecutor(policy: .pool(vettedCommands: []))
+        let result = executor.execute(request("read", [], workspace: ws, path: nil))
+        #expect(!result.ok)
+        #expect(result.text.contains("outside the workspace grant"))
+    }
+
+    @Test func poolPolicyReadMissingFileNamesThePathInTheError() throws {
         let ws = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: ws) }
         let executor = HostToolExecutor(policy: .pool(vettedCommands: []))
         let result = executor.execute(request("read", [], workspace: ws, path: "missing.txt"))
         #expect(!result.ok)
-        #expect(result.text == "error: could not read")
+        #expect(result.text.contains("missing.txt"))
     }
 
     // MARK: - write: parent-directory creation differs
