@@ -420,13 +420,10 @@ func cmdTaxonomy(_ dir: URL) {
         let toolRequests = report.tools.values.reduce(0, +)
         let toolText = report.tools.sorted { $0.value > $1.value }
             .map { "\($0.key)x\($0.value)" }.joined(separator: ", ")
-        let paddedRole = role.padding(toLength: 14, withPad: " ", startingAt: 0)
-        let paddedThink = String(report.events["think"] ?? 0)
-            .padding(toLength: 5, withPad: " ", startingAt: 0)
-        let paddedText = String(report.events["text"] ?? 0)
-            .padding(toLength: 4, withPad: " ", startingAt: 0)
-        let paddedTools = String(toolRequests)
-            .padding(toLength: 3, withPad: " ", startingAt: 0)
+        let paddedRole = padRight(role, width: 14)
+        let paddedThink = padLeft(String(report.events["think"] ?? 0), width: 5)
+        let paddedText = padLeft(String(report.events["text"] ?? 0), width: 4)
+        let paddedTools = padLeft(String(toolRequests), width: 3)
         print("   \(paddedRole) think=\(paddedThink) text=\(paddedText) tool_requests=\(paddedTools)  [\(toolText.isEmpty ? "none" : toolText)]")
         if !report.errors.isEmpty {
             print("   engine errors:")
@@ -495,7 +492,7 @@ func cmdReport(_ paths: [URL]) {
             totalGraded += graded
             if graded > 0 {
                 let interval = wilsonInterval(passes: passes, total: graded)
-                let label = family.padding(toLength: 24, withPad: " ", startingAt: 0)
+                let label = padRight(family, width: 24)
                 let rate = String(format: "%.0f", Double(passes) / Double(graded) * 100)
                 let lower = String(format: "%.0f", interval.0 * 100)
                 let upper = String(format: "%.0f", interval.1 * 100)
@@ -510,7 +507,7 @@ func cmdReport(_ paths: [URL]) {
             let rate = String(format: "%.0f", Double(totalPasses) / Double(totalGraded) * 100)
             let lower = String(format: "%.0f", interval.0 * 100)
             let upper = String(format: "%.0f", interval.1 * 100)
-            print("    \("POOLED".padding(toLength: 24, withPad: " ", startingAt: 0)) \(totalPasses)/\(totalGraded) = \(rate)%  [\(lower)%, \(upper)%]")
+            print("    \(padRight("POOLED", width: 24)) \(totalPasses)/\(totalGraded) = \(rate)%  [\(lower)%, \(upper)%]")
         }
         let failures = table.rows.filter { ($0["outcome"] ?? "") != "pass" }
         if !failures.isEmpty {
@@ -518,7 +515,7 @@ func cmdReport(_ paths: [URL]) {
             for row in failures { counts[row["outcome"] ?? "", default: 0] += 1 }
             print("    failure modes:")
             for (outcome, count) in counts.sorted(by: { $0.value > $1.value }) {
-                print("      \(outcome.padding(toLength: 14, withPad: " ", startingAt: 0)) \(count)")
+                print("      \(padRight(outcome, width: 14)) \(count)")
             }
             var details: [String: Int] = [:]
             for row in failures {
@@ -548,12 +545,70 @@ private func escapedTSV(_ value: String) -> String {
         .replacingOccurrences(of: "\n", with: " ")
 }
 
+private func padLeft(_ value: String, width: Int) -> String {
+    guard value.count < width else { return value }
+    return String(repeating: " ", count: width - value.count) + value
+}
+
+private func padRight(_ value: String, width: Int) -> String {
+    guard value.count < width else { return value }
+    return value + String(repeating: " ", count: width - value.count)
+}
+
+private func captureConfig(_ dir: URL) -> [String: Any]? {
+    ["campaign.json", "run-config.json"].lazy
+        .map { dir.appendingPathComponent($0) }
+        .compactMap { try? Data(contentsOf: $0) }
+        .compactMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        .first
+}
+
+/// Return an explicitly recorded engine identity. Missing metadata stays
+/// blank: the analyzer must not turn a capture's location or model into a
+/// guessed engine pin.
+private func enginePin(_ dir: URL, config: [String: Any]?) -> String {
+    var configs = config.map { [$0] } ?? []
+    for name in ["campaign.json", "run-config.json"] {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent(name)),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { continue }
+        configs.append(object)
+    }
+    for config in configs {
+        for key in ["engine_pin", "enginePin", "engine", "engine_sha",
+                    "engineSHA", "submodule_sha", "submoduleSHA"] {
+            if let value = config[key] as? String, !value.isEmpty { return value }
+        }
+    }
+
+    guard let text = try? String(contentsOf: dir.appendingPathComponent("provenance.md"), encoding: .utf8) else {
+        return ""
+    }
+    let markers = [
+        "Submodule (`external/ds4`) SHA:",
+        "Engine pin:",
+        "Engine SHA:"
+    ]
+    for rawLine in text.split(whereSeparator: \.isNewline) {
+        let line = String(rawLine)
+        for marker in markers {
+            guard let range = line.range(of: marker) else { continue }
+            let value = line[range.upperBound...].trimmingCharacters(in: .whitespaces)
+            if value.first == "`", let end = value.dropFirst().firstIndex(of: "`") {
+                let pin = String(value[value.index(after: value.startIndex)..<end])
+                if !pin.isEmpty { return pin }
+            }
+        }
+    }
+    return ""
+}
+
 /// Write a cheap, re-derivable index rather than introducing a second
 /// database/query layer. The output is ignored with the capture tree and can
 /// always be regenerated from the same capture directories.
 func cmdIndex(to output: URL) throws {
     let columns = ["kind", "name", "usable", "wire_bytes", "turns", "outcomes",
-                   "workers", "sum_suffix", "variant", "seed", "outcome"]
+                   "workers", "sum_suffix", "variant", "seed", "outcome", "engine_pin"]
     var rows = [columns.joined(separator: "\t")]
     for capture in captureDirs() {
         let wire = capture.dir.appendingPathComponent("wire.ndjson")
@@ -561,11 +616,7 @@ func cmdIndex(to output: URL) throws {
         let outcomes = parseOutcomes(capture.dir)
         let workers = workerStatusCounts(capture.dir).keys.sorted()
             .map { String($0.rawValue) }.joined(separator: ",")
-        let config = ["campaign.json", "run-config.json"].lazy
-            .map { capture.dir.appendingPathComponent($0) }
-            .compactMap { try? Data(contentsOf: $0) }
-            .compactMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-            .first
+        let config = captureConfig(capture.dir)
         let fields = [
             capture.kind, capture.name, isUnusable(capture) ? "0" : "1",
             String(wireBytes), String(parseWire(capture.dir).filter {
@@ -574,7 +625,7 @@ func cmdIndex(to output: URL) throws {
             }.count), String(outcomes.count), workers,
             String(suffixTotal(parseTrace(capture.dir))),
             "\(config?["variant"] ?? "")", "\(config?["seed"] ?? "")",
-            "\(config?["outcome"] ?? "")"
+            "\(config?["outcome"] ?? "")", enginePin(capture.dir, config: config)
         ].map(escapedTSV)
         rows.append(fields.joined(separator: "\t"))
     }

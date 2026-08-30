@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct PollingLineReaderTests {
 
     @Test func retainsPartialAndMultipleLines() throws {

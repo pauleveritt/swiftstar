@@ -518,9 +518,9 @@ final class AgentController {
                     await self?.consumeWire(line, generation: gen)
                 }
             }
-            if let lineData = lines.finish() {
-                await self?.consumeWire(String(decoding: lineData, as: UTF8.self), generation: gen)
-            }
+            // An incomplete final line is not a wire record. Keep EOF
+            // handling diagnostic-only; the old reader discarded this tail.
+            _ = lines.finish()
             capture?.close()
         }
 
