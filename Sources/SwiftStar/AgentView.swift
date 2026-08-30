@@ -305,15 +305,16 @@ struct AgentView: View {
                     text: nil, textFontSize: 0,
                     trackColor: memoryRingColor(footprint: footprint, planned: planned),
                     diameter: 15)
+                    .padding(.horizontal, 4)
                     .contentShape(Rectangle())
-                    // `.help` is a mouse tooltip; VoiceOver never reads it, and
-                    // the ring renders no text. Without these the two facts the
-                    // status bar exists for are invisible to assistive tech —
-                    // and severity is carried by color alone.
+                    .help(memoryRingTooltip(footprint: footprint, planned: planned))
+                    // VoiceOver never reads `.help`, and the ring renders no
+                    // text. Keep the same current-value summary available to
+                    // assistive technology; severity is otherwise carried by
+                    // color alone.
                     .accessibilityElement()
                     .accessibilityLabel("Agent memory")
                     .accessibilityValue(memoryRingTooltip(footprint: footprint, planned: planned))
-                    .help(memoryRingTooltip(footprint: footprint, planned: planned))
             }
             if controller.isUp, let s = controller.lastStatus, s.ctxSize > 0 {
                 ValueGaugeView(
@@ -321,14 +322,16 @@ struct AgentView: View {
                     text: nil, textFontSize: 0,
                     trackColor: contextRingColor(ctxUsed: s.ctxUsed),
                     diameter: 15)
+                    .padding(.horizontal, 4)
                     .contentShape(Rectangle())
+                    .help(contextRingTooltip(s))
                     .accessibilityElement()
                     .accessibilityLabel("Context window")
                     .accessibilityValue(contextRingTooltip(s))
-                    .help(contextRingTooltip(s))
             }
         }
         .padding(.horizontal, 10)
+        .padding(.trailing, 6)
         .padding(.vertical, 6)
     }
 
@@ -368,7 +371,10 @@ struct AgentView: View {
 
     private func memoryRingTooltip(footprint: Int64, planned: Int64) -> String {
         func gb(_ b: Int64) -> String { b.formatted(.byteCount(style: .memory)) }
-        var text = "Agent memory footprint: \(gb(footprint)) of a \(gb(planned)) budget."
+        let percent = Double(footprint) / Double(planned) * 100
+        var text = String(
+            format: "Agent memory: %@ resident of %@ planned (%.0f%%).",
+            gb(footprint), gb(planned), percent)
         if Double(footprint) > Double(planned) {
             // Resident includes the mapped model, so over-budget is normal for
             // a large model — say so rather than letting the critical color
@@ -381,11 +387,16 @@ struct AgentView: View {
     /// Carries the mechanism, not just the numbers: prefill speed is the
     /// figure the investigation showed actually degrades as context grows.
     private func contextRingTooltip(_ s: StatusSnapshot) -> String {
+        let percent = Double(s.ctxUsed) / Double(s.ctxSize) * 100
         var text =
-            "Context window used / total: \(s.ctxUsed.formatted()) / \(s.ctxSize.formatted()). "
-            + "Once this fills, ds4-agent compacts the conversation to make room."
+            String(format: "Context window: %@ of %@ tokens (%.0f%% used).",
+                   s.ctxUsed.formatted(), s.ctxSize.formatted(), percent)
+            + " Once this fills, ds4-agent compacts the conversation to make room."
         if s.prefillTPS > 0 {
-            text += String(format: " Current prefill speed: %.1f tok/s.", s.prefillTPS)
+            text += String(format: " Current prefill: %.1f tok/s.", s.prefillTPS)
+        }
+        if s.genTPS > 0 {
+            text += String(format: " Current decode: %.1f tok/s.", s.genTPS)
         }
         return text
     }
