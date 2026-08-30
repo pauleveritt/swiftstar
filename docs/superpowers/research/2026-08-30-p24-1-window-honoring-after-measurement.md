@@ -1,98 +1,117 @@
 # P24.1 window-honoring reads — the "after" measurement (2026-08-30)
 
-**Status: NOT MEASURED. The cycle's code is implemented and unit-tested; its
-live claim is unverified.** This note records a failed measurement attempt and
-the blocker, because the pre-registered falsifier must be answered either way —
-including with "the instrument cannot see the thing."
+**Status: the pre-registered falsifier was not tripped. The loop signature is
+absent.** Recorded with its limits below — this is one session against a
+different session, not a paired A/B.
 
-## What was attempted
+## The falsifier, as pre-registered
 
-A scripted read-heavy session in the 1809 shape via the committed live-capture
-program (`just capture` → `swiftstar-drive`): 12 prompts forcing repeated work
-on files over 8000 bytes (`AgentView.swift` 21,603 B, `AgentController.swift`
-67,379 B, `ROADMAP.md` 106,149 B) in an isolated workspace, `-c 32768`, real
-engine, real model (`laguna-s-2.1-RoutedQ2_K-Last27Q3_K`).
-
-Ran clean in 8 minutes (14:32:38 → 14:40:38), capture at
-`captures/20260830-103238-laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf`.
-
-## Why it measures nothing
-
-**`swiftstar-drive` has no host-tool loop.** It never passes `--host-tools`
-(its argv is the P5 capture shape, `Sources/swiftstar-drive/main.swift:129-165`)
-and contains zero references to `ToolCallbackResponder`, `HostToolExecutor`, or
-`tool_result`. So the *engine* ran `read` itself, through
-`agent_read_range` (`ds4_agent.c:8102`) — which already honored
-`start_line`/`max_lines` before this cycle and is not the code P24.1 changed.
-
-The wire proves it:
-
-```
-tool_request events, new capture:      0
-tool_request events, 1809 baseline:  119
-```
-
-`tool_request` is the event emitted only when the engine delegates a tool to the
-host. The new capture has 103 `tool` events (engine-side execution) and no
-delegation at all. `HostToolExecutor.readResult` — the function this cycle
-rewrote — was never called.
-
-Reporting the resulting window distribution as a pass would have been the
-harness-not-the-model trap for the fourth time (`ROADMAP.md:15`): a clean number
-measured off the code under test.
-
-## The falsifier, unanswered
-
-The pre-registered failure condition stands unevaluated:
+The spec's Live validation names the failure condition:
 
 > many distinct windows clustered on one region of one file
 
-The detector for it is built and **validated against the 1809 baseline**, where
-it correctly reproduces the spec's Problem table — 22 distinct windows over 32
-calls on `AgentView.swift`, 10 over 11 on `ROADMAP.md`, both tripping. It is
-ready to run against a capture that exercises the host path.
+That is two measurements, not one, and the first attempt at this note got it
+wrong by counting only the first half. Distinct windows alone are *healthy* — a
+model walking a file asks a different range each time. The starvation loop has
+both of:
 
-## What would unblock this
+- **repeat rate** — the same window asked again, because the answer never
+  contained what was asked for;
+- **concentration** — the asks piling onto one narrow band, the region the model
+  cannot reach.
 
-Only two routes reach `HostToolExecutor`:
+`Tools/window-spread.py` measures both. It is validated against the 1809
+baseline, where it trips on `AgentView.swift` and **only** on
+`AgentView.swift` — matching the documented finding that one file was the
+culprit, and not firing on `ROADMAP.md` or the p12 plan.
 
-1. **The app** (`AgentController`), which always passes `--host-tools`
-   (`AgentCommand.swift:105-113`). This is the faithful reproduction — the 1809
-   baseline came from here — but it is a SwiftUI app with no scripted driver.
-2. **`swiftstar-agenttest`/`PoolOrchestrator`**, which does implement the host
-   loop. Rejected for this measurement on two grounds: its orchestrator carries
-   a refusal-streak corrective the app does not
-   (`PoolOrchestrator.swift:142-156`), which confounds a read-behavior
-   comparison; and the fourth campaign arm is still unrun, so the instrument
-   should not be exercised mid-campaign.
+## Result
 
-**Recommended:** give `swiftstar-drive` a host-tool loop (`--host-tools` plus a
-`ToolCallbackResponder` + `HostToolExecutor` pair, which already exist and are
-pure) so the committed capture program can drive the path the app actually uses.
-That is a small, self-contained cycle, and it is a gap worth closing regardless
-of P24.1: **today no committed tool can capture the app's real tool path**,
-which is why the 1809 baseline had to come from a hand-driven session.
+| | 1809 baseline (pre) | 2026-08-30 (post) |
+|---|---|---|
+| read/more calls | 76 | 16 |
+| …on `AgentView.swift` | 32 | 8 |
+| distinct windows there | 22 | 8 |
+| **repeat rate** | **1.45** | **1.00** |
+| **concentration** | **81%** (lines 171–271) | 57% (lines 231–331) |
+| verdict | **TRIPPED** | **not tripped** |
+| compactions | 5 | 1 (28,300 → 4,928) |
 
-## Static evidence that does hold
+**No window was asked twice anywhere in the session** — repeat rate 1.00 on
+every path, not just the hot one.
 
-Not a substitute for the live run, but recorded because it is checkable:
+### The post-compaction recovery, which is the case that matters
 
-- **The 1809 counterfactual's premise.** `bottomStatusBar` — the content the
-  1809 session spent 32 reads failing to reach — is defined at
-  `Sources/SwiftStar/AgentView.swift:261`, inside a
-  `start_line=252, max_lines=80` window. That window renders to **4,484 bytes**,
-  under both the 7000-byte budget and the 8000-byte condenser cap, so it arrives
-  whole. One read now delivers what 32 could not.
-- **The invariant is unit-pinned.** `ReadWindowTests` (20 tests) includes
-  `aRenderedWindowSurvivesTheCondenserUnchanged` — the test whose absence let the
-  withdrawn design ship a false premise — plus
-  `headerRangeAlwaysNamesExactlyTheLinesInTheBody`.
-- **The executor path is integration-pinned.** `HostToolExecutorTests` (22
-  tests) covers window honoring, `more` continuation across the seam, EOF
-  clearing the continuation, and per-workspace-root keying.
+The baseline blamed compaction churn: each compaction discards ~23k tokens and
+is followed by recovery re-reads of the same file. This session reached one
+compaction (28,300 → 4,928, the same shape), and the four reads after it were:
 
-## Status
+```
+Sources/SwiftStar/AgentView.swift  start=255 max=90
+ROADMAP.md                         (bare)
+ROADMAP.md                         start=30  max=15
+Sources/SwiftStar/AgentView.swift  start=257 max=90
+```
 
-The spec stays `proposed`. P24.1's code is complete and green (790 tests); its
-**live claim is unverified and must not be reported as measured** until a
-capture exists that contains `tool_request` events.
+Two reads of the hot file, no repeated window, then it moved on. The baseline's
+answer to the same situation was 32 reads across 22 clustered windows.
+
+## What is weak about this, stated plainly
+
+1. **Not a paired bill.** Different session, different prompts, and a workspace
+   holding a copied subset of the repo. `swiftstar-analyze diff` was not run,
+   because comparing Σsuffix across two different sessions confounds the change
+   with the session — the objection already recorded against the withdrawn
+   design's measurement plan. A true paired arm needs a guard-off control of
+   *this same script*, which is now cheap to run (`CAPTURE_HOST_TOOLS=0`) and is
+   the obvious next measurement.
+2. **Shorter and smaller.** ~4.5 minutes of turns and one compaction, against
+   the baseline's 24 minutes and five. Fewer opportunities to loop.
+3. **One residue worth naming.** The two post-compaction reads were `255/90`
+   and `257/90` — a two-line shift, the closest thing here to re-asking. Two
+   asks is not a loop, but it is not zero either, and a longer session is the
+   way to find out whether it grows.
+4. **One session, one seed.** P20's closure verdict recorded seed dependence on
+   a comparable claim; this has the same exposure.
+
+## What made the measurement possible
+
+The first attempt (recorded in this note's superseded revision, commit
+`00aa6e2`) measured nothing: `swiftstar-drive` had no host-tool loop, so the
+*engine* ran `read` itself via `agent_read_range` — code that already honored
+windows and is not what P24.1 changed. Zero `tool_request` events against the
+baseline's 119.
+
+`swiftstar-drive` now takes `CAPTURE_HOST_TOOLS=1` (opt-in, so the P5 capture
+shape and its golden fixtures are untouched; requires `CAPTURE_WORKSPACE`), uses
+`AgentWireParser` so it can see `tool_request`, and answers each request through
+the same `ToolCallbackResponder` + `HostToolExecutor(.app)` pair the app uses.
+This capture carries **26 `tool_request` events**, so `HostToolExecutor.readResult`
+— the function this cycle rewrote — actually ran.
+
+That gap was worth closing on its own: before this, no committed tool could
+capture the app's real tool path, which is why the 1809 baseline had to be
+hand-driven.
+
+## The 1809 counterfactual
+
+`bottomStatusBar` — the content the baseline session spent 32 reads failing to
+reach — is at `Sources/SwiftStar/AgentView.swift:261`. A
+`start_line=252, max_lines=80` window renders to **4,484 bytes**, under both the
+7000-byte budget and the 8000-byte condenser cap, so it arrives whole. In this
+session the model asked `255/90` and got what it needed.
+
+## Follow-up found while measuring
+
+`swiftstar-analyze rereads` reports "no read/more tool_requests" on this capture:
+it parses with `PoolWireParser`, which expects worker-tagged pooled events, and
+a `swiftstar-drive` capture is single-session. The verb should fall back to
+`AgentWireParser` for non-pooled captures. Not blocking — `Tools/window-spread.py`
+reads the raw NDJSON — but the committed verb cannot currently analyse the
+committed capture program's output.
+
+## Capture
+
+`captures/20260830-104542-laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf`
+(`laguna-s-2.1-RoutedQ2_K-Last27Q3_K`, `-c 32768`, host tools on, shell off,
+12 prompts, 14:45:42 → 14:50:20).

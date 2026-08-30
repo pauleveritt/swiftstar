@@ -1,7 +1,9 @@
 # SwiftStar P24.1 design: window-honoring reads
 
 **Date:** 2026-08-30
-**Status:** proposed
+**Status:** implemented (2026-08-30) — falsifier not tripped, see the
+[after-measurement](../research/2026-08-30-p24-1-window-honoring-after-measurement.md);
+the paired guard-off control arm is still outstanding
 **Phase:** P24 — Digested first-class tools (feature cycle 1)
 
 This spec **supersedes**

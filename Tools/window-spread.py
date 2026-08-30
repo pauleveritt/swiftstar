@@ -38,8 +38,36 @@ for p, ws in sorted(calls.items(), key=lambda kv: -len(kv[1])):
     for w, n in distinct.most_common():
         start, mx = w
         print(f"          {n}x  start_line={start} max_lines={mx}")
-    # The falsifier: many distinct windows on one file is the loop.
-    if p != "<more>" and len(distinct) >= 5 and len(ws) >= 8:
-        print(f"      ** FALSIFIER TRIPPED for {p}: "
-              f"{len(distinct)} distinct windows over {len(ws)} calls **")
+    if p == "<more>" or len(ws) < 5:
+        print()
+        continue
+
+    # The falsifier is "many distinct windows CLUSTERED ON ONE REGION" — which
+    # is two measurements, not one. Distinct windows alone are healthy: a model
+    # walking a file asks for a different range each time and never repeats.
+    # The starvation loop has both of these instead:
+    #
+    #   repeat rate  -- the same window asked again, because the answer never
+    #                   contained what was asked for (baseline: 1.45)
+    #   concentration -- the asks pile onto one narrow band of one file, the
+    #                   region the model cannot reach (baseline: 14/22 in a
+    #                   single 100-line band)
+    repeat_rate = len(ws) / len(distinct)
+    starts = [int(s) for s, _ in ws if str(s).isdigit()]
+    concentration, band = 0.0, None
+    if starts:
+        for lo in range(min(starts), max(starts) + 1, 10):
+            n = sum(1 for s in starts if lo <= s < lo + 100)
+            if n / len(starts) > concentration:
+                concentration, band = n / len(starts), (lo, lo + 100)
+    print(f"      repeat rate   {repeat_rate:.2f} calls/window "
+          f"({len(ws)} calls, {len(distinct)} distinct)")
+    print(f"      concentration {concentration:.0%} of windowed asks in "
+          f"lines {band[0]}-{band[1]}" if band else "      concentration n/a")
+    if repeat_rate >= 1.3 and concentration >= 0.5:
+        print(f"      ** FALSIFIER TRIPPED for {p}: windows repeat AND cluster "
+              f"on one region — the starvation loop **")
+    else:
+        print(f"      -- no loop signature (needs repeat >=1.30 AND "
+              f"concentration >=50%)")
     print()
