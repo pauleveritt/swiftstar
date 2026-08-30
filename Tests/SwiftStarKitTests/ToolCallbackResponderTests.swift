@@ -477,3 +477,69 @@ struct ToolCallbackResponderTests {
         #expect(r.s.contains("taskText"))
     }
 }
+
+/// A refusal the model cannot act on costs a whole session. Measured across
+/// two live captures on 2026-08-30:
+///
+/// - `live/20260830-155556` called `shell` — not a tool; the engine advertises
+///   `bash` (`ds4_agent.c`'s `agent_glm_tool_schemas`). The host refused with a
+///   bare "unknown or unsupported tool: shell", the model never tried `bash`,
+///   and that session's only verification attempt (`swift build`) never ran.
+/// - `live/20260830-172411` called `bash` correctly and was refused by the
+///   shell toggle instead.
+///
+/// So neither session ever executed a command, for two different reasons. The
+/// unknown-tool refusal is the one the host can make self-correcting: name the
+/// tools that do exist, and point at the intended one when the guess is a
+/// recognizable near-miss.
+struct UnknownToolRefusalTests {
+    private let ws = URL(fileURLWithPath: "/tmp/swiftstar-consent-ws")
+
+    private func refusalReason(_ name: String, shellAllowed: Bool = true) -> String {
+        let consent = ToolCallbackResponder.consent(
+            idx: 0, name: name, params: [], workspace: ws, shellAllowed: shellAllowed)
+        guard case .refuse(let reason) = consent else { return "<proceeded>" }
+        return reason
+    }
+
+    @Test func unknownToolRefusalNamesTheToolsThatDoExist() {
+        let reason = refusalReason("frobnicate")
+        for tool in ["bash", "read", "write", "edit", "search", "list", "more", "dispatch"] {
+            #expect(reason.contains(tool), "refusal should name \(tool): \(reason)")
+        }
+    }
+
+    @Test func shellIsRefusedWithAPointerToBash() {
+        // The exact `live/20260830-155556` call.
+        let reason = refusalReason("shell")
+        #expect(reason.contains("bash"))
+        #expect(reason.lowercased().contains("did you mean"))
+    }
+
+    @Test func commonShellCommandNamesPointAtTheirRealTool() {
+        #expect(refusalReason("cat").contains("did you mean read"))
+        #expect(refusalReason("ls").contains("did you mean list"))
+        #expect(refusalReason("grep").contains("did you mean search"))
+    }
+
+    @Test func aNearMissIsSuggestedButNeverAccepted() {
+        // Suggesting is not aliasing: accepting `shell` would hide a real model
+        // error and let the host drift from the engine's advertised schema.
+        // It stays a refusal even with the shell toggle on.
+        let consent = ToolCallbackResponder.consent(
+            idx: 0, name: "shell", params: [ToolParam(name: "command", value: "swift build")],
+            workspace: ws, shellAllowed: true)
+        guard case .refuse = consent else {
+            Issue.record("`shell` must never execute; it is not a real tool")
+            return
+        }
+    }
+
+    @Test func theShellToggleRefusalIsUnchangedForTheRealToolName() {
+        // `bash` with the toggle off is a different refusal — a policy denial,
+        // not a bad name. It must not be diluted into "unknown tool".
+        let reason = refusalReason("bash", shellAllowed: false)
+        #expect(reason.contains("shell is not allowed"))
+        #expect(!reason.contains("unknown"))
+    }
+}

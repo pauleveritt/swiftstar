@@ -118,6 +118,29 @@ public enum ToolCallbackResponder {
     /// to `writableFiles`; the read aids stay free.
     private static let mutatingTools: Set<String> = ["write", "edit"]
 
+    /// Every tool the host will actually execute, sorted — named in the
+    /// unknown-tool refusal so a model that guessed a name can correct in one
+    /// round instead of guessing again.
+    static var executableTools: [String] {
+        (fileTools.union(shellTools).union(["dispatch"])).sorted()
+    }
+
+    /// Names a model is liable to reach for when it means a real tool. These
+    /// are **suggested, never accepted**: aliasing them would hide a genuine
+    /// model error and let the host drift from the schema the engine actually
+    /// advertises (`agent_glm_tool_schemas` names `bash`, not `shell`).
+    ///
+    /// `shell` is not hypothetical — `captures/live/20260830-155556` called it,
+    /// got a bare "unknown or unsupported tool: shell", never retried with
+    /// `bash`, and so never ran the `swift build` it intended. The rest are the
+    /// shell-command names nearest to each read aid.
+    private static let nearMisses: [String: String] = [
+        "shell": "bash", "sh": "bash", "zsh": "bash", "run": "bash", "exec": "bash",
+        "cat": "read", "head": "read", "tail": "read", "open": "read",
+        "ls": "list", "dir": "list",
+        "grep": "search", "rg": "search", "find": "search", "glob": "search",
+    ]
+
     /// The pure consent check (D1/D6): given the request, the workspace grant,
     /// and the shell toggle, decide whether the host may execute. File tools are
     /// confined to `workspace` (an absolute path or a `..` escape is refused);
@@ -189,7 +212,16 @@ public enum ToolCallbackResponder {
                 name: name, params: params, workspace: wsStd, resolvedPath: nil))
         }
 
-        return .refuse("refused: unknown or unsupported tool: \(name)")
+        // An unactionable refusal costs a whole session: the model has no way
+        // to tell a wrong name from a denied capability, so it stops trying.
+        // Name the tools that exist, and point at the intended one when the
+        // guess is a recognizable near-miss.
+        var reason = "refused: unknown or unsupported tool: \(name)"
+        if let intended = Self.nearMisses[name.lowercased()] {
+            reason += " (did you mean \(intended)?)"
+        }
+        reason += " — available: \(Self.executableTools.joined(separator: ", "))"
+        return .refuse(reason)
     }
 
     /// The consent-check step shared by both `respond` overloads (item 3, P22
