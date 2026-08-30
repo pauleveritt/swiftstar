@@ -1,8 +1,33 @@
 # SwiftStar P24.1 design: the read-guard (`don't-re-read`)
 
 **Date:** 2026-08-30
-**Status:** proposed
+**Status:** **SUPERSEDED 2026-08-30** by
+[`2026-08-30-p24-1-window-honoring-reads-design.md`](2026-08-30-p24-1-window-honoring-reads-design.md).
+Do not implement this design.
 **Phase:** P24 — Digested first-class tools (feature cycle 1)
+
+> **Why this was withdrawn.** D2 below claims "after any read the model holds
+> the whole file," verified by reading `HostToolExecutor.readResult`. The
+> verification stopped one call frame short: the immediate caller wraps every
+> result in `ToolResultCondenser.condense(raw.text)` at an 8000-byte cap
+> (`ToolCallbackResponder.swift:259,284`), so for every file this guard targeted
+> the model held a head+tail extract and never the middle. The re-reads it
+> counted as redundant are a starvation loop — the model asking 22 different
+> ways for a middle it cannot reach. The guard would have answered those asks
+> with 25 bytes instead of 8000, cutting Σsuffix by starving the model faster.
+>
+> Also found, and carried forward as requirements on any successor: no
+> invalidation at compaction (the spec's own stated driver) would have made a
+> file permanently unobtainable after the first compaction; no escape hatch, in
+> a repo that has already recorded a 23-round stall from a refusing tool
+> (`ROADMAP.md:337`); `Policy.app` has a third construction site
+> (`PoolOrchestrator.swift:208`) that would have silently changed the agenttest
+> instrument mid-campaign; and the planned "after" measurement was arithmetically
+> incapable of returning anything but the "before" number.
+>
+> The read guard is not cancelled — it moves to **P24.2**, to be re-decided
+> against a measurement taken after windowing lands, together with the pool
+> `readCache`, which has the same bug class.
 
 This spec is the authority on P24.1, the first feature cycle of P24. The
 phase row ([`ROADMAP.md` P24](../../../ROADMAP.md)) names the read-guard as the
