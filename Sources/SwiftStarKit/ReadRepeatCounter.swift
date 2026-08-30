@@ -40,9 +40,9 @@ public enum ReadRepeatCounter {
         var seen = Set<Key>()
         var byPath: [String: (calls: Int, windows: [Key: Int])] = [:]
         for (path, startLine, maxLines) in reads {
-            let start = max(startLine ?? 1, 1)
-            let max = maxLines.flatMap { $0 > 0 ? $0 : nil } ?? tier
-            let key = Key(path: path, start: start, max: max)
+            let start = ReadWindow.effectiveStartLine(startLine)
+            let maxL = ReadWindow.effectiveMaxLines(maxLines, default: tier)
+            let key = Key(path: path, start: start, max: maxL)
             seen.insert(key)
             byPath[path, default: (0, [:])].calls += 1
             byPath[path, default: (0, [:])].windows[key, default: 0] += 1

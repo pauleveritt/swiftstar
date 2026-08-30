@@ -237,14 +237,16 @@ struct ReadRequest {
 /// Every `read`/`more` tool_request on the wire, per worker, from the raw
 /// NDJSON via the production pooled parser — no engine, no model. `more`
 /// carries no `path` — it continues the file the session last `read` — so it is
-/// attributed to that path. `ctx_size` is captured from the wire's `status`
-/// events so the same-window key can resolve a bare read's tier default.
-func readRequests(_ dir: URL) -> (contextSize: Int, reads: [ReadRequest]) {
-    guard let text = try? String(contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8) else { return (0, []) }
+/// attributed to that path. `ctx_size` is captured per worker from the wire's
+/// `status` events (pool workers run at their own clamped context, not the
+/// orchestrator's) so the same-window key can resolve each worker's own bare-
+/// read tier default.
+func readRequests(_ dir: URL) -> (contextSizeByWorker: [WorkerId: Int], reads: [ReadRequest]) {
+    guard let text = try? String(contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8) else { return ([:], []) }
     let lines = text.split(whereSeparator: \.isNewline).map(String.init)
     var out: [ReadRequest] = []
     var lastPath: [WorkerId: String] = [:]
-    var ctxSize = 0
+    var ctxSizeByWorker: [WorkerId: Int] = [:]
 
     func record(worker: WorkerId, name: String, params: [ToolParam]) {
         var path = ""
@@ -266,12 +268,14 @@ func readRequests(_ dir: URL) -> (contextSize: Int, reads: [ReadRequest]) {
     var pooled = PoolWireParser()
     for line in lines {
         guard let e = pooled.feed(line) else { continue }
-        if case .status(let s) = e.event, ctxSize == 0 { ctxSize = s.ctxSize }
+        if case .status(let s) = e.event, ctxSizeByWorker[e.worker] == nil {
+            ctxSizeByWorker[e.worker] = s.ctxSize
+        }
         guard case .toolRequest(_, let name, let params) = e.event,
               name == "read" || name == "more" else { continue }
         record(worker: e.worker, name: name, params: params)
     }
-    if !out.isEmpty { return (ctxSize, out) }
+    if !out.isEmpty { return (ctxSizeByWorker, out) }
 
     // Single-session fallback: a `swiftstar-drive` capture carries no
     // worker-tagged envelopes, so `PoolWireParser` sees nothing in it. Before
@@ -281,12 +285,14 @@ func readRequests(_ dir: URL) -> (contextSize: Int, reads: [ReadRequest]) {
     var plain = AgentWireParser()
     for line in lines {
         guard let e = plain.feed(line) else { continue }
-        if case .status(let s) = e, ctxSize == 0 { ctxSize = s.ctxSize }
+        if case .status(let s) = e, ctxSizeByWorker[.orchestrator] == nil {
+            ctxSizeByWorker[.orchestrator] = s.ctxSize
+        }
         guard case .toolRequest(_, let name, let params) = e,
               name == "read" || name == "more" else { continue }
         record(worker: .orchestrator, name: name, params: params)
     }
-    return (ctxSize, out)
+    return (ctxSizeByWorker, out)
 }
 
 /// P24.2 (D3) read evidence: how many `read` calls each session made, how many
@@ -300,7 +306,7 @@ func readRequests(_ dir: URL) -> (contextSize: Int, reads: [ReadRequest]) {
 /// model's healthy walk across a file as redundant. `more` is attributed to a
 /// path but never counted as a re-read (a continuation is not a repeat).
 func cmdRereads(_ dir: URL) {
-    let (ctxSize, reads) = readRequests(dir)
+    let (ctxSizeByWorker, reads) = readRequests(dir)
     guard !reads.isEmpty else {
         print("no read/more tool_requests in \(dir.lastPathComponent)")
         return
@@ -311,7 +317,7 @@ func cmdRereads(_ dir: URL) {
         let moreCount = mine.filter { $0.isMore }.count
         let report = ReadRepeatCounter.summarize(
             mine.compactMap { $0.isMore ? nil : (path: $0.path, startLine: $0.startLine, maxLines: $0.maxLines) },
-            contextSize: ctxSize)
+            contextSize: ctxSizeByWorker[worker] ?? 0)
         let moreSuffix = moreCount > 0 ? " [\(moreCount) more call(s)]" : ""
         print("worker \(worker.rawValue): \(report.calls) read call(s), \(report.distinctPairs) distinct (path, window) pair(s) — \(report.sameWindowRepeats) same-window re-read(s)\(moreSuffix)")
         for row in report.paths where row.calls > 1 {

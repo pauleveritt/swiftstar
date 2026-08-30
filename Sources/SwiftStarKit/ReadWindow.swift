@@ -77,20 +77,33 @@ public enum ReadWindow {
         min(7000, max(1024, contextSize / 2))
     }
 
+    /// A missing `start_line` means "from the top"; a non-positive one clamps
+    /// to line 1. Shared by `render` and by `ReadRepeatCounter`'s same-window
+    /// key so both treat a request's identity the same way.
+    public static func effectiveStartLine(_ startLine: Int?) -> Int {
+        max(startLine ?? 1, 1)
+    }
+
+    /// A non-positive or absent `max_lines` is *absent*, not a request for one
+    /// line (`ds4_agent.c:8125`) — it resolves to the tier default. Shared by
+    /// `render` and by `ReadRepeatCounter`'s same-window key so a bare read and
+    /// its equivalent explicit window are never counted as two different ones.
+    public static func effectiveMaxLines(_ maxLines: Int?, default defaultLines: Int) -> Int {
+        maxLines.flatMap { $0 > 0 ? $0 : nil } ?? defaultLines
+    }
+
     public static func render(text: String, path: String,
                               request: ReadWindowRequest,
                               defaultLines: Int,
                               byteBudget: Int = 7000) -> ReadWindowResult {
         let lines = splitLines(text)
         let total = lines.count
-        let startIdx = min(max(request.startLine, 1) - 1, total)
+        let startIdx = min(effectiveStartLine(request.startLine) - 1, total)
 
         // The ceiling: `whole` means "to EOF", otherwise max_lines or the tier.
-        // A non-positive `max_lines` is *absent*, not a request for one line —
-        // `ds4_agent.c:8125` (`if (max_lines <= 0) max_lines = default`). Serving
-        // 1 and then advertising `call more with count=0` would be a second
-        // contract behind one tool name, and a slow-drip paging loop.
-        let requested = request.maxLines.flatMap { $0 > 0 ? $0 : nil } ?? defaultLines
+        // Serving 1 and then advertising `call more with count=0` would be a
+        // second contract behind one tool name, and a slow-drip paging loop.
+        let requested = effectiveMaxLines(request.maxLines, default: defaultLines)
         let ceiling = request.whole ? total - startIdx : requested
         let ceilingEnd = min(total, startIdx + max(ceiling, 0))
 

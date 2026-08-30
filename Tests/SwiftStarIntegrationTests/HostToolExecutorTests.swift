@@ -307,6 +307,26 @@ struct HostToolExecutorTests {
         #expect(second.text == first.text)
     }
 
+    @Test func poolPolicyReadReflectsFileChangesBetweenReads() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        let path = ws.appendingPathComponent("a.txt")
+        try "hello".write(to: path, atomically: true, encoding: .utf8)
+        let executor = HostToolExecutor(policy: .pool(vettedCommands: []))
+        let req = request("read", [], workspace: ws, path: "a.txt")
+
+        let first = executor.execute(req)
+        try "goodbye".write(to: path, atomically: true, encoding: .utf8)
+        let second = executor.execute(req)
+        // P24.2 (D2): with the cache gone, a changed file is never masked by a
+        // stale "(unchanged since last read)" — each read reflects the file on
+        // disk at the moment it is served. (Replaces
+        // poolPolicyReadCacheInvalidatesOnChange, whose "changed file serves
+        // new content" pin the plan retired without an actual replacement.)
+        #expect(first.text.hasSuffix(": lines 1-1 of 1\n1 hello\n"))
+        #expect(second.text.hasSuffix(": lines 1-1 of 1\n1 goodbye\n"))
+    }
+
     @Test func poolPolicyReadHonorsWindows() throws {
         let ws = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: ws) }
