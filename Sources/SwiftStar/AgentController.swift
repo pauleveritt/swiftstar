@@ -384,6 +384,11 @@ final class AgentController {
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
         workerTurn.watchdog?.cancel()
         workerTurn = ActiveWorkerTurn()
+        // P24.1 (D3/D5): the executor is a process-lifetime `static let`, so it
+        // cannot take the context size at construction, and its `more`
+        // continuations would otherwise outlive the session that made them.
+        Self.hostToolExecutor.setContextSize(settings.contextSize)
+        Self.hostToolExecutor.resetReadState()
         // D12: the build identification is resolved once per spawn (the
         // submodule SHA — the same fact the capture provenance records).
         buildSHA = AgentController.submoduleSHA(settings.engineDir)

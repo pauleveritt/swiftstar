@@ -18,6 +18,10 @@ public final class PoolOrchestrator {
     /// `vettedCommands = [...]` reset at the top of `runPhase`.
     private var hostToolExecutor = HostToolExecutor(policy: .pool(vettedCommands: []))
 
+    /// P24.1 (D3): the engine's read tier is chosen from context size; the
+    /// harness must use the same one, so each per-phase executor gets it.
+    private let contextSize: Int
+
     /// `workers` (P12.5): the pool size passed to `--subagent-pool`. Defaults
     /// to 3 (orchestrator + workers 1/2 — implement/repair), preserving every
     /// existing call site's behavior unchanged. A caller that needs an extra
@@ -26,6 +30,13 @@ public final class PoolOrchestrator {
     /// larger value.
     public init(settings: AgentSettings, workers: Int = 3) throws {
         self.model = settings.modelPath.lastPathComponent
+        // P24.1 (D3): the harness reads through the same windowed executor as
+        // the app, so it must select the same line/byte tier as the engine it
+        // is measuring. The placeholder above is replaced per phase; this
+        // keeps even that one off the 32768 default.
+        self.contextSize = settings.contextSize
+        self.hostToolExecutor = HostToolExecutor(
+            policy: .pool(vettedCommands: []), contextSize: settings.contextSize)
         let binary = AgentCommand.binaryPath(settings: settings)
         let process = Process()
         process.executableURL = binary
@@ -77,7 +88,7 @@ public final class PoolOrchestrator {
         var refusedStreak = 0
         let vettedCommands = [packet.validationCommand, packet.selfTestCommand]
             .compactMap { $0 }.filter { !$0.isEmpty }
-        hostToolExecutor = HostToolExecutor(policy: .pool(vettedCommands: vettedCommands))
+        hostToolExecutor = HostToolExecutor(policy: .pool(vettedCommands: vettedCommands), contextSize: contextSize)
         let prompt = PoolPrompt(worker: worker, text: packet.taskText).encode() + "\n"
         stdin.write(Data(prompt.utf8))
 
@@ -205,7 +216,7 @@ public final class PoolOrchestrator {
         // The orchestrator is the agent's own role: full bash (`.app` policy),
         // matching the app's shell-on agent tab — not the pool worker's
         // vetted-only commands. The caller validates the final result.
-        hostToolExecutor = HostToolExecutor(policy: .app)
+        hostToolExecutor = HostToolExecutor(policy: .app, contextSize: contextSize)
         let promptLine = PoolPrompt(worker: .orchestrator, text: prompt).encode() + "\n"
         stdin.write(Data(promptLine.utf8))
 
