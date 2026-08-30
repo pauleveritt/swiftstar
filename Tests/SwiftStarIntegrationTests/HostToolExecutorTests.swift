@@ -34,7 +34,7 @@ struct HostToolExecutorTests {
 
     // MARK: - read/more: app policy (no cache, split confinement/read errors)
 
-    @Test func appPolicyReadReturnsFullTextEveryTime() throws {
+    @Test func appPolicyReadRendersTheEngineWindowFormat() throws {
         let ws = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: ws) }
         try "hello".write(to: ws.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
@@ -43,8 +43,9 @@ struct HostToolExecutorTests {
 
         let first = executor.execute(req)
         let second = executor.execute(req)
-        #expect(first.text == "hello")
-        #expect(second.text == "hello", "the app policy has no read cache — a second read is not 'unchanged'")
+        #expect(first.text.hasSuffix(": lines 1-1 of 1\n1 hello\n"))
+        #expect(second.text == first.text,
+                "the app policy has no read cache — a second read serves the same window")
     }
 
     @Test func appPolicyReadMissingFileNamesThePathInTheError() throws {
@@ -65,6 +66,124 @@ struct HostToolExecutorTests {
         // when the caller passes no confined path) refuses before any I/O.
         #expect(!result.ok)
         #expect(result.text.contains("outside the workspace grant"))
+    }
+
+    // MARK: - P24.1 windowed reads and `more` continuation
+
+    /// n lines, "l1".."ln", at `big.txt` in `ws`.
+    private func writeLines(_ n: Int, _ ws: URL, prefix: String = "l") throws {
+        let text = (1...n).map { "\(prefix)\($0)" }.joined(separator: "\n") + "\n"
+        try text.write(to: ws.appendingPathComponent("big.txt"), atomically: true, encoding: .utf8)
+    }
+
+    @Test func readHonorsStartLineAndMaxLines() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        try writeLines(40, ws)
+        let executor = HostToolExecutor(policy: .app)
+        let r = executor.execute(request("read",
+            [param("start_line", "10"), param("max_lines", "3")],
+            workspace: ws, path: "big.txt"))
+        #expect(r.ok)
+        #expect(r.text.contains("lines 10-12 of 40; continue_offset=13;"))
+        #expect(r.text.contains("10 l10\n11 l11\n12 l12\n"))
+        #expect(!r.text.contains("13 l13"))
+    }
+
+    @Test func moreContinuesFromTheContinueOffset() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        try writeLines(40, ws)
+        let executor = HostToolExecutor(policy: .app)
+        _ = executor.execute(request("read",
+            [param("start_line", "1"), param("max_lines", "5")],
+            workspace: ws, path: "big.txt"))
+        let more = executor.execute(request("more", [param("count", "5")],
+            workspace: ws, path: nil))
+        #expect(more.ok)
+        #expect(more.text.contains("lines 6-10 of 40"))
+        #expect(more.text.contains("6 l6\n"))
+        #expect(!more.text.contains("5 l5\n"), "no line may repeat across the seam")
+    }
+
+    @Test func readingToEOFClearsTheContinuation() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        try "hello".write(to: ws.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        let executor = HostToolExecutor(policy: .app)
+        _ = executor.execute(request("read", [], workspace: ws, path: "a.txt"))
+        let more = executor.execute(request("more", [], workspace: ws, path: nil))
+        #expect(!more.ok)
+        #expect(more.text.contains("no previous output to continue"))
+    }
+
+    @Test func moreWithNoPriorReadErrors() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        let executor = HostToolExecutor(policy: .app)
+        let more = executor.execute(request("more", [], workspace: ws, path: nil))
+        #expect(!more.ok)
+        #expect(more.text.contains("no previous output to continue"))
+    }
+
+    /// D5: the `.app` executor is shared by the main agent and pool workers, so
+    /// continuation state must be keyed by workspace root. A single scalar
+    /// fails this test.
+    @Test func continuationsAreKeyedPerWorkspaceRoot() throws {
+        let wsA = try makeWorkspace(), wsB = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: wsA)
+                try? FileManager.default.removeItem(at: wsB) }
+        try writeLines(40, wsA)
+        try writeLines(40, wsB, prefix: "b")
+        let executor = HostToolExecutor(policy: .app)
+
+        _ = executor.execute(request("read", [param("max_lines", "5")], workspace: wsA, path: "big.txt"))
+        _ = executor.execute(request("read", [param("max_lines", "5")], workspace: wsB, path: "big.txt"))
+        let moreA = executor.execute(request("more", [param("count", "2")], workspace: wsA, path: nil))
+        #expect(moreA.text.contains("6 l6"), "A's `more` must continue A's file, not B's")
+        #expect(!moreA.text.contains("b6"))
+    }
+
+    @Test func resetReadStateClearsContinuations() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        try writeLines(40, ws)
+        let executor = HostToolExecutor(policy: .app)
+        _ = executor.execute(request("read", [param("max_lines", "5")], workspace: ws, path: "big.txt"))
+        executor.resetReadState()
+        let more = executor.execute(request("more", [], workspace: ws, path: nil))
+        #expect(!more.ok)
+        #expect(more.text.contains("no previous output to continue"))
+    }
+
+    @Test func contextSizeSelectsTheEngineTier() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        try writeLines(200, ws)
+        // 8192 → the engine's 120-line tier, so a 200-line file truncates.
+        let small = HostToolExecutor(policy: .app, contextSize: 8192)
+        #expect(small.execute(request("read", [], workspace: ws, path: "big.txt"))
+            .text.contains("lines 1-120 of 200; continue_offset=121;"))
+        // 32768 → the 500-line tier, so the same file reaches EOF.
+        let large = HostToolExecutor(policy: .app, contextSize: 32768)
+        #expect(large.execute(request("read", [], workspace: ws, path: "big.txt"))
+            .text.contains("lines 1-200 of 200\n"))
+        // setContextSize is the app's path (its executor is a `static let`).
+        small.setContextSize(32768)
+        #expect(small.execute(request("read", [], workspace: ws, path: "big.txt"))
+            .text.contains("lines 1-200 of 200\n"))
+    }
+
+    /// Sibling success for the two refusal tests above (BRIEF rule 4).
+    @Test func readOutsideGrantStillRefusesAndInsideStillServes() throws {
+        let ws = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: ws) }
+        try "hello".write(to: ws.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        let executor = HostToolExecutor(policy: .app)
+        let refused = executor.execute(request("read", [], workspace: ws, path: nil))
+        #expect(!refused.ok)
+        #expect(refused.text.contains("outside the workspace grant"))
+        #expect(executor.execute(request("read", [], workspace: ws, path: "a.txt")).ok)
     }
 
     // MARK: - read/more: pool policy (per-turn cache, folded generic error)
