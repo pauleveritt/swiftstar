@@ -401,6 +401,16 @@ private struct TaxonomyWorker {
     }
 }
 
+/// Stable presentation order for count maps. Dictionary iteration order is
+/// deliberately unspecified, so count-only sorting makes equal-frequency
+/// entries change places between analyzer runs.
+private func countEntries(_ counts: [String: Int]) -> [(key: String, value: Int)] {
+    counts.sorted {
+        if $0.value != $1.value { return $0.value > $1.value }
+        return $0.key < $1.key
+    }
+}
+
 /// Summarize the pooled wire by worker using the production parser. This is
 /// the Swift replacement for the retired directive-taxonomy script; worker
 /// streams are never folded together because that creates a session that never
@@ -454,7 +464,7 @@ func cmdTaxonomy(_ dir: URL) {
         let report = byWorker[worker] ?? TaxonomyWorker()
         let role = worker == .orchestrator ? "orchestrator" : "worker \(worker.rawValue)"
         let toolRequests = report.tools.values.reduce(0, +)
-        let toolText = report.tools.sorted { $0.value > $1.value }
+        let toolText = countEntries(report.tools)
             .map { "\($0.key)x\($0.value)" }.joined(separator: ", ")
         let paddedRole = padRight(role, width: 14)
         let paddedThink = padLeft(String(report.events["think"] ?? 0), width: 5)
@@ -463,7 +473,7 @@ func cmdTaxonomy(_ dir: URL) {
         print("   \(paddedRole) think=\(paddedThink) text=\(paddedText) tool_requests=\(paddedTools)  [\(toolText.isEmpty ? "none" : toolText)]")
         if !report.errors.isEmpty {
             print("   engine errors:")
-            for (error, count) in report.errors.sorted(by: { $0.value > $1.value }).prefix(5) {
+            for (error, count) in countEntries(report.errors).prefix(5) {
                 print(String(format: "     %4d x %@", count, String(error.prefix(90))))
             }
         }
@@ -550,7 +560,7 @@ func cmdReport(_ paths: [URL]) {
             var counts: [String: Int] = [:]
             for row in failures { counts[row["outcome"] ?? "", default: 0] += 1 }
             print("    failure modes:")
-            for (outcome, count) in counts.sorted(by: { $0.value > $1.value }) {
+            for (outcome, count) in countEntries(counts) {
                 print("      \(padRight(outcome, width: 14)) \(count)")
             }
             var details: [String: Int] = [:]
@@ -559,7 +569,7 @@ func cmdReport(_ paths: [URL]) {
                     details[detail, default: 0] += 1
                 }
             }
-            for (detail, count) in details.sorted(by: { $0.value > $1.value }).prefix(8) {
+            for (detail, count) in countEntries(details).prefix(8) {
                 print("        \(String(format: "%3d", count))x  \(String(detail.prefix(88)))")
             }
             if table.header.contains("dispatches") {
