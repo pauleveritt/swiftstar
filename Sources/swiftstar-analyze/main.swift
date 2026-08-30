@@ -223,52 +223,55 @@ func cmdDiff(_ a: URL, _ b: URL) {
 }
 
 /// A `read`/`more` tool_request reduced to what the measurement cares about:
-/// the worker (which session read it) and the path (what it read). Windowed
-/// reads (`start_line`/`max_lines`/`offset`/`end_line`) are flagged because the
-/// *distribution of windows* is the signal: many distinct windows clustered on
-/// one region of one file is the signature of the P24.1 starvation loop — the
-/// model asking repeatedly for lines the host never served. (Before P24.1 the
-/// host ignored these parameters entirely and returned the whole file, which
-/// the responder then condensed at 8000 bytes.)
+/// the worker (which session read it), the path (what it read), and the raw
+/// window parameters for same-window counting (P24.2, D3). `isMore` marks a
+/// continuation, which is attributed to a path but never counted as a re-read.
 struct ReadRequest {
     let worker: WorkerId
     let path: String
-    let windowed: Bool
+    let startLine: Int?    // nil for a bare read
+    let maxLines: Int?     // nil for a bare read
+    let isMore: Bool
 }
 
 /// Every `read`/`more` tool_request on the wire, per worker, from the raw
-/// NDJSON via the production pooled parser — no engine, no model. These counts
-/// are P24.1's evidence: repeated reads of one path, and the spread of windows
-/// across them, are what a starvation loop looks like from the wire. `more`
+/// NDJSON via the production pooled parser — no engine, no model. `more`
 /// carries no `path` — it continues the file the session last `read` — so it is
-/// attributed to that path, flagged windowed.
-func readRequests(_ dir: URL) -> [ReadRequest] {
-    guard let text = try? String(contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8) else { return [] }
+/// attributed to that path. `ctx_size` is captured from the wire's `status`
+/// events so the same-window key can resolve a bare read's tier default.
+func readRequests(_ dir: URL) -> (contextSize: Int, reads: [ReadRequest]) {
+    guard let text = try? String(contentsOf: dir.appendingPathComponent("wire.ndjson"), encoding: .utf8) else { return (0, []) }
     let lines = text.split(whereSeparator: \.isNewline).map(String.init)
     var out: [ReadRequest] = []
     var lastPath: [WorkerId: String] = [:]
+    var ctxSize = 0
 
     func record(worker: WorkerId, name: String, params: [ToolParam]) {
         var path = ""
-        var windowed = name == "more"
+        var startLine: Int? = nil
+        var maxLines: Int? = nil
         for p in params {
             if p.name == "path" { path = p.value }
-            if p.name == "start_line" || p.name == "max_lines" || p.name == "offset" || p.name == "end_line" { windowed = true }
+            if p.name == "start_line" { startLine = Int(p.value) }
+            if p.name == "max_lines" { maxLines = Int(p.value) }
         }
         if path.isEmpty { path = lastPath[worker] ?? "" }
         guard !path.isEmpty else { return }
         lastPath[worker] = path
-        out.append(ReadRequest(worker: worker, path: path, windowed: windowed))
+        out.append(ReadRequest(worker: worker, path: path,
+                               startLine: startLine, maxLines: maxLines,
+                               isMore: name == "more"))
     }
 
     var pooled = PoolWireParser()
     for line in lines {
-        guard let e = pooled.feed(line),
-              case .toolRequest(_, let name, let params) = e.event,
+        guard let e = pooled.feed(line) else { continue }
+        if case .status(let s) = e.event, ctxSize == 0 { ctxSize = s.ctxSize }
+        guard case .toolRequest(_, let name, let params) = e.event,
               name == "read" || name == "more" else { continue }
         record(worker: e.worker, name: name, params: params)
     }
-    if !out.isEmpty { return out }
+    if !out.isEmpty { return (ctxSize, out) }
 
     // Single-session fallback: a `swiftstar-drive` capture carries no
     // worker-tagged envelopes, so `PoolWireParser` sees nothing in it. Before
@@ -277,26 +280,27 @@ func readRequests(_ dir: URL) -> [ReadRequest] {
     // one-off script. Everything is attributed to the orchestrator.
     var plain = AgentWireParser()
     for line in lines {
-        guard case .toolRequest(_, let name, let params)? = plain.feed(line),
+        guard let e = plain.feed(line) else { continue }
+        if case .status(let s) = e, ctxSize == 0 { ctxSize = s.ctxSize }
+        guard case .toolRequest(_, let name, let params) = e,
               name == "read" || name == "more" else { continue }
         record(worker: .orchestrator, name: name, params: params)
     }
-    return out
+    return (ctxSize, out)
 }
 
-/// P24.1's read evidence, measured from the capture alone: how many read/more
-/// calls each session made, how many were re-reads of a path that session had
-/// already read, and the top offenders.
+/// P24.2 (D3) read evidence: how many `read` calls each session made, how many
+/// were same-window re-reads — the *same effective* `(path, start_line,
+/// max_lines)` asked again — and the top offenders, with repeated windows
+/// listed per path.
 ///
-/// `calls - distinct` is reported as "redundant", but read it as a *repeat*
-/// count, not a waste count: a repeat is only genuinely redundant when the
-/// earlier read delivered what the later one asks for. Before P24.1 that was
-/// false for every file over the condenser's 8000-byte cap — the host ignored
-/// `start_line`/`max_lines` and the responder cut the middle out — so repeats
-/// there measured a model that could not get what it asked for. The window
-/// spread per path is what distinguishes the two.
+/// Same-window of the *effective* window is the number that decides the
+/// read-guard question: a bare read and `start=1,max=<tier>` are one window,
+/// not two. The old same-path count (`calls - distinct paths`) labelled the
+/// model's healthy walk across a file as redundant. `more` is attributed to a
+/// path but never counted as a re-read (a continuation is not a repeat).
 func cmdRereads(_ dir: URL) {
-    let reads = readRequests(dir)
+    let (ctxSize, reads) = readRequests(dir)
     guard !reads.isEmpty else {
         print("no read/more tool_requests in \(dir.lastPathComponent)")
         return
@@ -304,16 +308,18 @@ func cmdRereads(_ dir: URL) {
     let workers = Set(reads.map { $0.worker }).sorted()
     for worker in workers {
         let mine = reads.filter { $0.worker == worker }
-        var byPath: [String: (count: Int, windowed: Int)] = [:]
-        for r in mine {
-            byPath[r.path, default: (0, 0)].count += 1
-            if r.windowed { byPath[r.path, default: (0, 0)].windowed += 1 }
-        }
-        let redundant = mine.count - byPath.count
-        print("worker \(worker.rawValue): \(mine.count) read/more call(s) across \(byPath.count) distinct path(s) — \(redundant) redundant re-read(s)")
-        for (path, c) in byPath.sorted(by: { $0.value.count > $1.value.count }) where c.count > 1 {
-            let w = c.windowed > 0 ? "  (windowed: \(c.windowed))" : ""
-            print(String(format: "  %3d  %@%@", c.count, path, w))
+        let moreCount = mine.filter { $0.isMore }.count
+        let report = ReadRepeatCounter.summarize(
+            mine.compactMap { $0.isMore ? nil : (path: $0.path, startLine: $0.startLine, maxLines: $0.maxLines) },
+            contextSize: ctxSize)
+        let moreSuffix = moreCount > 0 ? " [\(moreCount) more call(s)]" : ""
+        print("worker \(worker.rawValue): \(report.calls) read call(s), \(report.distinctPairs) distinct (path, window) pair(s) — \(report.sameWindowRepeats) same-window re-read(s)\(moreSuffix)")
+        for row in report.paths where row.calls > 1 {
+            print(String(format: "  %3d  %@  [%d distinct window(s)]",
+                         row.calls, row.path, row.distinctWindows))
+            for item in row.repeatedWindows {
+                print("          \(item.count)x  start_line=\(item.startLine) max_lines=\(item.maxLines)")
+            }
         }
     }
 }
