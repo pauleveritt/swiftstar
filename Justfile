@@ -65,6 +65,14 @@ lint-docs:
     done
     exit $fail
 
+# Point git at the tracked .githooks/ dir so pre-commit runs `lint-docs`
+# locally (docs/sdd.md, "Standing rules": closing a phase/branch owes a
+# green lint-docs, enforced mechanically, not left to memory). One-time
+# per clone; `git config` writes to this repo's untracked .git/config.
+install-hooks:
+    git config core.hooksPath .githooks
+    @echo "pre-commit will now run 'just lint-docs' on every commit."
+
 # Fast tier: SwiftStarKit against fixtures. No model, no network, no subprocess
 # (enforced by the FastTierGuard build-tool plugin on SwiftStarKitTests).
 test:

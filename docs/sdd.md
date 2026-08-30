@@ -29,6 +29,12 @@ Spec-driven development, one phase at a time.
    written," below, governs the *decision* record (`specs/`, `research/`). A
    plan is a build instruction; its history is in git.
 
+   **Closing a phase (or a branch that closes one) is not done until
+   `ROADMAP.md` is updated and `just lint-docs` is green.** Both are part of
+   the close, not optional follow-up — a phase whose row is stale, or whose
+   cell blew the cap, is not closed. This is a standing rule regardless of
+   which skill or workflow drives the finish (see "Standing rules" below).
+
 Research that informs a decision but is not itself a design goes in
 `docs/superpowers/research/`.
 
@@ -73,6 +79,23 @@ proven that twice on two different rules (see `ROADMAP.md`'s Backlog,
 "eval-system consolidation" and the P26 schema-freeze note) — so the gate
 exists precisely because prose alone did not hold.
 
+**A phase with more than one feature cycle (P12, P24, …) uses a numbered
+list inside the relevant cell(s)** — Phase, Direction, and/or Status — one
+item per cycle, each linking its own spec/plan/research docs and carrying its
+own one-line status. This keeps the phase as one table row (no nested
+sub-table) while still giving each cycle a distinct, linkable status instead
+of one run-on paragraph. The cell-length caps above still apply to the whole
+cell — a cycle whose item is still too long owes the same verdict-doc move.
+
+**`## Now` is a pointer, not a narrative.** It names what is currently in
+flight, what is parked and why (one line each), and links to the phase row
+or Backlog entry that carries the actual detail. It must never re-narrate a
+decision that already has a home in the phase table or the Backlog — that is
+how it grew into a second, undated history of the project the first time.
+Update it when what's in flight changes; if an item needs more than a
+sentence, that sentence belongs in the phase row or Backlog entry it points
+to, not in `Now` itself.
+
 ## Standing rules
 
 Every rule in `BRIEF.md`'s "Binding rules" applies to every phase. The two
@@ -82,3 +105,9 @@ easiest to forget:
   Break it, watch it fail, restore it.
 - **Every submodule bump owes a golden-fixture recapture** against the real
   binary. A rebase can apply cleanly and still be semantically wrong.
+- **Finishing a branch that closes a phase or feature cycle updates
+  `ROADMAP.md` and passes `just lint-docs`, before the branch is considered
+  done** — merged, PR'd, or otherwise handed off. This is enforced two ways,
+  not left to memory: a git hook runs `just lint-docs` on commit, and the
+  project's `CLAUDE.md` states the same rule for the agent driving the finish.
+  A closed phase with a stale row is not closed.

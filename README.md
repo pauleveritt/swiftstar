@@ -28,7 +28,7 @@ Flash) is switchable live, admission-gated before any stop. See
 [`ROADMAP.md`](ROADMAP.md) for current phase status.
 
 - [`BRIEF.md`](BRIEF.md) — the design. Read this first.
-- [`ROADMAP.md`](ROADMAP.md) — phases, concept budget, backlog.
+- [`ROADMAP.md`](ROADMAP.md) — phases, backlog.
 - [`docs/harvest/`](docs/harvest/index.md) — what the predecessor projects
   proved, kept as evidence rather than as source.
 - [`docs/sdd.md`](docs/sdd.md) — how work happens here.

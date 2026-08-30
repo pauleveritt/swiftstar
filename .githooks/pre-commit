@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# `just lint-docs` on every commit — see docs/sdd.md, "Standing rules":
+# closing a phase or feature cycle is not done until ROADMAP.md is updated
+# and this passes. A written convention nothing checks gets ignored under
+# deadline pressure (this project has already proven that twice); this hook
+# is the mechanical half of that rule, not a replacement for updating the
+# roadmap by hand.
+#
+# Scoped to staged files, not the whole repo: `lint-docs` also re-checks
+# every historical plan under docs/superpowers/plans/, most of which
+# predate the cap and were never meant to be retrofitted (docs/sdd.md's
+# "kept as it was written" rule protects closed build instructions). Failing
+# every commit on pre-existing, untouched violations would train everyone to
+# reach for --no-verify — the exact failure mode this hook exists to avoid.
+# So: block only on a violation in a file this commit actually touches.
+set -euo pipefail
+
+if ! command -v just >/dev/null 2>&1; then
+    echo "pre-commit: 'just' not found on PATH — skipping lint-docs" >&2
+    exit 0
+fi
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+output="$(just lint-docs 2>&1 || true)"
+[ -z "$output" ] && exit 0
+
+relevant=""
+while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    hit="$(echo "$output" | grep -F "$file:" || true)"
+    [ -n "$hit" ] && relevant="$relevant
+$hit"
+done <<< "$staged"
+
+if [ -n "$relevant" ]; then
+    echo "pre-commit: 'just lint-docs' failed on a file this commit touches:" >&2
+    echo "$relevant" >&2
+    echo >&2
+    echo "See docs/sdd.md, \"The phase table.\" Fix the violation, or" >&2
+    echo "'git commit --no-verify' to bypass (only when you know why)." >&2
+    exit 1
+fi
+
+pre_existing="$(echo "$output" | grep -c . || true)"
+if [ "$pre_existing" -gt 0 ]; then
+    echo "pre-commit: note — $pre_existing pre-existing lint-docs violation(s)" >&2
+    echo "in files this commit doesn't touch; not blocking. Run 'just" >&2
+    echo "lint-docs' directly to see them." >&2
+fi
+exit 0

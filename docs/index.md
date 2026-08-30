@@ -10,7 +10,7 @@ who isn't the author — see [the roadmap](https://github.com/pauleveritt/swifts
 For now, the durable documents are in the repository root:
 
 - `BRIEF.md` — the settled design. Read first.
-- `ROADMAP.md` — phases, concept budget, backlog.
+- `ROADMAP.md` — phases, backlog.
 - `docs/harvest/` — what the predecessor projects proved, as evidence.
 - `docs/sdd.md` — how work happens here.
 
