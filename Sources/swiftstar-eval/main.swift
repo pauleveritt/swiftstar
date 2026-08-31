@@ -9,12 +9,12 @@ import SwiftStarKit
 // below. A later task adds a verb by adding a merge line here and a new file
 // — it never edits another family's handlers.
 //
-//   Task 6 (this one): the ten swiftstar-analyze verbs — AnalyzeVerbs.swift
-//   Task 5 (lands separately): `run`                    — RunVerb.swift
-//   Task 7 (lands separately): `experiment`, `verdict`  — ExperimentVerb.swift
+//   Task 6: the ten swiftstar-analyze verbs               — AnalyzeVerbs.swift
+//   Task 5: `run`                                         — RunVerb.swift
+//   Task 7 (lands separately): `experiment`, `verdict`     — ExperimentVerb.swift
 
 let verbHandlers: [String: @Sendable ([String]) -> Void] = analyzeVerbHandlers
-// Task 5 adds:  .merging(runVerbHandlers) { a, _ in a }
+    .merging(runVerbHandlers) { a, _ in a }
 // Task 7 adds:  .merging(experimentVerbHandlers) { a, _ in a }
 
 let args = CommandLine.arguments

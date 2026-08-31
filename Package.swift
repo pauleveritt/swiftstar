@@ -49,7 +49,9 @@ let package = Package(
         // the same executor the app runs — matching swiftstar-agenttest below.
         .executableTarget(name: "swiftstar-drive", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .executableTarget(name: "swiftstar-agenttest", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
-        .executableTarget(name: "swiftstar-eval", dependencies: ["SwiftStarKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
+        // Task 5: the `run` verb spawns a real turn through `AgentSession`
+        // (`SwiftStarAppKit`) — the same seam `swiftstar-agenttest` uses.
+        .executableTarget(name: "swiftstar-eval", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "SwiftStarKitTests",
             dependencies: ["SwiftStarKit"],

@@ -183,6 +183,21 @@ public final class AgentSession {
         self.hostToolExecutor = HostToolExecutor(policy: .app, contextSize: settings.contextSize)
     }
 
+    /// Resolve this session's `SpawnRecord` without spawning anything —
+    /// eval-cli task 5's `run --dry-run` needs to print what a spawn WOULD
+    /// resolve to (model, engine SHA, sampler, power, workspace...) while
+    /// creating no capture tree and touching no process, and `start()` itself
+    /// needs the identical resolution before it creates that tree. Split out
+    /// so the two never drift: this is the one place `buildSHA` is computed.
+    /// Idempotent — safe to call more than once (a repeated dry-run, or a
+    /// caller that inspects the record before deciding whether to spawn).
+    public func resolveSpawnRecord() -> SpawnRecord {
+        buildSHA = Self.submoduleSHA(settings.engineDir)
+        return Self.makeSpawnRecord(
+            settings: settings, tools: tools, buildSHA: buildSHA,
+            captureDirectory: captureDirectory, startedAt: Date(), poolSize: poolSize)
+    }
+
     /// Spawn the engine and start draining its wire. Returns the `SpawnRecord`
     /// this spawn resolved to (eval-cli task 1's shape — the only thing an
     /// arm-to-arm diff compares); the caller decides what to do with it (the
@@ -195,10 +210,7 @@ public final class AgentSession {
     /// line that is only in-flight to a callback.
     @discardableResult
     public func start() throws -> SpawnRecord {
-        buildSHA = Self.submoduleSHA(settings.engineDir)
-        let record = Self.makeSpawnRecord(
-            settings: settings, tools: tools, buildSHA: buildSHA,
-            captureDirectory: captureDirectory, startedAt: Date(), poolSize: poolSize)
+        let record = resolveSpawnRecord()
         // Regression fix (eval-cli task 3): capture is conditional again — a
         // session started with `captureEnabled: false` creates neither the
         // directory nor any file under it, and the drain loops below tee
