@@ -11,13 +11,14 @@ public enum VariantRegistry {
         all.first { $0.id == id }
     }
 
-    /// Locate a variant's gguf. Model files legitimately live in more than one
-    /// place on a development machine — the Mellum drop in `~/models`, the
-    /// Laguna line in the ds4 checkout's `gguf/` — and a variant that names the
-    /// wrong directory is unusable with no signal beyond `.unreadableFile`.
-    /// (That is precisely how the XS default shipped: it named `~/models`, which
-    /// holds only the Mellum file, and the acceptance run set the env override,
-    /// so the green run masked it.)
+    /// Locate a variant's gguf. `~/models` is the standard drop location for
+    /// all variants (2026-08-30 consolidation); the ds4 checkout's `gguf/`
+    /// and DS4 Control's download dir remain as fallbacks for files that
+    /// haven't been moved there yet. A variant that names the wrong directory
+    /// is unusable with no signal beyond `.unreadableFile`. (That is
+    /// precisely how the XS default shipped: it named `~/models`, which at
+    /// the time held only the Mellum file, and the acceptance run set the env
+    /// override, so the green run masked it.)
     ///
     /// Order: the variant's own env override, then `SWIFTSTAR_MODEL_DIR`, then
     /// each known directory that actually has the file. When nothing matches,
@@ -35,10 +36,6 @@ public enum VariantRegistry {
         }
         directories.append(home.appending(path: "models"))
         directories.append(home.appending(path: "projects/ds4/gguf"))
-        // DeepSeek V4 Flash's artifact (P25): lives only under DS4 Control's
-        // download dir under its current `-0731` filename — the legacy copy in
-        // the ds4 submodule's gguf/ carries a different (pre-`-0731`) filename,
-        // so it would never match here regardless.
         directories.append(home.appending(path: "Library/Application Support/DS4 Control/gguf"))
 
         let candidates = directories.map { $0.appending(path: fileName) }
@@ -225,8 +222,9 @@ public enum VariantRegistry {
     /// DeepSeek V4 Flash — the 128 GB flagship rung (P25), the reference the
     /// other three are measured against (`docs/laptop-ai.md`). Resident only
     /// (no SSD streaming; that is the 32 GB Laguna XS story). Weights are
-    /// local — no download; the only artifact copy under the expected `-0731`
-    /// filename lives in DS4 Control's own download directory.
+    /// local — no download; the artifact under the expected `-0731` filename
+    /// lives in `~/models` (moved there from DS4 Control's own download
+    /// directory, 2026-08-30).
     public static let deepSeekV4Flash: Variant = {
         let path = locateModel(
             "DeepSeek-V4-Flash-Layers37-42Q4KExperts-OtherExpertLayersIQ2XXSGateUp-Q2KDown-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-fixed-0731.gguf",

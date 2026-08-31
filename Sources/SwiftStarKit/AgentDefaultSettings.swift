@@ -22,7 +22,7 @@ public enum AgentDefaultSettings {
     /// `Variant` (P22) retires it.
     public static func defaultModelFallback(environment: [String: String]) -> URL {
         URL(fileURLWithPath: environment["SWIFTSTAR_DEFAULT_MODEL"]
-            ?? "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
+            ?? "/Users/pauleveritt/models/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
     }
 
     /// The effective `selectedVariantID` for both model resolution (`resolve`,

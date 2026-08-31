@@ -48,6 +48,21 @@ struct AgentCommandTests {
         #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--power"))
     }
 
+    /// ds4.c's Laguna load path refuses to start at all when
+    /// `power_percent < 100` ("Laguna S 2.1 currently supports the standard
+    /// local graph path only"), so `--power` must never reach argv for a
+    /// variant that streams via SSD (Laguna S/XS's own signal) even when
+    /// power-saving is otherwise enabled.
+    @Test func argvOmitsPowerSavingForAnSsdStreamingVariantEvenWhenEnabled() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        var settings = makeSettings(workspace: ws)
+        settings.powerSavingEnabled = true
+        settings.runtime = EngineRuntimeConfig(ssdStreaming: true, ssdStreamingCacheExperts: 3200)
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(!argv.contains("--power"))
+        #expect(AgentCommand.powerRecord(settings: settings) == "100 (engine default; no `--power`)")
+    }
+
     @Test func argvAllowsShell() {
         let ws = URL(fileURLWithPath: "/tmp/ws")
         let argv = AgentCommand.argv(settings: makeSettings(workspace: ws, shellAllowed: true))

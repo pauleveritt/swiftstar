@@ -122,9 +122,21 @@ public enum AgentCommand {
     /// same volume of work — a gap first read as an engine improvement.
     /// Recording it here is what makes two captures comparable at a glance.
     public static func powerRecord(settings: AgentSettings) -> String {
-        settings.powerSavingEnabled
+        effectivePowerSavingEnabled(settings)
             ? "\(AgentSettings.powerSavingPercent) (`--power \(AgentSettings.powerSavingPercent)`)"
             : "100 (engine default; no `--power`)"
+    }
+
+    /// `settings.powerSavingEnabled`, forced off for a Laguna variant
+    /// (`runtime.ssdStreaming` — the family's own signal, set by both S and
+    /// XS, absent everywhere else): `ds4.c`'s Laguna load path refuses to
+    /// start at all when `power_percent < 100`, unconditionally, alongside
+    /// steering/MTP/DSpark/first-token-diagnostic ("Laguna S 2.1 currently
+    /// supports the standard local graph path only") — power-saving's
+    /// UserDefaults-true default (`AgentDefaultSettings.resolve`) would
+    /// otherwise pick a variant the engine immediately refuses to load.
+    private static func effectivePowerSavingEnabled(_ settings: AgentSettings) -> Bool {
+        settings.powerSavingEnabled && settings.runtime?.ssdStreaming != true
     }
 
     /// The spawn's think configuration, for `provenance.md`. Reports what argv
@@ -160,7 +172,7 @@ public enum AgentCommand {
             // without it fails loudly at option-parse, never silently.
             "--per-turn-think",
         ]
-        if settings.powerSavingEnabled {
+        if effectivePowerSavingEnabled(settings) {
             argv.append(contentsOf: ["--power", String(AgentSettings.powerSavingPercent)])
         }
         if settings.maxTokens > 0 {
