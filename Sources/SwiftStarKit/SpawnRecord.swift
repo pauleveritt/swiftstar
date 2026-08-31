@@ -272,6 +272,27 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
         return keys
     }
 
+    /// Returns a copy with `workspaceRef` replaced. `AgentSession` always
+    /// resolves this field to `""` (it does not know about `RunWorkspace` —
+    /// see that type's doc comment: worktree management is app-side, not
+    /// `AgentSession`'s concern). A caller that DOES manage a workspace's git
+    /// ref (`swiftstar-eval experiment`, via `RunWorkspace`) uses this to
+    /// fill the field in after `start()` returns, rather than needing a
+    /// dozen-parameter re-init.
+    public func withWorkspaceRef(_ ref: String) -> SpawnRecord {
+        SpawnRecord(
+            engineSHA: engineSHA, engineDirty: engineDirty, engineBinaryHash: engineBinaryHash,
+            swiftstarSHA: swiftstarSHA, swiftstarDirty: swiftstarDirty, harnessBinaryHash: harnessBinaryHash,
+            maxTokens: maxTokens, thinkBudget: thinkBudget, seed: seed,
+            systemPromptHash: systemPromptHash, runtimeFlags: runtimeFlags,
+            modelPath: modelPath, modelBytes: modelBytes, modelHash: modelHash, variantID: variantID,
+            contextSize: contextSize, sampler: sampler, power: power, thinkPolicy: thinkPolicy, tools: tools,
+            shellAllowed: shellAllowed, hostTools: hostTools, workspace: workspace, workspaceRef: ref,
+            osBuild: osBuild, wiredLimitBytes: wiredLimitBytes, environment: environment, userDefaults: userDefaults,
+            captureDirectory: captureDirectory, startedAt: startedAt, runIndex: runIndex,
+            argv: argv)
+    }
+
     /// The element-wise difference between this record's `argv` and
     /// `other`'s, as `"self:X vs other:Y"`/`"self:X vs other:<missing>"`/
     /// `"other:Y vs self:<missing>"` entries in index order. Exists only so a

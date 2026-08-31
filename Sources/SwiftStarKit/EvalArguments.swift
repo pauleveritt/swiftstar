@@ -24,6 +24,8 @@ public enum EvalArguments {
         "findings", "taxonomy", "validate", "report", "index",
         // Task 5.
         "run",
+        // Task 7.
+        "experiment", "verdict",
     ]
 
     public static func isKnownVerb(_ name: String) -> Bool {
@@ -64,7 +66,29 @@ public enum EvalArguments {
         FlagSpec("--dry-run", takesValue: false),
     ]
 
-    static let verbFlagSpecs: [String: [FlagSpec]] = ["run": runFlags]
+    /// `swiftstar-eval experiment`'s flag set (Task 7). Deliberately has no
+    /// `--record` entry — passing `--record` to `experiment` is refused by
+    /// `parse` itself (as an unknown flag) rather than accepted and then
+    /// specially rejected downstream: a verdict cannot be recorded before the
+    /// data it verdicts on exists (see `verdictFlags`, the separate
+    /// invocation).
+    public static let experimentFlags: [FlagSpec] = [
+        FlagSpec("--exploratory", takesValue: false),
+        FlagSpec("--dry-run", takesValue: false),
+    ]
+
+    /// `swiftstar-eval verdict`'s flag set (Task 7) — a separate invocation
+    /// from `experiment`, over an already-written results directory.
+    public static let verdictFlags: [FlagSpec] = [
+        FlagSpec("--record", takesValue: true),
+        FlagSpec("--evidence", takesValue: true),
+    ]
+
+    static let verbFlagSpecs: [String: [FlagSpec]] = [
+        "run": runFlags,
+        "experiment": experimentFlags,
+        "verdict": verdictFlags,
+    ]
 
     /// Every former `CAPTURE_*` env knob (`swiftstar-drive`/
     /// `swiftstar-agenttest`), mapped to the named `run` flag that replaces

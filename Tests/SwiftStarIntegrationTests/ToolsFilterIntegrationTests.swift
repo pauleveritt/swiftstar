@@ -66,62 +66,7 @@ struct ToolsFilterIntegrationTests {
         }
 
         let trace = try String(contentsOf: tracePath, encoding: .utf8)
-        return Self.toolNames(fromTrace: trace)
-    }
-
-    /// Decode every token's `text="..."` payload from the trace's
-    /// `initial_system_prompt` dump (`agent_trace_tokens`/`agent_trace_token`
-    /// in `ds4_agent.c`), concatenate the decoded text, and extract the
-    /// `"name"` key's string value from every schema object — the Swift
-    /// mirror of the engine test suite's own `agent_test_tool_names` helper
-    /// (`ds4_agent.c`), so both sides agree on what "the advertised tool
-    /// names" means. Tolerates both schema spellings: compact
-    /// (`"name":"x"`) and DSML's pretty-printed (`"name": "x"`).
-    static func toolNames(fromTrace trace: String) -> Set<String> {
-        var decoded = ""
-        var scan = trace.startIndex
-        let needle = "text=\""
-        while let range = trace.range(of: needle, range: scan..<trace.endIndex) {
-            var i = range.upperBound
-            var token = ""
-            while i < trace.endIndex, trace[i] != "\"" {
-                if trace[i] == "\\", trace.index(after: i) < trace.endIndex {
-                    let next = trace[trace.index(after: i)]
-                    switch next {
-                    case "n": token.append("\n")
-                    case "r": token.append("\r")
-                    case "t": token.append("\t")
-                    case "\"": token.append("\"")
-                    case "\\": token.append("\\")
-                    default: token.append(next)
-                    }
-                    i = trace.index(i, offsetBy: 2)
-                } else {
-                    token.append(trace[i])
-                    i = trace.index(after: i)
-                }
-            }
-            decoded += token
-            scan = i < trace.endIndex ? trace.index(after: i) : trace.endIndex
-        }
-
-        var names: Set<String> = []
-        var i = decoded.startIndex
-        let key = "\"name\""
-        while let range = decoded.range(of: key, range: i..<decoded.endIndex) {
-            var j = range.upperBound
-            while j < decoded.endIndex, decoded[j] == " " { j = decoded.index(after: j) }
-            guard j < decoded.endIndex, decoded[j] == ":" else { i = range.upperBound; continue }
-            j = decoded.index(after: j)
-            while j < decoded.endIndex, decoded[j] == " " { j = decoded.index(after: j) }
-            guard j < decoded.endIndex, decoded[j] == "\"" else { i = range.upperBound; continue }
-            let start = decoded.index(after: j)
-            var k = start
-            while k < decoded.endIndex, decoded[k] != "\"" { k = decoded.index(after: k) }
-            names.insert(String(decoded[start..<k]))
-            i = k < decoded.endIndex ? decoded.index(after: k) : decoded.endIndex
-        }
-        return names
+        return AdvertisedToolNames.names(fromTrace: trace)
     }
 
     private func realSettings(tools: [String]?) throws -> AgentSettings {

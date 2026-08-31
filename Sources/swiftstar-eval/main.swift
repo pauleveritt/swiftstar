@@ -15,7 +15,7 @@ import SwiftStarKit
 
 let verbHandlers: [String: @Sendable ([String]) -> Void] = analyzeVerbHandlers
     .merging(runVerbHandlers) { a, _ in a }
-// Task 7 adds:  .merging(experimentVerbHandlers) { a, _ in a }
+    .merging(experimentVerbHandlers) { a, _ in a }
 
 let args = CommandLine.arguments
 guard args.count >= 2,
