@@ -100,4 +100,44 @@ struct HostToolExecutorBashTests {
         #expect(sync.exitStatus == async_.exitStatus)
         #expect(sync.outputDigest == async_.outputDigest)
     }
+
+    // MARK: - P24.3: bash results are digested; test/lint are host-owned tools
+
+    @Test func bashResultIsDigestedNotRaw() {
+        let executor = HostToolExecutor(policy: .app)
+        let result = executor.execute(request([param("command", "echo small-output")]))
+        #expect(result.ok)
+        #expect(result.text.hasPrefix("bash: exit 0 (Ran: echo small-output)"))
+        #expect(result.text.contains("small-output"))
+    }
+
+    @Test func testToolRunsSwiftTestAgainstFixtureProject() throws {
+        // A tiny real Swift package: resolves to `swift test`, runs it, and
+        // digests the outcome. Exercised once here; the paired-bill live run
+        // (Task 12) is where the decision-completeness claim is measured.
+        let pkg = FileManager.default.temporaryDirectory
+            .appendingPathComponent("p24-3-fixture-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: pkg, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: pkg) }
+        try """
+        // swift-tools-version: 6.0
+        import PackageDescription
+        let package = Package(name: "Fixture", targets: [.target(name: "Fixture"), .testTarget(name: "FixtureTests", dependencies: ["Fixture"])])
+        """.write(toFile: pkg.appendingPathComponent("Package.swift").path, atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: pkg.appendingPathComponent("Sources/Fixture"), withIntermediateDirectories: true)
+        try "public func answer() -> Int { 42 }\n".write(toFile: pkg.appendingPathComponent("Sources/Fixture/Fixture.swift").path, atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: pkg.appendingPathComponent("Tests/FixtureTests"), withIntermediateDirectories: true)
+        try """
+        import Testing
+        @testable import Fixture
+        @Test func answers() { #expect(answer() == 42) }
+        """.write(toFile: pkg.appendingPathComponent("Tests/FixtureTests/FixtureTests.swift").path, atomically: true, encoding: .utf8)
+        let executor = HostToolExecutor(policy: .app)
+        let result = executor.execute(ToolExecutionRequest(
+            name: "test", params: [], workspace: pkg, resolvedPath: nil))
+        #expect(result.ok)
+        #expect(result.text.contains("Ran: swift test"))
+        #expect(result.text.contains("all passed") || result.text.contains("failures"))
+        #expect(result.validationRan)
+    }
 }

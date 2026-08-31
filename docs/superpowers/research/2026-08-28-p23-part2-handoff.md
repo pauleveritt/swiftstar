@@ -1,7 +1,7 @@
 # P23 part 2 — handoff at the Task 10 boundary
 
 **2026-08-28.** Tasks 1–9 of the
-[part-2 plan](../plans/2026-08-28-p23-wire-level-control-part2.md) are done on
+[part-2 plan](../plans/archive/2026-08-28-p23-wire-level-control-part2.md) are done on
 branch `worktree-p23-part2`. **Task 10 — the golden recapture, fork-ledger row
 #14, the submodule bump, and phase closure — is deliberately not done**: it is
 the phase's one live-model gate, and every comparable gate in this repo (P25

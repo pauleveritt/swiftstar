@@ -6,13 +6,11 @@
 # is the mechanical half of that rule, not a replacement for updating the
 # roadmap by hand.
 #
-# Scoped to staged files, not the whole repo: `lint-docs` also re-checks
-# every historical plan under docs/superpowers/plans/, most of which
-# predate the cap and were never meant to be retrofitted (docs/sdd.md's
-# "kept as it was written" rule protects closed build instructions). Failing
-# every commit on pre-existing, untouched violations would train everyone to
-# reach for --no-verify — the exact failure mode this hook exists to avoid.
-# So: block only on a violation in a file this commit actually touches.
+# Scoped to staged files, not the whole repo. `lint-docs` checks current plans
+# directly under docs/superpowers/plans/; immutable pre-policy plans live in
+# its archive subdirectory. Blocking on an unrelated in-progress plan would
+# train everyone to reach for --no-verify, so block only on a violation in a
+# file this commit actually touches.
 set -euo pipefail
 
 if ! command -v just >/dev/null 2>&1; then

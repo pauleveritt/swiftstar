@@ -5,7 +5,7 @@
 **Phase:** P12.8 — phase-level recovery (reopens P12's "recovery" charter)
 **Branch:** `p15-host-controlled-action-mode` (at `ea3d7ca`); builds on the P15
 text-contract build arm and P12.4's `RepairLoop`.
-**Brief:** `docs/superpowers/plans/P12.8-brief.md`
+**Brief:** `docs/superpowers/plans/archive/P12.8-brief.md`
 
 ## Problem
 

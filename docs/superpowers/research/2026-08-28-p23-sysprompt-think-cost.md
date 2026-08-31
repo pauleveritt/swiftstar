@@ -1,7 +1,7 @@
 # P23 — what the app's system prompt costs in thinking
 
 **2026-08-28.** Measurement only, no production code. Task 7 of the
-[P23 part-1 plan](../plans/2026-08-28-p23-wire-level-control.md).
+[P23 part-1 plan](../plans/archive/2026-08-28-p23-wire-level-control.md).
 
 **Pre-registered scope, honoured:** this measures **think volume only**, n=1 per
 arm, one task, one model, generation bounded at `-n 512`. **No task-success

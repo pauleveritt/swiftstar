@@ -65,14 +65,13 @@ ROADMAP P24 row's Status cell for the outcome.
 de-duplication — the app parses the wire async on `@MainActor`
 (`AgentController.swift:94`) while `PoolOrchestrator` runs a blocking
 `Darwin.poll` loop, and there is no clean shared driver across those
-concurrency models. The defect is *behavioral divergence*: (1) the harness
-injects a refusal-streak corrective after 3 identical refusals
-(`PoolOrchestrator.swift:142-156`) that the app never sends — grep returns no
-other site, so agenttest measures a model given un-sticking help real users
-do not get; (2) `toolCallBudget` is enforced mid-turn in the harness (`:122`)
-but judged post-hoc in the app (`WorktreeDispatch.swift:73`). Each divergence
-gets an explicit keep/drop/port decision, and any that changes measured
-behavior re-baselines the campaign.
+concurrency models. The only confirmed behavioral divergence was the
+harness-only refusal-streak corrective after three identical refusals
+(`PoolOrchestrator.swift`); P24.4 drops that coaching so the harness receives
+the same refusal the product sends. The earlier claim that
+`toolCallBudget` was post-hoc in the app was stale: `AgentController` and
+`AgentPoolTurnLoop` enforce the same shared `ToolCallBudgetTracker` boundary
+mid-turn. P24.4 pins that parity with tests and corrects the record.
 
 *Filed here because this is the fourth instance of the harness-not-the-model
 trap; sequenced last so it cannot perturb an open campaign arm mid-phase.*

@@ -319,7 +319,7 @@ Completed phases move here when the roadmap outgrows the front page.
   the model never acted and the host wrote every file. Design:
   [`2026-08-25-host-controlled-action-mode-design.md`](../specs/2026-08-25-host-controlled-action-mode-design.md).
   Plan:
-  [`2026-08-25-host-controlled-action-mode.md`](../plans/2026-08-25-host-controlled-action-mode.md).
+  [`2026-08-25-host-controlled-action-mode.md`](../plans/archive/2026-08-25-host-controlled-action-mode.md).
   Verdict record:
   [`2026-08-25-p15-verdict-record.md`](./2026-08-25-p15-verdict-record.md).
   Review:

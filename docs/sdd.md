@@ -19,7 +19,10 @@ Spec-driven development, one phase at a time.
    Placeholders" section requires full code blocks; it serves a stateless
    subagent executor and is **not in force here** — a test name plus its
    assertion is not a placeholder. Ceiling: under 400 lines, under 25%
-   fenced. Over either, split the phase.
+   fenced. Over either, split the phase. Plans written before this local rule
+   are retained in `docs/superpowers/plans/archive/` as legacy records; they
+   are not rewritten by automation. Current plans stay directly under
+   `docs/superpowers/plans/` and must carry the rule's metadata.
 4. **Execute** the plan, test-first.
 5. **Review**, then close the phase in `ROADMAP.md`.
 
@@ -73,11 +76,19 @@ row, the cited example of "already short," failed it by roughly 7x. If
 content before assuming every row regressed.
 
 Enforced mechanically by `just lint-docs`, checking phase-table cell length
-and plan fenced-code fraction/line count. A written convention that nothing
-checks gets ignored under deadline pressure — this project has already
-proven that twice on two different rules (see `ROADMAP.md`'s Backlog,
-"eval-system consolidation" and the P26 schema-freeze note) — so the gate
-exists precisely because prose alone did not hold.
+and current-scope plan metadata, fenced-code fraction, fence length, and line
+count. A written convention that nothing checks gets ignored under deadline
+pressure — this project has already proven that twice on two different rules
+(see `ROADMAP.md`'s Backlog, "eval-system consolidation" and the P26
+schema-freeze note) — so the gate exists precisely because prose alone did
+not hold. The 2026-08-29 policy change deliberately left earlier plans
+untouched; this scope rule makes that decision explicit instead of printing
+historical debt as if it were a current-plan regression. The archive index
+explains the retained legacy records and points readers to current authority.
+
+Plans in the current lint scope carry YAML front matter with `phase`, `cycle`,
+and `lifecycle` (`active`, `closed`, or `superseded`). Closed and superseded
+plans must have `## Result`; active plans must not claim a result in advance.
 
 **A phase with more than one feature cycle (P12, P24, …) uses a numbered
 list inside the relevant cell(s)** — Phase, Direction, and/or Status — one
