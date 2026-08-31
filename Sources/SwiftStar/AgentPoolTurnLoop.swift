@@ -117,6 +117,7 @@ extension AgentController {
             WorktreeDispatcher.discard(worktree, in: Self.resolveRepoRoot(from: settings.workspace))
         }
         workerTurn.clearActive()
+        clearInterruptPending()
         let receipt = DispatchReceipt(worker: worker, ref: nil, reason: reason, summary: reason)
         poolState = PoolScheduler.apply(poolState, .workerFailed(worker, receipt))
         if isConsult {
@@ -149,21 +150,31 @@ extension AgentController {
                     rollingDigest, mutations: [], exitStatus: nil, validationRan: false)
                 return
             }
-            let response = await ToolCallbackResponder.respond(
-                idx: idx, name: name, params: params,
-                workspace: workerTurn.worktree?.url ?? settings.workspace,
-                shellAllowed: false,
-                writableFiles: workerTurn.activePacket?.writableFiles,
-                execute: Self.executeHostTool)
+            let toolTask = Task { @MainActor in
+                await ToolCallbackResponder.respond(
+                    idx: idx, name: name, params: params,
+                    workspace: self.workerTurn.worktree?.url ?? self.settings.workspace,
+                    shellAllowed: false,
+                    writableFiles: self.workerTurn.activePacket?.writableFiles,
+                    execute: Self.executeHostTool)
+            }
+            workerTurn.setToolTask(toolTask)
+            let response = await toolTask.value
+            workerTurn.clearToolTask()
             guard generation == self.generation else { return }
-            writeToolResult(response)
-            workerTurn.outcomeBuilder?.recordHostVerdict(
-                idx: idx, ok: response.ok, mutations: response.mutations,
-                exitStatus: response.exitStatus, outputDigest: response.outputDigest,
-                validationRan: response.validationRan)
-            rollingDigest = RollingDigestReducer.recordHostVerdict(
-                rollingDigest, mutations: response.mutations,
-                exitStatus: response.exitStatus, validationRan: response.validationRan)
+            if workerTurn.interrupted {
+                writeToolResult(ToolCallbackResponse(
+                    idx: response.idx, ok: false, s: "interrupted"))
+            } else {
+                writeToolResult(response)
+                workerTurn.outcomeBuilder?.recordHostVerdict(
+                    idx: idx, ok: response.ok, mutations: response.mutations,
+                    exitStatus: response.exitStatus, outputDigest: response.outputDigest,
+                    validationRan: response.validationRan)
+                rollingDigest = RollingDigestReducer.recordHostVerdict(
+                    rollingDigest, mutations: response.mutations,
+                    exitStatus: response.exitStatus, validationRan: response.validationRan)
+            }
         case .toolRequestRefused(let idx, let reason):
             writeToolResult(ToolCallbackResponse(idx: idx, ok: false,
                 s: ToolResultCondenser.condense(reason)))
@@ -187,6 +198,7 @@ extension AgentController {
     func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome, generation: Int) async {
         workerTurn.watchdog?.cancel()
         let isConsult = workerTurn.isConsult(worker)
+        let wasInterrupted = workerTurn.interrupted
         let answerText: String? = isConsult ? outcome.text : nil
         let packet = workerTurn.activePacket ?? HandoffPacket(
             taskText: "", writableFiles: [], validationCommand: nil,
@@ -250,19 +262,40 @@ extension AgentController {
             rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
         }
         workerTurn.clearActive()
+        clearInterruptPending()
         if isConsult {
             workerTurn.removeConsult(worker)
+            if wasInterrupted {
+                poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+                transcript.appendSystem("→ chat interrupted")
+                log("worker \(worker.rawValue): consult interrupted")
+                drainQueuedWorkers()
+                return
+            }
             // Surface the answer directly; never deliver a consult's receipt as
             // orchestrator prose — the answer IS the delivery. Clear the receipt
             // only when the send lands (at-least-once, matching
             // injectPendingReceipts): if the user started a turn mid-consult the
             // send is refused, and leaving the receipt pending lets the next
             // drain fold the answer in via `injectionPrompt()`.
-            let answer = receipt.answerText.flatMap { $0.isEmpty ? nil : $0 } ?? receipt.summary
-            if sendConsulted(answer, worker: worker) {
+            guard let answer = receipt.answerText.flatMap({ $0.isEmpty ? nil : $0 }) else {
+                // `noChanges` is a write-dispatch verdict, not a response to a
+                // read-only consultation. Never present it as the worker's
+                // answer when the worker emitted no prose.
+                poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+                transcript.appendSystem("→ chat failed: worker returned no answer")
+                log("worker \(worker.rawValue): consult returned no answer")
+                drainQueuedWorkers()
+                return
+            }
+            let stats = ConsultedRowStats(
+                generatedTokens: outcome.generatedTokens,
+                decodeTPS: outcome.decodeTPS,
+                ctxUsed: outcome.ctxUsed)
+            if sendConsulted(answer, worker: worker, stats: stats) {
                 poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
             } else {
-                transcript.append(.consulted(worker, answer))
+                transcript.append(.consulted(worker, answer, stats: stats))
             }
         }
         log("worker \(worker.rawValue): \(receipt.summary)")

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftStarKit
 
@@ -32,8 +33,20 @@ struct AgentView: View {
                     onStart: { controller.startAgent() })
             }
             ToolbarItem(id: "endSession", placement: .primaryAction) {
-                Button("End session") { controller.stopAgent() }
-                    .help("Stop the agent run (the engine stops when you quit SwiftStar)")
+                Button {
+                    switch controller.state {
+                    case .stopped, .failed:
+                        controller.startAgent()
+                    case .starting, .ready, .generating:
+                        controller.stopAgent()
+                    case .stopping:
+                        break
+                    }
+                } label: {
+                    Label(sessionActionTitle, systemImage: sessionActionIcon)
+                }
+                .disabled(controller.state == .stopping)
+                .help(sessionActionHelp)
             }
         }
         .task { controller.startIfNeeded() }
@@ -122,8 +135,8 @@ struct AgentView: View {
     @ViewBuilder
     private func rowView(_ row: AgentTranscriptRow) -> some View {
         switch row {
-        case .user(let text):
-            AgentPromptBubble(text: text)
+        case .user(let text, let stats):
+            AgentPromptBubble(text: text, stats: stats)
         case .thinking(let text):
             ThinkingDisclosure(text: text)
         case .content(let text, let summary):
@@ -143,10 +156,20 @@ struct AgentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
             AgentToolCardView(card: card, workspace: controller.settings.workspace)
-        case .consulted(let worker, let text):
-            ConsultedAnswerView(worker: worker, text: text)
-        case .system(let text):
-            Text(text).font(.system(size: envTranscriptFontSize)).foregroundStyle(.tertiary)
+        case .consulted(let worker, let text, let stats):
+            ConsultedAnswerView(worker: worker, text: text, stats: stats)
+        case .system(let text, let stats):
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text).font(.system(size: envTranscriptFontSize)).foregroundStyle(.tertiary)
+                if let stats {
+                    Text(stats.timestamp.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(.quaternary)
+                        .monospacedDigit()
+                }
+            }
+        case .compaction(let summary):
+            CompactionRow(summary: summary)
         }
     }
 
@@ -209,24 +232,32 @@ struct AgentView: View {
                     // conflicting turn while a worker is running.
                     .disabled(!controller.canSend || controller.isConsulting)
                 Button {
-                    if controller.isGenerating {
+                    if controller.isTurnActive {
                         controller.interrupt()
                     } else {
                         send()
                     }
                 } label: {
-                    Image(systemName: controller.isGenerating ? "stop.circle.fill" : "arrow.up.circle.fill")
+                    Image(systemName: controller.isTurnActive ? "stop.circle.fill" : "arrow.up.circle.fill")
                         .font(.system(size: 28))
-                        .symbolEffect(.variableColor.iterative, isActive: controller.isGenerating)
-                        .foregroundStyle(controller.isGenerating ? .red : .accentColor)
+                        .symbolEffect(.variableColor.iterative,
+                                      isActive: controller.isTurnActive && !controller.interruptPending)
+                        .foregroundStyle(controller.isTurnActive ? .red : .accentColor)
                 }
                 .buttonStyle(.plain)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
                 // Icon-only, and the icon carries the whole meaning — the label
                 // has to move with the state or VoiceOver announces nothing.
-                .accessibilityLabel(controller.isGenerating ? "Stop generating" : "Send message")
+                .accessibilityLabel(controller.isTurnActive
+                    ? (controller.interruptPending
+                        ? (controller.isConsulting ? "Stopping consult" : "Stopping generation")
+                        : (controller.isConsulting ? "Stop consult" : "Stop generating"))
+                    : "Send message")
                 .disabled(
-                    !controller.isGenerating
-                        && (controller.state != .ready
+                    controller.isTurnActive
+                        ? controller.interruptPending
+                        : (controller.state != .ready
                             || controller.isConsulting
                             || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 )
@@ -242,6 +273,30 @@ struct AgentView: View {
     private var errorText: String? {
         if case .failed(let message) = controller.state { return message }
         return nil
+    }
+
+    private var sessionActionTitle: String {
+        switch controller.state {
+        case .stopped, .failed: return "Start session"
+        case .stopping: return "Stopping…"
+        case .starting, .ready, .generating: return "End session"
+        }
+    }
+
+    private var sessionActionIcon: String {
+        switch controller.state {
+        case .stopped, .failed: return "play.circle"
+        case .stopping: return "hourglass"
+        case .starting, .ready, .generating: return "stop.circle"
+        }
+    }
+
+    private var sessionActionHelp: String {
+        switch controller.state {
+        case .stopped, .failed: return "Start a new agent session"
+        case .stopping: return "Waiting for the agent session to stop"
+        case .starting, .ready, .generating: return "End the current agent session"
+        }
     }
 
     private func send() {
@@ -297,30 +352,7 @@ struct AgentView: View {
                     .animation(.default, value: bottomStatusText)
             }
             Spacer(minLength: 12)
-            if controller.isUp,
-               controller.lastPlannedModel == controller.settings.modelPath.lastPathComponent,
-               let footprint = controller.lastFootprintBytes,
-               let planned = controller.lastPlannedBytes, planned > 0 {
-                // Clamped at 1.0 for the ring: footprint is resident (includes
-                // the mapped model), so it can exceed the planned budget and
-                // the ring must read "full," not overflow. The color still uses
-                // the true fraction (over-budget = critical, via DialLogic).
-                ValueGaugeView(
-                    fraction: min(Double(footprint) / Double(planned), 1.0),
-                    text: nil, textFontSize: 0,
-                    trackColor: memoryRingColor(footprint: footprint, planned: planned),
-                    diameter: 15)
-                    .padding(.horizontal, 4)
-                    .contentShape(Rectangle())
-                    .help(memoryRingTooltip(footprint: footprint, planned: planned))
-                    // VoiceOver never reads `.help`, and the ring renders no
-                    // text. Keep the same current-value summary available to
-                    // assistive technology; severity is otherwise carried by
-                    // color alone.
-                    .accessibilityElement()
-                    .accessibilityLabel("Agent memory")
-                    .accessibilityValue(memoryRingTooltip(footprint: footprint, planned: planned))
-            }
+            memoryStatusWidget
             if controller.isUp, let s = controller.lastStatus, s.ctxSize > 0 {
                 ValueGaugeView(
                     fraction: Double(s.ctxUsed) / Double(s.ctxSize),
@@ -333,11 +365,43 @@ struct AgentView: View {
                     .accessibilityElement()
                     .accessibilityLabel("Context window")
                     .accessibilityValue(contextRingTooltip(s))
+                    .nativeTooltip(contextRingTooltip(s))
             }
         }
         .padding(.horizontal, 10)
         .padding(.trailing, 6)
         .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private var memoryStatusWidget: some View {
+        if controller.isUp,
+           controller.lastPlannedModel == controller.settings.modelPath.lastPathComponent,
+           let footprint = controller.lastFootprintBytes,
+           let planned = controller.lastPlannedBytes, planned > 0 {
+            // Keep the ring as a quick severity glance, but show the actual
+            // resident/planned values beside it so memory use is discoverable
+            // without requiring a hover or accessibility tooling.
+            let tooltip = memoryRingTooltip(footprint: footprint, planned: planned)
+            HStack(spacing: 4) {
+                ValueGaugeView(
+                    fraction: min(Double(footprint) / Double(planned), 1.0),
+                    text: nil, textFontSize: 0,
+                    trackColor: memoryRingColor(footprint: footprint, planned: planned),
+                    diameter: 15)
+                Text("\(memoryDisplay(footprint)) / \(memoryDisplay(planned))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+            .help(tooltip)
+            .accessibilityElement()
+            .accessibilityLabel("Agent memory")
+            .accessibilityValue(tooltip)
+            .nativeTooltip(tooltip)
+        }
     }
 
     /// Rates + activity while the agent is up, else the same state text as
@@ -375,11 +439,10 @@ struct AgentView: View {
     }
 
     private func memoryRingTooltip(footprint: Int64, planned: Int64) -> String {
-        func gb(_ b: Int64) -> String { b.formatted(.byteCount(style: .memory)) }
         let percent = Double(footprint) / Double(planned) * 100
         var text = String(
             format: "Agent memory: %@ resident of %@ planned (%.0f%%).",
-            gb(footprint), gb(planned), percent)
+            memoryDisplay(footprint), memoryDisplay(planned), percent)
         if Double(footprint) > Double(planned) {
             // Resident includes the mapped model, so over-budget is normal for
             // a large model — say so rather than letting the critical color
@@ -387,6 +450,10 @@ struct AgentView: View {
             text += " Over budget (resident includes the mapped model)."
         }
         return text
+    }
+
+    private func memoryDisplay(_ bytes: Int64) -> String {
+        bytes.formatted(.byteCount(style: .memory))
     }
 
     /// Carries the mechanism, not just the numbers: prefill speed is the
@@ -404,6 +471,41 @@ struct AgentView: View {
             text += String(format: " Current decode: %.1f tok/s.", s.genTPS)
         }
         return text
+    }
+}
+
+/// SwiftUI's `.help` does not reliably create a hover target for a small,
+/// custom-drawn view. Keep a transparent AppKit view over each status widget so
+/// macOS can provide its native tooltip while the gauge remains non-interactive.
+private struct NativeTooltipView: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        view.toolTip = text
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        nsView.toolTip = text
+    }
+}
+
+private struct NativeTooltipModifier: ViewModifier {
+    let text: String
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            NativeTooltipView(text: text)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+private extension View {
+    func nativeTooltip(_ text: String) -> some View {
+        modifier(NativeTooltipModifier(text: text))
     }
 }
 
