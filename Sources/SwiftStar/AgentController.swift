@@ -252,24 +252,13 @@ final class AgentController {
     /// reader trust and reproduce the capture). Item 6 (P22 cleanup): the
     /// assembly (title + bulleted facts + closing note) is shared with
     /// `swiftstar-drive`'s `CaptureWriter` via `CaptureProvenance`; the facts
-    /// themselves (sampler, workspace grant) stay specific to a live app
-    /// session.
-    private static func renderLiveProvenance(model: String, build: String, workspace: String, contextSize: Int, sampler: String, power: String, at dir: URL) throws {
+    /// themselves come from `SpawnRecord.provenanceFacts` (eval-cli task 1) —
+    /// the same record an arm-to-arm diff will compare, so this manifest and
+    /// that comparison can never quietly disagree about what a spawn was.
+    private static func renderLiveProvenance(_ record: SpawnRecord, at dir: URL) throws {
         let text = CaptureProvenance.render(
             title: "Live session provenance",
-            facts: [
-                .init("Model", "`\(model)`"),
-                .init("Build (`external/ds4` SHA)", "`\(build)`"),
-                .init("Context", "\(contextSize)"),
-                .init("Sampler", sampler),
-                // The engine throttle is a spawn SETTING (`--power`), not a
-                // measurement. Unrecorded, it turned a throttled app session and
-                // an unthrottled drive re-run into an apparent 1.7x engine
-                // speedup (see AgentCommand.powerRecord).
-                .init("Power", power),
-                .init("Workspace", "`\(workspace)`"),
-                CaptureProvenance.startedAtFact(Date()),
-            ],
+            facts: record.provenanceFacts,
             closingNote: """
             Captured live by the SwiftStar app (agent session). `wire.ndjson` and
             `agent.stderr` are the verbatim raw streams; `agent.trace` is the engine's
@@ -277,6 +266,56 @@ final class AgentController {
             file anchors wall-clock.
             """)
         try text.write(to: dir.appendingPathComponent("provenance.md"), atomically: true, encoding: .utf8)
+    }
+
+    /// Whether `dir`'s git working tree has uncommitted changes. Best-effort:
+    /// a non-repo or unreadable tree reads as clean rather than failing the
+    /// spawn — this is provenance, not a gate.
+    private static func repoDirty(_ dir: URL) -> Bool {
+        guard let result = try? GitProcess.run(["status", "--porcelain"], in: dir),
+              result.exit == 0, !result.timedOut else { return false }
+        return !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Assemble this spawn's `SpawnRecord` from the settings/facts already
+    /// resolved for this spawn (D12: engine SHA read once per spawn) plus a
+    /// handful of cheap app-side lookups (this app's own git identity, the OS
+    /// build string, the wired-memory advisory). Fields that need dedicated
+    /// machinery this app doesn't have yet (binary hashes, a full model-file
+    /// hash, the host-tool catalog) are left at honest empty/zero defaults —
+    /// they don't feed `provenanceFacts`, and wiring them is later eval-cli
+    /// work, not this task.
+    private func makeSpawnRecord(captureDir: URL, startedAt: Date) -> SpawnRecord {
+        let harnessRoot = AgentController.projectRoot()
+        let env = ProcessInfo.processInfo.environment
+        var allowlistedEnv: [String: String] = [:]
+        for key in SpawnRecord.environmentAllowlist {
+            if let value = env[key] { allowlistedEnv[key] = value }
+        }
+        var allowlistedDefaults: [String: String] = [:]
+        for key in SpawnRecord.userDefaultsKeys {
+            if let value = UserDefaults.standard.string(forKey: key) {
+                allowlistedDefaults[key] = value
+            } else if UserDefaults.standard.object(forKey: key) != nil {
+                allowlistedDefaults[key] = String(UserDefaults.standard.bool(forKey: key))
+            }
+        }
+        let modelBytes = try? FileManager.default.attributesOfItem(atPath: settings.modelPath.path)[.size] as? Int64
+        return SpawnRecord.from(
+            settings: settings,
+            engineSHA: buildSHA, engineDirty: AgentController.repoDirty(settings.engineDir),
+            engineBinaryHash: "",
+            swiftstarSHA: harnessRoot.map { AgentController.submoduleSHA($0) } ?? "unknown",
+            swiftstarDirty: harnessRoot.map { AgentController.repoDirty($0) } ?? false,
+            harnessBinaryHash: "",
+            systemPromptHash: settings.systemPrompt.map { ToolDigest.sha256($0) } ?? "",
+            modelBytes: modelBytes ?? 0, modelHash: "",
+            variantID: AgentController.effectiveSelectedVariantID(),
+            tools: [], osBuild: ProcessInfo.processInfo.operatingSystemVersionString,
+            wiredLimitBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes(),
+            workspaceRef: "",
+            environment: allowlistedEnv, userDefaults: allowlistedDefaults,
+            captureDirectory: captureDir.path, startedAt: startedAt, runIndex: 0)
     }
 
     func startIfNeeded() {
@@ -410,18 +449,14 @@ final class AgentController {
         let captureDir = Self.captureDirectory()
         if captureEnabled {
             try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
-            try? Self.renderLiveProvenance(
-                model: settings.modelPath.lastPathComponent, build: buildSHA,
-                workspace: settings.workspace.path, contextSize: settings.contextSize,
-                // P23: provenance is a per-SPAWN fact, and no override can have
-                // gone out yet at spawn time — the per-turn efforts live in
-                // outcomes.ndjson, which is where a per-turn fact belongs. What
-                // this records is the spawn's own think/throttle configuration,
-                // read off the same settings argv is built from, rather than the
-                // hardcoded `think=default` that used to sit here regardless of
-                // whether the spawn passed `--nothink`.
-                sampler: AgentCommand.samplerRecord(settings: settings),
-                power: AgentCommand.powerRecord(settings: settings), at: captureDir)
+            // P23: provenance is a per-SPAWN fact, and no override can have
+            // gone out yet at spawn time — the per-turn efforts live in
+            // outcomes.ndjson, which is where a per-turn fact belongs. The
+            // record's `sampler`/`power` read off the same settings argv is
+            // built from, rather than a hardcoded `think=default` that used to
+            // sit here regardless of whether the spawn passed `--nothink`.
+            let spawnRecord = makeSpawnRecord(captureDir: captureDir, startedAt: Date())
+            try? Self.renderLiveProvenance(spawnRecord, at: captureDir)
             settings.tracePath = captureDir.appendingPathComponent("agent.trace")
         }
         outcomesURL = captureEnabled ? captureDir.appendingPathComponent("outcomes.ndjson") : nil
