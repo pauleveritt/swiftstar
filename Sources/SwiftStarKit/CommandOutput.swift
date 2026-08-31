@@ -1,7 +1,8 @@
 import Foundation
 
 /// The pure shape of one completed command run, decoupled from
-/// `SubprocessRunner.Result` so pure digesters do not depend on AppKit.
+/// `SubprocessRunner.Result` (which lives in SwiftStarAppKit so the pure
+/// digesters cannot depend on it). P24.3: the input to every digester.
 public struct CommandOutput: Equatable, Sendable {
     public let stdout: String
     public let stderr: String

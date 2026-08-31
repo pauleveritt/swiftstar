@@ -1,8 +1,10 @@
-import CryptoKit
 import Foundation
+import CryptoKit
 
-/// The model-facing product of a command run: its bounded summary, the exact
-/// host-run command, the full-output artifact, and the stdout digest.
+/// The product of one digest: the ≤8000-byte summary the model sees, the exact
+/// command the host ran, the artifact path holding the full output, and a
+/// deterministic digest of the stdout stream. Pure value; `sha256` is a pure
+/// function of its input so digesters are testable byte-for-byte.
 public struct ToolDigest: Equatable, Sendable {
     public let summary: String
     public let command: String
@@ -16,10 +18,10 @@ public struct ToolDigest: Equatable, Sendable {
         self.outputDigest = outputDigest
     }
 
-    /// SHA-256 of a UTF-8 string, in the wire's prefixed lowercase-hex form.
-    public static func sha256(_ string: String) -> String {
-        "sha256:" + SHA256.hash(data: Data(string.utf8))
-            .map { String(format: "%02x", $0) }
-            .joined()
+    /// sha256 of `s` as lowercase hex with a `sha256:` prefix, matching
+    /// `HostToolExecutor.bashResult`'s digest format.
+    public static func sha256(_ s: String) -> String {
+        "sha256:" + SHA256.hash(data: Data(s.utf8))
+            .map { String(format: "%02x", $0) }.joined()
     }
 }
