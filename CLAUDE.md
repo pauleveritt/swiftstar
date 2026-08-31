@@ -5,6 +5,13 @@ for the full cycle (brainstorm → spec → plan → execute → review/close) a
 [`BRIEF.md`](BRIEF.md) for the settled design. Read both before planning
 non-trivial work here.
 
+## Session telemetry
+
+When asked what happened in a session (model used, timing, tokens, tool
+calls), read `.claude/skills/telemetry/SKILL.md` first — it documents the
+`swiftstar-analyze` CLI and the `captures/` layout. Do not go hunting
+elsewhere for a "telemetry" tool.
+
 ## Finishing a branch
 
 When using `superpowers:finishing-a-development-branch` (or otherwise
