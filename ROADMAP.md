@@ -875,6 +875,29 @@ group's order is not a priority order.
 
 ### Process and tooling
 
+- **`ROADMAP.md` is 998 lines, and roughly 800 of them are this Backlog — the
+  caps govern cells and plans but nothing bounds the file (2026-08-31).**
+  `docs/sdd.md` caps a Direction cell at 900 characters and a Status cell at
+  1,000, and plans at 400 lines / 25% fenced, all enforced by `just lint-docs`.
+  None of that constrains the document that actually grew: the phase table is
+  ~110 lines and the Backlog is the rest, added one individually-defensible
+  entry at a time. **Proposed fix: move the Backlog to a sibling `BACKLOG.md`,
+  linked from `## Now` and from the phase rows, plus a whole-file line cap on
+  what remains.** Recompute the split with
+  `awk '/^## Backlog/{f=1} f' ROADMAP.md | wc -l`. The sibling project
+  `../ds4-engine` adopted exactly this shape at bootstrap (`ROADMAP.md` 99
+  lines, `BACKLOG.md` 57, caps and rationale in its `docs/sdd.md`) and is the
+  worked reference. **The cost is not the file move, which is trivial — it is
+  that many research documents cite Backlog entries as `ROADMAP.md:NNN`,
+  including `docs/superpowers/research/2026-08-31-py-ds4-agent-in-process-python-host.md`,
+  which does so throughout.** Those citations are already unreliable, since
+  any edit above a line silently shifts its target, so the migration should
+  convert them to heading anchors rather than re-point them — which makes this
+  a citation sweep with a file move attached, not the reverse. Also conflicts
+  with the unlanded `eval-cli` worktree while that branch is in flight.
+  *Belongs in P26's hygiene work, alongside the fork-branch rename below, and
+  after `eval-cli` lands or is abandoned.*
+
 - **`fixtures/agent/golden.{ndjson,trace}` and `Sources/SwiftStarAppKit/Resources/golden.{ndjson,trace}` are byte-identical, manually-synced duplicates, with no build-time mechanism enforcing it (2026-08-29).** A symlink was tried and confirmed to break — SwiftPM's resource-copy step preserves the symlink rather than dereferencing it, so it dangles once relocated into the `.build` bundle. Documented at the point of use (`FixtureReplay.swift`, `DiagnosticsFixture.swift`, `fixtures/agent/provenance.md`) and partially guarded by `FixtureReplayTests.bundledFixtureMatchesRepoFixture` — which itself only diffs the `.ndjson` pair, not `.trace`. The real fix is a build-time resource-generation step (a `Package.swift` plugin or a pre-build copy script) so there's exactly one file on disk. *Reopens when a recapture updates one copy and not the other, or when `Package.swift` next changes and touching the resource declaration is already on the table.*
 - **Fork branch name contradicts the fork ledger's own stated structure
   (2026-08-29).** `.gitmodules` pins `p20-dispatch-schema`, a branch cut for
