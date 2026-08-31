@@ -178,7 +178,12 @@ extension AgentController {
         case .toolRequestRefused(let idx, let reason):
             writeToolResult(ToolCallbackResponse(idx: idx, ok: false,
                 s: ToolResultCondenser.condense(reason)))
-        case .ready:
+        case .ready(_, let stopReason, let generated, _):
+            // A fresh pool slot's attach handshake arrives as a bare `ready`
+            // (no stop_reason/generated) — the same shape as worker 0's boot
+            // ready — and must not be mistaken for this turn's end (see
+            // `AgentEvent.readyIsTurnEnd`).
+            guard AgentEvent.readyIsTurnEnd(stopReason: stopReason, generated: generated) else { break }
             if let builder = workerTurn.outcomeBuilder {
                 let outcome = builder.finish()
                 workerTurn.outcomeBuilder = nil

@@ -72,6 +72,19 @@ public enum AgentEvent: Equatable, Sendable {
     case refused(String)
 }
 
+public extension AgentEvent {
+    /// Whether a `.ready` closes a turn already in flight. A pool worker's
+    /// slot also gets a bare handshake `ready` when it first attaches — the
+    /// same shape as worker 0's boot ready, carrying neither field — and that
+    /// must not be mistaken for the end of the turn whose builder is already
+    /// open: it would finish the turn instantly with whatever text has
+    /// accumulated so far (nothing, on a fresh slot's first turn), discarding
+    /// everything the engine goes on to generate.
+    static func readyIsTurnEnd(stopReason: String?, generated: Int?) -> Bool {
+        stopReason != nil || generated != nil
+    }
+}
+
 /// Streaming NDJSON consumer for the `ds4-agent` wire (`--json-events`),
 /// shaped like `WireEventParser` (and, formerly, the Chat surface's
 /// `SSEParser`, retired 2026-08-26): feed one wire line at a time; it

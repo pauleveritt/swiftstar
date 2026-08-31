@@ -133,6 +133,17 @@ struct AgentWireParserTests {
         #expect(p.feed(#"{"t":"ready","kv_bytes":1,"planned_bytes":4,"stop_reason":"eos","generated":9,"ctx_used":100,"ts":5}"#) == .ready(plannedBytes: 4, stopReason: "eos", generated: 9, ctxUsed: 100))
     }
 
+    /// A pool worker slot's attach handshake is wire-identical to worker 0's
+    /// boot ready — no `stop_reason`/`generated` — and must not read as
+    /// turn-end, or the very first turn routed to a fresh slot finishes
+    /// instantly with whatever the (empty) builder has accumulated so far.
+    @Test func readyIsTurnEndOnlyWhenItCarriesClosingFields() {
+        #expect(AgentEvent.readyIsTurnEnd(stopReason: nil, generated: nil) == false)
+        #expect(AgentEvent.readyIsTurnEnd(stopReason: "eos", generated: nil) == true)
+        #expect(AgentEvent.readyIsTurnEnd(stopReason: nil, generated: 7) == true)
+        #expect(AgentEvent.readyIsTurnEnd(stopReason: "eos", generated: 7) == true)
+    }
+
     @Test func unknownLinesIgnored() {
         var p = AgentWireParser()
         _ = p.feed(Self.helloLine)
