@@ -41,7 +41,7 @@ RESULTS = os.environ.get('EXP_RESULTS',
 BIN = os.path.join(ROOT, '.build/arm64-apple-macosx/debug/swiftstar-agenttest')
 ANALYZER_BIN = os.environ.get(
     'ANALYZER_BIN',
-    os.path.join(ROOT, '.build/arm64-apple-macosx/debug/swiftstar-analyze'))
+    os.path.join(ROOT, '.build/arm64-apple-macosx/debug/swiftstar-eval'))
 
 
 def rows():

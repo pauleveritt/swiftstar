@@ -49,7 +49,7 @@ let package = Package(
         // the same executor the app runs — matching swiftstar-agenttest below.
         .executableTarget(name: "swiftstar-drive", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .executableTarget(name: "swiftstar-agenttest", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
-        .executableTarget(name: "swiftstar-analyze", dependencies: ["SwiftStarKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
+        .executableTarget(name: "swiftstar-eval", dependencies: ["SwiftStarKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "SwiftStarKitTests",
             dependencies: ["SwiftStarKit"],

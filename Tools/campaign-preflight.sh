@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$HERE" || { echo "[preflight] cannot cd to $HERE" >&2; exit 2; }
 
 BIN="$HERE/.build/arm64-apple-macosx/debug/swiftstar-agenttest"
-ANALYZER="${ANALYZER_BIN:-$HERE/.build/arm64-apple-macosx/debug/swiftstar-analyze}"
+ANALYZER="${ANALYZER_BIN:-$HERE/.build/arm64-apple-macosx/debug/swiftstar-eval}"
 ENGINE="$HERE/external/ds4/ds4-agent"
 fail=0
 note() { printf '[preflight] %-7s %s\n' "$1" "$2"; }
@@ -68,11 +68,11 @@ fi
 # Treat it as a first-class build artifact so a missing or stale analyzer cannot
 # turn an otherwise valid campaign into a stream of harness-void rows.
 if [ ! -x "$ANALYZER" ]; then
-  bad "analyzer binary missing: $ANALYZER (run: swift build --product swiftstar-analyze)"
+  bad "analyzer binary missing: $ANALYZER (run: swift build --product swiftstar-eval)"
 else
   stale="$(find Sources -name '*.swift' -newer "$ANALYZER" 2>/dev/null | head -5)"
   if [ -n "$stale" ]; then
-    bad "analyzer binary older than Sources (run: swift build --product swiftstar-analyze):"
+    bad "analyzer binary older than Sources (run: swift build --product swiftstar-eval):"
     printf '           %s\n' $stale
   else
     ok "analyzer binary newer than Swift sources"

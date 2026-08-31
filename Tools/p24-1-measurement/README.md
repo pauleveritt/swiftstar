@@ -43,7 +43,7 @@ Then `swift build` and run `run.sh` exactly as for the treatment arm, and
 ## Analysis
 
 ```sh
-swift run swiftstar-analyze rereads <capture-dir-name>
+swift run swiftstar-eval rereads <capture-dir-name>
 python3 Tools/window-spread.py captures/<capture-dir-name>
 ```
 

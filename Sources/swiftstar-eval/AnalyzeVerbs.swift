@@ -1,16 +1,20 @@
 import Foundation
 import SwiftStarKit
 
-// swiftstar-analyze — read the capture trees back (P21). Run from the checkout.
+// swiftstar-eval's analyzer verbs — read the capture trees back (P21, moved
+// unchanged from swiftstar-analyze in Task 6). Run from the checkout.
 //
-//   swiftstar-analyze list                       capture dirs, newest first, flagging unusable ones
-//   swiftstar-analyze summary [DIR | --latest]   per-turn table: decode average, tokens, ctx, tools, Σsuffix
-//   swiftstar-analyze trace  [DIR | --latest]    the prefill-sync/cache + compaction story
-//   swiftstar-analyze diff A B                   paired-bill comparison (Σsuffix)
-//   swiftstar-analyze validate [DIR | --latest]  capture validity as JSON
+//   swiftstar-eval list                       capture dirs, newest first, flagging unusable ones
+//   swiftstar-eval summary [DIR | --latest]   per-turn table: decode average, tokens, ctx, tools, Σsuffix
+//   swiftstar-eval trace  [DIR | --latest]    the prefill-sync/cache + compaction story
+//   swiftstar-eval diff A B                   paired-bill comparison (Σsuffix)
+//   swiftstar-eval validate [DIR | --latest]  capture validity as JSON
 //
 // All parsers are the production ones (WireEventParser, TraceParser,
 // TurnSummary); this is ~150 lines of plumbing, not re-derived math.
+//
+// Dispatch entry point only (below, `analyzeVerbHandlers`) changed in the
+// move — every function above it is byte-for-byte what swiftstar-analyze ran.
 
 // MARK: - discovery
 
@@ -719,59 +723,72 @@ func cmdIndex(to output: URL) throws {
     print("wrote \(rows.count - 1) capture row(s) to \(output.path)")
 }
 
-// MARK: - main
+// MARK: - verb registry
 
-let args = CommandLine.arguments
+/// Common usage text, shared with `main.swift`'s top-level guard so the
+/// message is identical regardless of which check rejects the invocation.
 func usage() -> Never {
-    FileHandle.standardError.write(Data("usage: swiftstar-analyze list | summary [DIR|--latest] | trace [DIR|--latest] | diff A B | rereads [DIR|--latest] | findings [DIR|--latest] | taxonomy [DIR|--latest] | validate [DIR|--latest] | report [TSV ...] | index [OUTPUT]\n".utf8))
+    FileHandle.standardError.write(Data("usage: swiftstar-eval list | summary [DIR|--latest] | trace [DIR|--latest] | diff A B | rereads [DIR|--latest] | findings [DIR|--latest] | taxonomy [DIR|--latest] | validate [DIR|--latest] | report [TSV ...] | index [OUTPUT]\n".utf8))
     exit(2)
 }
-guard args.count >= 2 else { usage() }
-switch args[1] {
-case "list":
-    cmdList()
-case "summary":
-    guard args.count >= 3 else { usage() }
-    cmdSummary(resolveDir(args[2]))
-case "trace":
-    guard args.count >= 3 else { usage() }
-    cmdTrace(resolveDir(args[2]))
-case "diff":
-    guard args.count >= 4 else { usage() }
-    cmdDiff(resolveDir(args[2]), resolveDir(args[3]))
-case "rereads":
-    guard args.count >= 3 else { usage() }
-    cmdRereads(resolveDir(args[2]))
-case "findings":
-    guard args.count >= 3 else { usage() }
-    cmdFindings(resolveDir(args[2]))
-case "taxonomy":
-    guard args.count >= 3 else { usage() }
-    cmdTaxonomy(resolveDir(args[2]))
-case "validate":
-    guard args.count >= 3 else { usage() }
-    cmdValidate(resolveDir(args[2]))
-case "report":
-    let paths: [URL]
-    if args.count > 2 {
-        paths = Array(args.dropFirst(2)).map { URL(fileURLWithPath: $0) }
-    } else {
-        let research = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("docs/superpowers/research")
-        paths = [
-            research.appendingPathComponent("experiment-results-editing-n20.tsv"),
-            research.appendingPathComponent("experiment-results-orchestrate.tsv")
-        ]
-    }
-    cmdReport(paths)
-case "index":
-    let output = args.count > 2
-        ? URL(fileURLWithPath: args[2])
-        : captureRoot().appendingPathComponent("index.tsv")
-    do { try cmdIndex(to: output) } catch {
-        FileHandle.standardError.write(Data("index failed: \(error)\n".utf8))
-        exit(1)
-    }
-default:
-    usage()
-}
+
+/// The ten analyzer verbs' entries in the shared registry (`main.swift`'s
+/// `verbHandlers`). Each handler receives its own argv — everything after the
+/// verb name — exactly as the old `swiftstar-analyze` switch did with
+/// `args[2...]`. Behavior is unchanged from the pre-move dispatch.
+let analyzeVerbHandlers: [String: @Sendable ([String]) -> Void] = [
+    "list": { _ in
+        cmdList()
+    },
+    "summary": { rest in
+        guard let dir = rest.first else { usage() }
+        cmdSummary(resolveDir(dir))
+    },
+    "trace": { rest in
+        guard let dir = rest.first else { usage() }
+        cmdTrace(resolveDir(dir))
+    },
+    "diff": { rest in
+        guard rest.count >= 2 else { usage() }
+        cmdDiff(resolveDir(rest[0]), resolveDir(rest[1]))
+    },
+    "rereads": { rest in
+        guard let dir = rest.first else { usage() }
+        cmdRereads(resolveDir(dir))
+    },
+    "findings": { rest in
+        guard let dir = rest.first else { usage() }
+        cmdFindings(resolveDir(dir))
+    },
+    "taxonomy": { rest in
+        guard let dir = rest.first else { usage() }
+        cmdTaxonomy(resolveDir(dir))
+    },
+    "validate": { rest in
+        guard let dir = rest.first else { usage() }
+        cmdValidate(resolveDir(dir))
+    },
+    "report": { rest in
+        let paths: [URL]
+        if !rest.isEmpty {
+            paths = rest.map { URL(fileURLWithPath: $0) }
+        } else {
+            let research = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent("docs/superpowers/research")
+            paths = [
+                research.appendingPathComponent("experiment-results-editing-n20.tsv"),
+                research.appendingPathComponent("experiment-results-orchestrate.tsv")
+            ]
+        }
+        cmdReport(paths)
+    },
+    "index": { rest in
+        let output = !rest.isEmpty
+            ? URL(fileURLWithPath: rest[0])
+            : captureRoot().appendingPathComponent("index.tsv")
+        do { try cmdIndex(to: output) } catch {
+            FileHandle.standardError.write(Data("index failed: \(error)\n".utf8))
+            exit(1)
+        }
+    },
+]

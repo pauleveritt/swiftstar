@@ -32,5 +32,5 @@ swift run swiftstar-drive
 
 echo
 echo "Analyse the newest capture with BOTH:"
-echo "  swift run swiftstar-analyze rereads <capture-dir-name>"
+echo "  swift run swiftstar-eval rereads <capture-dir-name>"
 echo "  python3 Tools/window-spread.py captures/<capture-dir-name>"
