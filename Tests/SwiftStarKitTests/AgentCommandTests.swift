@@ -166,6 +166,26 @@ struct AgentCommandTests {
         #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--seed"))
     }
 
+    /// eval-cli task 1 (fork divergence #19): `--tools` is the flagship
+    /// experiment's declared variable, so it must be argv-visible. Comma-
+    /// joined, one flag/value pair — matches the engine's `--tools a,b,c`.
+    @Test func argvPassesToolsWhenSet() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        var settings = makeSettings(workspace: ws)
+        settings.tools = ["read", "write", "list"]
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(argv.contains("--tools"))
+        #expect(argv[argv.firstIndex(of: "--tools")! + 1] == "read,write,list")
+    }
+
+    /// The decision this task is built around: absent `--tools` must
+    /// preserve today's behavior byte-for-byte, so nil must omit the flag
+    /// entirely rather than passing an empty list.
+    @Test func argvOmitsToolsWhenNil() {
+        let ws = URL(fileURLWithPath: "/tmp/ws")
+        #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--tools"))
+    }
+
     /// The engine chdir's to `--workspace` and loads `metal/*.metal`
     /// cwd-relative, so the spawner must point each at its absolute path via
     /// `DS4_METAL_*_SOURCE` (the same override PoolOrchestrator/swiftstar-drive

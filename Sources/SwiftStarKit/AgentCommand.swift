@@ -67,6 +67,15 @@ public struct AgentSettings: Equatable, Sendable {
     /// Launch-time engine flags (SSD streaming etc.) declared by a selected
     /// variant; nil = engine defaults. Wired into argv (P13 Laguna XS arm).
     public var runtime: EngineRuntimeConfig?
+    /// `--tools a,b,c` (eval-cli task 1, fork divergence #19): a comma-joined
+    /// allowlist over the advertised tool schema set, applied by the engine
+    /// AFTER its own `shell_allowed`/`host_tools` gating. nil omits the flag
+    /// entirely — today's behavior, byte-for-byte; every existing golden
+    /// fixture was captured with this field absent and must stay unchanged.
+    /// This is the knob the eval-cli flagship experiment declares as its
+    /// variable (`variable: "tools"`): without it, "the tool set" was a
+    /// claim nobody could vary or check on argv.
+    public var tools: [String]?
 
     /// The moderate duty-cycle target used by the app's power-saving mode.
     /// The engine documents 70% as a useful compromise between sustained load
@@ -87,7 +96,8 @@ public struct AgentSettings: Equatable, Sendable {
         workerContextSize: Int = WorkerContextPolicy.defaultContext,
         systemPrompt: String? = nil,
         tracePath: URL? = nil,
-        runtime: EngineRuntimeConfig? = nil
+        runtime: EngineRuntimeConfig? = nil,
+        tools: [String]? = nil
     ) {
         self.workerContextSize = workerContextSize
         self.engineDir = engineDir
@@ -103,6 +113,7 @@ public struct AgentSettings: Equatable, Sendable {
         self.systemPrompt = systemPrompt
         self.tracePath = tracePath
         self.runtime = runtime
+        self.tools = tools
     }
 }
 
@@ -175,6 +186,9 @@ public enum AgentCommand {
         }
         if settings.seed > 0 {
             argv.append(contentsOf: ["--seed", String(settings.seed)])
+        }
+        if let tools = settings.tools {
+            argv.append(contentsOf: ["--tools", tools.joined(separator: ",")])
         }
         if let systemPrompt = settings.systemPrompt {
             argv.append(contentsOf: ["-sys", systemPrompt])

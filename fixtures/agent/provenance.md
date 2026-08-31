@@ -259,3 +259,54 @@ bare prompt (→ worker 0) and a `PoolPrompt` (`{"s":…,"t":"prompt","worker":1
 0's and worker 1's turn events are each tagged with their worker id. This retires the
 hand-authored `pool.ndjson` stand-in that was created against the typed contract before the
 C patch landed (D2). Submodule `d351b40`; wall-clock 2026-08-23.
+
+## eval-cli task 1 recapture (2026-08-30) — submodule `ab7a445`
+
+Recaptured against the rebuilt binary at submodule
+`ab7a44584e50aeb6271dd0850e781a4fd16f8275` (fork divergence #19 — `--tools`,
+a comma-separated allowlist over the advertised schema set). This capture
+uses no `--tools` (the P5 spawn shape, unchanged), so it is exactly the case
+the divergence's own contract promises to leave alone: "absent `--tools`
+preserves today's advertisement, byte-for-byte." That promise was a belief
+until this recapture ran it against the real rebuilt binary rather than
+trusting the diff.
+
+**Byte-identical, not just count/band-compatible.** Unlike every prior
+recapture on this fixture, this one needed no tolerance: `hello` is
+identical (`caps` unchanged, no new capability), all three `ready` events'
+four memory fields are unchanged (`kv_bytes` 1,686,110,208 / `scratch_bytes`
+6,146,969,608 / `model_bytes` 48,257,070,080 / `planned_bytes`
+56,090,149,896 — the same `FixtureReplayTests` pinned value from the P23
+recapture), `status` count is 18 (same as the committed fixture), and both
+turn-end `ready` events carry the *exact same* `generated`/`ctx_used` pair
+(86/1103 and 35/1154) as the fixture being replaced — this model is
+deterministic enough at this sampler/seed that two independent runs landed
+on the identical token count. `golden.trace`'s two `prefill sync done` lines
+are unchanged too: `prompt=1017 cached=951 suffix=66` and `prompt=1119
+cached=1103 suffix=16` (totals 2136/2054/82, the value
+`TraceParserTests.goldenTraceSumsBothPrefillSyncLines` already pins — no
+change needed). Only `ts` (monotonic, all events) and the trace's wall-clock
+timestamps/millisecond durations moved, as always.
+
+**Two capture passes, same shape as the P23 recapture.** The first pass hit
+`sysprompt-32768.kv` warm already carried over from this session's own prior
+work, but for a different reason produced a 3-line trace (a cold-cache
+re-prefill, `cached=0 suffix=951`, `prompt=951`) — one-time fallout of cache
+state, not a wire-shape change, exactly the same class of artifact the P23
+recapture's "Two capture passes" note describes. The committed fixture is
+the second pass, cache warm, back to the two-sync shape.
+
+`wire.stderr` (`golden.stderr`) is unchanged except the two timing numbers
+(`residency requested in ... ms`, `warmup ... ms`) every prior recapture
+also left unpinned. Model: `laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf`, same
+P5 spawn shape (`CAPTURE_GGUF=... swift run swiftstar-drive`, ctx 32768, no
+`CAPTURE_WORKSPACE`/`CAPTURE_SHELL`/`CAPTURE_HOST_TOOLS`). Copied to the
+bundled `Sources/SwiftStarAppKit/Resources/golden.{ndjson,trace}` per the
+recapture rule.
+
+This does not exercise the `--tools` filter itself — that is Task 1's own
+`ToolsFilterIntegrationTests` (real spawns of both the Laguna/GLM-syntax and
+DSML-syntax binaries with `--tools read,write,list`), and the pretty-blob
+DSML filter is additionally covered at the engine level by
+`test_agent_dsml_honors_the_tools_filter_like_glm`. This recapture's only
+job is proving the *absent* case is inert — done.

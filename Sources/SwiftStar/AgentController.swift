@@ -282,9 +282,12 @@ final class AgentController {
     /// handful of cheap app-side lookups (this app's own git identity, the OS
     /// build string, the wired-memory advisory). Fields that need dedicated
     /// machinery this app doesn't have yet (binary hashes, a full model-file
-    /// hash, the host-tool catalog) are left at honest empty/zero defaults —
-    /// they don't feed `provenanceFacts`, and wiring them is later eval-cli
-    /// work, not this task.
+    /// hash) are left at honest empty/zero defaults — they don't feed
+    /// `provenanceFacts`, and wiring them is later eval-cli work, not this
+    /// task. `tools` (eval-cli task 1) is `settings.tools ?? []` — the
+    /// declared `--tools` filter, not a caller-supplied constant: a record
+    /// whose `tools` claims a treatment the engine never applied is the exact
+    /// defect this subsystem exists to prevent.
     private func makeSpawnRecord(captureDir: URL, startedAt: Date) -> SpawnRecord {
         let harnessRoot = AgentController.projectRoot()
         let env = ProcessInfo.processInfo.environment
@@ -311,7 +314,7 @@ final class AgentController {
             systemPromptHash: settings.systemPrompt.map { ToolDigest.sha256($0) } ?? "",
             modelBytes: modelBytes ?? 0, modelHash: "",
             variantID: AgentController.effectiveSelectedVariantID(),
-            tools: [], osBuild: ProcessInfo.processInfo.operatingSystemVersionString,
+            tools: settings.tools ?? [], osBuild: ProcessInfo.processInfo.operatingSystemVersionString,
             wiredLimitBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes(),
             workspaceRef: "",
             environment: allowlistedEnv, userDefaults: allowlistedDefaults,
