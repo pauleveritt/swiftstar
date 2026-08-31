@@ -208,8 +208,7 @@ silently changed.
 3. `HostToolExecutor` routes to `CommandToolRunner.runTest`.
 4. `ProjectCommandResolver` picks the command — `Package.swift` → `swift test`;
    `pyproject.toml` → `uv run pytest`; Swift wins in mixed repos. The selector is
-   charset-validated (`[A-Za-z0-9_./:-]` — `:` is pytest's `::` node-id
-   separator, shell-safe; reject everything else) and appended.
+   charset-validated (`[A-Za-z0-9_./-]`, reject everything else) and appended.
 5. `SubprocessRunner.run`; timeout 300s.
 6. Full stdout+stderr written to `.swiftstar/runs/test-<sha256>.log` (the artifact is
    always `.log` — it is the raw combined output, not a JSON document).

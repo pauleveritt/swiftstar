@@ -15,7 +15,7 @@
 - **The model names no command string.** Every command is host-derived (`ProjectCommandResolver`); the model supplies at most a `test` `selector` (Evidence 1 of the spec).
 - Every digest summary fits ≤8000 UTF-8 bytes — the condenser is a no-op.
 - A digester is a **total function** over `CommandOutput` — never crashes; non-JSON stdout falls back to the text path / bounded summary.
-- Selector is charset-validated to `[A-Za-z0-9_./:-]` (`:` is pytest's `::` node-id separator, shell-safe) before append; anything else is refused.
+- Selector is charset-validated to `[A-Za-z0-9_./-]` before append; anything else is refused.
 - `ok` for `test`/`lint` = "runner executed" (`!timedOut && exit != 127`); `bash` keeps `exit == 0 && !timedOut`. Failures live in the digest + `exitStatus`.
 - Artifacts at `.swiftstar/runs/<tool>-<sha256-of-content>.log` (raw combined output); pruned to the last 20 per tool at write time.
 - `outputDigest` = `sha256(stdout)`, `"sha256:"`-prefixed lowercase hex (matches `HostToolExecutor.bashResult`).
@@ -517,7 +517,7 @@ public enum TestDigest {
 
     /// `swift test` emits `<file>:<line>: error: <testID> : <message>` lines.
     static func parseXCTestText(_ stdout: String) -> [Failure] {
-        let pattern = #"^(.*\.swift):(\d+): error: (.+?) : (.*)$"#
+        let pattern = #"^(.*\.swift):(\d+): error: (\[.*\]) : (.*)$"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         var failures: [Failure] = []
         for line in stdout.split(separator: "\n") {
@@ -541,13 +541,6 @@ public enum TestDigest {
     // MARK: - clustering core (shared)
 
     typealias Cluster = (key: (file: String, message: String), failures: [Failure])
-
-    /// Absolute paths (XCTest) display as basenames; relative paths (pytest
-    /// nodeids) display as-is. The cluster *key* always keeps the full path —
-    /// two same-named files in different directories are different fixes.
-    static func displayFile(_ file: String) -> String {
-        file.hasPrefix("/") ? URL(fileURLWithPath: file).lastPathComponent : file
-    }
 
     static func makeClusters(_ failures: [Failure]) -> [Cluster] {
         var byKey: [(key: (file: String, message: String), failures: [Failure])] = []

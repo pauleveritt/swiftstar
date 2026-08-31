@@ -476,38 +476,6 @@ struct ToolCallbackResponderTests {
         #expect(!r.ok)
         #expect(r.s.contains("taskText"))
     }
-
-    // MARK: - P24.3 deterministic host tools (test/lint admitted without the shell toggle)
-
-    @Test func testAdmittedWithoutShellToggle() {
-        let verdict = ToolCallbackResponder.consent(
-            idx: 1, name: "test", params: [param("selector", "FooTests")],
-            workspace: ws, shellAllowed: false)
-        guard case .proceed(let req) = verdict else {
-            Issue.record("expected proceed, got \(verdict)"); return
-        }
-        #expect(req.resolvedPath == nil)
-        #expect(req.params.first?.value == "FooTests")
-    }
-
-    @Test func lintAdmittedWithoutShellToggle() {
-        let verdict = ToolCallbackResponder.consent(
-            idx: 2, name: "lint", params: [],
-            workspace: ws, shellAllowed: false)
-        guard case .proceed = verdict else {
-            Issue.record("expected proceed, got \(verdict)"); return
-        }
-    }
-
-    @Test func unknownToolStillRefusedWhenShellOff() {
-        let verdict = ToolCallbackResponder.consent(
-            idx: 3, name: "frobnicate", params: [],
-            workspace: ws, shellAllowed: false)
-        guard case .refuse(let reason) = verdict else {
-            Issue.record("expected refuse, got \(verdict)"); return
-        }
-        #expect(reason.contains("unknown or unsupported"))
-    }
 }
 
 /// A refusal the model cannot act on costs a whole session. Measured across

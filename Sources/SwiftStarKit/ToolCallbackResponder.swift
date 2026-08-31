@@ -117,12 +117,6 @@ public enum ToolCallbackResponder {
     /// aids `read`/`more`/`list`/`search`). A dispatched attempt confines these
     /// to `writableFiles`; the read aids stay free.
     private static let mutatingTools: Set<String> = ["write", "edit"]
-    /// P24.3: the deterministic host tools — fixed, host-assembled commands
-    /// (the model names no command string), so they are admitted without the
-    /// shell toggle; the model cannot inject arbitrary shell through them.
-    /// The tool/bash distinction: a tool runs a fixed command; `bash` runs an
-    /// arbitrary one and keeps its `shellAllowed` gate.
-    private static let deterministicTools: Set<String> = ["test", "lint"]
 
     /// Every tool the host will actually execute *in this session*, sorted —
     /// named in the unknown-tool refusal so a model that guessed a name can
@@ -201,11 +195,6 @@ public enum ToolCallbackResponder {
             }
             return .proceed(ToolExecutionRequest(
                 name: name, params: params, workspace: wsStd, resolvedPath: resolved.path))
-        }
-
-        if Self.deterministicTools.contains(name) {
-            return .proceed(ToolExecutionRequest(
-                name: name, params: params, workspace: wsStd, resolvedPath: nil))
         }
 
         if Self.shellTools.contains(name) {

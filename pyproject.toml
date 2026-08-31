@@ -17,14 +17,3 @@ docs = [
     "linkify-it-py>=2.0.3",
     "sphinx-autobuild>=2025.8.25",
 ]
-dev = [
-    # P24.3: the `lint` tool's host command. The agent's lint rung runs
-    # `uv run ruff check --output-format=json`; without a ruff target in the
-    # workspace the tool refuses deterministically.
-    "ruff>=0.9,<1",
-]
-
-[tool.ruff]
-target-version = "py313"
-line-length = 100
-extend-exclude = ["docs/_build"]
