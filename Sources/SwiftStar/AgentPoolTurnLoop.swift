@@ -258,7 +258,16 @@ extension AgentController {
             // injectPendingReceipts): if the user started a turn mid-consult the
             // send is refused, and leaving the receipt pending lets the next
             // drain fold the answer in via `injectionPrompt()`.
-            let answer = receipt.answerText.flatMap { $0.isEmpty ? nil : $0 } ?? receipt.summary
+            guard let answer = receipt.answerText.flatMap({ $0.isEmpty ? nil : $0 }) else {
+                // `noChanges` is a write-dispatch verdict, not a response to a
+                // read-only consultation. Never present it as the worker's
+                // answer when the worker emitted no prose.
+                poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+                transcript.appendSystem("→ chat failed: worker returned no answer")
+                log("worker \(worker.rawValue): consult returned no answer")
+                drainQueuedWorkers()
+                return
+            }
             let stats = ConsultedRowStats(
                 generatedTokens: outcome.generatedTokens,
                 decodeTPS: outcome.decodeTPS,

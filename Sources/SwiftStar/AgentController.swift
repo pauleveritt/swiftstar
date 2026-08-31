@@ -1204,7 +1204,9 @@ final class AgentController {
             transcript.appendSystem("→ chat refused: agent not idle")
             return
         }
-        transcript.appendSystem("→ consulting: \(trimmed)")
+        // A /chat task is still the user's question. Render it as a normal
+        // prompt bubble; the worker provenance is shown on the answer row.
+        transcript.appendUser(trimmed)
         let packet = HandoffPacket(
             taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
             baselines: [:], turnBudget: 100_000,

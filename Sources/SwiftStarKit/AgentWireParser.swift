@@ -138,9 +138,13 @@ public struct AgentWireParser: Sendable {
         case "queued":
             return .queued
         case "text":
-            return .text(object["s"] as? String ?? "")
+            // Older single-session captures use `s`; pooled captures from the
+            // engine's worker path have also used the descriptive `text` key.
+            // Both carry the same prose payload, and dropping the latter makes
+            // a perfectly good /chat answer look like an empty turn.
+            return .text(object["s"] as? String ?? object["text"] as? String ?? "")
         case "think":
-            return .think(object["s"] as? String ?? "")
+            return .think(object["s"] as? String ?? object["text"] as? String ?? "")
         case "tool":
             if let toolEvent = parseTool(object) { return .tool(toolEvent) }
             return .ignored(trimmed)

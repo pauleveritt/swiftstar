@@ -81,6 +81,13 @@ struct AgentWireParserTests {
         #expect(p.feed(#"{"t":"think","s":"hmm","ts":2}"#) == .think("hmm"))
     }
 
+    @Test func pooledTextAliasParsesAsWorkerProse() {
+        var p = AgentWireParser()
+        _ = p.feed(Self.helloLine)
+        #expect(p.feed(#"{"t":"text","text":"the worker's answer","ts":3}"#) == .text("the worker's answer"))
+        #expect(p.feed(#"{"t":"think","text":"worker reasoning","ts":4}"#) == .think("worker reasoning"))
+    }
+
     @Test func statusCarriesState() {
         var p = AgentWireParser()
         _ = p.feed(Self.helloLine)
