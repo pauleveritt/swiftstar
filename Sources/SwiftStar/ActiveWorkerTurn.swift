@@ -23,6 +23,7 @@ struct ActiveWorkerTurn {
     var worktree: WorktreeDispatcher.Worktree?
     var outcomeBuilder: TurnOutcomeBuilder?
     var watchdog: Task<Void, Never>?
+    private(set) var interrupted = false
     private var toolBudget = ToolCallBudgetTracker(budget: 0)
 
     var activeId: WorkerId? { state.active?.id }
@@ -36,7 +37,15 @@ struct ActiveWorkerTurn {
         state.start(id: id, packet: packet)
         self.worktree = worktree
         self.outcomeBuilder = outcomeBuilder
+        self.interrupted = false
         self.toolBudget = ToolCallBudgetTracker(budget: packet.toolCallBudget)
+    }
+
+    /// Record that the user stopped this pooled turn. The engine should emit
+    /// its normal interrupted `ready`, but the controller uses this local fact
+    /// to avoid surfacing partial consult prose as a completed answer.
+    mutating func markInterrupted() {
+        interrupted = true
     }
 
     /// End the active turn (finished, failed, or a session restart): cancels
@@ -50,6 +59,7 @@ struct ActiveWorkerTurn {
         worktree = nil
         outcomeBuilder = nil
         watchdog = nil
+        interrupted = false
         toolBudget = ToolCallBudgetTracker(budget: 0)
     }
 

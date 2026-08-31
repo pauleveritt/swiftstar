@@ -102,6 +102,7 @@ final class AgentController {
     private var stdoutTask: Task<Void, Never>?
     private var stderrTask: Task<Void, Never>?
     private var startupTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var stopEscalationTask: Task<Void, Never>?
     var generation = 0
     // D12 turn-outcome state.
     private var outcomeBuilder: TurnOutcomeBuilder?
@@ -151,6 +152,7 @@ final class AgentController {
         process?.terminate()
         memoryTask?.cancel()
         traceTask?.cancel()
+        stopEscalationTask?.cancel()
         try? logHandle?.close()
     }
 
@@ -431,6 +433,8 @@ final class AgentController {
         // not carry the previous session's advertisement forward.
         advertisedCaps = []
         stderrTail = []
+        stopEscalationTask?.cancel()
+        stopEscalationTask = nil
         lastStatus = nil
         lastPrefillTPS = 0
         lastGenTPS = 0
@@ -544,6 +548,8 @@ final class AgentController {
                 self.process = nil
                 self.memoryTask?.cancel()
                 self.traceTask?.cancel()
+                self.stopEscalationTask?.cancel()
+                self.stopEscalationTask = nil
                 self.lastFootprintBytes = nil
                 // The engine's failure mode is exiting (stderr boot lines are
                 // normal — the memory plan lives there); a mid-start or
@@ -1001,27 +1007,54 @@ final class AgentController {
 
     /// D5: interrupt = write one ETX byte (0x03) to the child's stdin. The
     /// engine latches it, emits an interrupted `finish` when mid-block, and
-    /// returns to idle; the controller reflects that via the wire.
+    /// returns to idle; the controller reflects that via the wire. Consults
+    /// use the same pooled engine input, so they are interruptible too.
+    var canInterrupt: Bool { isGenerating || isConsulting }
+
     func interrupt() {
-        guard isGenerating, let process,
+        guard canInterrupt, let process,
               let pipe = process.standardInput as? Pipe else { return }
-        sentInterrupt = true
-        pipe.fileHandleForWriting.write(Data([0x03]))
+        if isGenerating {
+            sentInterrupt = true
+        } else {
+            workerTurn.markInterrupted()
+        }
+        try? pipe.fileHandleForWriting.write(contentsOf: Data([0x03]))
     }
 
     func stopAgent() {
-        guard state != .stopped else { return }
+        guard state != .stopped || process != nil else { return }
         state = .stopping
         stdoutTask?.cancel()
         stderrTask?.cancel()
         startupTimeoutTask?.cancel()
+        stopEscalationTask?.cancel()
         memoryTask?.cancel()
         // EOF on stdin first (the same clean-exit shape as swiftstar-drive):        // the engine's non-interactive loop exits on EOF rather than relying
         // on SIGTERM alone.
         if let pipe = process?.standardInput as? Pipe {
             try? pipe.fileHandleForWriting.close()
         }
-        process?.terminate()
+        guard let process else {
+            state = .stopped
+            return
+        }
+        process.terminate()
+        // `Process.terminate()` is cooperative. A wedged engine can leave the
+        // toolbar stuck on "Stopping…" forever, which also makes a subsequent
+        // session impossible. Give graceful shutdown a short window, then
+        // kill the exact child we spawned; the termination handler still owns
+        // the final state transition.
+        let generation = self.generation
+        stopEscalationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self,
+                  self.generation == generation,
+                  self.state == .stopping,
+                  let process = self.process,
+                  process.isRunning else { return }
+            kill(process.processIdentifier, SIGKILL)
+        }
         // The termination handler lands on .stopped (its guard passes: state
         // is .stopping, not .stopped) after recording the exit.
     }

@@ -187,6 +187,7 @@ extension AgentController {
     func finishWorkerTurn(worker: WorkerId, outcome: TurnOutcome, generation: Int) async {
         workerTurn.watchdog?.cancel()
         let isConsult = workerTurn.isConsult(worker)
+        let wasInterrupted = workerTurn.interrupted
         let answerText: String? = isConsult ? outcome.text : nil
         let packet = workerTurn.activePacket ?? HandoffPacket(
             taskText: "", writableFiles: [], validationCommand: nil,
@@ -252,6 +253,13 @@ extension AgentController {
         workerTurn.clearActive()
         if isConsult {
             workerTurn.removeConsult(worker)
+            if wasInterrupted {
+                poolState = PoolScheduler.apply(poolState, .receiptInjected(worker))
+                transcript.appendSystem("→ chat interrupted")
+                log("worker \(worker.rawValue): consult interrupted")
+                drainQueuedWorkers()
+                return
+            }
             // Surface the answer directly; never deliver a consult's receipt as
             // orchestrator prose — the answer IS the delivery. Clear the receipt
             // only when the send lands (at-least-once, matching

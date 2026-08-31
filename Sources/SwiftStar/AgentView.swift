@@ -33,8 +33,20 @@ struct AgentView: View {
                     onStart: { controller.startAgent() })
             }
             ToolbarItem(id: "endSession", placement: .primaryAction) {
-                Button("End session") { controller.stopAgent() }
-                    .help("Stop the agent run (the engine stops when you quit SwiftStar)")
+                Button {
+                    switch controller.state {
+                    case .stopped, .failed:
+                        controller.startAgent()
+                    case .starting, .ready, .generating:
+                        controller.stopAgent()
+                    case .stopping:
+                        break
+                    }
+                } label: {
+                    Label(sessionActionTitle, systemImage: sessionActionIcon)
+                }
+                .disabled(controller.state == .stopping)
+                .help(sessionActionHelp)
             }
         }
         .task { controller.startIfNeeded() }
@@ -220,23 +232,27 @@ struct AgentView: View {
                     // conflicting turn while a worker is running.
                     .disabled(!controller.canSend || controller.isConsulting)
                 Button {
-                    if controller.isGenerating {
+                    if controller.canInterrupt {
                         controller.interrupt()
                     } else {
                         send()
                     }
                 } label: {
-                    Image(systemName: controller.isGenerating ? "stop.circle.fill" : "arrow.up.circle.fill")
+                    Image(systemName: controller.canInterrupt ? "stop.circle.fill" : "arrow.up.circle.fill")
                         .font(.system(size: 28))
-                        .symbolEffect(.variableColor.iterative, isActive: controller.isGenerating)
-                        .foregroundStyle(controller.isGenerating ? .red : .accentColor)
+                        .symbolEffect(.variableColor.iterative, isActive: controller.canInterrupt)
+                        .foregroundStyle(controller.canInterrupt ? .red : .accentColor)
                 }
                 .buttonStyle(.plain)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
                 // Icon-only, and the icon carries the whole meaning — the label
                 // has to move with the state or VoiceOver announces nothing.
-                .accessibilityLabel(controller.isGenerating ? "Stop generating" : "Send message")
+                .accessibilityLabel(controller.canInterrupt
+                    ? (controller.isConsulting ? "Stop consult" : "Stop generating")
+                    : "Send message")
                 .disabled(
-                    !controller.isGenerating
+                    !controller.canInterrupt
                         && (controller.state != .ready
                             || controller.isConsulting
                             || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -253,6 +269,30 @@ struct AgentView: View {
     private var errorText: String? {
         if case .failed(let message) = controller.state { return message }
         return nil
+    }
+
+    private var sessionActionTitle: String {
+        switch controller.state {
+        case .stopped, .failed: return "Start session"
+        case .stopping: return "Stopping…"
+        case .starting, .ready, .generating: return "End session"
+        }
+    }
+
+    private var sessionActionIcon: String {
+        switch controller.state {
+        case .stopped, .failed: return "play.circle"
+        case .stopping: return "hourglass"
+        case .starting, .ready, .generating: return "stop.circle"
+        }
+    }
+
+    private var sessionActionHelp: String {
+        switch controller.state {
+        case .stopped, .failed: return "Start a new agent session"
+        case .stopping: return "Waiting for the agent session to stop"
+        case .starting, .ready, .generating: return "End the current agent session"
+        }
     }
 
     private func send() {
