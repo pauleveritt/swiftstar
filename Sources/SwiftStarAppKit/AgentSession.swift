@@ -501,11 +501,23 @@ public final class AgentSession {
         // need); the record spans the whole turn, not just tool events.
         outcomeBuilder?.apply(event)
         switch event {
-        case .ready:
-            // D12/D6: the turn-end `ready` is the single gate — a builder
-            // opened by `send` and still open when a `ready` arrives is a
-            // finished turn, full stop. (A `ready` with no builder open — the
-            // engine's own pre-turn handshake ready — is a no-op here.)
+        case .ready(_, let stopReason, let generated, _):
+            // D12/D6: the turn-end `ready` closes an open builder. But "a
+            // builder is open" is NOT sufficient on its own, and assuming it
+            // was cost a real capture: the engine's boot `ready` arrives when
+            // the model finishes LOADING, which on a cold 15 GB model is well
+            // after `send` has already opened a builder. Treating it as a turn
+            // end finished the turn instantly with zero generated tokens, and
+            // `swiftstar-eval run` then stopped the engine before the prompt
+            // was ever processed — a capture with 19 `text` events in the
+            // committed golden came back with none, while the run exited 0.
+            //
+            // A boot (or pool-slot attach) ready carries neither `stop_reason`
+            // nor `generated`; a turn-end ready carries at least one. That is
+            // exactly the distinction `AgentEvent.readyIsTurnEnd` was added
+            // for in `b6d27e4` — it was applied on the worker path
+            // (`AgentPoolTurnLoop.swift:189`) and missed here.
+            guard AgentEvent.readyIsTurnEnd(stopReason: stopReason, generated: generated) else { break }
             if let builder = outcomeBuilder {
                 let outcome = builder.finish(appStopReason: sentInterrupt ? .interrupt : nil)
                 outcomeBuilder = nil

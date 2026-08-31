@@ -41,6 +41,28 @@ struct AgentSessionTests {
     {"t":"ready","kv_bytes":1,"scratch_bytes":1,"model_bytes":1,"planned_bytes":1,"stop_reason":"eos","generated":8,"ctx_used":20,"ts":7}
     """
 
+    /// `plainTurn` preceded by the engine's own BOOT `ready` — a bare one
+    /// carrying neither `stop_reason` nor `generated`, which is what
+    /// `ds4-agent` emits when the model finishes loading.
+    ///
+    /// This fixture exists because every hand-authored fake in this file
+    /// omitted that line, and the omission hid a real defect: on a cold 15 GB
+    /// model the boot ready lands well AFTER `send` has opened an outcome
+    /// builder, and `AgentSession` closed the turn on any ready while a
+    /// builder was open. A live `swiftstar-eval run --bare` therefore returned
+    /// `generated_tokens: 0` and exited 0, having stopped the engine before
+    /// the prompt was processed — against a committed golden carrying 19
+    /// `text` events. `BRIEF.md` names this trap exactly: a hand-authored fake
+    /// verifies your beliefs about the wire rather than the wire.
+    private static let bootReadyThenTurn = """
+    {"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts","think_override"],"ts":1}
+    {"t":"ready","kv_bytes":1,"scratch_bytes":1,"model_bytes":1,"planned_bytes":1,"ts":2}
+    {"t":"status","state":"generating","prefill_done":1,"prefill_total":1,"prefill_tps":0.0,"generated":4,"gen_tps":10.0,"ctx_used":10,"ctx_size":32768,"power":100,"error":"","ts":4}
+    {"t":"text","s":"hi there","ts":5}
+    {"t":"status","state":"idle","prefill_done":1,"prefill_total":1,"prefill_tps":0.0,"generated":8,"gen_tps":10.0,"ctx_used":20,"ctx_size":32768,"power":100,"error":"","ts":6}
+    {"t":"ready","kv_bytes":1,"scratch_bytes":1,"model_bytes":1,"planned_bytes":1,"stop_reason":"eos","generated":8,"ctx_used":20,"ts":7}
+    """
+
     /// Same shape as `plainTurn`, but with one `write` tool block before the
     /// turn-end `ready` —
     /// `FakeAgentSource.generate(hostTools: true)` rewrites the block into a
@@ -157,6 +179,37 @@ struct AgentSessionTests {
 
         #expect(outcomes.count == 1, "one send() must yield exactly one TurnOutcome")
         #expect(outcomes.first?.stopReason == .eos)
+    }
+
+    /// The engine's boot `ready` must not end a turn. Only a ready carrying
+    /// `stop_reason` or `generated` does — `AgentEvent.readyIsTurnEnd`, added
+    /// in `b6d27e4` for the pool-worker path and originally missed here.
+    ///
+    /// Sibling of `sessionSpawnsAndCompletesOneTurn`: that one proves a real
+    /// turn-end ready DOES finish the turn, this one proves a boot ready does
+    /// not. Break the guard and this test sees an outcome with zero generated
+    /// tokens and no text, which is exactly what the live capture showed.
+    @Test @MainActor func bootReadyDoesNotEndTheTurn() async throws {
+        let engineDir = try tempDir("engine-boot")
+        let workspace = try tempDir("ws-boot")
+        let captureDir = try tempDir("capture-boot")
+        let settings = makeSettings(engineDir: engineDir, workspace: workspace)
+        _ = try buildFakeEngine(capture: Self.bootReadyThenTurn, settings: settings, hostTools: true)
+
+        let session = AgentSession(settings: settings, tools: [], captureDirectory: captureDir)
+        _ = try session.start()
+        defer { session.stop() }
+
+        var outcomes: [TurnOutcome] = []
+        session.onOutcome = { outcomes.append($0) }
+
+        #expect(session.send("hello there") == true)
+        try await waitUntil { outcomes.count >= 1 }
+
+        #expect(outcomes.count == 1, "the boot ready must not produce a second outcome")
+        #expect(
+            outcomes.first?.generatedTokens == 8,
+            "the turn must carry the tokens generated after the boot ready, not zero")
     }
 
     @Test @MainActor func toolCallbackRoundTripIsAnswered() async throws {
