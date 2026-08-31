@@ -24,6 +24,7 @@ struct ActiveWorkerTurn {
     var outcomeBuilder: TurnOutcomeBuilder?
     var watchdog: Task<Void, Never>?
     private(set) var interrupted = false
+    private(set) var toolTask: Task<ToolCallbackResponse, Never>? = nil
     private var toolBudget = ToolCallBudgetTracker(budget: 0)
 
     var activeId: WorkerId? { state.active?.id }
@@ -38,6 +39,7 @@ struct ActiveWorkerTurn {
         self.worktree = worktree
         self.outcomeBuilder = outcomeBuilder
         self.interrupted = false
+        self.toolTask = nil
         self.toolBudget = ToolCallBudgetTracker(budget: packet.toolCallBudget)
     }
 
@@ -46,6 +48,19 @@ struct ActiveWorkerTurn {
     /// to avoid surfacing partial consult prose as a completed answer.
     mutating func markInterrupted() {
         interrupted = true
+        toolTask?.cancel()
+    }
+
+    mutating func setToolTask(_ task: Task<ToolCallbackResponse, Never>) {
+        toolTask = task
+    }
+
+    mutating func clearToolTask() {
+        toolTask = nil
+    }
+
+    mutating func cancelToolTask() {
+        toolTask?.cancel()
     }
 
     /// End the active turn (finished, failed, or a session restart): cancels
@@ -60,6 +75,8 @@ struct ActiveWorkerTurn {
         outcomeBuilder = nil
         watchdog = nil
         interrupted = false
+        toolTask?.cancel()
+        toolTask = nil
         toolBudget = ToolCallBudgetTracker(budget: 0)
     }
 

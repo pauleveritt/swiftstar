@@ -57,6 +57,23 @@ struct SubprocessRunnerTests {
         #expect(r.timedOut)
     }
 
+    @Test func asyncRunCancellationTerminatesTheChild() async {
+        let task = Task {
+            try await SubprocessRunner.run("sleep 30", in: self.tmp)
+        }
+        try? await Task.sleep(for: .milliseconds(100))
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            Issue.record("a canceled subprocess should not return a result")
+        } catch is CancellationError {
+            // Expected: cancellation must reap the child before returning.
+        } catch {
+            Issue.record("expected CancellationError, got \(error)")
+        }
+    }
+
     /// The point of the async overload: it must not block a thread while it
     /// waits. Running N of them concurrently proves it — a blocking
     /// implementation (`Thread.sleep` under the hood, e.g. a fake "async" that

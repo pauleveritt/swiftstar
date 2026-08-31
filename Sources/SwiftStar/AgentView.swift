@@ -232,28 +232,32 @@ struct AgentView: View {
                     // conflicting turn while a worker is running.
                     .disabled(!controller.canSend || controller.isConsulting)
                 Button {
-                    if controller.canInterrupt {
+                    if controller.isTurnActive {
                         controller.interrupt()
                     } else {
                         send()
                     }
                 } label: {
-                    Image(systemName: controller.canInterrupt ? "stop.circle.fill" : "arrow.up.circle.fill")
+                    Image(systemName: controller.isTurnActive ? "stop.circle.fill" : "arrow.up.circle.fill")
                         .font(.system(size: 28))
-                        .symbolEffect(.variableColor.iterative, isActive: controller.canInterrupt)
-                        .foregroundStyle(controller.canInterrupt ? .red : .accentColor)
+                        .symbolEffect(.variableColor.iterative,
+                                      isActive: controller.isTurnActive && !controller.interruptPending)
+                        .foregroundStyle(controller.isTurnActive ? .red : .accentColor)
                 }
                 .buttonStyle(.plain)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 // Icon-only, and the icon carries the whole meaning — the label
                 // has to move with the state or VoiceOver announces nothing.
-                .accessibilityLabel(controller.canInterrupt
-                    ? (controller.isConsulting ? "Stop consult" : "Stop generating")
+                .accessibilityLabel(controller.isTurnActive
+                    ? (controller.interruptPending
+                        ? (controller.isConsulting ? "Stopping consult" : "Stopping generation")
+                        : (controller.isConsulting ? "Stop consult" : "Stop generating"))
                     : "Send message")
                 .disabled(
-                    !controller.canInterrupt
-                        && (controller.state != .ready
+                    controller.isTurnActive
+                        ? controller.interruptPending
+                        : (controller.state != .ready
                             || controller.isConsulting
                             || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 )

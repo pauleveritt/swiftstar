@@ -117,6 +117,7 @@ extension AgentController {
             WorktreeDispatcher.discard(worktree, in: Self.resolveRepoRoot(from: settings.workspace))
         }
         workerTurn.clearActive()
+        clearInterruptPending()
         let receipt = DispatchReceipt(worker: worker, ref: nil, reason: reason, summary: reason)
         poolState = PoolScheduler.apply(poolState, .workerFailed(worker, receipt))
         if isConsult {
@@ -149,21 +150,31 @@ extension AgentController {
                     rollingDigest, mutations: [], exitStatus: nil, validationRan: false)
                 return
             }
-            let response = await ToolCallbackResponder.respond(
-                idx: idx, name: name, params: params,
-                workspace: workerTurn.worktree?.url ?? settings.workspace,
-                shellAllowed: false,
-                writableFiles: workerTurn.activePacket?.writableFiles,
-                execute: Self.executeHostTool)
+            let toolTask = Task { @MainActor in
+                await ToolCallbackResponder.respond(
+                    idx: idx, name: name, params: params,
+                    workspace: self.workerTurn.worktree?.url ?? self.settings.workspace,
+                    shellAllowed: false,
+                    writableFiles: self.workerTurn.activePacket?.writableFiles,
+                    execute: Self.executeHostTool)
+            }
+            workerTurn.setToolTask(toolTask)
+            let response = await toolTask.value
+            workerTurn.clearToolTask()
             guard generation == self.generation else { return }
-            writeToolResult(response)
-            workerTurn.outcomeBuilder?.recordHostVerdict(
-                idx: idx, ok: response.ok, mutations: response.mutations,
-                exitStatus: response.exitStatus, outputDigest: response.outputDigest,
-                validationRan: response.validationRan)
-            rollingDigest = RollingDigestReducer.recordHostVerdict(
-                rollingDigest, mutations: response.mutations,
-                exitStatus: response.exitStatus, validationRan: response.validationRan)
+            if workerTurn.interrupted {
+                writeToolResult(ToolCallbackResponse(
+                    idx: response.idx, ok: false, s: "interrupted"))
+            } else {
+                writeToolResult(response)
+                workerTurn.outcomeBuilder?.recordHostVerdict(
+                    idx: idx, ok: response.ok, mutations: response.mutations,
+                    exitStatus: response.exitStatus, outputDigest: response.outputDigest,
+                    validationRan: response.validationRan)
+                rollingDigest = RollingDigestReducer.recordHostVerdict(
+                    rollingDigest, mutations: response.mutations,
+                    exitStatus: response.exitStatus, validationRan: response.validationRan)
+            }
         case .toolRequestRefused(let idx, let reason):
             writeToolResult(ToolCallbackResponse(idx: idx, ok: false,
                 s: ToolResultCondenser.condense(reason)))
@@ -251,6 +262,7 @@ extension AgentController {
             rollingDigest = RollingDigestReducer.record(rollingDigest, receipt: receipt)
         }
         workerTurn.clearActive()
+        clearInterruptPending()
         if isConsult {
             workerTurn.removeConsult(worker)
             if wasInterrupted {
