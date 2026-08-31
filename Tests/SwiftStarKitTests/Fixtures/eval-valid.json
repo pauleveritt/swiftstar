@@ -1,0 +1,15 @@
+{
+  "name": "power-throttle-probe",
+  "question": "Does --power 100 change decode throughput vs --power 70?",
+  "falsifier": "If Sigma-suffix-normalized decode tokens/sec differs by less than 5% across all pairs, the claim is falsified.",
+  "variable": "power",
+  "pairs": 5,
+  "mode": "bare",
+  "promptFile": "prompts/throttle.md",
+  "captureSelection": "latest",
+  "arms": [
+    { "id": "control", "overrides": { "power": "70" } },
+    { "id": "treatment", "overrides": { "power": "100" } }
+  ],
+  "common": { "contextSize": 16384 }
+}
