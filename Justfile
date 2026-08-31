@@ -9,14 +9,8 @@ docs:
     uv run --group docs sphinx-build -W -b html docs docs/_build/html
 
 # Enforce docs/sdd.md's size caps: ROADMAP phase-table Direction/Status
-# cells, plan docs under 400 lines / 25% fenced code. Written convention
-# alone has already failed silently once (see docs/sdd.md, "The phase
-# table"). Direction/Status caps (900/1000 chars) are calibrated against
-# this project's own post-cleanup ROADMAP, not picked in the abstract --
-# the first version of this gate used 300 chars, which was aspirational and
-# unverified: even the row cited as the exemplar of "already short" (P20)
-# failed it by 7x. Caught only because a docs-restructuring pass ran the
-# actual gate instead of trusting the number in docs/sdd.md.
+# cells, and current plan docs directly under docs/superpowers/plans/. Archived
+# plans live below that directory and are retained unchanged.
 #
 # Splits table rows on a backtick-depth-aware pipe scan, not a naive
 # `IFS='|'` split -- a plain split mis-indexes every cell after a Direction
@@ -52,14 +46,53 @@ lint-docs:
         END { exit bad }
     ' ROADMAP.md || fail=1
     for f in docs/superpowers/plans/*.md; do
-        read -r lines pct <<< "$(awk '
-            { n++ }
-            /^```/ { infence = !infence; next }
-            infence { c++ }
-            END { pct = (n > 0) ? int(c * 100 / n) : 0; print n, pct }
+        lifecycle="$(awk -F': *' '$1 == "lifecycle" { print $2; exit }' "$f")"
+        if [ -z "$lifecycle" ]; then
+            echo "$f: missing lifecycle metadata (active, closed, or superseded)"
+            fail=1
+        elif [ "$lifecycle" != "active" ] && [ "$lifecycle" != "closed" ] && [ "$lifecycle" != "superseded" ]; then
+            echo "$f: invalid lifecycle metadata: $lifecycle"
+            fail=1
+        elif [ "$lifecycle" = "closed" ] || [ "$lifecycle" = "superseded" ]; then
+            if ! awk '/^## Result[[:space:]]*$/ { found=1 } END { exit !found }' "$f"; then
+                echo "$f: $lifecycle plan is missing a ## Result section"
+                fail=1
+            fi
+        fi
+
+        read -r lines fenced long_fences long_lines unbalanced <<< "$(awk '
+            { total++ }
+            /^```/ {
+                if (inside) {
+                    if (count > 15) { many++; many_lines += count }
+                    inside = 0; count = 0
+                } else { inside = 1; count = 0 }
+                next
+            }
+            inside { count++; fenced++ }
+            END {
+                if (inside) { unclosed=1; if (count > 15) { many++; many_lines += count } }
+                print total, fenced + 0, many + 0, many_lines + 0, unclosed + 0
+            }
         ' "$f")"
-        if [ "$lines" -gt 400 ] || [ "$pct" -gt 25 ]; then
-            echo "$f: $lines lines, ${pct}% fenced (cap 400 lines / 25% fenced)"
+        if [ "$unbalanced" -ne 0 ]; then
+            echo "$f: unbalanced fenced code block"
+            fail=1
+        fi
+        if [ "$long_fences" -gt 0 ]; then
+            echo "$f: $long_fences fence(s) exceed 15 lines ($long_lines fenced lines)"
+            awk '
+                /^```/ {
+                    if (inside) {
+                        if (NR - start - 1 > 15) printf "  lines %d-%d\n", start, NR - 1
+                        inside = 0
+                    } else { inside = 1; start = NR }
+                }
+            ' "$f"
+            fail=1
+        fi
+        if [ "$lines" -ge 400 ] || [ $((fenced * 100)) -ge $((lines * 25)) ]; then
+            echo "$f: $lines lines, $((fenced * 100 / lines))% fenced (must be under 400 lines / 25% fenced)"
             fail=1
         fi
     done

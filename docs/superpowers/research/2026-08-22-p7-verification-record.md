@@ -3,7 +3,7 @@
 Durable record for Phase P7 ("Agent mode"). Executed on branch `p7-agent-mode`,
 spec-driven per `docs/sdd.md`.
 Spec: [`docs/superpowers/specs/2026-08-22-p7-agent-mode-design.md`](../specs/2026-08-22-p7-agent-mode-design.md).
-Plan: `docs/superpowers/plans/2026-08-22-p7-agent-mode.md`.
+Plan: `docs/superpowers/plans/archive/2026-08-22-p7-agent-mode.md`.
 
 ## Test evidence
 

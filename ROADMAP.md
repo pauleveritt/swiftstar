@@ -61,8 +61,8 @@ Each plan is written as its phase begins. P12's plan is written:
 P13's design and benchmark record:
 [`2026-08-25-p13-mellum-variant-design.md`](docs/superpowers/specs/2026-08-25-p13-mellum-variant-design.md),
 [`2026-08-25-p13-mellum-benchmark-record.md`](docs/superpowers/research/2026-08-25-p13-mellum-benchmark-record.md).
-P15's plan is written:
-[`2026-08-25-host-controlled-action-mode.md`](docs/superpowers/plans/2026-08-25-host-controlled-action-mode.md).
+P15's plan is archived at
+[`2026-08-25-host-controlled-action-mode.md`](docs/superpowers/plans/archive/2026-08-25-host-controlled-action-mode.md).
 
 ### Dependencies worth knowing before planning
 

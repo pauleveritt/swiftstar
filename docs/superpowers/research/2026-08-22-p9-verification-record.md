@@ -3,7 +3,7 @@
 Durable record for Phase P9 ("The tool-callback wire"). Executed on branch
 `p9-tool-wire`, spec-driven per [`docs/sdd.md`](../../sdd.md).
 Spec: [`docs/superpowers/specs/2026-08-22-p9-tool-callback-wire-design.md`](../specs/2026-08-22-p9-tool-callback-wire-design.md).
-Plan: [`docs/superpowers/plans/2026-08-22-p9-tool-callback-wire.md`](../plans/2026-08-22-p9-tool-callback-wire.md).
+Plan: [`docs/superpowers/plans/archive/2026-08-22-p9-tool-callback-wire.md`](../plans/archive/2026-08-22-p9-tool-callback-wire.md).
 
 ## Test evidence
 
