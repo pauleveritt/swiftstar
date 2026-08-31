@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-25
 **Reviewer:** `z-ai/glm-5.2` (OpenRouter), read-only, dispatched via `pi -p --no-session`.
-**Reviewed:** `docs/superpowers/specs/2026-08-25-p12-2-mellum-loadable-design.md` and `docs/superpowers/plans/2026-08-25-p12-2-mellum-loadable.md`, verified against `~/projects/ds4/.claude/worktrees/swiftstar-integration-mellum` (tip `cde6438`).
+**Reviewed:** `docs/superpowers/specs/2026-08-25-p12-2-mellum-loadable-design.md` and `docs/superpowers/plans/archive/2026-08-25-p12-2-mellum-loadable.md`, verified against `~/projects/ds4/.claude/worktrees/swiftstar-integration-mellum` (tip `cde6438`).
 
 ## Verified facts (reviewer's verdicts, re-checked against source)
 

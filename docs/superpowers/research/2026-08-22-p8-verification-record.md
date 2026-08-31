@@ -3,7 +3,7 @@
 Durable record for Phase P8 ("Skills"). Executed on branch `p8-skills`,
 spec-driven per [`docs/sdd.md`](../../sdd.md).
 Spec: [`docs/superpowers/specs/2026-08-22-p8-skills-design.md`](../specs/2026-08-22-p8-skills-design.md).
-Plan: [`docs/superpowers/plans/2026-08-22-p8-skills.md`](../plans/2026-08-22-p8-skills.md).
+Plan: [`docs/superpowers/plans/archive/2026-08-22-p8-skills.md`](../plans/archive/2026-08-22-p8-skills.md).
 
 ## Test evidence
 

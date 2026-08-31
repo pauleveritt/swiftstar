@@ -31,7 +31,7 @@ struct AgentDefaultSettingsTests {
 
     @Test func defaultModelFallbackUsesTheHardcodedLagunaPathByDefault() {
         let url = AgentDefaultSettings.defaultModelFallback(environment: [:])
-        #expect(url.path == "/Users/pauleveritt/projects/ds4/gguf/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
+        #expect(url.path == "/Users/pauleveritt/models/laguna-s-2.1-RoutedQ2_K-Last27Q3_K.gguf")
     }
 
     @Test func defaultModelFallbackHonorsEnvOverride() {
@@ -253,7 +253,10 @@ struct AgentDefaultSettingsTests {
         defer { cleanUp(defaults, scratchName) }
         let settings = AgentDefaultSettings.resolve(defaults: defaults, environment: [:], projectRoot: nil)
         #expect(settings.powerSavingEnabled == true)
-        #expect(AgentCommand.argv(settings: settings).contains("--power"))
+        // Nothing-configured resolves to Laguna S (an SSD-streaming variant),
+        // whose ds4.c load path refuses to start at all under `--power` <100
+        // — so despite the setting being on, argv must not carry the flag.
+        #expect(!AgentCommand.argv(settings: settings).contains("--power"))
     }
 
     @Test func powerSavingsHonorsAnExplicitOptOut() {

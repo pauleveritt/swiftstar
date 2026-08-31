@@ -33,11 +33,103 @@ public struct ToolCard: Equatable, Sendable {
     public var status: String?
     public var path: String? = nil
     public var finished: Bool = false
+    public var startedAt: UInt64? = nil
+    public var finishedAt: UInt64? = nil
+
+    public var durationSeconds: Double? {
+        guard let startedAt, let finishedAt, finishedAt >= startedAt else { return nil }
+        return Double(finishedAt - startedAt) / 1_000_000
+    }
+
+    public var inputBytes: Int {
+        params.reduce(0) { $0 + $1.value.utf8.count }
+    }
+
+    public var outputBytes: Int { output?.utf8.count ?? 0 }
+}
+
+/// Facts recorded when the app echoes a prompt. Token counts are deliberately
+/// absent: the app does not own the engine tokenizer.
+public struct UserRowStats: Equatable, Sendable {
+    public let timestamp: Date
+    public let characterCount: Int
+
+    public init(timestamp: Date = Date(), characterCount: Int) {
+        self.timestamp = timestamp
+        self.characterCount = characterCount
+    }
+
+    public static func forText(_ text: String, at timestamp: Date = Date()) -> Self {
+        Self(timestamp: timestamp, characterCount: text.count)
+    }
+}
+
+/// Local provenance for an app-generated system row.
+public struct SystemRowStats: Equatable, Sendable {
+    public let timestamp: Date
+
+    public init(timestamp: Date = Date()) { self.timestamp = timestamp }
+}
+
+/// Facts from a completed worker turn. The worker uses the same engine model
+/// as the pool, so only facts actually present in its outcome are included.
+public struct ConsultedRowStats: Equatable, Sendable {
+    public let generatedTokens: Int?
+    public let decodeTPS: Double?
+    public let ctxUsed: Int?
+
+    public init(generatedTokens: Int? = nil, decodeTPS: Double? = nil, ctxUsed: Int? = nil) {
+        self.generatedTokens = generatedTokens
+        self.decodeTPS = decodeTPS
+        self.ctxUsed = ctxUsed
+    }
+
+    public var line: String? {
+        var parts: [String] = []
+        if let decodeTPS, decodeTPS.isFinite, decodeTPS > 0 {
+            parts.append("Decode \(Int(decodeTPS.rounded())) tok/s")
+        }
+        if let generatedTokens { parts.append("\(generatedTokens) tok") }
+        if let ctxUsed, ctxUsed > 0 { parts.append("ctx \(ctxUsed.formatted())") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+/// A trace-backed context rebuild. `newTokens` is the compacted prefix and
+/// `tailTokens` is the preserved tail appended after it.
+public struct CompactionSummary: Equatable, Sendable {
+    public let reason: String
+    public let oldTokens: Int
+    public let newTokens: Int
+    public let tailStart: Int
+    public let tailTokens: Int
+    /// When the app observed the trace line. The trace's own wall timestamp is
+    /// not needed for the facts and is intentionally not reconstructed here.
+    public let observedAt: Date?
+
+    public init(reason: String, oldTokens: Int, newTokens: Int, tailStart: Int,
+                tailTokens: Int, observedAt: Date? = nil) {
+        self.reason = reason
+        self.oldTokens = oldTokens
+        self.newTokens = newTokens
+        self.tailStart = tailStart
+        self.tailTokens = tailTokens
+        self.observedAt = observedAt
+    }
+
+    public var retainedTokens: Int { newTokens + tailTokens }
+    public var discardedTokens: Int { max(oldTokens - retainedTokens, 0) }
+
+    public var line: String {
+        var parts = ["ctx \(oldTokens.formatted()) → \(newTokens.formatted()) + \(tailTokens.formatted()) tail = \(retainedTokens.formatted()) tok"]
+        if discardedTokens > 0 { parts.append("−\(discardedTokens.formatted())") }
+        return parts.joined(separator: " · ")
+    }
 }
 
 /// One display row of the agent transcript.
 public enum AgentTranscriptRow: Equatable, Sendable {
-    case user(String)
+    case user(String, stats: UserRowStats? = nil)
     case thinking(String)
     /// The assistant's prose, with the turn's frozen summary once it completes
     /// (the renderer shows it as a small static line under the bubble).
@@ -46,8 +138,9 @@ public enum AgentTranscriptRow: Equatable, Sendable {
     /// A worker's final answer surfaced by `/chat` — a delegated artifact,
     /// rendered as its own panel (clearly not the main agent speaking).
     /// Carries the worker's id for the panel's provenance badge.
-    case consulted(WorkerId, String)
-    case system(String)
+    case consulted(WorkerId, String, stats: ConsultedRowStats? = nil)
+    case system(String, stats: SystemRowStats? = nil)
+    case compaction(CompactionSummary)
 }
 
 /// Reduces `AgentEvent`s to display rows. Consecutive `.content` and
@@ -100,13 +193,13 @@ public struct AgentTranscript: Equatable, Sendable {
     /// Non-wire sibling: user prompts and engine status lines are not NDJSON
     /// events, so they enter through a separate mutator (like ChatTranscript).
     public mutating func appendSystem(_ message: String) {
-        rows.append(.system(message))
+        rows.append(.system(message, stats: SystemRowStats()))
     }
 
     /// The user's own prompt echo — a real row (rendered as an accent pill),
     /// not a `> `-prefixed system line.
     public mutating func appendUser(_ message: String) {
-        rows.append(.user(message))
+        rows.append(.user(message, stats: UserRowStats.forText(message)))
     }
 
     /// Append a non-wire row directly (the generic entry point under the
@@ -130,7 +223,8 @@ public struct AgentTranscript: Equatable, Sendable {
         case .start:
             cardRows = [:]
         case .tool:
-            let card = ToolCard(name: te.name ?? "", params: [], output: nil, status: nil)
+            let card = ToolCard(name: te.name ?? "", params: [], output: nil, status: nil,
+                                startedAt: te.ts)
             rows.append(.tool(card))
             cardRows[te.idx] = rows.count - 1
         case .paramBegin:
@@ -159,6 +253,7 @@ public struct AgentTranscript: Equatable, Sendable {
             guard let row = cardRows[te.idx], case .tool(var card) = rows[row] else { return }
             card.status = te.status
             card.finished = true
+            card.finishedAt = te.ts
             rows[row] = .tool(card)
         }
     }

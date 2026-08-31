@@ -54,6 +54,9 @@ final class AgentController {
     /// which is also what lets it be `nonisolated`: the `@Observable` macro
     /// cannot apply `nonisolated` to a *tracked* stored property.
     @ObservationIgnored private var memoryTask: Task<Void, Never>?
+    /// Tails the engine's trace side-channel so compaction becomes a persistent
+    /// transcript row instead of only a Diagnostics finding.
+    @ObservationIgnored private var traceTask: Task<Void, Never>?
     /// The in-flight turn's decode work, accumulated per generation segment on
     /// the engine's own clock. Reset at each turn's start and end.
 
@@ -115,7 +118,15 @@ final class AgentController {
     /// parser this type no longer owns.
     private(set) var advertisedCaps: Set<String> = []
     private var startupTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var stopEscalationTask: Task<Void, Never>?
+    @ObservationIgnored private var orchestratorToolTask: Task<ToolCallbackResponse, Never>?
     var generation = 0
+    /// Status samples for the active orchestrator turn. `TurnSpan` turns these
+    /// into elapsed work time without counting the user's typing time. (D12;
+    /// the outcome builder itself moved into `AgentSession` with the turn
+    /// loop — this stays app-side because it feeds `TurnSummary`'s
+    /// `elapsedSeconds`, a view-facing figure.)
+    private var turnStatuses: [StatusSnapshot] = []
     // P11 (D4) worker-turn state: everything that exists only while one
     // worker turn is in flight, consolidated into one value (item 1 of the
     // P22 cleanup) so there is exactly one place that creates/clears it —
@@ -132,6 +143,14 @@ final class AgentController {
     // read is tracked. Same treatment as `outcomeBuilder`, which is mutated
     // just as often (per wire event) and stays tracked.
     var workerTurn = ActiveWorkerTurn()
+    /// View-facing "an interrupt is in flight" flag. `AgentSession` tracks its
+    /// OWN `sentInterrupt` privately (it needs it to label the outcome record
+    /// `.interrupt` when the wire's own stop_reason says something else); this
+    /// is the separate, app-side signal `AgentView`/`AgentPoolTurnLoop` read
+    /// to disable the interrupt affordance and gate a worker's post-interrupt
+    /// tool answers. The orchestrator's own tool-call budget now lives inside
+    /// `AgentSession` (`toolBudget`) since tool-request admission moved there.
+    private(set) var interruptPending = false
     var buildSHA = "unknown"
     private let logHandle: FileHandle?
 
@@ -155,6 +174,9 @@ final class AgentController {
         // and be genuinely checked again.
         process?.terminate()
         memoryTask?.cancel()
+        traceTask?.cancel()
+        stopEscalationTask?.cancel()
+        orchestratorToolTask?.cancel()
         try? logHandle?.close()
     }
 
@@ -177,12 +199,13 @@ final class AgentController {
     /// P22 cleanup). `consult()`'s worker turn runs via `drainQueuedWorkers()`
     /// without ever touching `state` — it stays `.ready` for the whole turn,
     /// on purpose: `sendConsulted`'s delivery requires `canSend`, `interrupt()`
-    /// keys off `isGenerating`, and `ModelMenu` disables on `isGenerating` —
-    /// all three would break if a worker turn reused `.generating`. This is a
-    /// separate signal so AgentView can show a distinct "consulting" affordance
-    /// (composer visibly busy, but not the generating/interrupt state) instead
-    /// of looking idle while a consult worker is in flight.
+    /// leaves the main controller in `.ready`, because `sendConsulted`'s
+    /// delivery requires `canSend` and `ModelMenu` must remain disabled while
+    /// the worker is running. This separate signal lets AgentView show a
+    /// distinct "consulting" affordance without lying about the main engine
+    /// state.
     var isConsulting: Bool {
+        guard state == .ready else { return false }
         guard let id = workerTurn.activeId else { return false }
         return workerTurn.isConsult(id)
     }
@@ -276,6 +299,54 @@ final class AgentController {
         return (wire, tracePath)
     }
 
+    /// Read complete lines from the append-only trace without doing file I/O on
+    /// the MainActor. The trace may not exist until the engine opens it, so the
+    /// tailer retries the open and keeps the file handle at its current offset.
+    private func startTracePolling(path: URL, generation: Int) {
+        traceTask?.cancel()
+        traceTask = Task.detached(priority: .utility) { [weak self] in
+            var handle: FileHandle?
+            var pending = Data()
+            var parser = TraceParser()
+            var didInitialSeek = false
+            while !Task.isCancelled {
+                if handle == nil {
+                    handle = try? FileHandle(forReadingFrom: path)
+                    if handle != nil, !didInitialSeek {
+                        // A same-second restart can reuse an append-only
+                        // capture directory. Start at this spawn's live tail,
+                        // otherwise old compactions would be replayed.
+                        _ = try? handle?.seekToEnd()
+                        didInitialSeek = true
+                    }
+                }
+                if let handle,
+                   let chunk = try? handle.read(upToCount: 64 * 1024),
+                   !chunk.isEmpty {
+                    pending.append(chunk)
+                    while let newline = pending.firstIndex(of: 0x0A) {
+                        let line = pending.prefix(upTo: newline)
+                        pending.removeSubrange(...newline)
+                        let text = String(decoding: line, as: UTF8.self)
+                        if let event = parser.feed(text) {
+                            await self?.consumeTrace(event, generation: generation)
+                        }
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            try? handle?.close()
+        }
+    }
+
+    private func consumeTrace(_ event: TraceEvent, generation: Int) {
+        guard generation == self.generation else { return }
+        guard case .compaction(let reason, let old, let new, let tailStart, let tail) = event else { return }
+        transcript.append(.compaction(CompactionSummary(
+            reason: reason, oldTokens: old, newTokens: new,
+            tailStart: tailStart, tailTokens: tail, observedAt: Date())))
+    }
+
     /// Persist one finished turn's outcome as an appended line in the session's
     /// outcomes.ndjson (P21): captures become self-contained evidence. Item 6
     /// (P22 cleanup): routed through `SafeAppendFile` — a fresh one per call
@@ -356,6 +427,11 @@ final class AgentController {
         // failure message never pairs a new session with a stale tail.
         advertisedCaps = []
         stderrTail = []
+        stopEscalationTask?.cancel()
+        stopEscalationTask = nil
+        orchestratorToolTask?.cancel()
+        orchestratorToolTask = nil
+        interruptPending = false
         lastStatus = nil
         lastPrefillTPS = 0
         lastGenTPS = 0
@@ -365,8 +441,12 @@ final class AgentController {
         // A restart is a fresh engine = a fresh pool: stale pending workers and
         // consult bookkeeping must not survive into the new session.
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
+        workerTurn.cancelToolTask()
         workerTurn.watchdog?.cancel()
         workerTurn = ActiveWorkerTurn()
+        traceTask?.cancel()
+        traceTask = nil
+        turnStatuses = []
         // P24.1 (D3/D5): the pool worker executor is a process-lifetime
         // `static let` (still used by `AgentPoolTurnLoop.swift`), so it cannot
         // take the context size at construction, and its `more` continuations
@@ -518,6 +598,12 @@ final class AgentController {
             guard let self, gen == self.generation else { return }
             self.process = nil
             self.memoryTask?.cancel()
+            self.traceTask?.cancel()
+            self.stopEscalationTask?.cancel()
+            self.stopEscalationTask = nil
+            self.orchestratorToolTask?.cancel()
+            self.orchestratorToolTask = nil
+            self.interruptPending = false
             self.lastFootprintBytes = nil
             // The engine's failure mode is exiting (stderr boot lines are
             // normal — the memory plan lives there); a mid-start or mid-turn
@@ -538,6 +624,9 @@ final class AgentController {
         }
         self.process = session.process
         startMemoryPolling()
+        if let tracePath = settings.tracePath {
+            startTracePolling(path: tracePath, generation: gen)
+        }
 
         startupTimeoutTask?.cancel()
         startupTimeoutTask = Task { [weak self] in
@@ -567,6 +656,15 @@ final class AgentController {
         case .status(let snapshot):
             onTelemetry?(.status(snapshot))
             lastStatus = snapshot
+            // D12: the outcome record itself lives in `AgentSession` now, but
+            // the elapsed-work-time figure `TurnSummary` shows (`TurnSpan`,
+            // below) is view-facing, so this type keeps its own copy of the
+            // turn's status samples rather than reaching into the session's
+            // private builder. `isGenerating` is this type's own equivalent
+            // of "a turn is open" — the orchestrator's outcome builder tracks
+            // the identical span 1:1 (opened by `send`, closed by the
+            // turn-end `ready`).
+            if isGenerating { turnStatuses.append(snapshot) }
             lastPrefillTPS = AgentStatusText.ratchet(previous: lastPrefillTPS, new: snapshot.prefillTPS)
             lastGenTPS = AgentStatusText.ratchet(previous: lastGenTPS, new: snapshot.genTPS)
         case .ready(let plannedBytes, _, _, _):
@@ -605,14 +703,23 @@ final class AgentController {
             promptTPS: lastPrefillTPS,
             decodeTPS: outcome.decodeTPS ?? lastGenTPS,
             generatedTokens: outcome.generatedTokens,
-            ctxUsed: outcome.ctxUsed)
+            ctxUsed: outcome.ctxUsed,
+            elapsedSeconds: TurnSpan.measure(turnStatuses)?.workSeconds,
+            stopReason: outcome.stopReason)
         transcript.attachSummary(summary)
+        turnStatuses = []
         // The status bar's Prompt/Decode readout resets at turn end: a
         // permanent "last observed" must not pose as "current" while the
         // agent idles between turns (`AgentSession.send` also zeros at the
         // next turn's start — this covers the idle window).
         lastPrefillTPS = 0
         lastGenTPS = 0
+        // `AgentSession.onOutcome` fires only for a genuine turn-end (its own
+        // `outcomeBuilder` was open and a closing `ready` arrived) — the
+        // precise moment `interruptPending` (this type's own view-facing
+        // signal, since `AgentSession`'s `sentInterrupt` stays private) must
+        // clear.
+        interruptPending = false
         // P11 (D4): the orchestrator's turn ended — run any workers it
         // dispatched.
         drainQueuedWorkers()
@@ -717,7 +824,9 @@ final class AgentController {
         // (worker receipts injected into the orchestrator's next turn) is a
         // quiet system row — the user never typed it, so it must not look like
         // they did.
-        let row: AgentTranscriptRow = asUser ? .user(trimmed) : .system(trimmed)
+        let row: AgentTranscriptRow = asUser
+            ? .user(trimmed, stats: UserRowStats.forText(trimmed))
+            : .system(trimmed, stats: SystemRowStats())
         return inject(trimmed, row: row)
     }
 
@@ -726,11 +835,12 @@ final class AgentController {
     /// rendered as its own `.consulted` panel — a delegated artifact, not
     /// the main agent's prose.
     @discardableResult
-    func sendConsulted(_ answer: String, worker: WorkerId) -> Bool {
+    func sendConsulted(_ answer: String, worker: WorkerId,
+                       stats: ConsultedRowStats? = nil) -> Bool {
         let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         let wireText = "→ consulted: \(trimmed)"
-        return inject(wireText, row: .consulted(worker, trimmed))
+        return inject(wireText, row: .consulted(worker, trimmed, stats: stats))
     }
 
     /// Now a thin wrapper: the wire write, the think-override decision, and
@@ -744,6 +854,7 @@ final class AgentController {
         guard canSend, !wireText.isEmpty, let agentSession,
               agentSession.send(wireText, think: think) else { return false }
         transcript.append(row)
+        turnStatuses = []
         // A new turn starts with honest zeros: the previous turn's ratcheted
         // rates would mislead ("Prompt 1200" while prefill is actually 0) in
         // the brief window before fresh status events arrive.
@@ -753,23 +864,79 @@ final class AgentController {
         return true
     }
 
-    /// D5: interrupt = write one ETX byte (0x03) to the child's stdin —
-    /// `AgentSession.interrupt` now does the actual write; this type only
-    /// still gates on `isGenerating` (its own `state`, which `AgentSession`
-    /// does not track).
+    /// D5: interrupt = write one ETX byte (0x03) to the child's stdin. The
+    /// engine latches it, emits an interrupted `finish` when mid-block, and
+    /// returns to idle; the controller reflects that via the wire. Consults
+    /// use the same pooled engine input, so they are interruptible too.
+    ///
+    /// `AgentSession.interrupt()` owns the write for the orchestrator's OWN
+    /// turn (it also flips its private `sentInterrupt`, which the outcome
+    /// record needs to label the turn `.interrupt` over whatever the wire's
+    /// own stop_reason says) — gated there on its own `outcomeBuilder != nil`,
+    /// which is nil during a `/chat` consult worker's turn. A consult
+    /// interrupt is written here instead, straight to `process` (the same
+    /// underlying pipe `AgentSession` holds — mirrored into `self.process` at
+    /// `startAgent()`), and marks the worker's own turn state interrupted.
+    var isTurnActive: Bool { isGenerating || isConsulting }
+    var canInterrupt: Bool { isTurnActive && !interruptPending }
+
+    func clearInterruptPending() {
+        interruptPending = false
+    }
+
     func interrupt() {
-        guard isGenerating else { return }
-        agentSession?.interrupt()
+        guard isTurnActive, !interruptPending else { return }
+        if isGenerating {
+            agentSession?.interrupt()
+            interruptPending = true
+            orchestratorToolTask?.cancel()
+            return
+        }
+        guard let process, let pipe = process.standardInput as? Pipe else { return }
+        do {
+            try pipe.fileHandleForWriting.write(contentsOf: Data([0x03]))
+            interruptPending = true
+            workerTurn.markInterrupted()
+        } catch {
+            transcript.appendSystem("→ interrupt failed: \(error.localizedDescription)")
+            log("interrupt failed: \(error)")
+        }
     }
 
     func stopAgent() {
-        guard state != .stopped else { return }
+        guard state != .stopped || process != nil else { return }
         state = .stopping
         startupTimeoutTask?.cancel()
+        stopEscalationTask?.cancel()
+        orchestratorToolTask?.cancel()
+        workerTurn.cancelToolTask()
+        interruptPending = false
         memoryTask?.cancel()
+        // `AgentSession.stop()` does the cooperative shutdown (EOF on stdin,
+        // then `terminate()`) and `AgentSession.onExit` lands `.stopped` (its
+        // guard passes: state is `.stopping`, not `.stopped`) after recording
+        // the exit. `terminate()` is only cooperative, though — a wedged
+        // engine can leave the toolbar stuck on "Stopping…" forever, which
+        // also makes a subsequent session impossible — so give graceful
+        // shutdown a short window, then kill the exact child `AgentSession`
+        // spawned. `self.process` still mirrors `session.process` (set at
+        // `startAgent()`), so it is reachable here without reaching back into
+        // the session.
         agentSession?.stop()
-        // `AgentSession.onExit` lands `.stopped` (its guard passes: state is
-        // .stopping, not .stopped) after recording the exit.
+        guard process != nil else {
+            state = .stopped
+            return
+        }
+        let generation = self.generation
+        stopEscalationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self,
+                  self.generation == generation,
+                  self.state == .stopping,
+                  let process = self.process,
+                  process.isRunning else { return }
+            kill(process.processIdentifier, SIGKILL)
+        }
     }
 
     /// Stop, wait for the termination handler to land `.stopped`, then start
@@ -916,7 +1083,7 @@ final class AgentController {
                 "→ /quick unavailable: this engine build does not advertise \(TurnThinkPolicy.overrideCap)")
             return
         }
-        _ = inject(trimmed, row: .user(trimmed), think: .off)
+        _ = inject(trimmed, row: .user(trimmed, stats: UserRowStats.forText(trimmed)), think: .off)
     }
 
     /// The running model's `ModelFamily` for `TurnThinkPolicy` (P23): from the
@@ -950,7 +1117,9 @@ final class AgentController {
             transcript.appendSystem("→ chat refused: agent not idle")
             return
         }
-        transcript.appendSystem("→ consulting: \(trimmed)")
+        // A /chat task is still the user's question. Render it as a normal
+        // prompt bubble; the worker provenance is shown on the answer row.
+        transcript.appendUser(trimmed)
         let packet = HandoffPacket(
             taskText: trimmed, writableFiles: writableFiles, validationCommand: nil,
             baselines: [:], turnBudget: 100_000,

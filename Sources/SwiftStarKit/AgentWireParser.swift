@@ -26,6 +26,23 @@ public struct AgentToolEvent: Equatable, Sendable {
     public let value: String?
     public let status: String?
     public let calls: Int?
+    /// The wire's monotonic timestamp, when the engine included one. Tool
+    /// cards use the start/finish pair to show a real execution duration.
+    public let ts: UInt64?
+
+    public init(phase: AgentToolPhase, idx: Int, name: String?, paramKind: String?,
+                paramName: String?, value: String?, status: String?, calls: Int?,
+                ts: UInt64? = nil) {
+        self.phase = phase
+        self.idx = idx
+        self.name = name
+        self.paramKind = paramKind
+        self.paramName = paramName
+        self.value = value
+        self.status = status
+        self.calls = calls
+        self.ts = ts
+    }
 }
 
 /// One modelled event from the NDJSON agent wire. `.ignored` carries the raw
@@ -53,6 +70,19 @@ public enum AgentEvent: Equatable, Sendable {
     case toolRequestRefused(idx: Int, reason: String)
     case ignored(String)
     case refused(String)
+}
+
+public extension AgentEvent {
+    /// Whether a `.ready` closes a turn already in flight. A pool worker's
+    /// slot also gets a bare handshake `ready` when it first attaches — the
+    /// same shape as worker 0's boot ready, carrying neither field — and that
+    /// must not be mistaken for the end of the turn whose builder is already
+    /// open: it would finish the turn instantly with whatever text has
+    /// accumulated so far (nothing, on a fresh slot's first turn), discarding
+    /// everything the engine goes on to generate.
+    static func readyIsTurnEnd(stopReason: String?, generated: Int?) -> Bool {
+        stopReason != nil || generated != nil
+    }
 }
 
 /// Streaming NDJSON consumer for the `ds4-agent` wire (`--json-events`),
@@ -121,9 +151,13 @@ public struct AgentWireParser: Sendable {
         case "queued":
             return .queued
         case "text":
-            return .text(object["s"] as? String ?? "")
+            // Older single-session captures use `s`; pooled captures from the
+            // engine's worker path have also used the descriptive `text` key.
+            // Both carry the same prose payload, and dropping the latter makes
+            // a perfectly good /chat answer look like an empty turn.
+            return .text(object["s"] as? String ?? object["text"] as? String ?? "")
         case "think":
-            return .think(object["s"] as? String ?? "")
+            return .think(object["s"] as? String ?? object["text"] as? String ?? "")
         case "tool":
             if let toolEvent = parseTool(object) { return .tool(toolEvent) }
             return .ignored(trimmed)
@@ -154,23 +188,28 @@ public struct AgentWireParser: Sendable {
         switch phase {
         case .tool:
             return AgentToolEvent(phase: phase, idx: idx, name: object["name"] as? String,
-                                  paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)
+                                  paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         case .paramBegin:
             return AgentToolEvent(phase: phase, idx: idx, name: nil,
                                   paramKind: object["kind"] as? String, paramName: object["name"] as? String,
-                                  value: nil, status: nil, calls: nil)
+                                  value: nil, status: nil, calls: nil,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         case .paramValue, .output:
             return AgentToolEvent(phase: phase, idx: idx, name: nil,
                                   paramKind: nil, paramName: nil, value: object["s"] as? String,
-                                  status: nil, calls: nil)
+                                  status: nil, calls: nil,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         case .finish:
             return AgentToolEvent(phase: phase, idx: idx, name: nil,
                                   paramKind: nil, paramName: nil, value: nil,
                                   status: object["status"] as? String,
-                                  calls: (object["calls"] as? NSNumber)?.intValue)
+                                  calls: (object["calls"] as? NSNumber)?.intValue,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         case .start, .paramEnd:
             return AgentToolEvent(phase: phase, idx: idx, name: nil,
-                                  paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil)
+                                  paramKind: nil, paramName: nil, value: nil, status: nil, calls: nil,
+                                  ts: (object["ts"] as? NSNumber)?.uint64Value)
         }
     }
 

@@ -56,6 +56,17 @@ struct ThinkOverrideCapGateTests {
                 "the worker's think must come from its packet's declared sampling")
     }
 
+    /// A pool worker's attach-handshake `ready` (no stop_reason/generated —
+    /// same shape as worker 0's boot ready) must not finish the turn early.
+    /// The decision itself is unit-tested directly
+    /// (`AgentWireParserTests.readyIsTurnEndOnlyWhenItCarriesClosingFields`);
+    /// this only asserts the live call site actually consults it.
+    @Test func workerReadyGatesOnTurnEndBeforeFinishing() throws {
+        let loop = try source("Sources/SwiftStar/AgentPoolTurnLoop.swift")
+        #expect(loop.contains("guard AgentEvent.readyIsTurnEnd(stopReason: stopReason, generated: generated) else { break }"),
+                "a bare attach-handshake ready must not finish the worker's turn")
+    }
+
     /// The composed guarantee, at the level this target *can* execute: with no
     /// cap the policy yields no override and the envelope carries no field, so
     /// the bytes on the wire are byte-identical to pre-P23.

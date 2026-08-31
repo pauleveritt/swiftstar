@@ -3,7 +3,7 @@
 Durable record for Phase P10 ("Isolation"). Executed on branch `p10-isolation`,
 spec-driven per [`docs/sdd.md`](../../sdd.md).
 Spec: [`docs/superpowers/specs/2026-08-22-p10-isolation-design.md`](../specs/2026-08-22-p10-isolation-design.md).
-Plan: [`docs/superpowers/plans/2026-08-22-p10-isolation.md`](../plans/2026-08-22-p10-isolation.md).
+Plan: [`docs/superpowers/plans/archive/2026-08-22-p10-isolation.md`](../plans/archive/2026-08-22-p10-isolation.md).
 
 ## Test evidence
 

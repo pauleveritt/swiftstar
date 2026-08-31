@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Runs one shell command to completion, draining stdout/stderr concurrently so
 /// a verbose command can never deadlock on a full pipe, and enforcing a timeout.
@@ -59,7 +60,16 @@ public enum SubprocessRunner {
             arguments: ["-c", command], in: cwd)
         let deadline = Date().addingTimeInterval(timeout)
         while launched.process.isRunning && Date() < deadline {
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            do {
+                try await Task.sleep(nanoseconds: 50_000_000)
+            } catch {
+                cancel(launched)
+                throw error
+            }
+        }
+        if Task.isCancelled {
+            cancel(launched)
+            throw CancellationError()
         }
         return finish(launched)
     }
@@ -92,7 +102,16 @@ public enum SubprocessRunner {
         let launched = try launch(executable: executable, arguments: arguments, in: cwd)
         let deadline = Date().addingTimeInterval(timeout)
         while launched.process.isRunning && Date() < deadline {
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            do {
+                try await Task.sleep(nanoseconds: 50_000_000)
+            } catch {
+                cancel(launched)
+                throw error
+            }
+        }
+        if Task.isCancelled {
+            cancel(launched)
+            throw CancellationError()
         }
         return finish(launched)
     }
@@ -175,5 +194,17 @@ public enum SubprocessRunner {
         let out = String(decoding: launched.outBuf.value, as: UTF8.self)
         let err = String(decoding: launched.errBuf.value, as: UTF8.self)
         return Result(stdout: out, stderr: err, exit: launched.process.terminationStatus, timedOut: timedOut)
+    }
+
+    /// Cancel an async subprocess and reap it without returning a partial
+    /// result. The caller is usually a UI interrupt path: cancellation must
+    /// not leave a shell alive after the tool task has been canceled.
+    private static func cancel(_ launched: Launched) {
+        if launched.process.isRunning {
+            kill(launched.process.processIdentifier, SIGTERM)
+        }
+        launched.process.waitUntilExit()
+        launched.outPipe.fileHandleForReading.readabilityHandler = nil
+        launched.errPipe.fileHandleForReading.readabilityHandler = nil
     }
 }
