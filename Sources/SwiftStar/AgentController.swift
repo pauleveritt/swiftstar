@@ -853,6 +853,32 @@ final class AgentController {
                         think: ThinkEffort? = nil) -> Bool {
         guard canSend, !wireText.isEmpty, let agentSession,
               agentSession.send(wireText, think: think) else { return false }
+        commitTurn(row)
+        return true
+    }
+
+    /// `inject`'s sibling for the three `CommandRouter` commands (eval-cli
+    /// task 4): the per-command envelope decision (`/quick`'s advertised-cap
+    /// gate, `/orchestrate`'s directive text) now lives in
+    /// `AgentSession.run(_:)`, not duplicated here — this only performs the
+    /// same app-side bookkeeping `inject` does (the transcript row, the
+    /// `state` transition), gated on `run(_:)` actually accepting the write.
+    /// `row` is supplied by the caller rather than derived from the command
+    /// because `/orchestrate`'s transcript bubble shows the built directive
+    /// text, not the bare task — the same text `run(_:)` independently
+    /// builds and sends (both derive it via `OrchestrateDirective.build`
+    /// from the same task/writableFiles, so they can't disagree).
+    @discardableResult
+    private func injectCommand(_ command: Command, row: AgentTranscriptRow) -> Bool {
+        guard canSend, let agentSession, agentSession.run(command) else { return false }
+        commitTurn(row)
+        return true
+    }
+
+    /// The app-side half of a turn's start, shared by `inject`/`injectCommand`:
+    /// append the transcript row, reset the per-turn readout, and flip to
+    /// `.generating`.
+    private func commitTurn(_ row: AgentTranscriptRow) {
         transcript.append(row)
         turnStatuses = []
         // A new turn starts with honest zeros: the previous turn's ratcheted
@@ -861,7 +887,6 @@ final class AgentController {
         lastPrefillTPS = 0
         lastGenTPS = 0
         state = .generating
-        return true
     }
 
     /// D5: interrupt = write one ETX byte (0x03) to the child's stdin. The
@@ -1015,10 +1040,15 @@ final class AgentController {
 
     /// The `/orchestrate` command (P20): run the task as the model-driven
     /// coordination loop. The directive (built from the task + writable scope)
-    /// is sent as one user turn through the normal `send` path — the model
-    /// decomposes, dispatches phases via the `dispatch` tool, reads receipts,
-    /// validates, and writes files; the host's pool/validation machinery is
-    /// the substrate. One-shot-first: no host repair loop (D2).
+    /// is sent as one user turn through `AgentSession.run(.orchestrate(...))`
+    /// (eval-cli task 4 — the directive build and the wire write both moved
+    /// there) — the model decomposes, dispatches phases via the `dispatch`
+    /// tool, reads receipts, validates, and writes files; the host's
+    /// pool/validation machinery is the substrate. One-shot-first: no host
+    /// repair loop (D2). The transcript bubble shows the built directive
+    /// text (matching pre-move behavior) — built here too, for the row only;
+    /// `run(_:)` builds the identical text (same pure function, same
+    /// arguments) for the wire.
     func orchestrate(task: String, writableFiles: [String]) {
         let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -1030,7 +1060,8 @@ final class AgentController {
             return
         }
         let directive = OrchestrateDirective.build(task: trimmed, writableFiles: writableFiles)
-        send(directive, asUser: true)
+        injectCommand(.orchestrate(task: trimmed, writableFiles: writableFiles),
+                      row: .user(directive, stats: UserRowStats.forText(directive)))
     }
 
     @ObservationIgnored private var restartTask: Task<Void, Never>?
@@ -1067,7 +1098,13 @@ final class AgentController {
     /// `/quick` (P23): one no-think turn. D3 — the app does not offer `/quick`
     /// when the engine did not advertise `think_override`: sending the field
     /// to an engine that does not claim it would be a silent degrade, and a
-    /// no-think turn without engine support is not quick at all.
+    /// no-think turn without engine support is not quick at all. The gate
+    /// itself now lives in `AgentSession.run(.quick(...))` (eval-cli task 4 —
+    /// this used to duplicate its own copy of `advertisedCaps.contains(...)`
+    /// here); `injectCommand` returning `false` is ambiguous between "not
+    /// idle" (already ruled out above) and "the engine never advertised the
+    /// cap", so the refusal message names the cap gate specifically, same as
+    /// pre-move.
     func quick(task: String) {
         let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -1078,12 +1115,12 @@ final class AgentController {
             transcript.appendSystem("→ quick: agent not idle")
             return
         }
-        guard advertisedCaps.contains(TurnThinkPolicy.overrideCap) else {
+        guard injectCommand(.quick(task: trimmed),
+                            row: .user(trimmed, stats: UserRowStats.forText(trimmed))) else {
             transcript.appendSystem(
                 "→ /quick unavailable: this engine build does not advertise \(TurnThinkPolicy.overrideCap)")
             return
         }
-        _ = inject(trimmed, row: .user(trimmed, stats: UserRowStats.forText(trimmed)), think: .off)
     }
 
     /// The running model's `ModelFamily` for `TurnThinkPolicy` (P23): from the
@@ -1106,6 +1143,17 @@ final class AgentController {
     /// the answer (the glossary's **chat** — formerly the misnamed
     /// `/orchestrate` read-only delegation; the coordination loop keeps the
     /// name and lands with P20).
+    ///
+    /// Not routed through `AgentSession.run(.chat(...))` (eval-cli task 4):
+    /// worker selection (`PoolScheduler.availableWorker`), the pool queue,
+    /// and the `.consulted` transcript row all need `poolState`, which stays
+    /// app-side per the pool-loop boundary this type has kept since eval-cli
+    /// task 3 (`AgentPoolTurnLoop`'s own doc comment). `AgentSession.run`'s
+    /// `.chat` case exists so `run(_:)` is total over `Command` and so a
+    /// headless caller with no pool of its own (an eval arm) has one call for
+    /// all three commands; the running app's real `/chat` keeps this
+    /// pool-worker path, which `run(_:)` cannot express without owning
+    /// scheduling state it deliberately does not.
     func consult(task: String, writableFiles: [String]) {
         let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }

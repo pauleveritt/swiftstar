@@ -198,7 +198,7 @@ public final class AgentSession {
         buildSHA = Self.submoduleSHA(settings.engineDir)
         let record = Self.makeSpawnRecord(
             settings: settings, tools: tools, buildSHA: buildSHA,
-            captureDirectory: captureDirectory, startedAt: Date())
+            captureDirectory: captureDirectory, startedAt: Date(), poolSize: poolSize)
         // Regression fix (eval-cli task 3): capture is conditional again — a
         // session started with `captureEnabled: false` creates neither the
         // directory nor any file under it, and the drain loops below tee
@@ -325,6 +325,55 @@ public final class AgentSession {
         let line = PoolPrompt(worker: .orchestrator, text: trimmed, think: effort).encode() + "\n"
         pipe.fileHandleForWriting.write(Data(line.utf8))
         return true
+    }
+
+    /// Eval-cli task 4: route a parsed `CommandRouter` command to this
+    /// session's own `send` — folding in the per-command envelope decision
+    /// that used to live duplicated inside `AgentController` (`quick`'s
+    /// advertised-cap gate, `orchestrate`'s directive build). This is the
+    /// module boundary `ThinkOverrideCapGateTests`/`PoolEngineArgvTests`
+    /// grepped `AgentController.swift`'s source text to compensate for
+    /// (BRIEF.md binding rule 3 forbids that pattern) — moving the logic
+    /// here means what those tests pinned is now pinned behaviorally, by
+    /// `AgentSessionCommandTests` driving this method against a fake wire.
+    ///
+    /// `.chat` sends a plain turn (no per-turn override) — the pool-worker
+    /// routing `/chat` uses in the running app (worker selection, the
+    /// worktree, the transcript's `.consulted` row) stays app-side per the
+    /// pool-loop boundary this type has kept since eval-cli task 3
+    /// (`AgentController.consult`, `AgentPoolTurnLoop`); this case exists so
+    /// `run(_:)` is a total function over `Command` and so a headless caller
+    /// (an eval arm) that only wants the wire envelope difference between
+    /// the three commands has one call to make for all three.
+    ///
+    /// `.quick` refuses (`false`, no wire write) rather than silently
+    /// dropping to a normal turn when the engine's own handshake never
+    /// advertised `think_override` — binding rule 7: the wire announces
+    /// itself, and a mismatch refuses loudly instead of degrading quietly.
+    /// `TurnThinkPolicy.decide` (consulted again inside `send`) would itself
+    /// fall back to `.useDefault` for an unadvertised cap, which is correct
+    /// for a request that merely PREFERS an override (dispatch's worker
+    /// think) but wrong for `/quick`, whose entire contract IS the override
+    /// — a `/quick` that silently ran a normal turn would not be quick at
+    /// all, so this gate refuses the whole command instead of letting `send`
+    /// downgrade it.
+    ///
+    /// `.orchestrate` builds the directive (`OrchestrateDirective.build`, a
+    /// pure function of `task`/`writableFiles`) and sends it as a normal
+    /// turn — the same text `AgentController.orchestrate` built and sent
+    /// pre-move, now built once, here.
+    @discardableResult
+    public func run(_ command: Command) -> Bool {
+        switch command {
+        case .chat(let task):
+            return send(task)
+        case .quick(let task):
+            guard advertisedCaps.contains(TurnThinkPolicy.overrideCap) else { return false }
+            return send(task, think: .off)
+        case .orchestrate(let task, let writableFiles):
+            let directive = OrchestrateDirective.build(task: task, writableFiles: writableFiles)
+            return send(directive)
+        }
     }
 
     /// Send one `HandoffPacket` as `worker`'s turn on the pooled wire (P11 D4)
@@ -540,7 +589,7 @@ public final class AgentSession {
     /// `UserDefaults`/environment explicitly, so it carries over unchanged.
     private static func makeSpawnRecord(
         settings: AgentSettings, tools: [String], buildSHA: String,
-        captureDirectory: URL, startedAt: Date
+        captureDirectory: URL, startedAt: Date, poolSize: Int? = nil
     ) -> SpawnRecord {
         let env = ProcessInfo.processInfo.environment
         var allowlistedEnv: [String: String] = [:]
@@ -573,7 +622,8 @@ public final class AgentSession {
             wiredLimitBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes(),
             workspaceRef: "",
             environment: allowlistedEnv, userDefaults: allowlistedDefaults,
-            captureDirectory: captureDirectory.path, startedAt: startedAt, runIndex: 0)
+            captureDirectory: captureDirectory.path, startedAt: startedAt, runIndex: 0,
+            argv: poolSize.map { PoolEngine.argv(settings: settings, workers: $0) })
     }
 
     /// The P5-provenance shape, written once at spawn. (Port of

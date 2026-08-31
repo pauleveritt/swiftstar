@@ -176,6 +176,13 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
     /// caller, who resolved it however that's done at the call site (this
     /// type does not know how, and per the fast-tier rule for
     /// `SwiftStarKit`, must not find out).
+    /// `argv` overrides the default `AgentCommand.argv(settings:)` — a
+    /// pooled caller (`PoolEngine.argv`, `SwiftStarAppKit`; not a dependency
+    /// of this Kit target) spawns with `--subagent-pool <N>` appended, and
+    /// this record's own `argv` must reflect what the process actually ran
+    /// with, or a caller reading it back (a capture's `provenance.md`, an
+    /// eval arm's `SpawnRecord`) would believe a pooled spawn was a plain
+    /// one. nil (every existing call site) keeps `argv` exactly as before.
     public static func from(
         settings: AgentSettings,
         engineSHA: String, engineDirty: Bool, engineBinaryHash: String,
@@ -185,7 +192,8 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
         tools: [String], osBuild: String, wiredLimitBytes: Int64,
         workspaceRef: String,
         environment: [String: String], userDefaults: [String: String],
-        captureDirectory: String, startedAt: Date, runIndex: Int
+        captureDirectory: String, startedAt: Date, runIndex: Int,
+        argv: [String]? = nil
     ) -> SpawnRecord {
         SpawnRecord(
             engineSHA: engineSHA, engineDirty: engineDirty, engineBinaryHash: engineBinaryHash,
@@ -203,7 +211,7 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
             osBuild: osBuild, wiredLimitBytes: wiredLimitBytes,
             environment: environment, userDefaults: userDefaults,
             captureDirectory: captureDirectory, startedAt: startedAt, runIndex: runIndex,
-            argv: AgentCommand.argv(settings: settings))
+            argv: argv ?? AgentCommand.argv(settings: settings))
     }
 
     /// The `provenance.md` facts this record backs — `AgentController`'s live
