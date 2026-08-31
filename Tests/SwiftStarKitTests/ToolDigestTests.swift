@@ -1,5 +1,5 @@
-import Foundation
 import Testing
+import Foundation
 @testable import SwiftStarKit
 
 struct ToolDigestTests {
@@ -20,10 +20,10 @@ struct ToolDigestTests {
     }
 
     @Test func toolDigestCarriesAllFields() {
-        let digest = ToolDigest(summary: "s", command: "c", artifactPath: "p", outputDigest: "h")
-        #expect(digest.summary == "s")
-        #expect(digest.command == "c")
-        #expect(digest.artifactPath == "p")
-        #expect(digest.outputDigest == "h")
+        let d = ToolDigest(summary: "s", command: "c", artifactPath: "p", outputDigest: "h")
+        #expect(d.summary == "s")
+        #expect(d.command == "c")
+        #expect(d.artifactPath == "p")
+        #expect(d.outputDigest == "h")
     }
 }

@@ -141,7 +141,7 @@ public final class HostToolExecutor: @unchecked Sendable {
         } catch {
             return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
         }
-        return bashResult(r)
+        return bashResult(r, command: command, workspace: request.workspace)
     }
 
     /// The async twin of `execute` (item 3, P22 cleanup): identical mapping,
@@ -157,7 +157,7 @@ public final class HostToolExecutor: @unchecked Sendable {
         } catch {
             return ToolExecutionResult(ok: false, text: "error: \(error.localizedDescription)")
         }
-        return bashResult(r)
+        return bashResult(r, command: command, workspace: request.workspace)
     }
 
     // MARK: - everything except bash (pure, synchronous either way)
@@ -173,6 +173,11 @@ public final class HostToolExecutor: @unchecked Sendable {
                 text: "bash_status/bash_stop are not yet implemented in host mode; use a plain bash with a short timeout")
         }
         switch request.name {
+        case "test":
+            let selector = request.params.first(where: { $0.name == "selector" })?.value
+            return CommandToolRunner.runTest(selector: selector, workspace: request.workspace)
+        case "lint":
+            return CommandToolRunner.runLint(workspace: request.workspace)
         case "read", "more":
             return readResult(request)
         case "list":
@@ -378,20 +383,16 @@ public final class HostToolExecutor: @unchecked Sendable {
         }
     }
 
-    /// Assemble the `bash` result from a finished `SubprocessRunner.Result`:
-    /// stdout+stderr concatenated (no separator — matches both originals),
-    /// digested over stdout alone (also matches both originals; validation's
-    /// combined digest lives in `WorktreeDispatcher.runValidation`, a
-    /// different call entirely).
-    private func bashResult(_ r: SubprocessRunner.Result) -> ToolExecutionResult {
-        let combined = r.stdout + (r.stderr.isEmpty ? "" : r.stderr)
-        let digest = "sha256:" + SHA256.hash(data: Data(r.stdout.utf8))
-            .map { String(format: "%02x", $0) }.joined()
-        return ToolExecutionResult(
-            ok: r.exit == 0 && !r.timedOut,
-            text: combined,
-            exitStatus: Int(r.exit),
-            outputDigest: digest, validationRan: true)
+    /// P24.3: bash results are `BashDigest`s — the model never sees raw
+    /// unbounded output; the artifact holds the full combined output. The ok
+    /// semantics (exit==0 && !timedOut) are unchanged.
+    private func bashResult(_ r: SubprocessRunner.Result, command: String,
+                            workspace: URL) -> ToolExecutionResult {
+        let out = CommandOutput(stdout: r.stdout, stderr: r.stderr,
+                                exit: r.exit, timedOut: r.timedOut)
+        return CommandToolRunner.assemble(
+            out: out, command: command, kind: .bash,
+            runsDir: CommandToolRunner.runsDir(for: workspace))
     }
 
     /// Recursive grep for `search`: walks `root` depth-first, reads each
