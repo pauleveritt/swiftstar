@@ -256,4 +256,121 @@ struct AgentSessionTests {
         #expect(onDisk.contains(#""stop_reason":"eos""#),
                 "the turn-end ready line must already be flushed by the time onOutcome fires")
     }
+
+    // MARK: - Step 1 test (task 3): pooled dispatch
+
+    /// Eval-cli task 3, Step 1: a pooled dispatch against the fake engine
+    /// surfaces worker events tagged with the right `WorkerId`, and the
+    /// parent (orchestrator) turn completes. `fixtures/agent/pool.ndjson`
+    /// (already used by `PoolOrchestratorTests`) replays worker 0's whole
+    /// turn followed by worker 1's — the fake's `replayOnce()` fires the
+    /// entire remaining capture off ONE stdin prompt line (see
+    /// `FakeAgentSource`'s doc), so a single `send()` (worker 0's own prompt)
+    /// is enough to observe both streams: worker 0's through `onOutcome`,
+    /// worker 1's through `onWorkerEvent`.
+    @Test @MainActor func dispatchedWorkerEventsReachTheHost() async throws {
+        let engineDir = try tempDir("engine")
+        let workspace = try tempDir("ws")
+        let captureDir = try tempDir("capture")
+        let settings = makeSettings(engineDir: engineDir, workspace: workspace)
+        let argv = PoolEngine.argv(settings: settings, workers: 2)
+        let capture = try Data(contentsOf: FakeAgentHarness.fixture("pool.ndjson"))
+        let source = try FakeAgentSource.generate(capture: capture, engineArgv: argv, hostTools: false)
+        let binary = try FakeAgentHarness.compileFake(source: source, into: engineDir)
+        try FileManager.default.moveItem(at: binary, to: engineDir.appendingPathComponent("ds4-agent"))
+
+        // `pool.ndjson` carries real captured `ts` deltas (tens of seconds
+        // between worker 0's startup `ready` and its first real status line)
+        // — `FAKE_SPEED=0` disables the fake's replay delay entirely (the
+        // same knob `PoolEngineTests`/`WorktreeDispatchFakeAgentTests` use for
+        // this exact fixture) so the test doesn't have to wait out the
+        // original capture's wall-clock time.
+        setenv("FAKE_SPEED", "0", 1)
+        defer { unsetenv("FAKE_SPEED") }
+
+        let session = AgentSession(settings: settings, tools: [], captureDirectory: captureDir,
+                                   poolSize: 2)
+        _ = try session.start()
+        defer { session.stop() }
+
+        var outcomes: [TurnOutcome] = []
+        session.onOutcome = { outcomes.append($0) }
+        var workerEvents: [(WorkerId, AgentEvent)] = []
+        session.onWorkerEvent = { worker, event in workerEvents.append((worker, event)) }
+
+        #expect(session.send("do the thing") == true)
+        try await waitUntil {
+            outcomes.count >= 1 && workerEvents.contains {
+                if case .ready = $0.1 { return $0.0 == WorkerId(1) }
+                return false
+            }
+        }
+
+        #expect(outcomes.count == 1, "the orchestrator's (worker 0) turn must complete via onOutcome")
+        #expect(outcomes.first?.stopReason == .eos)
+        #expect(workerEvents.allSatisfy { $0.0 == WorkerId(1) },
+                "every event forwarded to onWorkerEvent in this fixture belongs to worker 1")
+        #expect(workerEvents.contains { if case .text = $0.1 { return true }; return false },
+                "worker 1's own text events must reach the host, tagged with its WorkerId")
+    }
+
+    // MARK: - Regression fix: sessionCaptureEnabled (task 2 made capture
+    // unconditional; these pin the refusal/success pair per binding rule 4).
+
+    /// `captureEnabled: false` must write NOTHING under `captureDirectory` —
+    /// not even the directory itself. Task 2's report flagged this as a
+    /// deliberate regression ("capture is no longer optional"); this test
+    /// pins the fix.
+    @Test @MainActor func captureDisabledWritesNoCaptureTree() async throws {
+        let engineDir = try tempDir("engine")
+        let workspace = try tempDir("ws")
+        // Deliberately NOT `tempDir(_:)` — that helper pre-creates the
+        // directory, which would make this test pass trivially (the
+        // directory would already exist for a reason unrelated to capture).
+        let captureDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agentsession-capture-off-\(UUID().uuidString)", isDirectory: true)
+        let settings = makeSettings(engineDir: engineDir, workspace: workspace)
+        _ = try buildFakeEngine(capture: Self.plainTurn, settings: settings, hostTools: true)
+
+        let session = AgentSession(settings: settings, tools: [], captureDirectory: captureDir,
+                                   captureEnabled: false)
+        _ = try session.start()
+        defer { session.stop() }
+
+        var outcomes: [TurnOutcome] = []
+        session.onOutcome = { outcomes.append($0) }
+        #expect(session.send("hello there") == true)
+        try await waitUntil { outcomes.count >= 1 }
+
+        #expect(outcomes.count == 1, "the turn must still complete with capture off")
+        #expect(!FileManager.default.fileExists(atPath: captureDir.path),
+                "captureEnabled: false must not create the capture directory at all")
+    }
+
+    /// The success half of the pair: `captureEnabled: true` (the default)
+    /// writes the same capture tree it always did.
+    @Test @MainActor func captureEnabledWritesACaptureTree() async throws {
+        let engineDir = try tempDir("engine")
+        let workspace = try tempDir("ws")
+        let captureDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agentsession-capture-on-\(UUID().uuidString)", isDirectory: true)
+        let settings = makeSettings(engineDir: engineDir, workspace: workspace)
+        _ = try buildFakeEngine(capture: Self.plainTurn, settings: settings, hostTools: true)
+
+        let session = AgentSession(settings: settings, tools: [], captureDirectory: captureDir,
+                                   captureEnabled: true)
+        _ = try session.start()
+        defer { session.stop() }
+
+        var outcomes: [TurnOutcome] = []
+        session.onOutcome = { outcomes.append($0) }
+        #expect(session.send("hello there") == true)
+        try await waitUntil { outcomes.count >= 1 }
+
+        #expect(outcomes.count == 1)
+        #expect(FileManager.default.fileExists(
+            atPath: captureDir.appendingPathComponent("wire.ndjson").path))
+        #expect(FileManager.default.fileExists(
+            atPath: captureDir.appendingPathComponent("provenance.md").path))
+    }
 }

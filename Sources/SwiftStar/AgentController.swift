@@ -101,7 +101,12 @@ final class AgentController {
     /// header says its handles cannot leave the app target) still reads
     /// `process` directly for worker prompts until a later task seams the
     /// pool loop behind this same session.
-    private var agentSession: AgentSession?
+    // Not `private`: `AgentPoolTurnLoop.swift` (an extension in another file)
+    // calls `agentSession?.dispatch(...)` to write a worker's `PoolPrompt` —
+    // eval-cli task 3's seam (the same reason `process`/`poolState`/
+    // `workerTurn` are already not `private`). Not widened to `internal`
+    // beyond this file's module boundary either.
+    var agentSession: AgentSession?
     /// The capabilities the engine's `hello` advertised (P23, D3): the app
     /// records what was advertised so it can gate outbound feature fields.
     /// `"think_override"` gates per-turn think sends; `/quick` is refused
@@ -380,21 +385,35 @@ final class AgentController {
         // Live session capture (P7's deferred "live wiring", scoped 2026-08-26):
         // persist the agent's wire + trace + stderr so the session can be read
         // from disk — analysing prompts, tool calls, context — without
-        // SWIFTSTAR_LOG. `AgentSession.start()` now owns writing the wire/
-        // stderr tees and `provenance.md` (binding rule 5: on disk before this
-        // type's callbacks ever see a line) — capture is no longer optional
-        // (the `sessionCaptureEnabled` toggle this app used to honor has no
-        // equivalent in `AgentSession`'s contract; a caller that always
-        // captures cannot regress into the capture-integrity bugs the P5/P22
-        // captures were built to prevent).
+        // SWIFTSTAR_LOG. `AgentSession.start()` owns writing the wire/stderr
+        // tees and `provenance.md` (binding rule 5: on disk before this
+        // type's callbacks ever see a line) — but only when told to.
+        //
+        // Regression fix (eval-cli task 3): Task 2 made capture unconditional
+        // — `AgentSession`'s contract had no toggle, so a user who had
+        // switched off "Capture sessions to captures/live/" in Settings
+        // (`sessionCaptureEnabled`, default true) got every session written
+        // to disk anyway. `AgentSession.init(captureEnabled:)` restores the
+        // toggle's effect; `outcomesURL`/`settings.tracePath` stay nil when
+        // it's off, so `appendOutcome`/the engine's own `--trace` side-channel
+        // are both skipped too — capture is all-or-nothing per session, not a
+        // wire tee with a still-live trace file.
+        let sessionCaptureEnabled = UserDefaults.standard.object(forKey: "sessionCaptureEnabled") == nil
+            ? true : UserDefaults.standard.bool(forKey: "sessionCaptureEnabled")
         pruneStaleCaptures()  // retention policy: see the AgentController extension below
         let captureDir = Self.captureDirectory()
-        outcomesURL = captureDir.appendingPathComponent("outcomes.ndjson")
-        // The engine's OWN `--trace` side-channel (independent of
-        // `AgentSession`'s wire/stderr tee — see `AgentCommand.argv`) still
-        // needs a path threaded through `settings` before argv is built;
-        // `liveCaptureURLs` (Diagnostics' live-analysis source) reads it back.
-        settings.tracePath = captureDir.appendingPathComponent("agent.trace")
+        if sessionCaptureEnabled {
+            outcomesURL = captureDir.appendingPathComponent("outcomes.ndjson")
+            // The engine's OWN `--trace` side-channel (independent of
+            // `AgentSession`'s wire/stderr tee — see `AgentCommand.argv`)
+            // still needs a path threaded through `settings` before argv is
+            // built; `liveCaptureURLs` (Diagnostics' live-analysis source)
+            // reads it back.
+            settings.tracePath = captureDir.appendingPathComponent("agent.trace")
+        } else {
+            outcomesURL = nil
+            settings.tracePath = nil
+        }
 
         // P8: stage the Superpowers skills into the workspace (progressive
         // disclosure, D2/D3) and pass the deterministic bootstrap index via
@@ -414,9 +433,19 @@ final class AgentController {
         settings.systemPrompt = SuperpowersBootstrap.build(skillsDir: skillsDir).indexPrompt
             + "\n\n" + DispatchPreferenceRule.text
 
+        // Regression fix (eval-cli task 3): pass the SAME total pool value
+        // (`AgentController.poolSize()`, clamped) that `poolState`'s own
+        // `workerCapacity` above is derived from — `AgentSession.start()`
+        // spawns `--subagent-pool <poolSize>` so the engine actually hosts
+        // the worker sessions the scheduler addresses. Before this fix the
+        // session never carried this at all, so `/orchestrate`/`/chat` and
+        // `dispatch` were dead in the running app (Task 2's report, "entangle
+        // -ment 2").
         let session = AgentSession(
             settings: settings, tools: settings.tools ?? [], captureDirectory: captureDir,
-            family: AgentController.runningModelFamily())
+            family: AgentController.runningModelFamily(),
+            captureEnabled: sessionCaptureEnabled,
+            poolSize: AgentController.poolSize())
         session.onEvent = { [weak self] event in
             guard let self, gen == self.generation else { return }
             self.applyAgentEvent(event)
@@ -424,6 +453,56 @@ final class AgentController {
         session.onOutcome = { [weak self] outcome in
             guard let self, gen == self.generation else { return }
             self.finishTurn(outcome)
+        }
+        // Regression fix (eval-cli task 3): worker-tagged wire events reach
+        // `handleWorkerEvent` (`AgentPoolTurnLoop.swift`, app-side — it needs
+        // `workerTurn`'s worktree/watchdog, which cannot leave this target).
+        // `handleWorkerEvent` is async (it awaits the host tool executor for
+        // a worker's `tool_request`); `onWorkerEvent` itself is sync
+        // (`AgentSession`'s own drain loop calls it inline from `consume`),
+        // so the async half runs in its own `Task` — the engine blocks on the
+        // matching `tool_result` either way (P11's serialized pool mutex), so
+        // this cannot race a later line for the SAME worker.
+        session.onWorkerEvent = { [weak self] worker, event in
+            guard let self, gen == self.generation else { return }
+            Task { @MainActor [weak self] in
+                guard let self, gen == self.generation else { return }
+                await self.handleWorkerEvent(worker: worker, event: event, generation: gen)
+            }
+        }
+        // Regression fix (eval-cli task 3): the `dispatch` tool's admission
+        // decision needs `poolState`/`rollingDigest`, which stay app-side —
+        // `AgentSession` cannot make it itself. Mutating `poolState` here (a
+        // side effect of computing the decision, not a separate callback) is
+        // the same shape the pre-task-2 inline `consumeWire` dispatch handler
+        // used.
+        session.onDispatchDecision = { [weak self] params in
+            guard let self, gen == self.generation else { return .refused("session restarted") }
+            let decision = DispatchAdmission.decide(
+                params: params, digest: self.rollingDigest, loaded: [:],
+                implementer: self.settings.modelPath.lastPathComponent,
+                poolState: self.poolState,
+                dumb: UserDefaults.standard.bool(forKey: "dispatchDumb"))
+            switch decision {
+            case .refused(let reason):
+                self.log("dispatch: refused (\(reason))")
+            case .enqueue(let packet, let worker):
+                self.poolState = PoolScheduler.apply(self.poolState, .enqueue(packet: packet))
+                self.log("dispatch: enqueued worker \(worker.rawValue)")
+            }
+            return decision
+        }
+        // Regression fix (eval-cli task 3): restore `rollingDigest`'s
+        // host-verdict feed for the orchestrator's own tool calls (Task 2's
+        // report, entanglement #4) — it fed the wire-event half
+        // (`applyAgentEvent`) but not this half, so a `dispatch` admission
+        // decided against a digest that never recorded any file the
+        // orchestrator itself had touched.
+        session.onToolVerdict = { [weak self] mutations, exitStatus, validationRan in
+            guard let self, gen == self.generation else { return }
+            self.rollingDigest = RollingDigestReducer.recordHostVerdict(
+                self.rollingDigest, mutations: mutations,
+                exitStatus: exitStatus, validationRan: validationRan)
         }
         session.onRefusal = { [weak self] line in
             guard let self, gen == self.generation else { return }

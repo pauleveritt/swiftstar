@@ -82,11 +82,14 @@ extension AgentController {
                 build: buildSHA,
                 task: packet.taskText,
                 think: effort))
-        if let pipe = process?.standardInput as? Pipe {
-            pipe.fileHandleForWriting.write(
-                Data((PoolPrompt(worker: worker, text: packet.taskText,
-                                 think: effort, contextSize: workerCtx).encode() + "\n").utf8))
-        }
+        // Eval-cli task 3: the raw wire write moved into `AgentSession
+        // .dispatch` (it owns the `Pipe`/`advertisedCaps` now) — this method
+        // keeps only the app-side admission/worktree/outcome-builder bits
+        // `AgentSession` cannot own (`ActiveWorkerTurn`'s own doc comment).
+        // `dispatch` independently recomputes the same `effort`/`workerCtx`
+        // from the same pure inputs (`packet`, `advertisedCaps`, `settings`),
+        // so the two calculations cannot drift.
+        _ = agentSession?.dispatch(packet, worker: worker)
         armWorkerWatchdog(worker)
         log("worker \(worker.rawValue): turn started (worktree \(worktree.url.lastPathComponent))")
     }

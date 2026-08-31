@@ -65,6 +65,42 @@ public final class AgentSession {
     /// needs to know a spawn died to reproduce its existing failure surface
     /// now that it no longer owns the `Process` itself.
     public var onExit: ((Int32, [String]) -> Void)?
+    /// Eval-cli task 3: a worker-tagged wire event (any `worker != .orchestrator`
+    /// line). Fired for EVERY event on that worker's stream — hello/status/
+    /// text/tool/ready alike, mirroring `onEvent`'s "everything" contract for
+    /// the orchestrator — so the app's `AgentPoolTurnLoop` (which stays
+    /// app-side: `ActiveWorkerTurn`, the watchdog `Task`, and the worktree
+    /// handles cannot leave this target) can drive its own outcome builder,
+    /// answer the worker's tool requests, and finish the worker's turn. This
+    /// session never answers a worker's `tool_request` itself — only the
+    /// orchestrator's own requests are auto-answered in `consume`.
+    public var onWorkerEvent: ((WorkerId, AgentEvent) -> Void)?
+    /// The `dispatch` tool is a host-control tool, not a normal one (P11 D5):
+    /// admitting it means enqueuing a worker into `PoolState`, which stays
+    /// app-side (this session owns no scheduler). When the orchestrator's own
+    /// wire emits a `dispatch` `tool_request`, `consume` asks this closure for
+    /// the admission decision (the app makes it, using its own `poolState`/
+    /// `rollingDigest`, and mutates `poolState` itself as a side effect of
+    /// computing it) and then answers the wire from the returned `Decision`
+    /// via `DispatchAdmission.apply` — which also records the outcome verdict
+    /// into this session's own `outcomeBuilder`, since neither half may be
+    /// written without the other (the 2026-08-30 dead-letter bug
+    /// `DispatchAdmission` exists to prevent). nil (no pool wired to this
+    /// session) refuses every dispatch — the sole-turn/CLI default.
+    public var onDispatchDecision: ((_ params: [ToolParam]) -> DispatchAdmission.Decision)?
+    /// Regression fix (eval-cli task 3): the orchestrator's own tool-answer
+    /// verdict (mutations/exitStatus/validationRan), fired right after this
+    /// session records it into its own `outcomeBuilder` — mirrors what it
+    /// already records there, for the app's `rollingDigest`
+    /// (`RollingDigestReducer.recordHostVerdict`), which stays app-side (it
+    /// backs `DispatchAdmission.decide`'s own `poolState`-dependent gate).
+    /// Task 2 fed `rollingDigest` from every wire event (`applyAgentEvent`)
+    /// but never from a tool-answer verdict, since a verdict is only
+    /// available from inside this session's own async tool-answer flow — this
+    /// callback is that missing feed. Not fired for `dispatch` itself (which
+    /// never touched the file digest even pre-move) or for a budget-refused
+    /// call routed through `dispatch`'s own branch above.
+    public var onToolVerdict: ((_ mutations: [String], _ exitStatus: Int?, _ validationRan: Bool) -> Void)?
 
     /// The engine's advertised handshake capabilities (P23 D3), recorded so a
     /// per-turn feature field is only ever sent when the engine claimed it —
@@ -82,7 +118,26 @@ public final class AgentSession {
     private let tools: [String]
     private let captureDirectory: URL
     private let family: ModelFamily
-    private var parser = AgentWireParser()
+    /// Eval-cli task 3: `AgentController`'s `sessionCaptureEnabled`
+    /// `UserDefaults` toggle, threaded through explicitly rather than read
+    /// here (this type touches no `UserDefaults` of its own — the app reads
+    /// its own setting and passes the resolved bool). `false` skips creating
+    /// `captureDirectory` and every file under it (`wire.ndjson`,
+    /// `agent.stderr`, `provenance.md`) — Task 2 had made capture
+    /// unconditional, silently re-enabling it for a user who had turned the
+    /// app's toggle off.
+    private let captureEnabled: Bool
+    /// Eval-cli task 3: when set, `start()` spawns the engine with
+    /// `--subagent-pool <poolSize>` (`PoolEngine.argv`) instead of the plain
+    /// single-session argv, and the wire is parsed with the pool's `worker`
+    /// tag. nil (the eval-cli task 2 default) is a plain single-session spawn
+    /// — every existing caller is unaffected.
+    private let poolSize: Int?
+    /// Always a `PoolWireParser`, even outside pool mode: a wire line with no
+    /// `worker` field parses as `.orchestrator` (`PoolWireParser.worker(of:)`),
+    /// so this is a superset of the old plain `AgentWireParser`, not a
+    /// behavior change for a non-pool session — see the type doc.
+    private var parser = PoolWireParser()
     private var outcomeBuilder: TurnOutcomeBuilder?
     /// Per-turn cap on host tool calls (P22 GLM review: a runaway model
     /// otherwise loops the host forever). Reset by `send` for each new turn —
@@ -115,12 +170,16 @@ public final class AgentSession {
     /// selection (an app, via `UserDefaults`) passes its own.
     public init(
         settings: AgentSettings, tools: [String], captureDirectory: URL,
-        family: ModelFamily = .lagunaS
+        family: ModelFamily = .lagunaS,
+        captureEnabled: Bool = true,
+        poolSize: Int? = nil
     ) {
         self.settings = settings
         self.tools = tools
         self.captureDirectory = captureDirectory
         self.family = family
+        self.captureEnabled = captureEnabled
+        self.poolSize = poolSize
         self.hostToolExecutor = HostToolExecutor(policy: .app, contextSize: settings.contextSize)
     }
 
@@ -137,21 +196,35 @@ public final class AgentSession {
     @discardableResult
     public func start() throws -> SpawnRecord {
         buildSHA = Self.submoduleSHA(settings.engineDir)
-        try FileManager.default.createDirectory(at: captureDirectory, withIntermediateDirectories: true)
         let record = Self.makeSpawnRecord(
             settings: settings, tools: tools, buildSHA: buildSHA,
             captureDirectory: captureDirectory, startedAt: Date())
-        try Self.renderProvenance(record, at: captureDirectory)
+        // Regression fix (eval-cli task 3): capture is conditional again — a
+        // session started with `captureEnabled: false` creates neither the
+        // directory nor any file under it, and the drain loops below tee
+        // nothing (see `wireCapture`/`stderrCapture` below).
+        if captureEnabled {
+            try FileManager.default.createDirectory(at: captureDirectory, withIntermediateDirectories: true)
+            try Self.renderProvenance(record, at: captureDirectory)
+        }
 
         let wireURL = captureDirectory.appendingPathComponent("wire.ndjson")
         let stderrURL = captureDirectory.appendingPathComponent("agent.stderr")
-        FileManager.default.createFile(atPath: wireURL.path, contents: nil)
-        FileManager.default.createFile(atPath: stderrURL.path, contents: nil)
+        if captureEnabled {
+            FileManager.default.createFile(atPath: wireURL.path, contents: nil)
+            FileManager.default.createFile(atPath: stderrURL.path, contents: nil)
+        }
 
         let binary = AgentCommand.binaryPath(settings: settings)
         let process = Process()
         process.executableURL = binary
-        process.arguments = AgentCommand.argv(settings: settings)
+        // Regression fix (eval-cli task 3): pool/dispatch was dead because
+        // this always spawned the plain single-session argv, never
+        // `--subagent-pool` — the engine never hosted a worker session for
+        // `dispatch` to address. `poolSize` set threads the same
+        // `PoolEngine.argv` the pre-move `PoolOrchestrator` used.
+        process.arguments = poolSize.map { PoolEngine.argv(settings: settings, workers: $0) }
+            ?? AgentCommand.argv(settings: settings)
         process.currentDirectoryURL = settings.engineDir
         process.environment = AgentCommand.engineEnvironment(
             engineDir: settings.engineDir,
@@ -173,8 +246,8 @@ public final class AgentSession {
         self.process = process
         try process.run()
 
-        let wireCapture = SafeAppendFile(path: wireURL.path)
-        let stderrCapture = SafeAppendFile(path: stderrURL.path)
+        let wireCapture = captureEnabled ? SafeAppendFile(path: wireURL.path) : nil
+        let stderrCapture = captureEnabled ? SafeAppendFile(path: stderrURL.path) : nil
         stdoutTask?.cancel()
         stdoutTask = Task.detached(priority: .utility) { [weak self] in
             let handle = stdoutPipe.fileHandleForReading
@@ -184,15 +257,16 @@ public final class AgentSession {
                 if data.isEmpty { break }  // EOF: the child closed stdout
                 for lineData in lines.append(data) {
                     // The tee happens BEFORE the parse/callback below (binding
-                    // rule 5) — see this method's doc.
-                    wireCapture.append(lineData)
-                    wireCapture.append(Data([0x0A]))
+                    // rule 5) — see this method's doc. Skipped entirely when
+                    // capture is disabled.
+                    wireCapture?.append(lineData)
+                    wireCapture?.append(Data([0x0A]))
                     let line = String(decoding: lineData, as: UTF8.self)
                     await self?.consume(line)
                 }
             }
             _ = lines.finish()
-            wireCapture.close()
+            wireCapture?.close()
         }
 
         stderrTask?.cancel()
@@ -203,13 +277,13 @@ public final class AgentSession {
                 let data = handle.availableData
                 if data.isEmpty { break }
                 for lineData in lines.append(data) {
-                    stderrCapture.append(lineData)
-                    stderrCapture.append(Data([0x0A]))
+                    stderrCapture?.append(lineData)
+                    stderrCapture?.append(Data([0x0A]))
                     await self?.consumeStderr(String(decoding: lineData, as: UTF8.self))
                 }
             }
             _ = lines.finish()
-            stderrCapture.close()
+            stderrCapture?.close()
         }
 
         return record
@@ -253,6 +327,47 @@ public final class AgentSession {
         return true
     }
 
+    /// Send one `HandoffPacket` as `worker`'s turn on the pooled wire (P11 D4)
+    /// — the wire-write half of `AgentPoolTurnLoop.drainQueuedWorkers`, moved
+    /// here because it is this session's `Pipe`/`advertisedCaps` that the
+    /// write needs. Mirrors `send`'s own per-turn think-override decision
+    /// (`TurnThinkPolicy.decide`, gated on `advertisedCaps`) and adds the
+    /// worker context clamp (`WorkerContextPolicy.clamp`, D8) `send` has no
+    /// analog for, since only a pool worker's context is ever sized
+    /// independently of the parent's.
+    ///
+    /// Deliberately does NOT open an `outcomeBuilder`, and does NOT gate on
+    /// `poolSize`/pool mode: a worker's own `TurnOutcomeBuilder`, worktree,
+    /// and watchdog stay app-side (`ActiveWorkerTurn`) — this call is only
+    /// the raw wire write, the same seam `writeToolResult` already is for
+    /// tool results.
+    @discardableResult
+    public func dispatch(_ packet: HandoffPacket, worker: WorkerId) -> Bool {
+        guard !stopped, let process,
+              let pipe = process.standardInput as? Pipe else { return false }
+        let capAdvertised = advertisedCaps.contains(TurnThinkPolicy.overrideCap)
+        let decision = TurnThinkPolicy.decide(
+            requested: TurnThinkPolicy.effort(for: packet.sampling.think),
+            family: family, capAdvertised: capAdvertised)
+        let effort: ThinkEffort?
+        switch decision {
+        case .useDefault: effort = nil
+        case .override(let e): effort = e
+        case .refused: effort = nil
+        }
+        // Sent only when the cap is advertised: an engine that never claimed
+        // the ctx key would treat the envelope's extra field as unknown and
+        // run at the parent's context, which is a silent budget overrun.
+        let workerCtx: Int? = capAdvertised
+            ? WorkerContextPolicy.clamp(requested: settings.workerContextSize,
+                                        parentContext: settings.contextSize)
+            : nil
+        let line = PoolPrompt(worker: worker, text: packet.taskText,
+                              think: effort, contextSize: workerCtx).encode() + "\n"
+        pipe.fileHandleForWriting.write(Data(line.utf8))
+        return true
+    }
+
     /// Write one `tool_result` line to the engine's stdin — the single sink
     /// for a host-answered `tool_request`. `write(contentsOf:)`, not
     /// `write(_:)`: the latter RAISES on a closed/broken pipe, which `try?`
@@ -292,7 +407,19 @@ public final class AgentSession {
     // MARK: - wire consumption (the single-turn loop)
 
     private func consume(_ line: String) async {
-        guard !stopped, let event = parser.feed(line) else { return }
+        guard !stopped, let poolEvent = parser.feed(line) else { return }
+        let worker = poolEvent.worker
+        let event = poolEvent.event
+        // P11 (D1/D4): a worker-tagged event belongs to that worker's own
+        // turn, not the orchestrator's — hand it to `onWorkerEvent` and stop.
+        // This session never auto-answers a worker's `tool_request` (that
+        // needs the worker's worktree/writableFiles, which live in
+        // `ActiveWorkerTurn`, app-side); the app answers via
+        // `writeToolResult` from inside its own `onWorkerEvent` handler.
+        guard worker == .orchestrator else {
+            onWorkerEvent?(worker, event)
+            return
+        }
         if case .hello = event {
             // P23 (D3): record what the engine advertised so `send`'s
             // per-turn override never assumes a capability the handshake
@@ -322,6 +449,26 @@ public final class AgentSession {
                 outcomeBuilder?.recordHostVerdict(
                     idx: idx, ok: false, mutations: [], exitStatus: nil,
                     outputDigest: nil, validationRan: false)
+                onToolVerdict?([], nil, false)
+                return
+            }
+            // Regression fix (eval-cli task 3): `dispatch` is a host-control
+            // tool (P11 D5), not a normal one — admitting it means enqueuing
+            // a worker into `PoolState`, which lives app-side. Task 2 routed
+            // every tool name (including `dispatch`) through the generic
+            // `ToolCallbackResponder.respond`, whose own `dispatch` branch
+            // answers `ok:true, s:"dispatched"` WITHOUT enqueueing anything —
+            // a `/orchestrate` dispatch call always "succeeded" on the wire
+            // and never ran a worker. `onDispatchDecision` is how the app
+            // (which owns `poolState`) makes the real admission call;
+            // `DispatchAdmission.apply` composes the wire answer and this
+            // session's own outcome verdict together, so neither can be
+            // written without the other (the 2026-08-30 dead-letter bug it
+            // exists to prevent).
+            if name == "dispatch" {
+                let decision = onDispatchDecision?(params) ?? .refused("dispatch is not available")
+                let response = DispatchAdmission.apply(decision, idx: idx, into: &outcomeBuilder)
+                writeToolResult(response)
                 return
             }
             // P9: the host owns execution. `respond` consent-checks,
@@ -340,6 +487,7 @@ public final class AgentSession {
                 idx: idx, ok: response.ok,
                 mutations: response.mutations, exitStatus: response.exitStatus,
                 outputDigest: response.outputDigest, validationRan: response.validationRan)
+            onToolVerdict?(response.mutations, response.exitStatus, response.validationRan)
         case .toolRequestRefused(let idx, let reason):
             // P9: a malformed `tool_request` still blocks the engine on a
             // result — write one so it unblocks, matching
