@@ -134,6 +134,21 @@ func parseTrace(_ dir: URL) -> [TraceEvent] {
     return []
 }
 
+/// Raw `--trace` file text, for `PairBill.suffixTotal(trace:)` — mirrors
+/// `parseTrace`'s file selection (`agent.trace` then `wire.trace`), but hands
+/// back the lossily-decoded text instead of parsed events, since
+/// `PairBill.suffixTotal` does its own parse (it lives in `SwiftStarKit`,
+/// which does no file I/O of its own).
+func traceText(_ dir: URL) -> String {
+    for name in ["agent.trace", "wire.trace"] {
+        let url = dir.appendingPathComponent(name)
+        if let data = try? Data(contentsOf: url), !data.isEmpty {
+            return String(decoding: data, as: UTF8.self)
+        }
+    }
+    return ""
+}
+
 func parseOutcomes(_ dir: URL) -> [TurnOutcome] {
     guard let text = try? String(contentsOf: dir.appendingPathComponent("outcomes.ndjson"), encoding: .utf8) else { return [] }
     var out: [TurnOutcome] = []
@@ -151,12 +166,6 @@ func decodeWork(_ turn: [StatusSnapshot], finalSegment: Int?) -> DecodeAccumulat
     for s in turn { acc.apply(s) }
     acc.finish(finalSegment: finalSegment)
     return acc
-}
-
-func suffixTotal(_ trace: [TraceEvent]) -> Int {
-    var total = 0
-    for e in trace { if case .prefillSync(_, _, let suffix, _, _) = e { total += suffix } }
-    return total
 }
 
 func compactionCount(_ trace: [TraceEvent]) -> Int {
@@ -200,7 +209,7 @@ func cmdSummary(_ dir: URL) {
     let outcomes = parseOutcomes(dir)
     let trace = parseTrace(dir)
     let rows = TurnAlignment.align(events: events, outcomes: outcomes)
-    print("Session \(dir.lastPathComponent): \(rows.count) turn(s), \(outcomes.count) outcome(s), \(compactionCount(trace)) compaction(s), Σsuffix \(suffixTotal(trace))")
+    print("Session \(dir.lastPathComponent): \(rows.count) turn(s), \(outcomes.count) outcome(s), \(compactionCount(trace)) compaction(s), Σsuffix \(PairBill.suffixTotal(trace: traceText(dir)))")
     for (i, row) in rows.enumerated() {
         let outcome = row.outcome
         // Prefer the outcome's own figures: the builder computed the rate and
@@ -276,8 +285,8 @@ func cmdTrace(_ dir: URL) {
 func cmdDiff(_ a: URL, _ b: URL) {
     // The paired-bill comparison P24's guardrail calls for: the only additively
     // meaningful trace metric is Σsuffix (Σprompt is cumulative + double-counts).
-    let sa = suffixTotal(parseTrace(a))
-    let sb = suffixTotal(parseTrace(b))
+    let sa = PairBill.suffixTotal(trace: traceText(a))
+    let sb = PairBill.suffixTotal(trace: traceText(b))
     print("Σsuffix  \(a.lastPathComponent): \(sa)")
     print("Σsuffix  \(b.lastPathComponent): \(sb)")
     if sa > 0 {
@@ -697,7 +706,7 @@ func cmdIndex(to output: URL) throws {
                 if case .ready(_, let stop, _, _) = $0 { return stop != nil }
                 return false
             }.count), String(outcomes.count), workers,
-            String(suffixTotal(parseTrace(capture.dir))),
+            String(PairBill.suffixTotal(trace: traceText(capture.dir))),
             "\(config?["variant"] ?? "")", "\(config?["seed"] ?? "")",
             "\(config?["outcome"] ?? "")", enginePin(capture.dir, config: config)
         ].map(escapedTSV)
