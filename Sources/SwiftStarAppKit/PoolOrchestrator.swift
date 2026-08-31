@@ -84,7 +84,6 @@ public final class PoolOrchestrator {
             task: packet.taskText,
             think: nil)
         var toolBudget = ToolCallBudgetTracker(budget: packet.toolCallBudget)
-        var refusalTracker = ToolRefusalTracker()
         let vettedCommands = [packet.validationCommand, packet.selfTestCommand]
             .compactMap { $0 }.filter { !$0.isEmpty }
         hostToolExecutor = HostToolExecutor(policy: .pool(vettedCommands: vettedCommands), contextSize: contextSize)
@@ -121,14 +120,11 @@ public final class PoolOrchestrator {
                             outputDigest: nil, validationRan: false)
                         return false
                     }
-                    var response = ToolCallbackResponder.respond(
+                    let response = ToolCallbackResponder.respond(
                         idx: idx, name: name, params: params,
                         workspace: worktree, shellAllowed: true,  // bash is vetted in the executor
                         writableFiles: packet.writableFiles,
                         execute: hostToolExecutor.execute)
-                    response = refusalTracker.apply(
-                        response, name: name, params: params,
-                        hintSuffix: " Run one of the vetted commands exactly as given, or edit the code instead.")
                     stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
                     builder.recordHostVerdict(
                         idx: idx, ok: response.ok, mutations: response.mutations,
@@ -174,7 +170,6 @@ public final class PoolOrchestrator {
             model: model, build: "pooled", task: prompt)
         var dispatched: [HandoffPacket] = []
         var toolBudget = ToolCallBudgetTracker(budget: toolCallBudget)
-        var refusalTracker = ToolRefusalTracker()
         // The orchestrator is the agent's own role: full bash (`.app` policy),
         // matching the app's shell-on agent tab — not the pool worker's
         // vetted-only commands. The caller validates the final result.
@@ -222,13 +217,11 @@ public final class PoolOrchestrator {
                                 outputDigest: nil, validationRan: false)
                         }
                     } else {
-                        var response = ToolCallbackResponder.respond(
+                        let response = ToolCallbackResponder.respond(
                             idx: idx, name: name, params: params,
                             workspace: worktree, shellAllowed: true,
                             writableFiles: nil,
                             execute: hostToolExecutor.execute)
-                        response = refusalTracker.apply(
-                            response, name: name, params: params)
                         stdin.write(Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
                         builder.recordHostVerdict(
                             idx: idx, ok: response.ok, mutations: response.mutations,
