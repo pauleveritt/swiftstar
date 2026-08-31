@@ -212,6 +212,75 @@ struct ExperimentVerbTests {
                 "a refused arm diff must spawn nothing")
     }
 
+    // MARK: - writesTheResolvedSpawnRecordPerRun (F6)
+
+    /// Fable-fixes review, F6: `record.withWorkspaceRef(...)` was the last
+    /// use of the resolved `SpawnRecord` — computed, then discarded. Pins
+    /// that each run's arm directory now carries a `spawn-record.json` with
+    /// the workspace ref actually filled in (the one fact `provenance.md`,
+    /// rendered earlier inside `AgentSession.start()`, could not yet have).
+    @Test func writesTheResolvedSpawnRecordPerRun() throws {
+        let name = "spawn-record"
+        let json = experimentJSON(
+            name: name, variable: "tools",
+            controlOverrides: #"{"tools": ["read"]}"#,
+            treatmentOverrides: #"{"tools": ["read", "write"]}"#)
+        let repo = try makeRepo(experimentName: name, experimentJSON: json)
+
+        let engineDir = try tempDir("engine-record")
+        let modelPath = URL(fileURLWithPath: "/tmp/expverb-model-record.gguf")
+        try buildFakeEngine(engineDir: engineDir, modelPath: modelPath, toolVariants: [["read"], ["read", "write"]])
+
+        try run(
+            ["experiment", "evals/\(name).json", "--exploratory"], cwd: repo,
+            extraEnv: ["DS4_DIR": engineDir.path, "SWIFTSTAR_MODEL": modelPath.path])
+
+        let resultsDir = try onlyResultsDir(repo: repo, name: name)
+        for armID in ["control", "treatment"] {
+            let recordURL = resultsDir
+                .appendingPathComponent("pair-1", isDirectory: true)
+                .appendingPathComponent(armID, isDirectory: true)
+                .appendingPathComponent("spawn-record.json")
+            let data = try Data(contentsOf: recordURL)
+            let record = try JSONDecoder().decode(SpawnRecord.self, from: data)
+            #expect(!record.workspaceRef.isEmpty,
+                    "\(armID)'s spawn-record.json must carry the workspace ref RunWorkspace resolved")
+            #expect(record.tools == (armID == "control" ? ["read"] : ["read", "write"]))
+        }
+    }
+
+    // MARK: - refusesArmsWhoseDeclaredVariableNeverActuallyDiffered (F1)
+
+    /// Fable-fixes review, F1's second hole: the experiment declares
+    /// `variable: "tools"`, but both arms resolve to the SAME tools list —
+    /// the treatment never applied. `differingKeys` has nothing undeclared to
+    /// complain about (nothing else moved either), so before this fix the
+    /// run was silently admitted. Sibling of
+    /// `admitsTheDeclaredVariableAndWritesPreregistrationBeforeAnySpawn`,
+    /// where the two arms genuinely differ on "tools".
+    @Test func refusesArmsWhoseDeclaredVariableNeverActuallyDiffered() throws {
+        let name = "no-op-treatment"
+        let json = experimentJSON(
+            name: name, variable: "tools",
+            controlOverrides: #"{"tools": ["read"]}"#,
+            treatmentOverrides: #"{"tools": ["read"]}"#)
+        let repo = try makeRepo(experimentName: name, experimentJSON: json)
+        // Deliberately no fake engine built: a pre-spawn refusal must spawn nothing.
+
+        let result = try run(
+            ["experiment", "evals/\(name).json", "--exploratory"], cwd: repo,
+            extraEnv: ["DS4_DIR": repo.appendingPathComponent("no-such-engine").path,
+                       "SWIFTSTAR_MODEL": "/tmp/expverb-model-unused.gguf"])
+
+        #expect(result.status != 0)
+
+        let resultsDir = try onlyResultsDir(repo: repo, name: name)
+        let armDiff = try String(contentsOf: resultsDir.appendingPathComponent("arm-diff.txt"), encoding: .utf8)
+        #expect(armDiff.contains("tools"), "refusal must name the variable that never applied: \(armDiff)")
+        #expect(!FileManager.default.fileExists(atPath: resultsDir.appendingPathComponent("pair-1").path),
+                "a refused arm diff must spawn nothing")
+    }
+
     // MARK: - refusesAnUncommittedExperimentFile
 
     @Test func refusesAnUncommittedExperimentFile() throws {

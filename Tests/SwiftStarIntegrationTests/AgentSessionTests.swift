@@ -226,6 +226,100 @@ struct AgentSessionTests {
         #expect(textEvents < 3, "the interrupt must have cut the replay short of its natural end")
     }
 
+    /// hello -> one generating segment -> a "bash" tool block that runs a
+    /// real (slow) host subprocess -> turn-end ready. `hostTools: true`
+    /// generation turns this into a `tool_request`/`tool_result` round trip
+    /// (same shape as `toolTurn`), but the command itself (`sleep 1`) is
+    /// what gives the test a real wall-clock window to call `interrupt()`
+    /// WHILE the host's own subprocess is still running — the exact race F5
+    /// exists to handle.
+    private static let interruptibleToolTurn = """
+    {"t":"hello","v":1,"caps":["status","ready","text","think","tool","queued","ts"],"ts":1}
+    {"t":"status","state":"generating","prefill_done":1,"prefill_total":1,"prefill_tps":0.0,"generated":0,"gen_tps":0.0,"ctx_used":10,"ctx_size":32768,"power":100,"error":"","ts":4}
+    {"t":"text","s":"\\n","ts":5}
+    {"t":"tool","phase":"start","idx":0,"ts":6}
+    {"t":"tool","phase":"tool","idx":0,"name":"bash","ts":7}
+    {"t":"tool","phase":"param_begin","idx":0,"kind":"bash_command","name":"command","ts":8}
+    {"t":"tool","phase":"param_value","idx":0,"s":"sleep 1","ts":9}
+    {"t":"tool","phase":"param_end","idx":0,"ts":10}
+    {"t":"tool","phase":"finish","idx":0,"calls":1,"ts":11}
+    {"t":"status","state":"idle","prefill_done":1,"prefill_total":1,"prefill_tps":0.0,"generated":8,"gen_tps":10.0,"ctx_used":30,"ctx_size":32768,"power":100,"error":"","ts":15}
+    {"t":"ready","kv_bytes":1,"scratch_bytes":1,"model_bytes":1,"planned_bytes":1,"stop_reason":"eos","generated":8,"ctx_used":30,"ts":16}
+    """
+
+    // Fable-fixes review, F5: `main` (`74a789a`/`5d808a0`) ran an
+    // orchestrator tool call in a cancellable `orchestratorToolTask` and, on
+    // an interrupt landing mid-call, wrote `ok:false "interrupted"` instead
+    // of the real result. The extraction to `AgentSession` dropped that —
+    // this `await` had become a bare, uncancellable one with no
+    // post-interrupt recheck — and had no test, which is how it was lost.
+    // This pins the restored behavior: interrupt DURING an in-flight `bash`
+    // call (a real 1-second host subprocess gives a real window to land the
+    // interrupt before the call returns) must make the host write a refusal,
+    // not the real bash result.
+    @Test @MainActor func interruptDuringAnInFlightToolCallWritesARefusalNotTheRealResult() async throws {
+        let engineDir = try tempDir("engine")
+        let workspace = try tempDir("ws")
+        let captureDir = try tempDir("capture")
+        let settings = makeSettings(engineDir: engineDir, workspace: workspace)
+        _ = try buildFakeEngine(capture: Self.interruptibleToolTurn, settings: settings, hostTools: true)
+
+        let session = AgentSession(settings: settings, tools: [], captureDirectory: captureDir)
+        _ = try session.start()
+        defer { session.stop() }
+
+        var sawToolRequest = false
+        session.onEvent = { event in
+            if case .toolRequest = event { sawToolRequest = true }
+        }
+        var outcomes: [TurnOutcome] = []
+        session.onOutcome = { outcomes.append($0) }
+
+        #expect(session.send("run something slow") == true)
+        // The tool_request event fires BEFORE the host awaits the (real,
+        // ~1-second) bash subprocess — interrupting right after it lands
+        // races the interrupt against that subprocess's completion, giving
+        // it a real window to land first.
+        try await waitUntil { sawToolRequest }
+        session.interrupt()
+
+        try await waitUntil(timeout: 15) { outcomes.count >= 1 }
+        #expect(outcomes.count == 1)
+        let bashCall = outcomes.first?.toolCalls.first { $0.name == "bash" }
+        #expect(bashCall?.transitions.contains(.rejected) == true,
+                "an interrupt mid-tool-call must be recorded as a host refusal")
+        #expect(bashCall?.transitions.contains(.executed) != true,
+                "the real bash result must NOT be recorded once the call was interrupted")
+    }
+
+    /// Sibling (binding rule 4) of
+    /// `interruptDuringAnInFlightToolCallWritesARefusalNotTheRealResult`: the
+    /// SAME slow `bash` tool call, run to completion with no interrupt, is
+    /// recorded as a real, executed result.
+    @Test @MainActor func aToolCallThatCompletesWithoutInterruptIsRecordedForReal() async throws {
+        let engineDir = try tempDir("engine")
+        let workspace = try tempDir("ws")
+        let captureDir = try tempDir("capture")
+        let settings = makeSettings(engineDir: engineDir, workspace: workspace)
+        _ = try buildFakeEngine(capture: Self.interruptibleToolTurn, settings: settings, hostTools: true)
+
+        let session = AgentSession(settings: settings, tools: [], captureDirectory: captureDir)
+        _ = try session.start()
+        defer { session.stop() }
+
+        var outcomes: [TurnOutcome] = []
+        session.onOutcome = { outcomes.append($0) }
+
+        #expect(session.send("run something slow") == true)
+        try await waitUntil(timeout: 15) { outcomes.count >= 1 }
+
+        #expect(outcomes.count == 1)
+        let bashCall = outcomes.first?.toolCalls.first { $0.name == "bash" }
+        #expect(bashCall?.transitions.contains(.executed) == true,
+                "an uninterrupted call must be recorded as the real, executed result")
+        #expect(bashCall?.transitions.contains(.rejected) != true)
+    }
+
     @Test @MainActor func captureIsOnDiskBeforeTheReadback() async throws {
         // Binding rule 5: the wire capture is written to disk before anything
         // reads it back. Proven by reading `wire.ndjson` from INSIDE the

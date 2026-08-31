@@ -45,6 +45,15 @@ private func experimentCaptureRoot() -> URL {
 /// exactly the kind of thing that would make `attemptNumberComesFromSiblingDirectories`
 /// flake instead of fail. The suffix sorts after the timestamp lexically, so
 /// chronological order is preserved for attempt counting.
+/// F6: `.sortedKeys` for a deterministic, diffable `spawn-record.json`;
+/// `.prettyPrinted` because this file exists to be read by a person auditing
+/// a run after the fact, not just round-tripped by code.
+private let spawnRecordEncoder: JSONEncoder = {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    return encoder
+}()
+
 private func resultsTimestamp() -> String {
     let df = DateFormatter()
     df.dateFormat = "yyyyMMdd-HHmmss"
@@ -61,19 +70,23 @@ private func experimentFail(_ message: String) -> Never {
 }
 
 /// Apply one `EvalValue` override, keyed by the `SpawnRecord` property name
-/// it names (`EvalExperiment.spawnRecordProperties`'s vocabulary — the same
-/// names a `variable:` declaration uses), onto `settings`. Not every declared
-/// property is a settable spawn input (`sampler`, `thinkPolicy`'s rendered
-/// form, every SHA/hash, `captureDirectory`/`startedAt`/`runIndex`) — those
-/// are outputs of a spawn, not inputs to one, and are silently ignored here;
-/// an experiment that declares one of them as `variable` was already refused
-/// by `EvalExperiment.parse`'s own gate... except `thinkPolicy` and `power`,
-/// which DO have a settable input side (`noThink`, `powerSavingEnabled`) and
-/// are handled below. `workspace`/`hostTools`/`gitRef` are handled by the
-/// caller instead: `workspace` is `RunWorkspace`-managed (never an
-/// `overrides` value), `hostTools` is always on (`AgentCommand.argv` passes
-/// it unconditionally), and `gitRef` selects the engine build the caller
-/// resolves once per arm, not a per-field `AgentSettings` write.
+/// it names (`EvalExperiment.overrideKeyVocabulary`'s vocabulary — a SUBSET
+/// of `spawnRecordProperties`, the wider list a `variable:` declaration draws
+/// from), onto `settings`. `EvalExperiment.parse` already refused any key not
+/// in `overrideKeyVocabulary`, and any value whose shape doesn't match what
+/// that key accepts (fable-fixes review, F1) — so by the time `overrides`
+/// reaches this function every key is one of the cases below and every value
+/// is the right shape. `default: break` is defensive only (a caller that
+/// builds an `EvalExperiment` directly, bypassing `parse`, gets the OLD
+/// silent-drop behavior — `parse` is the enforcement boundary, not this
+/// function). `workspace`/`hostTools`/`gitRef` are excluded from
+/// `overrideKeyVocabulary` entirely (refused at parse time as unknown keys):
+/// `workspace` is `RunWorkspace`-managed (never an `overrides` value),
+/// `hostTools` is always on (`AgentCommand.argv` passes it unconditionally,
+/// no per-spawn toggle exists), and `gitRef` is refused outright as a
+/// `variable` (`EvalExperimentError.gitRefNotSupported`, F2) because per-arm
+/// engine builds are not implemented — so it has no legitimate override use
+/// either.
 private func applyOverride(_ settings: inout AgentSettings, key: String, value: EvalValue) {
     switch key {
     case "tools":
@@ -241,9 +254,15 @@ private func experimentMain(_ args: [String]) async {
     let dryRecordB = dryResolve(
         experiment: experiment, arm: armB, engineDir: engineDir,
         defaultModelPath: defaultModelPath, workspace: resultsDir)
-    let declaredRefs: (String, String)? = experiment.variable == "gitRef"
-        ? (dryRecordA.engineSHA, dryRecordB.engineSHA) : nil
-    let admission = ArmDiff.admit(dryRecordA, dryRecordB, variable: experiment.variable, declaredRefs: declaredRefs)
+    // F2: `variable == "gitRef"` is refused at parse time
+    // (`EvalExperiment.parse`, `EvalExperimentError.gitRefNotSupported`) —
+    // per-arm engine builds are not implemented, so this call site never
+    // sees a gitRef experiment and `declaredRefs` is always nil. (This used
+    // to fabricate `declaredRefs` from the arms' own resolved `engineSHA`s —
+    // a tautology at `ArmDiff`'s only production call site: a value can
+    // never disagree with itself, so the "declared ref matches the resolved
+    // SHA" check could never fail.)
+    let admission = ArmDiff.admit(dryRecordA, dryRecordB, variable: experiment.variable, declaredRefs: nil)
 
     let armDiffText: String
     switch admission {
@@ -317,6 +336,17 @@ private func experimentMain(_ args: [String]) async {
             continue
         }
         record = record.withWorkspaceRef(workspace.ref)
+        // F6: `record` — the complete resolved description of THIS spawn,
+        // the whole point of building one — used to end here, feeding only
+        // `provenance.md` (already rendered inside `session.start()`, with
+        // an empty `workspaceRef` since `AgentSession` does not know about
+        // `RunWorkspace`) before being discarded. Serialize it, now that the
+        // ref is filled in, so the full record is auditable from the
+        // capture tree afterward rather than living only in this process's
+        // memory for the run's duration.
+        if let recordData = try? spawnRecordEncoder.encode(record) {
+            try? recordData.write(to: armDir.appendingPathComponent("spawn-record.json"))
+        }
 
         var sawHello = false
         var refusalReason: String?

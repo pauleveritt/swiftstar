@@ -77,6 +77,20 @@ public struct AgentSettings: Equatable, Sendable {
     /// claim nobody could vary or check on argv.
     public var tools: [String]?
 
+    /// eval-cli task 8: reproduces `swiftstar-drive`'s exact P5 argv shape —
+    /// `-m`, `-c`, `--metal`, `--non-interactive`, `--json-events`, `--trace`
+    /// (when `tracePath` is set), and nothing else unless another setting on
+    /// this struct explicitly asks for it. `false` (every existing caller) is
+    /// byte-for-byte unchanged: `argv(settings:)` still appends
+    /// `--workspace`/`--shell`/`--host-tools`/`--per-turn-think`
+    /// unconditionally, exactly as it did before this field existed. `true`
+    /// suppresses only those four unconditional flags — the retirement ruling
+    /// for `fixtures/agent/provenance.md`'s "caps/`tool_request`-free bare
+    /// wire" invariant: a plain `swiftstar-eval run` cannot reproduce that
+    /// shape, because `argv(settings:)` has passed those four unconditionally
+    /// since P9/P23, so `--bare` is the one escape hatch that can.
+    public var bare: Bool
+
     /// The moderate duty-cycle target used by the app's power-saving mode.
     /// The engine documents 70% as a useful compromise between sustained load
     /// and throughput, without changing model output.
@@ -97,8 +111,10 @@ public struct AgentSettings: Equatable, Sendable {
         systemPrompt: String? = nil,
         tracePath: URL? = nil,
         runtime: EngineRuntimeConfig? = nil,
-        tools: [String]? = nil
+        tools: [String]? = nil,
+        bare: Bool = false
     ) {
+        self.bare = bare
         self.workerContextSize = workerContextSize
         self.engineDir = engineDir
         self.modelPath = modelPath
@@ -172,17 +188,23 @@ public enum AgentCommand {
             "--metal",
             "--non-interactive",
             "--json-events",
-            "--workspace", settings.workspace.path,
-            "--shell", settings.shellAllowed ? "on" : "off",
+        ]
+        // eval-cli task 8: `settings.bare` suppresses exactly these four
+        // unconditional flags — the P5 shape `swiftstar-drive` captured
+        // (see `bare`'s doc comment). Every existing caller leaves `bare`
+        // false and gets this block byte-for-byte as before.
+        if !settings.bare {
+            argv.append(contentsOf: ["--workspace", settings.workspace.path])
+            argv.append(contentsOf: ["--shell", settings.shellAllowed ? "on" : "off"])
             // P9: the app owns tool execution — always pass `--host-tools` so the
             // agent emits `tool_request` and blocks on `tool_result` (D1).
-            "--host-tools",
+            argv.append("--host-tools")
             // P23: per-turn think overrides (think/ctx on the prompt envelope).
             // Unconditional like --host-tools: the app pins the engine (the
             // submodule bump in this phase shipped the flag); a DS4_DIR build
             // without it fails loudly at option-parse, never silently.
-            "--per-turn-think",
-        ]
+            argv.append("--per-turn-think")
+        }
         if effectivePowerSavingEnabled(settings) {
             argv.append(contentsOf: ["--power", String(AgentSettings.powerSavingPercent)])
         }

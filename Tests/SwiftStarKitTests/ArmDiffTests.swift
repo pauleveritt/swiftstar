@@ -126,6 +126,9 @@ struct ArmDiffTests {
         }
     }
 
+    // hostTools genuinely differs (true vs false) here — the declared
+    // variable must actually differ (F1's second hole) even in a test whose
+    // point is the must-differ allowlist, not the variable itself.
     @Test func admitsTheMustDifferAllowlist() {
         let a = SpawnRecord(
             engineSHA: "e", engineDirty: false, engineBinaryHash: "eb",
@@ -144,13 +147,29 @@ struct ArmDiffTests {
             maxTokens: 0, thinkBudget: 0, seed: 0, systemPromptHash: "sp", runtimeFlags: [],
             modelPath: "/m", modelBytes: 1, modelHash: "mh", variantID: nil,
             contextSize: 100, sampler: "sampler", power: "power", thinkPolicy: "default",
-            tools: [], shellAllowed: false, hostTools: true,
+            tools: [], shellAllowed: false, hostTools: false,
             workspace: "/w", workspaceRef: "wr", osBuild: "os", wiredLimitBytes: 1,
             environment: [:], userDefaults: [:],
             captureDirectory: "captures/b", startedAt: Date(timeIntervalSince1970: 2), runIndex: 1,
             argv: [])
         let result = ArmDiff.admit(a, b, variable: "hostTools", declaredRefs: nil)
-        #expect(result == .success(["captureDirectory", "startedAt", "runIndex"]))
+        #expect(result == .success(["captureDirectory", "hostTools", "startedAt", "runIndex"]))
+    }
+
+    // Fable-fixes review, F1's second hole: an experiment declares a
+    // variable, but the two arms are IDENTICAL on that axis — the treatment
+    // never applied. `differingKeys` has nothing undeclared to complain
+    // about, so the old code admitted this; it must now be refused.
+    @Test func refusesWhenTheDeclaredVariableDoesNotActuallyDiffer() {
+        let a = record(settings: settings(), hostTools: true)
+        let b = record(settings: settings(), hostTools: true) // "treatment" never applied
+        let result = ArmDiff.admit(a, b, variable: "hostTools", declaredRefs: nil)
+        switch result {
+        case .success:
+            Issue.record("expected a refusal: the declared variable never actually differed")
+        case .failure(let refusal):
+            #expect(refusal.message.contains("hostTools"))
+        }
     }
 
     // The allowlist is fixed, not widened by whatever the caller declares:

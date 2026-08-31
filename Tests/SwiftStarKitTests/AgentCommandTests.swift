@@ -239,6 +239,76 @@ struct AgentCommandTests {
         let ws = URL(fileURLWithPath: "/tmp/ws")
         #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--ssd-streaming"))
     }
+
+    // MARK: - Task 8: `--bare` reproduces `swiftstar-drive`'s exact P5 argv
+
+    /// `swiftstar-drive`'s P5 shape (`Sources/swiftstar-drive/main.swift`,
+    /// before its eval-cli task 8 deletion): `-m`, `-c`, `--metal`,
+    /// `--non-interactive`, `--json-events`, `--trace <path>`, and nothing
+    /// else when no `CAPTURE_*` knob is set — no `--workspace`, no
+    /// `--shell`, no `--host-tools`, no `--per-turn-think`. `bare: true`
+    /// must reproduce this byte-for-byte given the same base settings that
+    /// (with `bare: false`) produce the app's own unconditional argv.
+    @Test func bareReproducesDriveSP5Argv() {
+        var settings = makeSettings(workspace: URL(fileURLWithPath: "/Users/me/Work"))
+        settings.bare = true
+        settings.tracePath = URL(fileURLWithPath: "/tmp/captures/run1/wire.trace")
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(argv == [
+            "-m", "/tmp/model.gguf",
+            "-c", "16384",
+            "--metal",
+            "--non-interactive",
+            "--json-events",
+            "--trace", "/tmp/captures/run1/wire.trace",
+        ])
+    }
+
+    /// `bare` suppresses exactly the four unconditional flags — it must not
+    /// touch any of the other conditional ones (each already covered by its
+    /// own test above with `bare` at its default `false`).
+    @Test func bareOmitsWorkspaceShellHostToolsAndPerTurnThink() {
+        var settings = makeSettings(workspace: URL(fileURLWithPath: "/Users/me/Work"), shellAllowed: true)
+        settings.bare = true
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(!argv.contains("--workspace"))
+        #expect(!argv.contains("--shell"))
+        #expect(!argv.contains("--host-tools"))
+        #expect(!argv.contains("--per-turn-think"))
+    }
+
+    /// `bare` still honors an explicitly-set optional flag — the ruling's
+    /// "and nothing else unless explicitly asked for": a `--tools`/`--seed`
+    /// set alongside `--bare` must still reach argv.
+    @Test func bareStillAppliesExplicitlyRequestedFlags() {
+        var settings = makeSettings(workspace: URL(fileURLWithPath: "/tmp/ws"))
+        settings.bare = true
+        settings.seed = 7
+        settings.tools = ["read", "write"]
+        let argv = AgentCommand.argv(settings: settings)
+        #expect(argv.contains("--seed"))
+        #expect(argv[argv.firstIndex(of: "--seed")! + 1] == "7")
+        #expect(argv.contains("--tools"))
+        #expect(argv[argv.firstIndex(of: "--tools")! + 1] == "read,write")
+    }
+
+    /// `bare: false` (the default, every existing caller) must be
+    /// byte-for-byte unchanged from before this field existed.
+    @Test func nonBareDefaultIsUnaffectedByTheBareField() {
+        let ws = URL(fileURLWithPath: "/Users/me/Work")
+        #expect(!AgentCommand.argv(settings: makeSettings(workspace: ws)).contains("--bare"))
+        #expect(AgentCommand.argv(settings: makeSettings(workspace: ws)) == [
+            "-m", "/tmp/model.gguf",
+            "-c", "16384",
+            "--metal",
+            "--non-interactive",
+            "--json-events",
+            "--workspace", "/Users/me/Work",
+            "--shell", "off",
+            "--host-tools",
+            "--per-turn-think",
+        ])
+    }
 }
 
 /// The live capture's `provenance.md` recorded `Sampler: think=default` as a

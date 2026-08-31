@@ -133,14 +133,29 @@ plan's Result section rather than done silently.
   "falsifier": "the digest drops something decision-relevant",
   "variable": "tools",
   "pairs": 3,
-  "mode": "chat",
+  "mode": "orchestrate",
   "promptFile": "evals/p24-3-prompt.md",
   "captureSelection": "recordsWork",
-  "arms": [ {"id": "control",   "tools": ["read","write","list","search","bash"]},
-            {"id": "treatment", "tools": ["read","write","list","search","bash","test","lint"]} ],
-  "common": { "gitRef": "p24-3-run-digest-family", "variant": "deepseek-v4-flash",
-              "ctx": 50000, "power": 70, "shell": "on", "hostTools": true } }
+  "arms": [ {"id": "control",   "overrides": {"tools": ["read","write","list","search","bash"]}},
+            {"id": "treatment", "overrides": {"tools": ["read","write","list","search","bash","test","lint"]}} ],
+  "common": { "contextSize": 50000, "power": 70, "shellAllowed": true } }
 ```
+
+**Correction, 2026-08-31 (adversarial review, finding F1):** the example
+above originally put `"tools": [...]` directly on each arm instead of nested
+under `"overrides"`, and `common` used `gitRef`, `variant`, `ctx`, `shell`,
+`hostTools` — none of which `applyOverride`
+(`Sources/swiftstar-eval/ExperimentVerb.swift`) recognizes, and `variant` had
+no case at all. `mode` was `"chat"`, which `experiment` refuses headlessly
+(decision 7) exactly like `run --mode chat`. An experiment written straight
+from this doc, as originally worded, would have run both arms at their
+defaults and been silently admitted as a valid comparison — the same defect
+class as the 2026-08-30 incident this design exists to prevent, rebuilt
+inside the tool meant to prevent it. `EvalExperiment.overrideKeyVocabulary`
+(`Sources/SwiftStarKit/EvalExperiment.swift`) is now the authoritative key
+list for `common`/`overrides`, enforced at parse time — an unrecognized key,
+or a recognized one with the wrong JSON shape, is refused rather than
+dropped.
 
 `question` and `falsifier` are the pre-registration. They are copied verbatim
 into the results directory before the first spawn, so the artifact carries

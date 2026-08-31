@@ -50,6 +50,23 @@ public enum EvalValue: Codable, Equatable, Sendable {
         case .list(let l): try container.encode(l)
         }
     }
+
+    /// This value's shape, without the payload — lets
+    /// `EvalExperiment.overrideKeyVocabulary` describe which shapes an
+    /// override key accepts without constructing a dummy value of each.
+    public var kind: EvalValueKind {
+        switch self {
+        case .string: return .string
+        case .int: return .int
+        case .bool: return .bool
+        case .list: return .list
+        }
+    }
+}
+
+/// The four `EvalValue` shapes, named. See `EvalValue.kind`.
+public enum EvalValueKind: String, Sendable {
+    case string, int, bool, list
 }
 
 /// Which `AgentCommand` shape a spawn uses. Not the model, not the tools —
@@ -94,6 +111,33 @@ public enum EvalExperimentError: Error, Equatable {
     /// is built from: `maxTokens`, `thinkBudget`, `seed`, `systemPromptHash`,
     /// `runtimeFlags` (or the specific flag's own field, where one exists).
     case argvIsNotAnAxis
+    /// `variable == "gitRef"` (fable-fixes review, F2): per-arm engine
+    /// builds are not implemented — every arm resolves its engine from the
+    /// SAME `DS4_DIR` (`ExperimentVerb.swift`'s `engineDir`), so there is no
+    /// way for two arms of one `swiftstar-eval experiment` invocation to
+    /// actually run different engine builds. The design's own `ArmDiff`
+    /// gitRef path only ever fires this refusal when `swiftstarSHA` differs,
+    /// which cannot happen within one invocation either — so admitting
+    /// `variable: "gitRef"` here was a check that could never fail, not a
+    /// guard. Refused outright instead: comparing two engine builds needs
+    /// two separate invocations, not one experiment file.
+    case gitRefNotSupported
+    /// `common`/`arm.overrides` named a key with no settable `AgentSettings`
+    /// input — see `EvalExperiment.overrideKeyVocabulary`. Without this gate
+    /// `applyOverride`'s old `default: break` silently dropped it: an
+    /// experiment written straight from this design's own example doc used
+    /// `ctx`, `shell`, `hostTools`, `variant`, `gitRef` — none recognized —
+    /// and ran both arms at their defaults, admitted as if the treatment had
+    /// applied (fable-fixes review, F1). `context` names where the bad key
+    /// was declared (`"common"`, or `"arm \"<id>\""`).
+    case unknownOverrideKey(key: String, context: String, accepted: [String])
+    /// The key IS in `overrideKeyVocabulary`, but the JSON value's shape does
+    /// not match what `applyOverride` requires for it (e.g.
+    /// `"contextSize": "big"` where an int is required) — the other half of
+    /// F1's silent-drop: `applyOverride`'s per-case `if case ... = value`
+    /// pattern match fails silently on a type mismatch exactly like an
+    /// unrecognized key does.
+    case mistypedOverrideValue(key: String, context: String, accepted: [String])
 }
 
 /// The committed pre-registration for one `swiftstar-eval` run: what is being
@@ -153,6 +197,58 @@ public struct EvalExperiment: Codable, Equatable, Sendable {
         "environment", "userDefaults", "captureDirectory", "startedAt",
         "runIndex",
     ]
+
+    /// Accepted `common`/`arm.overrides` keys, and the `EvalValueKind`s each
+    /// one accepts — `applyOverride`'s own vocabulary
+    /// (`Sources/swiftstar-eval/ExperimentVerb.swift`), reproduced here so
+    /// `parse` can enforce it BEFORE any arm runs (fable-fixes review, F1).
+    /// `applyOverride`'s old `default: break` silently dropped anything
+    /// outside this set — an unknown key, or a recognized key with the wrong
+    /// JSON shape — which is how an experiment written straight from this
+    /// design's own (since-corrected) example doc ran both arms at their
+    /// defaults and was admitted as a valid comparison.
+    ///
+    /// Note this is a DIFFERENT, smaller vocabulary than
+    /// `spawnRecordProperties` above: that one names every property `ArmDiff`
+    /// can compare (including pure outputs of a spawn — SHAs, hashes,
+    /// `osBuild` — that no override can ever set); this one names only the
+    /// properties an override actually has a settable input for.
+    ///
+    /// `workspace` (`RunWorkspace`-managed, never an override), `hostTools`
+    /// (always on — `AgentCommand.argv` passes it unconditionally, no
+    /// per-spawn toggle exists) and `gitRef` (per-arm engine builds are not
+    /// implemented — see `EvalExperimentError.gitRefNotSupported`) are
+    /// deliberately absent: declaring any of them today would silently do
+    /// nothing, the exact defect this vocabulary exists to catch.
+    public static let overrideKeyVocabulary: [String: Set<EvalValueKind>] = [
+        "tools": [.list],
+        "power": [.bool, .string, .int],
+        "maxTokens": [.int],
+        "thinkBudget": [.int],
+        "contextSize": [.int],
+        "modelPath": [.string],
+        "shellAllowed": [.bool, .string],
+        "thinkPolicy": [.string],
+    ]
+
+    /// Refuses any key in `overrides` that is not in `overrideKeyVocabulary`,
+    /// or whose value's shape does not match what that key accepts.
+    /// `context` names where `overrides` came from (`"common"`, or
+    /// `"arm \"<id>\""`) for the thrown error's message.
+    private static func validateOverrides(_ overrides: [String: EvalValue], context: String) throws {
+        for key in overrides.keys.sorted() {
+            let value = overrides[key]!
+            guard let acceptedKinds = overrideKeyVocabulary[key] else {
+                throw EvalExperimentError.unknownOverrideKey(
+                    key: key, context: context, accepted: overrideKeyVocabulary.keys.sorted())
+            }
+            guard acceptedKinds.contains(value.kind) else {
+                throw EvalExperimentError.mistypedOverrideValue(
+                    key: key, context: context,
+                    accepted: acceptedKinds.map(\.rawValue).sorted())
+            }
+        }
+    }
 
     /// Either a single declared axis, or — when the file mistakenly lists
     /// more than one — the list itself, so `parse` can report exactly what
@@ -215,8 +311,16 @@ public struct EvalExperiment: Codable, Equatable, Sendable {
         guard variable != "argv" else {
             throw EvalExperimentError.argvIsNotAnAxis
         }
-        guard variable == "gitRef" || spawnRecordProperties.contains(variable) else {
+        guard variable != "gitRef" else {
+            throw EvalExperimentError.gitRefNotSupported
+        }
+        guard spawnRecordProperties.contains(variable) else {
             throw EvalExperimentError.unknownVariable(variable)
+        }
+
+        try validateOverrides(raw.common ?? [:], context: "common")
+        for arm in raw.arms {
+            try validateOverrides(arm.overrides, context: "arm \"\(arm.id)\"")
         }
 
         let pairs = raw.pairs ?? defaultPairs

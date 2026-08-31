@@ -79,6 +79,34 @@ public enum ArmDiff {
                 message: "Refusing: arms declared to differ only by \"\(variable)\" " +
                     "also differ in \(undeclared.joined(separator: ", ")).\(reason)\(argvNote)"))
         }
+
+        // Fable-fixes review, F1's second hole: `undeclared` being empty only
+        // proves nothing UNEXPECTED differs — it says nothing about whether
+        // the declared `variable` itself actually differs. A treatment that
+        // silently failed to apply (an unrecognized override key, a typo, a
+        // config that resolved both arms to the same value) produces two
+        // arms identical on every axis, `raw` is empty or contains only
+        // must-differ noise, `undeclared` is trivially empty, and the old
+        // code admitted the comparison — exactly the "the 'treatment' arm
+        // had no treatment" defect this type exists to prevent, rebuilt
+        // inside the guard meant to catch it. `tools` gets no special case:
+        // if the two arms' declared tool lists genuinely differ this already
+        // holds, and if a config bug widened one arm to match the other this
+        // IS the case that must be refused — the separate wire-level check
+        // in `swiftstar-eval experiment` (declared tools vs
+        // `AdvertisedToolNames`, after the handshake) verifies the OTHER
+        // direction, that a per-arm declaration was honored by the engine,
+        // which this pre-spawn, no-process-yet check cannot see at all.
+        let variableActuallyDiffers = raw.contains(variable)
+            || (variable == "gitRef" && !raw.intersection(engineBuildKeys).isEmpty)
+        guard variableActuallyDiffers else {
+            return .failure(ArmDiffRefusal(
+                undeclared: [],
+                message: "Refusing: declared variable \"\(variable)\" does not actually " +
+                    "differ between the two arms — a treatment that never applied is not " +
+                    "a comparison."))
+        }
+
         return .success(raw)
     }
 }

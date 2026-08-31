@@ -147,32 +147,44 @@ private func runMain(_ args: [String]) async {
     let tools = (flags["--tools"] ?? "")
         .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     // `--host-tools`/`--per-turn-think` are accepted (binding rule 4 — every
-    // former CAPTURE_* knob becomes a named flag) but are no-ops: a `run`
-    // spawn goes through `AgentCommand.argv`, which already passes both
-    // unconditionally — the app never had a way to turn either off, so
-    // neither does this CLI.
+    // former CAPTURE_* knob becomes a named flag) but are no-ops when `--bare`
+    // is absent: a `run` spawn goes through `AgentCommand.argv`, which already
+    // passes both unconditionally — the app never had a way to turn either
+    // off, so neither does this CLI. `--bare` (eval-cli task 8) is the one
+    // exception: it suppresses both, along with `--workspace`/`--shell`, to
+    // reproduce `swiftstar-drive`'s retired P5 argv shape.
+    let bare = flags["--bare"] != nil
     let engineDir = URL(fileURLWithPath: env["DS4_DIR"] ?? FileManager.default.currentDirectoryPath + "/external/ds4")
-
-    let settings = AgentSettings(
-        engineDir: engineDir, modelPath: modelPath, contextSize: ctx,
-        workspace: workspace, shellAllowed: shellAllowed,
-        powerSavingEnabled: powerSavingEnabled, seed: seed,
-        // `--tools` must reach argv (`AgentCommand.argv`'s own `--tools`
-        // flag), not just the `SpawnRecord.tools` provenance field below —
-        // otherwise the flag would look wired but never actually restrict
-        // the engine's advertised schema.
-        tools: tools.isEmpty ? nil : tools)
-
-    let dryRun = flags["--dry-run"] != nil
 
     // MARK: - capture directory (kind "live" — same root `captureDirs()`
     // scans for the app's own sessions, so `list`/`summary --latest` see a
-    // `run` capture exactly like an app one)
+    // `run` capture exactly like an app one). Computed before `settings` so
+    // `--bare`'s `tracePath` can point into it.
     let df = DateFormatter()
     df.dateFormat = "yyyyMMdd-HHmmss"
     let captureDirectory = captureRoot()
         .appendingPathComponent("live", isDirectory: true)
         .appendingPathComponent("\(df.string(from: Date()))-run", isDirectory: true)
+
+    let settings = AgentSettings(
+        engineDir: engineDir, modelPath: modelPath, contextSize: ctx,
+        workspace: workspace, shellAllowed: shellAllowed,
+        powerSavingEnabled: powerSavingEnabled, seed: seed,
+        // `--trace <path>` is part of `swiftstar-drive`'s P5 shape
+        // (unconditional there); only `--bare` reproduces it here — a plain
+        // `run` leaves `tracePath` nil, unchanged from before this flag
+        // existed. `swiftstar-drive`'s own trace file was named
+        // `wire.trace` inside the capture directory; matched here so a
+        // `--bare` capture carries the file the recapture rule expects.
+        tracePath: bare ? captureDirectory.appendingPathComponent("wire.trace") : nil,
+        // `--tools` must reach argv (`AgentCommand.argv`'s own `--tools`
+        // flag), not just the `SpawnRecord.tools` provenance field below —
+        // otherwise the flag would look wired but never actually restrict
+        // the engine's advertised schema.
+        tools: tools.isEmpty ? nil : tools,
+        bare: bare)
+
+    let dryRun = flags["--dry-run"] != nil
 
     let session = AgentSession(
         settings: settings, tools: tools, captureDirectory: captureDirectory,

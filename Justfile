@@ -127,10 +127,26 @@ engine:
     git submodule update --init external/ds4
     make -C external/ds4 ds4-agent
 
+# Passthrough to swiftstar-eval, the one eval CLI (eval-cli, retiring
+# swiftstar-analyze/-drive/-agenttest). e.g. `just eval run --prompt "hi" \
+# --gguf <path>` or `just eval list`.
+eval *ARGS:
+    swift run swiftstar-eval {{ARGS}}
+
 # Live capture against the real engine. Never part of CI; takes minutes.
-# Landed 2026-08-26 (P21).
+# Landed 2026-08-26 (P21). Re-pointed 2026-08-31 (eval-cli task 8):
+# `swiftstar-drive` is retired; `swiftstar-eval run --bare` reproduces its
+# exact P5 argv (`-m`, `-c`, `--metal`, `--non-interactive`, `--json-events`,
+# `--trace` — no `--workspace`/`--shell`/`--host-tools`/`--per-turn-think`),
+# the shape `fixtures/agent/provenance.md`'s recapture rule requires. See
+# that file for the invariants a recapture re-verifies and for copying the
+# result to the bundled `Sources/SwiftStarAppKit/Resources/golden.*` (both
+# steps stay manual).
 capture:
-    swift run swiftstar-drive
+    swift run swiftstar-eval run --bare \
+        --gguf "${CAPTURE_GGUF:?CAPTURE_GGUF (absolute path to the gguf) is required}" \
+        --ctx "${CAPTURE_CTX:-32768}" \
+        --prompt "${CAPTURE_PROMPT:-Explain, in three sentences, why the sky is blue.}"
 
 # Assemble .build/SwiftStar.app (release build + Info.plist + icon)
 app:

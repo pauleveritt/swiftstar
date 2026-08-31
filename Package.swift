@@ -45,9 +45,10 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
         ),
-        // SwiftStarAppKit (P24.1): the host-tool loop needs `HostToolExecutor`,
-        // the same executor the app runs — matching swiftstar-agenttest below.
-        .executableTarget(name: "swiftstar-drive", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
+        // swiftstar-drive retired 2026-08-31 (eval-cli task 8): its P5 argv
+        // shape lives on as `swiftstar-eval run --bare` (`AgentSettings.bare`,
+        // `AgentCommand.argv`) — see `fixtures/agent/provenance.md`'s
+        // recapture rule and `Justfile`'s `capture` recipe.
         .executableTarget(name: "swiftstar-agenttest", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         // Task 5: the `run` verb spawns a real turn through `AgentSession`
         // (`SwiftStarAppKit`) — the same seam `swiftstar-agenttest` uses.

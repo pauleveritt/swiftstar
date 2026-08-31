@@ -64,6 +64,13 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
     public let tools: [String]
     public let shellAllowed: Bool
     public let hostTools: Bool
+    /// `AgentSettings.bare` (eval-cli task 8): whether this spawn suppressed
+    /// `--workspace`/`--shell`/`--host-tools`/`--per-turn-think` to reproduce
+    /// `swiftstar-drive`'s P5 argv shape. Recorded like any other setting so
+    /// an experiment that ever declares `bare` as its variable — or spawns
+    /// one bare arm by mistake — has it surface in `differingKeys`/`ArmDiff`
+    /// rather than silently disappearing into the argv-only vocabulary.
+    public let bare: Bool
     public let workspace: String
     public let workspaceRef: String
     public let osBuild: String
@@ -101,7 +108,7 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
         maxTokens: Int, thinkBudget: Int, seed: UInt64, systemPromptHash: String, runtimeFlags: [String],
         modelPath: String, modelBytes: Int64, modelHash: String, variantID: String?,
         contextSize: Int, sampler: String, power: String, thinkPolicy: String, tools: [String],
-        shellAllowed: Bool, hostTools: Bool, workspace: String, workspaceRef: String,
+        shellAllowed: Bool, hostTools: Bool, bare: Bool = false, workspace: String, workspaceRef: String,
         osBuild: String, wiredLimitBytes: Int64, environment: [String: String], userDefaults: [String: String],
         captureDirectory: String, startedAt: Date, runIndex: Int,
         argv: [String]
@@ -128,6 +135,7 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
         self.tools = tools
         self.shellAllowed = shellAllowed
         self.hostTools = hostTools
+        self.bare = bare
         self.workspace = workspace
         self.workspaceRef = workspaceRef
         self.osBuild = osBuild
@@ -206,7 +214,11 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
             sampler: AgentCommand.samplerRecord(settings: settings),
             power: AgentCommand.powerRecord(settings: settings),
             thinkPolicy: settings.noThink ? "none" : "default",
-            tools: tools, shellAllowed: settings.shellAllowed, hostTools: true,
+            // `--host-tools` is one of the four flags `bare` suppresses
+            // (`AgentCommand.argv`), so this record's own `hostTools` must
+            // track it rather than stay hardcoded true — a bare spawn never
+            // passes the flag.
+            tools: tools, shellAllowed: settings.shellAllowed, hostTools: !settings.bare, bare: settings.bare,
             workspace: settings.workspace.path, workspaceRef: workspaceRef,
             osBuild: osBuild, wiredLimitBytes: wiredLimitBytes,
             environment: environment, userDefaults: userDefaults,
@@ -260,6 +272,7 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
         if tools != other.tools { keys.insert("tools") }
         if shellAllowed != other.shellAllowed { keys.insert("shellAllowed") }
         if hostTools != other.hostTools { keys.insert("hostTools") }
+        if bare != other.bare { keys.insert("bare") }
         if workspace != other.workspace { keys.insert("workspace") }
         if workspaceRef != other.workspaceRef { keys.insert("workspaceRef") }
         if osBuild != other.osBuild { keys.insert("osBuild") }
@@ -287,7 +300,7 @@ public struct SpawnRecord: Equatable, Sendable, Codable {
             systemPromptHash: systemPromptHash, runtimeFlags: runtimeFlags,
             modelPath: modelPath, modelBytes: modelBytes, modelHash: modelHash, variantID: variantID,
             contextSize: contextSize, sampler: sampler, power: power, thinkPolicy: thinkPolicy, tools: tools,
-            shellAllowed: shellAllowed, hostTools: hostTools, workspace: workspace, workspaceRef: ref,
+            shellAllowed: shellAllowed, hostTools: hostTools, bare: bare, workspace: workspace, workspaceRef: ref,
             osBuild: osBuild, wiredLimitBytes: wiredLimitBytes, environment: environment, userDefaults: userDefaults,
             captureDirectory: captureDirectory, startedAt: startedAt, runIndex: runIndex,
             argv: argv)

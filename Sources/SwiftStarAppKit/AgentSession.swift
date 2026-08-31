@@ -144,6 +144,13 @@ public final class AgentSession {
     /// verbatim port of `AgentController`'s pre-move `orchestratorToolBudget`.
     private var toolBudget = ToolCallBudgetTracker(budget: ToolCallBudgetTracker.defaultBudget)
     private var sentInterrupt = false
+    /// F5: the in-flight orchestrator tool call, if any — cancelled by
+    /// `interrupt()`/`stop()` so an interrupt landing mid-call does not leave
+    /// a completed-but-discarded task running longer than it has to (the
+    /// `execute` closure itself does not check `Task.isCancelled`, so this is
+    /// advisory, not a hard abort — the authoritative discard is `consume`'s
+    /// own `sentInterrupt` re-check after the `await`).
+    private var orchestratorToolTask: Task<ToolCallbackResponse, Never>?
     /// Set once by `stop()`. Every async resumption point (the tool-callback
     /// await in `consume`) re-checks this before touching `outcomeBuilder` or
     /// writing to `process` — the same reentrancy hazard
@@ -448,6 +455,7 @@ public final class AgentSession {
         guard !stopped, outcomeBuilder != nil, let process,
               let pipe = process.standardInput as? Pipe else { return }
         sentInterrupt = true
+        orchestratorToolTask?.cancel()
         pipe.fileHandleForWriting.write(Data([0x03]))
     }
 
@@ -459,6 +467,7 @@ public final class AgentSession {
         stopped = true
         stdoutTask?.cancel()
         stderrTask?.cancel()
+        orchestratorToolTask?.cancel()
         if let pipe = process?.standardInput as? Pipe {
             try? pipe.fileHandleForWriting.close()
         }
@@ -538,11 +547,39 @@ public final class AgentSession {
             // `SubprocessRunner`), so re-check `stopped` after it before
             // touching `outcomeBuilder` or writing to a possibly-closed pipe
             // — `stop()` is reachable during a long-running tool call.
-            let response = await ToolCallbackResponder.respond(
-                idx: idx, name: name, params: params,
-                workspace: settings.workspace, shellAllowed: settings.shellAllowed,
-                execute: hostToolExecutor.execute)
+            //
+            // F5 (fable-fixes review): `main` (`74a789a`/`5d808a0`) ran this
+            // same call in a cancellable `orchestratorToolTask` and, after an
+            // interrupt landed mid-call, wrote `ok:false "interrupted"`
+            // instead of the real result — otherwise a tool call that was
+            // already running when the model got interrupted would still
+            // complete and its result would still be recorded as if nothing
+            // had happened. That behavior was dropped in the extraction to
+            // `AgentSession` (this `await` used to be a bare, uncancellable
+            // one) and had no test, which is how it was lost. Restored here:
+            // the task is stored so `interrupt()`/`stop()` can cancel it, and
+            // `sentInterrupt` — already set by `interrupt()`, already the
+            // signal `.ready` uses to label the finished turn `.interrupt` —
+            // is re-checked after the await to decide which result to write.
+            let toolTask = Task { [hostToolExecutor, settings] in
+                await ToolCallbackResponder.respond(
+                    idx: idx, name: name, params: params,
+                    workspace: settings.workspace, shellAllowed: settings.shellAllowed,
+                    execute: hostToolExecutor.execute)
+            }
+            orchestratorToolTask = toolTask
+            let response = await toolTask.value
+            orchestratorToolTask = nil
             guard !stopped else { return }
+            if sentInterrupt {
+                let refusal = ToolCallbackResponse(idx: idx, ok: false, s: "interrupted")
+                writeToolResult(refusal)
+                outcomeBuilder?.recordHostVerdict(
+                    idx: idx, ok: false, mutations: [], exitStatus: nil,
+                    outputDigest: nil, validationRan: false)
+                onToolVerdict?([], nil, false)
+                return
+            }
             writeToolResult(response)
             outcomeBuilder?.recordHostVerdict(
                 idx: idx, ok: response.ok,

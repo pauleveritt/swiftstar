@@ -229,15 +229,39 @@ struct AgentSessionCommandTests {
     /// Replaces the `PoolEngine.argv(` call-site grep (`PoolEngineArgvTests
     /// .poolEngineArgvIsTheOnlyPooledArgvBuilder`): asserts the argv a pooled
     /// `AgentSession` actually spawns with, not which source line built it.
-    @Test @MainActor func pooledSpawnArgvCarriesSubagentPool() throws {
+    ///
+    /// Fable-fixes review, F7: this used to build `expectedArgv` from the
+    /// SAME `PoolEngine.argv(...)` call `AgentSession.resolveSpawnRecord`
+    /// uses, and never observed the fake engine — comparing `record.argv`
+    /// to `expectedArgv` was really comparing the record to itself. A
+    /// regression where `start()` spawned the plain, non-pooled argv while
+    /// the record still claimed the pooled one would have passed. The fix:
+    /// a `promptGuard` snippet (the mechanism `FakeAgentSource` built for
+    /// exactly this — proving what actually reached the engine from outside
+    /// the app target) dumps `CommandLine.arguments` to a file from inside
+    /// the fake's own prompt loop, and the assertion below compares
+    /// `record.argv` to THAT — what the fake actually received — not to the
+    /// expression that built it.
+    @Test @MainActor func pooledSpawnArgvCarriesSubagentPool() async throws {
         let engineDir = try tempDir("engine-pool")
         let workspace = try tempDir("ws-pool")
         let captureDir = try tempDir("capture-pool")
         let settings = makeSettings(engineDir: engineDir, workspace: workspace)
         let expectedArgv = PoolEngine.argv(settings: settings, workers: 2)
+
+        let argvDumpURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agentsessioncmd-observed-argv-\(UUID().uuidString).txt")
+        let escapedDumpPath = argvDumpURL.path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let promptGuard = """
+            let __observedArgv = CommandLine.arguments.dropFirst().joined(separator: "\\u{1}")
+            try? __observedArgv.write(toFile: "\(escapedDumpPath)", atomically: true, encoding: .utf8)
+            """
+
         let source = try FakeAgentSource.generate(
             capture: Data(Self.plainTurn(caps: Self.capsWithOverride).utf8),
-            engineArgv: expectedArgv, hostTools: false)
+            engineArgv: expectedArgv, hostTools: false, promptGuard: promptGuard)
         let binary = try FakeAgentHarness.compileFake(source: source, into: engineDir)
         try FileManager.default.moveItem(at: binary, to: engineDir.appendingPathComponent("ds4-agent"))
 
@@ -245,9 +269,18 @@ struct AgentSessionCommandTests {
         let record = try session.start()
         defer { session.stop() }
 
-        #expect(record.argv == expectedArgv)
         #expect(record.argv.contains("--subagent-pool"))
         let idx = try #require(record.argv.firstIndex(of: "--subagent-pool"))
         #expect(record.argv[record.argv.index(after: idx)] == "2")
+
+        var outcomes: [TurnOutcome] = []
+        session.onOutcome = { outcomes.append($0) }
+        #expect(session.send("go") == true)
+        try await waitUntil { outcomes.count >= 1 }
+
+        let observedArgv = try String(contentsOf: argvDumpURL, encoding: .utf8)
+            .components(separatedBy: "\u{1}")
+        #expect(observedArgv == record.argv,
+                "the record must match what the fake engine actually received, not itself")
     }
 }

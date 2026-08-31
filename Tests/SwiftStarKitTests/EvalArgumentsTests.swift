@@ -72,6 +72,7 @@ struct EvalArgumentsTests {
             "--seed", "42",
             "--tools", "read,write",
             "--dry-run",
+            "--bare",
         ]
         switch EvalArguments.parse(argv) {
         case .failure(let message):
@@ -84,7 +85,16 @@ struct EvalArgumentsTests {
             #expect(invocation.flags["--power"] == "70")
             #expect(invocation.flags["--host-tools"] == "true")
             #expect(invocation.flags["--dry-run"] == "true")
+            #expect(invocation.flags["--bare"] == "true")
             #expect(invocation.positional.isEmpty)
         }
+    }
+
+    // MARK: - Task 8: `--bare` (swiftstar-drive's retirement ruling)
+
+    /// `--bare` reproduces `swiftstar-drive`'s exact P5 argv shape — it must
+    /// be its own value-less flag, not folded into an existing one.
+    @Test func runFlagsDeclaresBare() {
+        #expect(EvalArguments.runFlags.contains(EvalArguments.FlagSpec("--bare", takesValue: false)))
     }
 }

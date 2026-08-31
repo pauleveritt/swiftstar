@@ -153,10 +153,16 @@ cadence counts moved.
 
 ## Recapture rule
 
-This fixture is the sanctioned output of `swiftstar-drive`. **On every submodule bump, it must
-be recaptured** against the freshly rebuilt binary (`just engine`, then `just capture`),
-because a rebase can apply cleanly and still be semantically wrong — and the handshake
-version/caps, the D12 turn-outcome fields, the `ts` monotonicity, and (P9) the
+**2026-08-31 (eval-cli task 8): `swiftstar-drive` is retired.** Its committed P5 argv shape
+(`-m`, `-c`, `--metal`, `--non-interactive`, `--json-events`, `--trace`, and nothing else) now
+lives on as `swiftstar-eval run --bare` (`AgentSettings.bare`, wired into `AgentCommand.argv`) —
+the one flag that suppresses the app's own unconditional `--workspace`/`--shell`/`--host-tools`/
+`--per-turn-think`, which a plain `run` cannot do. `just capture` is re-pointed at it; the env
+knobs are now flags (`CAPTURE_GGUF` → `--gguf`, `CAPTURE_CTX` → `--ctx`, one prompt via
+`--prompt`/`CAPTURE_PROMPT`). This fixture is the sanctioned output of that command. **On every
+submodule bump, it must be recaptured** against the freshly rebuilt binary (`just engine`, then
+`just capture`), because a rebase can apply cleanly and still be semantically wrong — and the
+handshake version/caps, the D12 turn-outcome fields, the `ts` monotonicity, and (P9) the
 `tool_request`-free bare wire are all part of what a recapture re-verifies. The P9 recapture
 caught the `hello` `caps` defect this way (see "D1 + the hello `caps` fix" above) — the very
 reason the rule exists. The recapture must also be copied to the bundled

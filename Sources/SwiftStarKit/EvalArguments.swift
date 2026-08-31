@@ -64,6 +64,13 @@ public enum EvalArguments {
         FlagSpec("--seed", takesValue: true),
         FlagSpec("--tools", takesValue: true),
         FlagSpec("--dry-run", takesValue: false),
+        // eval-cli task 8: reproduces `swiftstar-drive`'s exact P5 argv shape
+        // (`AgentSettings.bare`) — no `--workspace`/`--shell`/`--host-tools`/
+        // `--per-turn-think`. The retirement ruling: a plain `run` cannot
+        // produce the "caps/`tool_request`-free bare wire" `provenance.md`
+        // records as the golden fixture's invariant, because those four
+        // flags are unconditional otherwise.
+        FlagSpec("--bare", takesValue: false),
     ]
 
     /// `swiftstar-eval experiment`'s flag set (Task 7). Deliberately has no

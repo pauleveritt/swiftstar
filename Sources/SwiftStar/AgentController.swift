@@ -119,7 +119,6 @@ final class AgentController {
     private(set) var advertisedCaps: Set<String> = []
     private var startupTimeoutTask: Task<Void, Never>?
     @ObservationIgnored private var stopEscalationTask: Task<Void, Never>?
-    @ObservationIgnored private var orchestratorToolTask: Task<ToolCallbackResponse, Never>?
     var generation = 0
     /// Status samples for the active orchestrator turn. `TurnSpan` turns these
     /// into elapsed work time without counting the user's typing time. (D12;
@@ -176,7 +175,6 @@ final class AgentController {
         memoryTask?.cancel()
         traceTask?.cancel()
         stopEscalationTask?.cancel()
-        orchestratorToolTask?.cancel()
         try? logHandle?.close()
     }
 
@@ -429,8 +427,6 @@ final class AgentController {
         stderrTail = []
         stopEscalationTask?.cancel()
         stopEscalationTask = nil
-        orchestratorToolTask?.cancel()
-        orchestratorToolTask = nil
         interruptPending = false
         lastStatus = nil
         lastPrefillTPS = 0
@@ -601,8 +597,6 @@ final class AgentController {
             self.traceTask?.cancel()
             self.stopEscalationTask?.cancel()
             self.stopEscalationTask = nil
-            self.orchestratorToolTask?.cancel()
-            self.orchestratorToolTask = nil
             self.interruptPending = false
             self.lastFootprintBytes = nil
             // The engine's failure mode is exiting (stderr boot lines are
@@ -912,9 +906,11 @@ final class AgentController {
     func interrupt() {
         guard isTurnActive, !interruptPending else { return }
         if isGenerating {
+            // `AgentSession.interrupt()` cancels its own in-flight
+            // orchestrator tool task now (F5) — this type no longer holds a
+            // second handle to cancel.
             agentSession?.interrupt()
             interruptPending = true
-            orchestratorToolTask?.cancel()
             return
         }
         guard let process, let pipe = process.standardInput as? Pipe else { return }
@@ -933,7 +929,6 @@ final class AgentController {
         state = .stopping
         startupTimeoutTask?.cancel()
         stopEscalationTask?.cancel()
-        orchestratorToolTask?.cancel()
         workerTurn.cancelToolTask()
         interruptPending = false
         memoryTask?.cancel()
