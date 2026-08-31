@@ -240,6 +240,25 @@ One fork-ledger row:
   divergence #12). The DSML/DeepSeek block is **untouched** — the same way
   `dispatch` itself is handled; DeepSeek visibility is a separate decision,
   flagged here and not decided.
+
+  > **REVERSED 2026-08-31.** Kept as written, per `docs/sdd.md`, because the
+  > reversal is the useful record. "DeepSeek visibility is a separate decision,
+  > flagged here and not decided" was the decision — and deciding it by default
+  > made divergence #16 **unreachable for the model SwiftStar actually ships**.
+  > `agent_schemas_for` is not called by the DSML/DeepSeek prompt path, so
+  > `test`/`lint` were never advertised to DeepSeek V4 Flash at all. On
+  > 2026-08-30 that produced an A/B whose "treatment" arm had no treatment,
+  > read first as a 2.2x speedup and then as sampling variance — both wrong.
+  > Reversed in the engine by divergence #18 (`70400f5`), which threads
+  > `--shell`/`--host-tools` through the DSML prompt, plus a cross-family guard
+  > (`2a86c86`) pinning all four family builders to one tool set.
+  >
+  > The lesson generalizes past this row: **a schema the shipped prompt never
+  > builds is not a schema.** The same trap was caught a second time on
+  > 2026-08-31, when divergence #19's `--tools` filter was first wired into
+  > `agent_schemas_for` alone and would again have been dead code on DSML.
+  > Any change to the tool surface must be verified across all four families,
+  > not on the default path alone.
 - Tweak the `bash` schema description to say output is digested.
 - Golden recapture + provenance note (standing rule: every submodule bump owes a
   recapture).

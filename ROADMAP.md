@@ -16,6 +16,8 @@ into a second history of the phase table.
 
 - **In flight:** P24.4, the instrument-reconciliation cleanup cycle — see the
   P24 row.
+- **Shipped, unmeasured:** P27's `swiftstar-eval`. The CLI is in; the P24.3
+  paired bill it was built to run is not — see the P27 row.
 - **Parked:** Mellum, inactive until 2026-09-05 (Backlog, "Agent architecture
   and process"); P25 cycles 5–6 (live acceptance, SSD streaming), deferred by
   decision — see the P25 row.
@@ -53,6 +55,7 @@ into a second history of the phase table.
 | P22 | More models: Laguna XS + model switching | Laguna XS 2.1 as a first-class, choosable preset at parity with Laguna S — merge the unmerged `p13-laguna-xs-variant` branch (9 commits; its spec `2026-08-26-p13-laguna-xs-variant-design.md` lives on that branch), the completed live acceptance run, XS golden recapture — plus **model switching** (woven in): an "Apply this model" action that stops and re-spawns the agent with the new model, feasibility-/VariantGate-admitted *before* the stop (never kill a working session to switch to an infeasible model), transcript preserved, provenance per-spawn reflects the new model, pool re-spawns with it, switch refused mid-generation. XS is also the natural line for P20's small-ctx workers | **Closed.**<br>**(1) Laguna XS 2.1** — parity with Laguna S, merged 2026-08-27; live acceptance PASS, golden recapture. [Verdict](docs/superpowers/research/2026-08-27-p22-laguna-xs-acceptance-verdict.md), [recapture](docs/superpowers/research/2026-08-28-p22-xs-golden-recapture-verdict.md).<br>**(2) Model switching** ("Apply this model") — admission before stop; live-validated S→XS, an accidental XS→DeepSeek switch proved P25 Cycle 4b's admission denominator. [Verdict](docs/superpowers/research/2026-08-28-p22-model-switching-verdict.md) ([live](docs/superpowers/research/2026-08-28-p22-model-switching-live-validation.md)).<br>**(3) SSD streaming, Laguna line** — S resident at 20.53 GiB (~32.5 GiB saved); DFlash × SSD refused. [Verdict](docs/superpowers/research/2026-08-28-p22-ssd-across-the-line-verdict.md) ([live](docs/superpowers/research/2026-08-28-p22-ssd-across-the-line-live-validation.md)).<br>16 GB acceptance skipped by decision 2026-08-27, unconfirmed. |
 | P23 | Wire-level control | Per-turn think on the agent wire (`reasoning_effort`-style) **plus per-worker context for pool workers** (the small-ctx/RLM lever, descoped from P20 2026-08-27 and merged here). The think leg buys correctness and responsiveness — it bounds the observed think-to-the-wall failure and delivers the "fast reply"; its wall-clock ceiling is ~9.3%, so it is **not** a throughput lever. The per-worker-context leg carries the measured speed (4.2x prefill ceiling; ~6.15 GB → ~1.5 GB scratch per worker). One engine patch, **fork-ledger row #14** (P22's SSD widening took #13), one golden recapture. Spec: [`2026-08-28-p23-wire-level-control-design.md`](docs/superpowers/specs/2026-08-28-p23-wire-level-control-design.md) | **Implemented and closed 2026-08-28.** Spec: [design](docs/superpowers/specs/2026-08-28-p23-wire-level-control-design.md); full record: [wire-control research](docs/superpowers/research/2026-08-28-p23-wire-control-research.md).<br>**(1) Per-turn think** — `/quick`, `think_override` cap, `TurnThinkPolicy`; `TurnOutcome.sampler` records the effort actually used.<br>**(2) Per-worker context** — clamped to `[4096, parent]`, `sysprompt-<ctx>.kv`; fork-ledger row #14; golden recapture (also fixed a real ctx-swap data race and a stale `planned_bytes` drift, both traced in the research doc).<br>**Descoped:** warm-prefix routing (D11, stays Backlog); the "toolless" half of `/quick` (busts the KV prefix). **Deferred:** spec test 9 (think-to-the-wall regression) — no local model reproduces visible thinking; see the [repro attempt](docs/superpowers/research/2026-08-28-p23-think-to-the-wall-repro-attempt.md). |
 | P24 | Digested first-class tools | P9's deferred condensation-direction attack on prefill-tail cost (measured: one file re-read 31× = 37% of Σsuffix). Deterministic host-owned tools, in cycles: P24.1 windowed reads, P24.2 read-guard retirement, P24.3 run+digest tools, then P24.4 instrument reconciliation. `scout`, policy gating, and model-asks-human remain later ladder work. [Direction and re-scoping](docs/superpowers/research/2026-08-30-p24-direction-and-rescoping.md). | **(1) P24.1** — closed 2026-08-30; 799 tests; repeat rate 1.45→1.00. [Design](docs/superpowers/specs/2026-08-30-p24-1-window-honoring-reads-design.md), [measurement](docs/superpowers/research/2026-08-30-p24-1-window-honoring-after-measurement.md).<br>**(2) P24.2** — guard retired and `.pool` `readCache` removed; re-baselined. [Design](docs/superpowers/specs/2026-08-30-p24-2-read-guard-redecision-design.md).<br>**(3) P24.3 run+digest family** — landed on `main` 2026-08-30: host-owned `test`/`lint`, bounded `bash`, resolver, executor wiring, engine schemas, and tests. Golden recapture and paired-bill measurement remain outstanding.<br>**(4) P24.4** — next: reconcile the refusal-streak corrective and `toolCallBudget` timing between `swiftstar-agenttest` and the app. |
+| P27 | One eval CLI | `swiftstar-eval`: one CLI that runs an ad-hoc prompt, a `/quick` or the orchestrator through the app's own spawn path and hands every result to the same analyzer — replacing `swiftstar-drive` and `swiftstar-analyze`, with `swiftstar-agenttest` deferred to a second cycle | **CLI shipped 2026-08-31; the measurement it was built for has NOT run.** [Design](docs/superpowers/specs/2026-08-30-eval-cli-design.md), plans [1a](docs/superpowers/plans/2026-08-30-eval-cli-1a-kit-types.md) / [1b](docs/superpowers/plans/2026-08-30-eval-cli-1b-cli-and-extraction.md) / [1c](docs/superpowers/plans/2026-08-30-eval-cli-1c-the-bill.md).<br>**(1) The guard** — arms resolve to a full `SpawnRecord`; a run is refused when they differ by anything undeclared, or when the declared variable did not actually differ. Interleaved, seed-matched, no headline ratio.<br>**(2) The extraction** — the turn loop moved out of the 66 KB SwiftUI `AgentController` into a headless `AgentSession`; two source-text tests retired for behavioral ones.<br>**(3) Engine divergence #19** — `--tools`, cross-family.<br>**(4) Not done:** plan 1c (the P24.3 bill) and cycle 2. |
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
@@ -715,6 +718,21 @@ group's order is not a priority order.
   in-process access.*
 
 ### Evaluation and measurement
+
+- **Test-tier reliability, found during P27 (2026-08-31).** Three problems, all
+  in the harness rather than the product. (a) The integration tier cannot
+  reliably complete: runs wedge with a leaked `fake-ds4-agent` child whose
+  parent `swiftpm-testing-helper` then holds the SwiftPM `.build` lock — one
+  orphan survived 4h19m and starved every run in the session. (b)
+  `SubprocessRunnerTests.asyncRunDoesNotSerializeConcurrentCalls` and
+  `asyncRunTimesOutOnAHangingCommand` assert wall-clock bounds (2.0s) and fail
+  whenever the machine is busy; both pass in isolation in under 0.4s. A false
+  failure people learn to ignore is worse than no test. (c) The
+  `AgentSessionTests` fake captures are **hand-authored**, which `BRIEF.md`
+  forbids for exactly the reason it names — none contained the engine's boot
+  `ready`, and that omission hid a live defect that made every capture empty
+  (fixed in `424fddd`). *Reopens whenever the integration tier next blocks a
+  merge.*
 
 - **Orchestrate-loop generalization: does 93% hold on a second task?
   (arm 3 complete 2026-08-30 — verdict: signal, not confirmation; still

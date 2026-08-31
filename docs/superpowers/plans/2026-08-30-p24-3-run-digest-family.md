@@ -73,6 +73,12 @@ to run `test`/`lint`, digest `bash`, and preserve the existing app seam.
 Update `external/ds4/ds4_agent.c`, its C tests, and the fork ledger to advertise
 the schemas under `--host-tools`; preserve the existing DSML/DeepSeek block.
 
+> **REVERSED 2026-08-31.** "Preserve the existing DSML/DeepSeek block" is what
+> made divergence #16 unreachable for DeepSeek V4 Flash, the model SwiftStar
+> ships: the DSML prompt path does not call `agent_schemas_for`, so `test` and
+> `lint` were never advertised to it. Reversed by divergence #18 (`70400f5`)
+> and the cross-family guard (`2a86c86`). See the design doc's reversal note.
+
 ### 11. Fixture recapture
 
 Build the engine, recapture the agent fixtures, copy bundled resources, and
