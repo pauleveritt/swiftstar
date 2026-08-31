@@ -83,6 +83,17 @@ public enum EvalExperimentError: Error, Equatable {
     /// would let two things set the same axis, and whichever set it last
     /// would silently win.
     case seedIsNotAnAxis
+    /// `SpawnRecord.differingKeys(from:)` deliberately never emits `"argv"`
+    /// (see its doc comment) — it is derived from the typed fields, not an
+    /// axis of its own. A file that declared `variable: "argv"` would still
+    /// PARSE, and then `ArmDiff.admit` would refuse every run (nothing ever
+    /// differs by the literal key `"argv"`) with a message that never
+    /// mentions argv, which is a much later and much more confusing place to
+    /// discover the mistake. argv is recorded, for provenance, but never
+    /// diffed wholesale — the axes to declare instead are the typed fields it
+    /// is built from: `maxTokens`, `thinkBudget`, `seed`, `systemPromptHash`,
+    /// `runtimeFlags` (or the specific flag's own field, where one exists).
+    case argvIsNotAnAxis
 }
 
 /// The committed pre-registration for one `swiftstar-eval` run: what is being
@@ -129,8 +140,9 @@ public struct EvalExperiment: Codable, Equatable, Sendable {
     /// it as-is and never checks it against the real API. This is the one
     /// place that does: the Swift property names `SpawnRecord.differingKeys`
     /// actually uses, plus `"gitRef"` (the engine-ref special case
-    /// `ArmDiff.engineBuildKeys` covers). `seed` is deliberately absent —
-    /// see `EvalExperimentError.seedIsNotAnAxis`.
+    /// `ArmDiff.engineBuildKeys` covers). `seed` and `argv` are deliberately
+    /// absent — see `EvalExperimentError.seedIsNotAnAxis` and
+    /// `.argvIsNotAnAxis`.
     static let spawnRecordProperties: Set<String> = [
         "engineSHA", "engineDirty", "engineBinaryHash",
         "swiftstarSHA", "swiftstarDirty", "harnessBinaryHash",
@@ -139,7 +151,7 @@ public struct EvalExperiment: Codable, Equatable, Sendable {
         "sampler", "power", "thinkPolicy", "tools", "shellAllowed", "hostTools",
         "workspace", "workspaceRef", "osBuild", "wiredLimitBytes",
         "environment", "userDefaults", "captureDirectory", "startedAt",
-        "runIndex", "argv",
+        "runIndex",
     ]
 
     /// Either a single declared axis, or — when the file mistakenly lists
@@ -199,6 +211,9 @@ public struct EvalExperiment: Codable, Equatable, Sendable {
 
         guard variable != "seed" else {
             throw EvalExperimentError.seedIsNotAnAxis
+        }
+        guard variable != "argv" else {
+            throw EvalExperimentError.argvIsNotAnAxis
         }
         guard variable == "gitRef" || spawnRecordProperties.contains(variable) else {
             throw EvalExperimentError.unknownVariable(variable)

@@ -22,15 +22,19 @@ public enum FalsifierVerdict: String, Codable, Equatable, Sendable {
 /// and their spread carry the same information without inviting that.
 public enum EvalReport {
     /// `unrecorded` is deliberately not "success" — nothing was determined,
-    /// so a caller (a script, a CI gate) must not treat it as a pass. `2` is
-    /// the conventional "indeterminate" exit code, distinct from `0` (the
-    /// falsifier had its chance and the claim survived) and `1` (the
-    /// falsifier fired).
+    /// so a caller (a script, a CI gate) must not treat it as a pass; `2` is
+    /// the conventional "indeterminate" exit code. `claimFalsified` is a
+    /// SUCCESSFUL run that answered the question with "no" — the change did
+    /// not help. Exiting non-zero there would put a thumb on the scale
+    /// against ever recording that outcome, which is exactly the
+    /// self-deception this whole subsystem exists to prevent, so both
+    /// recorded verdicts — survives or falsified — exit `0`. Only the
+    /// absence of a recorded outcome is non-zero.
     public static func exitCode(for verdict: FalsifierVerdict) -> Int32 {
         switch verdict {
         case .unrecorded: return 2
         case .claimSurvives: return 0
-        case .claimFalsified: return 1
+        case .claimFalsified: return 0
         }
     }
 

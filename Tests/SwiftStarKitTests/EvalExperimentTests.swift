@@ -100,6 +100,44 @@ struct EvalExperimentTests {
         #expect(first.map(\.armID) == second.map(\.armID))
     }
 
+    @Test func refusesArgvAsTheVariable() throws {
+        #expect(throws: EvalExperimentError.argvIsNotAnAxis) {
+            _ = try EvalExperiment.parse(Self.json(variable: "\"argv\""), exploratory: false)
+        }
+    }
+
+    // Sibling success for refusesArgvAsTheVariable: one of the typed fields
+    // argv is built from (runtimeFlags) is a real, admitted axis.
+    @Test func admitsRuntimeFlagsInsteadOfArgv() throws {
+        let experiment = try EvalExperiment.parse(Self.json(variable: "\"runtimeFlags\""), exploratory: false)
+        #expect(experiment.variable == "runtimeFlags")
+    }
+
+    @Test func refusesAnUnknownVariable() throws {
+        #expect(throws: EvalExperimentError.unknownVariable("hosttools")) {
+            _ = try EvalExperiment.parse(Self.json(variable: "\"hosttools\""), exploratory: false)
+        }
+    }
+
+    // Sibling success for refusesAnUnknownVariable: the correctly-spelled
+    // property parses.
+    @Test func admitsAKnownVariable() throws {
+        let experiment = try EvalExperiment.parse(Self.json(variable: "\"hostTools\""), exploratory: false)
+        #expect(experiment.variable == "hostTools")
+    }
+
+    @Test func refusesAnUnknownMode() throws {
+        #expect(throws: EvalExperimentError.unknownMode("orchestrateee")) {
+            _ = try EvalExperiment.parse(Self.json(mode: "orchestrateee"), exploratory: false)
+        }
+    }
+
+    // Sibling success for refusesAnUnknownMode: a real EvalMode case parses.
+    @Test func admitsAKnownMode() throws {
+        let experiment = try EvalExperiment.parse(Self.json(mode: "orchestrate"), exploratory: false)
+        #expect(experiment.mode == .orchestrate)
+    }
+
     @Test func preregistrationCarriesQuestionAndFalsifier() throws {
         let experiment = try EvalExperiment.parse(Self.fixture("eval-valid.json"), exploratory: false)
         #expect(experiment.preregistration.contains(experiment.question))

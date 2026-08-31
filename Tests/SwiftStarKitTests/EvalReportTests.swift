@@ -78,8 +78,14 @@ struct EvalReportTests {
         #expect(report.contains("VERDICT: unrecorded"))
     }
 
+    // Both recorded verdicts exit zero: claimFalsified is a successful run
+    // that answered "no" — a non-zero exit there would put a thumb on the
+    // scale against ever recording that outcome, which is exactly the
+    // self-deception this subsystem exists to prevent. Only `.unrecorded`
+    // (no evidence was produced at all) is non-zero.
     @Test func recordedVerdictExitsZero() {
         #expect(EvalReport.exitCode(for: .claimSurvives) == 0)
+        #expect(EvalReport.exitCode(for: .claimFalsified) == 0)
     }
 
     @Test func attemptNumberIsPrinted() {
