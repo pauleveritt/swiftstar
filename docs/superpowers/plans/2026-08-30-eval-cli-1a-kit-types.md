@@ -1,3 +1,9 @@
+---
+phase: P27
+cycle: eval-cli-1a-kit-types
+lifecycle: active
+---
+
 # `swiftstar-eval` 1a: the pure types
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use

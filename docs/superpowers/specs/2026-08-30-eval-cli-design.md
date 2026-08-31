@@ -339,6 +339,15 @@ Q&A. `swiftstar-drive` and `swiftstar-analyze` are deleted at the end of it.
 env-knob plumbing and its private loop. `run-config.json` is replaced by the
 same `provenance.md` plus `SpawnRecord` every other run writes.
 
+**Superseded 2026-08-30, same day, by events on `main`.** The paragraph below
+argued that cycle 2 would close P24's cleanup item (4). It will not: while this
+branch was in flight, `main`'s P24.4 (`8077883`, "reconcile harness refusal
+behavior with product") closed that item independently and deleted
+`ToolRefusalTracker` outright. Cycle 2's case is now only the one made
+elsewhere in this document — one spawn path, so an eval and the app cannot
+drift. Kept as written, per `docs/sdd.md`, because the reasoning was sound on
+the evidence available and the reversal is the useful record.
+
 **Cycle 2 closes P24's cleanup item (4).** Verified 2026-08-30:
 `ToolRefusalTracker` and `ToolCallBudgetTracker` (`14bbe70`, `29d2d4b`) unify
 the app and the pool — `AgentController` and `PoolOrchestrator` both use them —

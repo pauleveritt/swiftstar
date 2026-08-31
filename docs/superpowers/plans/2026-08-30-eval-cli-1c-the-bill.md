@@ -1,3 +1,9 @@
+---
+phase: P27
+cycle: eval-cli-1c-the-bill
+lifecycle: active
+---
+
 # `swiftstar-eval` 1c: the P24.3 paired bill
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
@@ -101,9 +107,16 @@ live, records the verdict either way, and writes the decision record.
 ### Task 3: The amendments and the close
 
 **Files:**
-- Modify: `docs/superpowers/plans/2026-08-30-p24-3-run-digest-family.md`
-  (lines 25, 1398, 1405, the fork-ledger row 15, and 1550)
+- Modify: `docs/superpowers/specs/2026-08-30-p24-3-run-digest-family-design.md:240,254`
+- Modify: `docs/superpowers/plans/2026-08-30-p24-3-run-digest-family.md:74`
 - Modify: `ROADMAP.md`
+
+**Note, 2026-08-30:** these targets moved. The original plan carried the claim
+at lines 25, 1398, 1405, 1550 and in fork-ledger row 15 — but `main`'s
+`c89f908` ("archive legacy plans and enforce current plan layout") rewrote that
+plan from 1,553 lines to about 90, and the surviving statements of the decision
+are the three cited above. Amend where the claim now lives, not where it lived
+when this plan was written.
 
 - [ ] **Step 1: Record the DSML reversal** beside each original, dated, per
       `docs/sdd.md`'s "kept as it was written" — never edited over. The
@@ -132,8 +145,14 @@ live, records the verdict either way, and writes the decision record.
 - **Spec coverage (this plan):** the Task 12 bill → Tasks 1, 2. Amendments
   owed → Task 3.
 - **Cycle 2 is not here.** Absorbing `swiftstar-agenttest` onto `AgentSession`
-  — which is also what closes P24's cleanup item (4) — gets its own spec and
-  plan once this cycle's evidence is in.
+  gets its own spec and plan once this cycle's evidence is in.
+- **Correction, 2026-08-30:** the spec argued that cycle 2 would close P24's
+  cleanup item (4), the refusal-streak and `toolCallBudget` divergences. It no
+  longer will — `main`'s P24.4 (`8077883`, "reconcile harness refusal behavior
+  with product") closed that item independently while this branch was in
+  flight, and deleted `ToolRefusalTracker` in the process. Cycle 2's remaining
+  case is the one the spec makes elsewhere: one spawn path, so an eval and the
+  app cannot drift. The ROADMAP row must not claim credit for P24.4's work.
 - **The one judgement call left to the runner** is Task 2 Step 4: the
   falsifier is a human verdict, and the tool deliberately cannot compute it.
   What the tool guarantees is that the verdict is recorded, evidenced, and

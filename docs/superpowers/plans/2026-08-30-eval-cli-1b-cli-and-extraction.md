@@ -1,3 +1,9 @@
+---
+phase: P27
+cycle: eval-cli-1b-cli-and-extraction
+lifecycle: active
+---
+
 # `swiftstar-eval` 1b: the engine flag, the extraction, the CLI
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
