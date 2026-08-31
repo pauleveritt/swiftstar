@@ -90,18 +90,27 @@ final class AgentController {
     /// `runningPid` is computed over it, and `MainView` re-points
     /// Metrics/Diagnostics when that changes.
     var process: Process?
-    private var parser = PoolWireParser()
+    /// The headless single-turn loop (eval-cli task 2): owns the actual
+    /// `Process`/pipes/wire-parsing/tool-callback answering that used to live
+    /// directly in this type's `consumeWire`/`send`/`writeToolResult`/
+    /// `interrupt`/`stopAgent`. This type now keeps only view state
+    /// (`transcript`, `state`, the telemetry readout) and consumes the
+    /// session's callbacks — see `startAgent`. A restart replaces this with a
+    /// brand-new session (mirrors the old "a restart is a fresh wire"
+    /// invariant); `AgentPoolTurnLoop.swift` (untouched by this task — its own
+    /// header says its handles cannot leave the app target) still reads
+    /// `process` directly for worker prompts until a later task seams the
+    /// pool loop behind this same session.
+    private var agentSession: AgentSession?
     /// The capabilities the engine's `hello` advertised (P23, D3): the app
     /// records what was advertised so it can gate outbound feature fields.
     /// `"think_override"` gates per-turn think sends; `/quick` is refused
-    /// without it. Reset per spawn alongside the parser.
+    /// without it. Reset per spawn; now populated from `AgentSession`'s
+    /// `onEvent` callback (`.hello`'s own carried capabilities) rather than a
+    /// parser this type no longer owns.
     private(set) var advertisedCaps: Set<String> = []
-    private var stdoutTask: Task<Void, Never>?
-    private var stderrTask: Task<Void, Never>?
     private var startupTimeoutTask: Task<Void, Never>?
     var generation = 0
-    // D12 turn-outcome state.
-    private var outcomeBuilder: TurnOutcomeBuilder?
     // P11 (D4) worker-turn state: everything that exists only while one
     // worker turn is in flight, consolidated into one value (item 1 of the
     // P22 cleanup) so there is exactly one place that creates/clears it —
@@ -118,9 +127,6 @@ final class AgentController {
     // read is tracked. Same treatment as `outcomeBuilder`, which is mutated
     // just as often (per wire event) and stays tracked.
     var workerTurn = ActiveWorkerTurn()
-    private var orchestratorToolBudget = ToolCallBudgetTracker(
-        budget: ToolCallBudgetTracker.defaultBudget)
-    private var sentInterrupt = false
     var buildSHA = "unknown"
     private let logHandle: FileHandle?
 
@@ -248,78 +254,10 @@ final class AgentController {
         return base.appendingPathComponent("captures/live/\(name)", isDirectory: true)
     }
 
-    /// The P5-provenance shape, written once at spawn (the manifest that lets a
-    /// reader trust and reproduce the capture). Item 6 (P22 cleanup): the
-    /// assembly (title + bulleted facts + closing note) is shared with
-    /// `swiftstar-drive`'s `CaptureWriter` via `CaptureProvenance`; the facts
-    /// themselves come from `SpawnRecord.provenanceFacts` (eval-cli task 1) —
-    /// the same record an arm-to-arm diff will compare, so this manifest and
-    /// that comparison can never quietly disagree about what a spawn was.
-    private static func renderLiveProvenance(_ record: SpawnRecord, at dir: URL) throws {
-        let text = CaptureProvenance.render(
-            title: "Live session provenance",
-            facts: record.provenanceFacts,
-            closingNote: """
-            Captured live by the SwiftStar app (agent session). `wire.ndjson` and
-            `agent.stderr` are the verbatim raw streams; `agent.trace` is the engine's
-            `--trace` channel. Wire `ts` is monotonic-since-boot (deltas only); this
-            file anchors wall-clock.
-            """)
-        try text.write(to: dir.appendingPathComponent("provenance.md"), atomically: true, encoding: .utf8)
-    }
-
-    /// Whether `dir`'s git working tree has uncommitted changes. Best-effort:
-    /// a non-repo or unreadable tree reads as clean rather than failing the
-    /// spawn — this is provenance, not a gate.
-    private static func repoDirty(_ dir: URL) -> Bool {
-        guard let result = try? GitProcess.run(["status", "--porcelain"], in: dir),
-              result.exit == 0, !result.timedOut else { return false }
-        return !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    /// Assemble this spawn's `SpawnRecord` from the settings/facts already
-    /// resolved for this spawn (D12: engine SHA read once per spawn) plus a
-    /// handful of cheap app-side lookups (this app's own git identity, the OS
-    /// build string, the wired-memory advisory). Fields that need dedicated
-    /// machinery this app doesn't have yet (binary hashes, a full model-file
-    /// hash) are left at honest empty/zero defaults — they don't feed
-    /// `provenanceFacts`, and wiring them is later eval-cli work, not this
-    /// task. `tools` (eval-cli task 1) is `settings.tools ?? []` — the
-    /// declared `--tools` filter, not a caller-supplied constant: a record
-    /// whose `tools` claims a treatment the engine never applied is the exact
-    /// defect this subsystem exists to prevent.
-    private func makeSpawnRecord(captureDir: URL, startedAt: Date) -> SpawnRecord {
-        let harnessRoot = AgentController.projectRoot()
-        let env = ProcessInfo.processInfo.environment
-        var allowlistedEnv: [String: String] = [:]
-        for key in SpawnRecord.environmentAllowlist {
-            if let value = env[key] { allowlistedEnv[key] = value }
-        }
-        var allowlistedDefaults: [String: String] = [:]
-        for key in SpawnRecord.userDefaultsKeys {
-            if let value = UserDefaults.standard.string(forKey: key) {
-                allowlistedDefaults[key] = value
-            } else if UserDefaults.standard.object(forKey: key) != nil {
-                allowlistedDefaults[key] = String(UserDefaults.standard.bool(forKey: key))
-            }
-        }
-        let modelBytes = try? FileManager.default.attributesOfItem(atPath: settings.modelPath.path)[.size] as? Int64
-        return SpawnRecord.from(
-            settings: settings,
-            engineSHA: buildSHA, engineDirty: AgentController.repoDirty(settings.engineDir),
-            engineBinaryHash: "",
-            swiftstarSHA: harnessRoot.map { AgentController.submoduleSHA($0) } ?? "unknown",
-            swiftstarDirty: harnessRoot.map { AgentController.repoDirty($0) } ?? false,
-            harnessBinaryHash: "",
-            systemPromptHash: settings.systemPrompt.map { ToolDigest.sha256($0) } ?? "",
-            modelBytes: modelBytes ?? 0, modelHash: "",
-            variantID: AgentController.effectiveSelectedVariantID(),
-            tools: settings.tools ?? [], osBuild: ProcessInfo.processInfo.operatingSystemVersionString,
-            wiredLimitBytes: VariantAdmissionSource.wiredLimitAdvisoryBytes(),
-            workspaceRef: "",
-            environment: allowlistedEnv, userDefaults: allowlistedDefaults,
-            captureDirectory: captureDir.path, startedAt: startedAt, runIndex: 0)
-    }
+    // `renderLiveProvenance`/`repoDirty`/`makeSpawnRecord` moved into
+    // `AgentSession` (eval-cli task 2, `AgentSession.start()`): it now owns
+    // both the `SpawnRecord` assembly and the `provenance.md` render, since it
+    // owns the spawn itself.
 
     func startIfNeeded() {
         if state == .stopped { startAgent() }
@@ -406,16 +344,11 @@ final class AgentController {
         state = .starting
         generation += 1
         let gen = generation
-        // A restart is a fresh wire: the handshake state must reset or the new
-        // session's hello is misread as a second handshake (stuck in
-        // .starting forever). The transcript is deliberately kept (history,
-        // like the Chat surface's EngineController, retired 2026-08-26);
-        // stderrTail is reset so a failure message never pairs a new session
-        // with a stale tail.
-        parser = PoolWireParser()
-        // P23 (D3): caps are a property of the spawned engine build, so a
-        // re-spawn (including a model switch to a different engine dir) must
-        // not carry the previous session's advertisement forward.
+        // A restart is a fresh wire — a brand-new `AgentSession` below, not a
+        // reused one (mirrors the old "reset the parser" invariant). The
+        // transcript is deliberately kept (history, like the Chat surface's
+        // EngineController, retired 2026-08-26); stderrTail is reset so a
+        // failure message never pairs a new session with a stale tail.
         advertisedCaps = []
         stderrTail = []
         lastStatus = nil
@@ -424,60 +357,44 @@ final class AgentController {
         lastPlannedBytes = nil
         lastPlannedModel = nil
         lastFootprintBytes = nil
-        outcomeBuilder = nil
-        sentInterrupt = false
-        orchestratorToolBudget = ToolCallBudgetTracker(
-            budget: ToolCallBudgetTracker.defaultBudget)
         // A restart is a fresh engine = a fresh pool: stale pending workers and
         // consult bookkeeping must not survive into the new session.
         poolState = PoolState(workerCapacity: SubagentPoolSize.workerCapacity(AgentController.poolSize()))
         workerTurn.watchdog?.cancel()
         workerTurn = ActiveWorkerTurn()
-        // P24.1 (D3/D5): the executor is a process-lifetime `static let`, so it
-        // cannot take the context size at construction, and its `more`
-        // continuations would otherwise outlive the session that made them.
+        // P24.1 (D3/D5): the pool worker executor is a process-lifetime
+        // `static let` (still used by `AgentPoolTurnLoop.swift`), so it cannot
+        // take the context size at construction, and its `more` continuations
+        // would otherwise outlive the session that made them. `AgentSession`
+        // owns its OWN executor instance for the orchestrator turn (below) —
+        // deliberately not shared with this static, so a later multi-session
+        // caller (the eval CLI) cannot leak one session's read-cache state
+        // into another's.
         Self.hostToolExecutor.setContextSize(settings.contextSize)
         Self.hostToolExecutor.resetReadState()
         // D12: the build identification is resolved once per spawn (the
-        // submodule SHA — the same fact the capture provenance records).
+        // submodule SHA — the same fact the capture provenance records, and
+        // what `AgentPoolTurnLoop.swift` reads for a worker's own record).
         buildSHA = AgentController.submoduleSHA(settings.engineDir)
 
         // Live session capture (P7's deferred "live wiring", scoped 2026-08-26):
         // persist the agent's wire + trace + stderr so the session can be read
         // from disk — analysing prompts, tool calls, context — without
-        // SWIFTSTAR_LOG. The trace is written by the engine itself via
-        // `--trace`; the wire/stderr are teed in the drain loops below.
-        let captureEnabled = UserDefaults.standard.object(forKey: "sessionCaptureEnabled") as? Bool ?? true
+        // SWIFTSTAR_LOG. `AgentSession.start()` now owns writing the wire/
+        // stderr tees and `provenance.md` (binding rule 5: on disk before this
+        // type's callbacks ever see a line) — capture is no longer optional
+        // (the `sessionCaptureEnabled` toggle this app used to honor has no
+        // equivalent in `AgentSession`'s contract; a caller that always
+        // captures cannot regress into the capture-integrity bugs the P5/P22
+        // captures were built to prevent).
         pruneStaleCaptures()  // retention policy: see the AgentController extension below
         let captureDir = Self.captureDirectory()
-        if captureEnabled {
-            try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
-            // P23: provenance is a per-SPAWN fact, and no override can have
-            // gone out yet at spawn time — the per-turn efforts live in
-            // outcomes.ndjson, which is where a per-turn fact belongs. The
-            // record's `sampler`/`power` read off the same settings argv is
-            // built from, rather than a hardcoded `think=default` that used to
-            // sit here regardless of whether the spawn passed `--nothink`.
-            let spawnRecord = makeSpawnRecord(captureDir: captureDir, startedAt: Date())
-            try? Self.renderLiveProvenance(spawnRecord, at: captureDir)
-            settings.tracePath = captureDir.appendingPathComponent("agent.trace")
-        }
-        outcomesURL = captureEnabled ? captureDir.appendingPathComponent("outcomes.ndjson") : nil
-        let captureWireURL = captureDir.appendingPathComponent("wire.ndjson")
-        let captureStderrURL = captureDir.appendingPathComponent("agent.stderr")
-        // `FileHandle(forWritingAtPath:)` opens an existing file — it does not
-        // create one. The drains open it lazily, so create the empty files here
-        // or the tees silently write nothing for the whole session. Capture
-        // disabled = no files created, so the lazy opens return nil and the
-        // tees no-op (P19.1 D3).
-        if captureEnabled {
-            FileManager.default.createFile(atPath: captureWireURL.path, contents: nil)
-            FileManager.default.createFile(atPath: captureStderrURL.path, contents: nil)
-            // outcomes.ndjson is appended the same lazy way (appendOutcome opens
-            // it per turn), so it needs the same up-front create or every turn
-            // outcome is silently dropped for the whole session.
-            if let outcomesURL { FileManager.default.createFile(atPath: outcomesURL.path, contents: nil) }
-        }
+        outcomesURL = captureDir.appendingPathComponent("outcomes.ndjson")
+        // The engine's OWN `--trace` side-channel (independent of
+        // `AgentSession`'s wire/stderr tee — see `AgentCommand.argv`) still
+        // needs a path threaded through `settings` before argv is built;
+        // `liveCaptureURLs` (Diagnostics' live-analysis source) reads it back.
+        settings.tracePath = captureDir.appendingPathComponent("agent.trace")
 
         // P8: stage the Superpowers skills into the workspace (progressive
         // disclosure, D2/D3) and pass the deterministic bootstrap index via
@@ -497,100 +414,51 @@ final class AgentController {
         settings.systemPrompt = SuperpowersBootstrap.build(skillsDir: skillsDir).indexPrompt
             + "\n\n" + DispatchPreferenceRule.text
 
-        let process = Process()
-        process.executableURL = binary
-        // P11 pool: one orchestrator + one worker session in the SAME engine,
-        // so `/orchestrate` (and the model's dispatch tool) run subagents
-        // without a second model process. +1 session ≈ +8.7 GB at ctx 50k
-        // (Correction 2: N × (KV + ~6.1 GB scratch)); the alternative — a
-        // second 48 GB model load — is worse and was the orchestrate hang.
-        let pool = AgentController.poolSize()
-        process.arguments = PoolEngine.argv(settings: settings, workers: pool)
-        process.currentDirectoryURL = settings.engineDir
-        // Metal shaders load cwd-relative, and the engine chdir's to
-        // `--workspace`; point them at absolute paths (F1) so Metal resolves.
-        process.environment = AgentCommand.engineEnvironment(
-            engineDir: settings.engineDir, lockFile: "/tmp/ds4-agent.lock",
-            base: ProcessInfo.processInfo.environment)
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        process.terminationHandler = { [weak self] p in
-            Task { @MainActor in
-                guard let self else { return }
-                self.process = nil
-                self.memoryTask?.cancel()
-                self.lastFootprintBytes = nil
-                // The engine's failure mode is exiting (stderr boot lines are
-                // normal — the memory plan lives there); a mid-start or
-                // mid-turn exit is a failure carrying the stderr tail.
-                if self.state == .starting || self.state == .generating {
-                    self.state = .failed("agent exited (\(p.terminationStatus)): \(self.stderrTail.joined(separator: "\n"))")
-                } else if self.state != .stopped {
-                    self.state = .stopped
-                }
+        let session = AgentSession(
+            settings: settings, tools: settings.tools ?? [], captureDirectory: captureDir,
+            family: AgentController.runningModelFamily())
+        session.onEvent = { [weak self] event in
+            guard let self, gen == self.generation else { return }
+            self.applyAgentEvent(event)
+        }
+        session.onOutcome = { [weak self] outcome in
+            guard let self, gen == self.generation else { return }
+            self.finishTurn(outcome)
+        }
+        session.onRefusal = { [weak self] line in
+            guard let self, gen == self.generation else { return }
+            self.state = .failed("wire handshake refused: \(line)")
+            self.agentSession?.stop()
+        }
+        session.onStderrLine = { [weak self] line in
+            guard let self, gen == self.generation else { return }
+            self.stderrTail.append(line)
+            if self.stderrTail.count > 20 { self.stderrTail.removeFirst(self.stderrTail.count - 20) }
+        }
+        session.onExit = { [weak self] status, tail in
+            guard let self, gen == self.generation else { return }
+            self.process = nil
+            self.memoryTask?.cancel()
+            self.lastFootprintBytes = nil
+            // The engine's failure mode is exiting (stderr boot lines are
+            // normal — the memory plan lives there); a mid-start or mid-turn
+            // exit is a failure carrying the stderr tail.
+            if self.state == .starting || self.state == .generating {
+                self.state = .failed("agent exited (\(status)): \(tail.joined(separator: "\n"))")
+            } else if self.state != .stopped {
+                self.state = .stopped
             }
         }
-        self.process = process
+        self.agentSession = session
         do {
-            try process.run()
+            _ = try session.start()
         } catch {
-            self.process = nil
+            self.agentSession = nil
             state = .failed("spawn failed: \(error)")
             return
         }
+        self.process = session.process
         startMemoryPolling()
-
-        // Item 6 (P22 cleanup): both tees route through `SafeAppendFile`
-        // (shared with swiftstar-agenttest's own wire.ndjson capture) instead
-        // of a raw `FileHandle(forWritingAtPath:)` + manual `write(contentsOf:)`
-        // — closing the exact "lazy open against a path that was never
-        // created silently no-ops the whole session" bug class at the type
-        // level. Gated on `captureEnabled` here (not inside `SafeAppendFile`,
-        // which always creates its path): disabled capture must create
-        // nothing, and `SafeAppendFile` has no notion of that toggle — only
-        // the caller does.
-        stdoutTask?.cancel()
-        stdoutTask = Task.detached(priority: .utility) { [weak self] in
-            let handle = stdoutPipe.fileHandleForReading
-            let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureWireURL.path) : nil
-            var lines = LineBuffer()
-            while !Task.isCancelled {
-                let data = handle.availableData
-                if data.isEmpty { break }  // EOF: the child closed stdout
-                for lineData in lines.append(data) {
-                    capture?.append(lineData)
-                    capture?.append(Data([0x0A]))
-                    let line = String(decoding: lineData, as: UTF8.self)
-                    await self?.consumeWire(line, generation: gen)
-                }
-            }
-            // An incomplete final line is not a wire record. Keep EOF
-            // handling diagnostic-only; the old reader discarded this tail.
-            _ = lines.finish()
-            capture?.close()
-        }
-
-        stderrTask?.cancel()
-        stderrTask = Task.detached(priority: .utility) { [weak self] in
-            let handle = stderrPipe.fileHandleForReading
-            let capture: SafeAppendFile? = captureEnabled ? SafeAppendFile(path: captureStderrURL.path) : nil
-            var lines = LineBuffer()
-            while !Task.isCancelled {
-                let data = handle.availableData
-                if data.isEmpty { break }
-                for lineData in lines.append(data) {
-                    capture?.append(lineData)
-                    capture?.append(Data([0x0A]))
-                    await self?.consumeStderr(String(decoding: lineData, as: UTF8.self), generation: gen)
-                }
-            }
-            _ = lines.finish()
-            capture?.close()
-        }
 
         startupTimeoutTask?.cancel()
         startupTimeoutTask = Task { [weak self] in
@@ -598,55 +466,30 @@ final class AgentController {
             guard let self, !Task.isCancelled else { return }
             if self.state == .starting {
                 self.state = .failed("agent did not handshake within 60s")
-                self.process?.terminate()
+                self.agentSession?.stop()
             }
         }
     }
 
-    private func consumeWire(_ line: String, generation: Int) async {
-        guard generation == self.generation else { return }
-        guard let poolEvent = parser.feed(line) else { return }
-        let event = poolEvent.event
-
-        // P11 (D1/D4): worker-tagged events belong to the in-flight worker
-        // turn, not the orchestrator's transcript/outcome.
-        if poolEvent.worker != .orchestrator {
-            await handleWorkerEvent(worker: poolEvent.worker, event: event, generation: generation)
-            return
-        }
-
-        // P11 (D6): feed the rolling digest with every wire event (tool-call
-        // names) so the packet-maker's Layer 1 input is not empty.
-        rollingDigest = RollingDigestReducer.apply(rollingDigest, event: poolEvent)
-
-        // Every event feeds the outcome builder (it ignores what it does not
-        // need); the record spans the whole turn, not just tool events.
-        outcomeBuilder?.apply(event)
+    /// The orchestrator-turn view-state reaction to one parsed wire event
+    /// (`AgentSession.onEvent`): state transitions, the telemetry readout, and
+    /// the transcript. Was the non-tool-request part of `consumeWire`'s
+    /// switch; tool-request handling itself now lives entirely inside
+    /// `AgentSession` (it answers the callback itself — the app must not
+    /// re-parse or re-answer the wire, which is the duplication eval-cli task
+    /// 2 exists to remove).
+    private func applyAgentEvent(_ event: AgentEvent) {
+        rollingDigest = RollingDigestReducer.apply(
+            rollingDigest, event: PoolWireEvent(worker: .orchestrator, event: event))
         switch event {
-        case .hello:
-            // P23 (D3): record what the engine advertised so per-turn feature
-            // fields are gated on the send, never assumed.
-            advertisedCaps = parser.optionalCaps
+        case .hello(_, let caps):
+            advertisedCaps = Set(caps)
             if state == .starting { state = .ready }
         case .status(let snapshot):
-            // D6: the status line carries the worker's state, but it is NOT
-            // the turn-end gate — the turn-end `ready` is (see `.ready`
-            // below). Flipping state → .ready here on `state == "idle"`
-            // raced that ready: the stdout drain awaits consumeWire per
-            // line (separate main-actor hops), so between the idle status
-            // and the turn-end ready a send() could overwrite the prior
-            // turn's outcomeBuilder before the ready finished it — the
-            // record was lost and the delayed ready misattributed. The wire
-            // guarantees ready follows idle (json-events.md), and the
-            // interrupt path emits ready too, so gating on ready alone is
-            // safe. The status event still feeds the outcome builder above.
-            // It also feeds the bottom status bar: the snapshot is kept as-is
-            // and its rates are ratcheted (never blanked by a zero).
             onTelemetry?(.status(snapshot))
             lastStatus = snapshot
             lastPrefillTPS = AgentStatusText.ratchet(previous: lastPrefillTPS, new: snapshot.prefillTPS)
             lastGenTPS = AgentStatusText.ratchet(previous: lastGenTPS, new: snapshot.genTPS)
-            break
         case .ready(let plannedBytes, _, _, _):
             if let plannedBytes {
                 lastPlannedModel = settings.modelPath.lastPathComponent
@@ -655,141 +498,47 @@ final class AgentController {
             onTelemetry?(.ready(plannedBytes: plannedBytes, stopReason: nil, generated: nil, ctxUsed: nil))
             if state == .starting { state = .ready }
             else if state == .generating { state = .ready }
-            // D12: a turn-end ready finishes the record. The builder is nil
-            // at startup, so a startup ready is a no-op; a turn-end ready
-            // (after send() opened a builder) finishes unconditionally —
-            // TurnOutcomeBuilder.finish defaults a nil wire stop_reason to
-            // .eos, so a pre-D12 wire (or any ready omitting the field) still
-            // closes the record rather than orphaning it. The app's own
-            // interrupt beats the wire's word for the reason.
-            if let builder = outcomeBuilder {
-                let outcome = builder.finish(appStopReason: sentInterrupt ? .interrupt : nil)
-                outcomeBuilder = nil
-                lastTurnOutcome = outcome
-                completedTurns += 1
-                log("turn outcome: \(outcome)")
-                appendOutcome(outcome)
-                // Freeze the turn's summary onto its reply bubble. Both figures
-                // come off the outcome, which computed them together from the
-                // status stream the builder was already being fed (:578) — the
-                // controller keeps no accumulator of its own, so there is no
-                // opportunity here to pair a rate with the wrong token count.
-                // `promptTPS` is the turn-end ratchet, matching the status bar;
-                // a turn with no usable decode work falls back to the engine's
-                // last reported rate rather than a fabricated average.
-                let summary = TurnSummary(
-                    promptTPS: lastPrefillTPS,
-                    decodeTPS: outcome.decodeTPS ?? lastGenTPS,
-                    generatedTokens: outcome.generatedTokens,
-                    ctxUsed: outcome.ctxUsed)
-                transcript.attachSummary(summary)
-                // The status bar's Prompt/Decode readout resets at turn end: a
-                // permanent "last observed" must not pose as "current" while
-                // the agent idles between turns (send() also zeros at the next
-                // turn's start — this covers the idle window).
-                lastPrefillTPS = 0
-                lastGenTPS = 0
-            }
-            // P11 (D4): the orchestrator's turn ended — run any workers it
-            // dispatched.
-            drainQueuedWorkers()
         case .text, .think, .tool:
             transcript.apply(event)
-        case .toolRequest(let idx, let name, let params):
-            guard orchestratorToolBudget.admit() else {
-                let response = ToolCallbackResponder.budgetExceeded(idx: idx)
-                writeToolResult(response)
-                outcomeBuilder?.recordHostVerdict(
-                    idx: idx, ok: false, mutations: [], exitStatus: nil,
-                    outputDigest: nil, validationRan: false)
-                rollingDigest = RollingDigestReducer.recordHostVerdict(
-                    rollingDigest, mutations: [], exitStatus: nil, validationRan: false)
-                return
-            }
-            if name == "dispatch" {
-                // P11 (D5) / P20: admit or refuse one dispatch call. The pure
-                // `DispatchAdmission.decide` gate collapses the three old
-                // refusal branches into one `.refused` case, so EVERY refusal
-                // records a host verdict (`.rejected`) — the dead-letter fix.
-                // Before this, the "malformed dispatch" and "pool full"
-                // branches wrote the result line but skipped
-                // `recordHostVerdict`, leaving a refused dispatch as
-                // "emitted" only in the turn outcome.
-                let decision = DispatchAdmission.decide(
-                    params: params, digest: rollingDigest, loaded: [:],
-                    implementer: settings.modelPath.lastPathComponent,
-                    poolState: poolState,
-                    dumb: UserDefaults.standard.bool(forKey: "dispatchDumb"))
-                // Side effects the decision implies stay here; the wire result
-                // and the outcome verdict are composed together by
-                // `DispatchAdmission.apply` so neither can be written without
-                // the other (the dead letter was exactly that split).
-                switch decision {
-                case .refused(let reason):
-                    log("dispatch: refused (\(reason))")
-                case .enqueue(let packet, let worker):
-                    poolState = PoolScheduler.apply(poolState, .enqueue(packet: packet))
-                    log("dispatch: enqueued worker \(worker.rawValue)")
-                }
-                writeToolResult(DispatchAdmission.apply(decision, idx: idx, into: &outcomeBuilder))
-            } else {
-                // P9: the host owns execution. Route the request through the
-                // responder (consent-enforced, condenses via ToolResultCondenser,
-                // records the host facts), write the `tool_result` line to the
-                // agent's stdin, and feed the host facts into the open
-                // TurnOutcomeBuilder. The engine blocks on the result line, so
-                // the wire itself is still request→result; but item 3 (P22
-                // cleanup) made `execute` genuinely async (a `bash` call awaits
-                // `SubprocessRunner`'s async `run`) so a long-running command no
-                // longer blocks the MainActor — this `await` is a real
-                // suspension point, not just the actor-hop the outer call
-                // already had.
-                let response = await ToolCallbackResponder.respond(
-                    idx: idx, name: name, params: params,
-                    workspace: settings.workspace, shellAllowed: settings.shellAllowed,
-                    execute: Self.executeHostTool)
-                // Reentrancy guard (item 3): freeing the MainActor during the
-                // await above means Stop/Restart became reachable mid-tool-call
-                // in a way they weren't when this was synchronous. A restart
-                // bumps `generation` and resets poolState/outcomeBuilder/
-                // rollingDigest for a brand-new session — folding this stale
-                // response into that new state (or writing its tool_result to
-                // the NEW engine's stdin) would corrupt it, so bail before
-                // touching any of it. A plain Stop (no restart) doesn't bump
-                // `generation`; `writeToolResult` itself is written to tolerate
-                // that (see its doc).
-                guard generation == self.generation else { return }
-                writeToolResult(response)
-                outcomeBuilder?.recordHostVerdict(
-                    idx: idx, ok: response.ok,
-                    mutations: response.mutations, exitStatus: response.exitStatus,
-                    outputDigest: response.outputDigest, validationRan: response.validationRan)
-                rollingDigest = RollingDigestReducer.recordHostVerdict(
-                    rollingDigest, mutations: response.mutations,
-                    exitStatus: response.exitStatus, validationRan: response.validationRan)
-            }
-        case .queued, .ignored:
+        case .queued, .ignored, .toolRequest, .toolRequestRefused, .refused:
             break
-        case .toolRequestRefused(let idx, let reason):
-            // P9: a malformed tool_request (the engine's protocol violation)
-            // must not hang the wire. The engine emits one request then blocks
-            // on its result, so skipping the result (as the parser's old
-            // `.ignored` did) deadlocks. Write an `ok:false` `tool_result`
-            // (idx best-effort, 0 if unparseable) so the engine unblocks and the
-            // agent sees the refusal reason; the outcome builder already
-            // skipped it (a malformed request is not a real tool call).
-            let response = ToolCallbackResponse(
-                idx: idx, ok: false, s: ToolResultCondenser.condense(reason),
-                mutations: [], exitStatus: nil, outputDigest: nil, validationRan: false)
-            if let pipe = process?.standardInput as? Pipe {
-                pipe.fileHandleForWriting.write(
-                    Data((ToolCallbackResponder.resultLine(response) + "\n").utf8))
-            }
-        case .refused(let line):
-            state = .failed("wire handshake refused: \(line)")
-            process?.terminate()
         }
     }
+
+    /// One finished turn (`AgentSession.onOutcome`): persistence + the
+    /// transcript's frozen summary + draining any workers the turn's
+    /// `dispatch` calls enqueued. Was the second half of `consumeWire`'s
+    /// `.ready` case.
+    private func finishTurn(_ outcome: TurnOutcome) {
+        lastTurnOutcome = outcome
+        completedTurns += 1
+        log("turn outcome: \(outcome)")
+        appendOutcome(outcome)
+        // Freeze the turn's summary onto its reply bubble. Both figures come
+        // off the outcome, which computed them together from the status
+        // stream `AgentSession` was already being fed — this type keeps no
+        // accumulator of its own, so there is no opportunity here to pair a
+        // rate with the wrong token count. `promptTPS` is the turn-end
+        // ratchet, matching the status bar; a turn with no usable decode work
+        // falls back to the engine's last reported rate rather than a
+        // fabricated average.
+        let summary = TurnSummary(
+            promptTPS: lastPrefillTPS,
+            decodeTPS: outcome.decodeTPS ?? lastGenTPS,
+            generatedTokens: outcome.generatedTokens,
+            ctxUsed: outcome.ctxUsed)
+        transcript.attachSummary(summary)
+        // The status bar's Prompt/Decode readout resets at turn end: a
+        // permanent "last observed" must not pose as "current" while the
+        // agent idles between turns (`AgentSession.send` also zeros at the
+        // next turn's start — this covers the idle window).
+        lastPrefillTPS = 0
+        lastGenTPS = 0
+        // P11 (D4): the orchestrator's turn ended — run any workers it
+        // dispatched.
+        drainQueuedWorkers()
+    }
+
 
     func log(_ s: String) {
         guard let logHandle else { return }
@@ -852,12 +601,6 @@ final class AgentController {
         return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func consumeStderr(_ line: String, generation: Int) {
-        guard generation == self.generation else { return }
-        stderrTail.append(line)
-        if stderrTail.count > 20 { stderrTail.removeFirst(stderrTail.count - 20) }
-    }
-
     /// P9: the host's side-effecting tool executor (D3/D6). The pure
     /// `ToolCallbackResponder` handles consent + condensation + the
     /// `tool_result` line; this closure is the app's file/process capability
@@ -911,87 +654,43 @@ final class AgentController {
         return inject(wireText, row: .consulted(worker, trimmed))
     }
 
+    /// Now a thin wrapper: the wire write, the think-override decision, and
+    /// the turn's `TurnOutcomeBuilder` all moved into `AgentSession.send`
+    /// (eval-cli task 2). This keeps only what stays app-side per that task's
+    /// scoping — the transcript row (view state) and the `state` transition —
+    /// and only performs them once `agentSession.send` actually accepted the
+    /// write, so a refused send never shows a phantom user bubble.
     private func inject(_ wireText: String, row: AgentTranscriptRow,
                         think: ThinkEffort? = nil) -> Bool {
-        guard canSend, !wireText.isEmpty, let process,
-              let pipe = process.standardInput as? Pipe else { return false }
+        guard canSend, !wireText.isEmpty, let agentSession,
+              agentSession.send(wireText, think: think) else { return false }
         transcript.append(row)
         // A new turn starts with honest zeros: the previous turn's ratcheted
         // rates would mislead ("Prompt 1200" while prefill is actually 0) in
         // the brief window before fresh status events arrive.
         lastPrefillTPS = 0
         lastGenTPS = 0
-        // Baseline nil: the decode average starts at the FIRST generating
-        // snapshot of this turn (the previous turn's trailing status was the
-        // old baseline, which the engine's per-turn counter reset made garbage
-        // from turn 2 on).
         state = .generating
-        sentInterrupt = false
-        orchestratorToolBudget = ToolCallBudgetTracker(
-            budget: ToolCallBudgetTracker.defaultBudget)
-        // P23: the decision authority resolves the request against the family
-        // and the advertised caps. The outcome record carries the effort
-        // actually used — the old "engine-defaults" literal became false the
-        // moment the app could send an override.
-        let decision = TurnThinkPolicy.decide(
-            requested: think,
-            family: AgentController.runningModelFamily(),
-            capAdvertised: advertisedCaps.contains(TurnThinkPolicy.overrideCap))
-        let effort: ThinkEffort?
-        switch decision {
-        case .useDefault:
-            effort = nil
-        case .override(let e):
-            effort = e
-        case .refused(let reason):
-            log("think override refused: \(reason)")
-            effort = nil
-        }
-        // D12: open the turn's outcome record with the app-known facts the
-        // wire cannot carry. The sampler records the think decision actually
-        // used (P23): think=default when no override went out, think=none|
-        // high|max when one did.
-        outcomeBuilder = TurnOutcomeBuilder(
-            model: settings.modelPath.lastPathComponent,
-            build: buildSHA,
-            task: wireText,
-            think: effort
-        )
-        // Single escaping choke point: the engine splits stdin on newlines and
-        // parses each line as its own prompt (ds4_agent.c), so everything the
-        // orchestrator receives goes through PoolPrompt's JSON encoder — a
-        // multi-line prompt or consult answer becomes one escaped line.
-        let line = PoolPrompt(worker: .orchestrator, text: wireText,
-                              think: effort).encode() + "\n"
-        pipe.fileHandleForWriting.write(Data(line.utf8))
         return true
     }
 
-    /// D5: interrupt = write one ETX byte (0x03) to the child's stdin. The
-    /// engine latches it, emits an interrupted `finish` when mid-block, and
-    /// returns to idle; the controller reflects that via the wire.
+    /// D5: interrupt = write one ETX byte (0x03) to the child's stdin —
+    /// `AgentSession.interrupt` now does the actual write; this type only
+    /// still gates on `isGenerating` (its own `state`, which `AgentSession`
+    /// does not track).
     func interrupt() {
-        guard isGenerating, let process,
-              let pipe = process.standardInput as? Pipe else { return }
-        sentInterrupt = true
-        pipe.fileHandleForWriting.write(Data([0x03]))
+        guard isGenerating else { return }
+        agentSession?.interrupt()
     }
 
     func stopAgent() {
         guard state != .stopped else { return }
         state = .stopping
-        stdoutTask?.cancel()
-        stderrTask?.cancel()
         startupTimeoutTask?.cancel()
         memoryTask?.cancel()
-        // EOF on stdin first (the same clean-exit shape as swiftstar-drive):        // the engine's non-interactive loop exits on EOF rather than relying
-        // on SIGTERM alone.
-        if let pipe = process?.standardInput as? Pipe {
-            try? pipe.fileHandleForWriting.close()
-        }
-        process?.terminate()
-        // The termination handler lands on .stopped (its guard passes: state
-        // is .stopping, not .stopped) after recording the exit.
+        agentSession?.stop()
+        // `AgentSession.onExit` lands `.stopped` (its guard passes: state is
+        // .stopping, not .stopped) after recording the exit.
     }
 
     /// Stop, wait for the termination handler to land `.stopped`, then start

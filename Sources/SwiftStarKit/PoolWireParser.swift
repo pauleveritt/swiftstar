@@ -6,6 +6,17 @@ import Foundation
 public struct PoolWireEvent: Equatable, Sendable {
     public let worker: WorkerId
     public let event: AgentEvent
+
+    /// Explicit public init: the auto-generated memberwise one defaults to
+    /// `internal`, which `AgentController` (a different module, eval-cli task
+    /// 2) needs to construct a `.orchestrator`-tagged event for
+    /// `RollingDigestReducer.apply` now that it no longer owns a
+    /// `PoolWireParser` of its own — `AgentSession` hands it bare `AgentEvent`
+    /// values instead.
+    public init(worker: WorkerId, event: AgentEvent) {
+        self.worker = worker
+        self.event = event
+    }
 }
 
 /// Streaming consumer for the pooled wire. Composes `AgentWireParser` (which
