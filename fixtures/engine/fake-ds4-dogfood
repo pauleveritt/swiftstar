@@ -37,6 +37,10 @@ with open(env["FAKE_ENGINE_FIXTURE"]) as f:
 
 inbox = queue.Queue()
 
+if env.get("FAKE_ENGINE_PIDFILE"):
+    with open(env["FAKE_ENGINE_PIDFILE"], "w") as f:
+        f.write(str(os.getpid()))
+
 
 def log(text):
     if log_path:
@@ -106,6 +110,9 @@ def is_tool_start(line):
 
 def finish():
     emit('{"kind": "quitting"}')
+    capture = env.get("FAKE_ENGINE_CAPTURE_PATH")
+    if capture:
+        emit(json.dumps({"kind": "event", "event": {"kind": "closed", "capture_path": capture}}))
     emit('{"kind": "close"}')
     sys.stderr.write("Session artifacts: /tmp/fake-session\n")
     sys.stderr.flush()

@@ -4,6 +4,7 @@ import SwiftStarKit
 public enum EngineSessionError: Error, Equatable {
     case notRunning
     case encoding
+    case alreadyStarted
 }
 
 /// Owns one `ds4-dogfood tui --ndjson` subprocess: writes commands to its
@@ -26,6 +27,7 @@ public final class EngineSession {
     private let environment: [String: String]?
     private let workingDirectory: URL?
 
+    private var started = false
     private var process: Process?
     private var stdin: FileHandle?
     private var parser = EngineWireParser()
@@ -52,7 +54,9 @@ public final class EngineSession {
     }
 
     public func start() throws {
-        guard process == nil else { return }
+        // One-shot: a finished session's state is not reset; make a new one.
+        guard !started else { throw EngineSessionError.alreadyStarted }
+        started = true
         // A write to a dead engine must surface as a thrown error, not SIGPIPE.
         signal(SIGPIPE, SIG_IGN)
 
@@ -92,6 +96,13 @@ public final class EngineSession {
             for await data in errStream { self?.consumeStderr(data) }
             self?.stderrReachedEOF()
         }
+    }
+
+    /// Dropping a still-running session must not orphan the engine (model and
+    /// GPU memory): close stdin, then terminate.
+    isolated deinit {
+        try? stdin?.close()
+        if let process, process.isRunning { process.terminate() }
     }
 
     public func send(prompt: String) throws {
@@ -170,9 +181,7 @@ public final class EngineSession {
             sawReady = true
         case .closed(let capturePath):
             if let capturePath, !capturePath.isEmpty {
-                let base = workingDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                sessionDirectory = URL(fileURLWithPath: capturePath, relativeTo: base)
-                    .deletingLastPathComponent().standardizedFileURL
+                sessionDirectory = resolve(capturePath).deletingLastPathComponent().standardizedFileURL
             }
         case .protocolError:
             failedProtocol = true
@@ -200,8 +209,15 @@ public final class EngineSession {
         guard sessionDirectory == nil, let range = line.range(of: marker) else { return }
         let path = line[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty else { return }
+        sessionDirectory = resolve(path).standardizedFileURL
+    }
+
+    /// Absolute paths as-is; relative ones against the working directory.
+    /// (`URL(relativeTo:)` needs a trailing-slash base, so append explicitly.)
+    private func resolve(_ path: String) -> URL {
+        if path.hasPrefix("/") { return URL(fileURLWithPath: path) }
         let base = workingDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        sessionDirectory = URL(fileURLWithPath: path, relativeTo: base).standardizedFileURL
+        return base.appendingPathComponent(path)
     }
 
     private func stdoutReachedEOF() {
