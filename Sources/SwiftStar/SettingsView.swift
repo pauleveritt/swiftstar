@@ -3,29 +3,10 @@ import SwiftStarAppKit
 import SwiftStarKit
 
 struct SettingsView: View {
-    @AppStorage("engineDir") private var engineDir = ""
-    @AppStorage("modelPath") private var modelPath = ""
-    @AppStorage("selectedVariantID") private var selectedVariantID = ""
-    @AppStorage("contextSize") private var contextSize = 51_200
-    // Agent pane (2026-08-26): the shell toggle moved here from the Agent tab;
-    // the transcript font size applies immediately.
-    @AppStorage("agentShellAllowed") private var shellAllowed = false
-    @AppStorage("agentPowerSavingEnabled") private var powerSavingEnabled = true
-    @AppStorage("agentThinkBudget") private var agentThinkBudget = 2048
-    @AppStorage("workerContextSize") private var workerContextSize = WorkerContextPolicy.defaultContext
+    @AppStorage("engineExecutable") private var engineExecutable = ""
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
-    // P19.1 D3: delegation defaults — the toolbar holds the active session's
-    // values; Settings holds the defaults.
-    @AppStorage("subagentPoolSize") private var subagentPoolSize = 2
-    @AppStorage("sessionCaptureEnabled") private var sessionCaptureEnabled = true
-    @AppStorage("dispatchDumb") private var dispatchDumb = false
 
-    // P19.1 D4: the engine lifecycle escape hatch, stashed here (not the main
-    // surface). Reached via AgentController.shared — the weak reference set in
-    // init, alive as long as MainView owns the controller.
-    @State private var agentController: AgentController?
-
-    // Download section (P3)
+    // Download section
     @State private var downloadRunner = DownloadRunner()
     @State private var downloadTask: Task<Void, Never>?
     @State private var selectedTarget: String = Self.targets[0].file
@@ -47,8 +28,6 @@ struct SettingsView: View {
             return url
         }
     }
-    // The P1 model first; more targets arrive with P22 (Laguna XS). Source of
-    // the URL pattern: external/ds4/download_model.sh (laguna-q2-q3 target).
     static let targets: [DownloadTarget] = [
         DownloadTarget(
             name: "Laguna S 2.1 — Routed Q2/Q3 (48 GB)",
@@ -77,39 +56,10 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Engine") {
-                TextField("Engine directory (DS4_DIR)", text: $engineDir)
-                Picker("Variant", selection: $selectedVariantID) {
-                    Text("Custom file…").tag("")
-                    ForEach(VariantRegistry.all) { variant in
-                        Text(variant.displayName).tag(variant.id)
-                    }
-                }
-                if selectedVariantID.isEmpty {
-                    TextField("Model file", text: $modelPath)
-                } else if let variant = VariantRegistry.resolve(selectedVariantID) {
-                    Text(variant.modelFile.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Stepper("Context size: \(contextSize)", value: $contextSize, in: 1024...262144, step: 1024)
-                Text("A selected variant is verified before launch; a custom file is not. Settings apply when the engine next starts.")
+                TextField("ds4-dogfood path", text: $engineExecutable, prompt: Text("Search PATH and ~/.local/bin"))
+                Text("Leave empty to search PATH and ~/.local/bin. Applies when a session next starts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let agentController {
-                    Divider()
-                    HStack {
-                        Text(engineStateLabel(agentController.state))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Stop") { agentController.stopAgent() }
-                            .disabled(agentController.state == .stopped || agentController.state == .stopping)
-                        Button("Start") { agentController.startAgent() }
-                            .disabled(agentController.state == .ready || agentController.state == .starting)
-                        Button("Restart") { agentController.restartAgent() }
-                            .disabled(agentController.state == .stopping)
-                    }
-                }
             }
             Section("Download model") {
                 Picker("Model", selection: $selectedTarget) {
@@ -119,25 +69,7 @@ struct SettingsView: View {
                 }
                 downloadStatus
             }
-            Section("Agent") {
-                Toggle("Allow shell commands", isOn: $shellAllowed)
-                Text("Applies when the agent next starts.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Toggle("Enable power savings", isOn: $powerSavingEnabled)
-                Text("Targets 70% GPU duty cycle to reduce heat, fan noise, and battery use. Applies when the agent next starts.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Stepper("Think budget: \(agentThinkBudget == 0 ? "off" : "\(agentThinkBudget) tokens")",
-                        value: $agentThinkBudget, in: 0...8192, step: 256)
-                Text("Caps one round's reasoning. The engine forces a close at the ceiling and bans reopening for that round. 0 disables it; the default never fires on an ordinary turn.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Stepper("Worker context: \(workerContextSize == 0 ? "inherit parent" : "\(workerContextSize) tokens")",
-                        value: $workerContextSize, in: 0...16384, step: 1024)
-                Text("Context for subagent-pool workers. Smaller means less prefill and scratch per worker; 0 inherits the parent's context. Clamped to at least 4096 and never above the parent.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Section("Transcript") {
                 Slider(value: fontSliderValue, in: 0...3, step: 1) {
                     Text("Transcript font size")
                 }
@@ -151,29 +83,10 @@ struct SettingsView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            Section("Delegation") {
-                Stepper("Subagent pool: \(SubagentPoolSize.clamp(subagentPoolSize))", value: $subagentPoolSize, in: 2...8)
-                Toggle("Capture sessions to captures/live/", isOn: $sessionCaptureEnabled)
-                Toggle("Dispatch mode: Smart (off) / Dumb (on)", isOn: $dispatchDumb)
-            }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 560)
-        .onAppear { agentController = AgentController.shared }
+        .frame(width: 520, height: 420)
         .onDisappear { downloadTask?.cancel() }
-    }
-
-    /// The engine's current state, for the Settings escape-hatch readout
-    /// (P19.1 D4). Mirrors the main surface's status text.
-    private func engineStateLabel(_ s: AgentController.AgentState) -> String {
-        switch s {
-        case .stopped: return "Agent stopped"
-        case .starting: return "Starting agent…"
-        case .ready: return "Agent ready"
-        case .generating: return "Working…"
-        case .stopping: return "Stopping…"
-        case .failed(let message): return "Failed: \(message)"
-        }
     }
 
     /// The slider's 0…3 slot index, mapped through `TranscriptFontScale.sizes`
@@ -201,12 +114,7 @@ struct SettingsView: View {
             }
             Button("Cancel") { cancelDownload() }
         case .done(let url):
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Downloaded to \(url.path)", systemImage: "checkmark.circle")
-                Button("Use this model") {
-                    modelPath = url.path
-                }
-            }
+            Label("Downloaded to \(url.path)", systemImage: "checkmark.circle")
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.red)

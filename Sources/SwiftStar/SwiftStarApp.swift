@@ -5,16 +5,15 @@ import SwiftStarKit
 @main
 struct SwiftStarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var engine = EngineController()
 
     var body: some Scene {
-        // `Window`, not `WindowGroup`: a second window would build a second
-        // MainView, hence a second AgentController, which spawns another engine
-        // loading the same multi-GB model — two processes contending for the
-        // GPU and for /tmp/ds4-agent.lock — and would re-point
-        // `AgentController.shared` (the quit handler and Settings' lifecycle
-        // row) at the newest window. One engine, one window.
+        // `Window`, not `WindowGroup`: a second window would spawn a second
+        // engine loading the same multi-GB model, two processes contending for
+        // the GPU. One engine, one window.
         Window("SwiftStar", id: "main") {
-            MainView()
+            MainView(engine: engine)
+                .onAppear { appDelegate.engine = engine }
         }
         .commands {
             ToolbarCommands()
@@ -29,6 +28,9 @@ struct SwiftStarApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Set by the main window; the quit handler waits on it.
+    var engine: EngineController?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
@@ -37,8 +39,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MarkdownText.runResourceSelfTestIfRequested()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        // Stop the agent on quit (Cmd-Q) so it is not orphaned to launchd.
-        AgentController.shared?.stopAgent()
+    /// Quit waits for the engine to exit, so it is not orphaned to launchd.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let engine, engine.isActive else { return .terminateNow }
+        Task { @MainActor in
+            await engine.quit()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }
