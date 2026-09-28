@@ -13,7 +13,7 @@ worktree and the session capture.
 
 ## Status
 
-**A front-end for one ds4-engine session** (P28, in progress; design in
+**A front-end for one ds4-engine session** (P28, complete 2026-09-28; design in
 [`docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md`](docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md)).
 Before P28 the app carried a forked C engine as a submodule, host-run tools, a
 subagent pool and two eval CLIs; P28 removes all of that, and the old text

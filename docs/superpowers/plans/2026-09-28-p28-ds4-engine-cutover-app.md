@@ -1,7 +1,7 @@
 ---
 phase: P28
 cycle: P28-ds4-engine-cutover-b
-lifecycle: active
+lifecycle: closed
 ---
 
 # P28 ds4-engine cut-over, plan B: switch, remove, document
@@ -161,3 +161,23 @@ Links to deleted source files become plain text naming the file and "(removed in
 - [ ] **Step 2:** Whole-branch review and fixes; both plans get
   `## Result` and `lifecycle: closed`; ROADMAP P28 Status; `just lint-docs`
   green; commit.
+
+## Result
+
+Closed 2026-09-28.
+
+- **Commits:** `aa6c1f9` + `730e5ff` (T6 + review fix), `94ac02a`, `7eeda74`
+  (T7), `e27d0b2` + `a6a3a4a` (T8 + review fix), `1d0dadc` (final-review
+  fixes).
+- **Diverged:** Task 8 ran before Tasks 5–7 (docs lane); its Backlog
+  collapse first closed non-fork entries, restored in `a6a3a4a`. Task 6
+  kept the font slider in Settings, added a 10 s outer quit bound with a
+  generation counter, and moved gauge helpers into `GaugeFormatting.swift`.
+- **Task 9:** GUI click-through was not possible from the agent session (no
+  screen or accessibility access). Verified instead: the built app spawns
+  `tui --ndjson --source <root> --commit HEAD` and quits with no orphan; a
+  throwaway live `EngineSession` probe against Laguna XS showed a `read`
+  card with preview, an answer, per-pause metrics (≈776 / ≈146 tok/s, ctx
+  1,956 / 65,536), `/help` as a notice, Stop mid-turn → interrupted, and
+  quit → exit 0 with session directory and `ds4-dogfood apply <id>`.
+- **Descoped:** nothing; the owner's GUI pass remains the last check.

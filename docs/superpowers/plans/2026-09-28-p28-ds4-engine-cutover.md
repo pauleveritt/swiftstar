@@ -1,7 +1,7 @@
 ---
 phase: P28
 cycle: P28-ds4-engine-cutover-a
-lifecycle: active
+lifecycle: closed
 ---
 
 # P28 ds4-engine cut-over, plan A: the engine seam
@@ -290,3 +290,23 @@ Mac` to stderr, no stdout, exit 2. `FAKE_ENGINE_IGNORE_QUIT=1` ignores
     `tool_start` → both prompts in `FAKE_ENGINE_LOG`.
 - [ ] **Step 2:** red (`SWIFTSTAR_INTEGRATION=1 swift test --filter
   EngineSessionTests`) → implement → green → commit.
+
+## Result
+
+Closed 2026-09-28, executed subagent-driven (Sonnet implementers, per-task
+review, Opus for Task 5's review, Fable for the final whole-branch review).
+
+- **Commits:** `371a7f2` (T1), `44039a0` (T2), `9b830a0` (T3), `2c39579`
+  (T4), `850effa` + `442c742` (T5 + review fix), `1d0dadc` (final-review
+  fixes touching this plan's types).
+- **Diverged:** Tasks 2 and 3 were one dispatch and one review. `EngineWireParser`
+  also joins a `lines` array for `help`/`models`, renders `status_report` as
+  one line and `exported` as "Exported to <path>" (final review, checked
+  against a live payload). `EngineTranscript` gained `loadingText`.
+  `EngineSession` gained `EngineSessionError`, an isolated `deinit`, a
+  one-shot `start()`, and a `resolve(_:)` fix for relative capture paths.
+- **Added tests beyond the plan:** `interruptByteMidTurn`,
+  `droppedSessionTerminatesTheEngine`, `closedCapturePathResolvesSessionDirectory`,
+  `startIsOneShot`, `loadingTextClearedOnFirstInput`, `exportedNamesThePath`,
+  `statusReportIsOneReadableLine`.
+- **Descoped:** nothing. Deferred minors are in the final review record.
