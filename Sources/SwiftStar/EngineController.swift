@@ -104,14 +104,29 @@ final class EngineController {
 
     func stop() {
         guard transcript.canStop, let session else { return }
-        try? session.stop()
+        do {
+            try session.stop()
+        } catch {
+            transcript.appendSystem("Could not stop: \(error.localizedDescription)")
+        }
     }
 
-    /// Asks the engine to quit and returns once it has exited.
-    func quit() async {
+    /// Asks the engine to quit and returns once it has exited, or after
+    /// `deadline` even if it has not, so app quit can never hang.
+    func quit(deadline: Duration = .seconds(10)) async {
         guard let session, session.isRunning else { return }
         session.quit()
+        Task { [weak self] in
+            try? await Task.sleep(for: deadline)
+            self?.resumeQuitWaiters()
+        }
         await withCheckedContinuation { quitWaiters.append($0) }
+    }
+
+    private func resumeQuitWaiters() {
+        let waiters = quitWaiters
+        quitWaiters = []
+        for waiter in waiters { waiter.resume() }
     }
 
     private func handle(_ event: EngineEvent) {
@@ -132,8 +147,6 @@ final class EngineController {
                 "Session: \(directory.path)\nTo take its changes: \(EngineCommand.applyCommand(sessionDirectory: directory))")
         }
         phase = .ended(exit)
-        let waiters = quitWaiters
-        quitWaiters = []
-        for waiter in waiters { waiter.resume() }
+        resumeQuitWaiters()
     }
 }
