@@ -1,4 +1,0 @@
-[submodule "external/ds4"]
-	path = external/ds4
-	url = https://github.com/pauleveritt/ds4.git
-	branch = p20-dispatch-schema
