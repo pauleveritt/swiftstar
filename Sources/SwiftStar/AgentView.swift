@@ -25,6 +25,20 @@ struct AgentView: View {
             ToolbarItem(placement: .automatic) {
                 workspaceButton
             }
+            ToolbarItem(placement: .automatic) {
+                modelLabel
+            }
+            ToolbarItem(placement: .automatic) {
+                if controller.restartNeeded {
+                    Button {
+                        Task { await controller.restart() }
+                    } label: {
+                        Label("Restart to use \(controller.settingsModelID ?? "new settings")",
+                              systemImage: "arrow.clockwise")
+                    }
+                    .help("Settings changed the model or context size; restart the session to apply")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     if controller.isActive {
@@ -39,6 +53,18 @@ struct AgentView: View {
             }
         }
         .task { if controller.phase == .idle { controller.start() } }
+    }
+
+    /// The loaded model and context size; empty for an older engine that
+    /// sends no `session` event.
+    @ViewBuilder private var modelLabel: some View {
+        if let info = controller.transcript.session, info.modelID != nil || info.contextSize != nil {
+            let context = info.contextSize.map { " · \($0.formatted(.number.grouping(.never))) ctx" } ?? ""
+            Text((info.modelID ?? "model") + context)
+                .font(.system(size: envTranscriptFontSize))
+                .foregroundStyle(.secondary)
+                .help("Model and context size loaded in the running session")
+        }
     }
 
     private var workspaceButton: some View {

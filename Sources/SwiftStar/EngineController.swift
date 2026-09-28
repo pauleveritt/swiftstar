@@ -18,6 +18,8 @@ final class EngineController {
 
     static let workspaceDefaultsKey = "agentWorkspace"
     static let executableDefaultsKey = "engineExecutable"
+    static let modelIDDefaultsKey = "engineModelID"
+    static let contextSizeDefaultsKey = "engineContextSize"
 
     private(set) var transcript = EngineTranscript()
     private(set) var metrics = EngineMetricsState()
@@ -48,6 +50,29 @@ final class EngineController {
         return ProjectRoot.locate(anchor: anchor) ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
+    /// True while a session runs and Settings name a different model or
+    /// context size than the one loaded. Never touches the running session.
+    var restartNeeded: Bool {
+        guard phase == .running else { return false }
+        return EngineCommand.restartNeeded(
+            session: transcript.session,
+            modelID: UserDefaults.standard.string(forKey: Self.modelIDDefaultsKey),
+            contextSize: UserDefaults.standard.integer(forKey: Self.contextSizeDefaultsKey))
+    }
+
+    /// The model id Settings would start the engine with, trimmed; nil if unset.
+    var settingsModelID: String? {
+        let t = UserDefaults.standard.string(forKey: Self.modelIDDefaultsKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (t?.isEmpty ?? true) ? nil : t
+    }
+
+    /// Quits the running session, then starts a new one with current Settings.
+    func restart() async {
+        await quit()
+        start()
+    }
+
     var isActive: Bool { phase == .starting || phase == .running }
 
     func start() {
@@ -75,7 +100,10 @@ final class EngineController {
 
         let session = EngineSession(
             executable: executable,
-            arguments: EngineCommand.arguments(source: source),
+            arguments: EngineCommand.arguments(
+                source: source,
+                modelID: UserDefaults.standard.string(forKey: Self.modelIDDefaultsKey),
+                contextSize: UserDefaults.standard.integer(forKey: Self.contextSizeDefaultsKey)),
             workingDirectory: source)
         session.onEvent = { [weak self] event in self?.handle(event) }
         session.onExit = { [weak self] exit, directory in self?.handleExit(exit, directory) }
