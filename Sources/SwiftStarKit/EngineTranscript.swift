@@ -30,6 +30,8 @@ public struct EngineTranscript: Equatable, Sendable {
     public private(set) var isBusy = false
     public private(set) var isGenerating = false
     public private(set) var isAwaitingInput = false
+    /// Engine status text while the model loads; cleared at the first `input`.
+    public private(set) var loadingText: String?
 
     public var canStop: Bool { isBusy }
 
@@ -52,7 +54,10 @@ public struct EngineTranscript: Equatable, Sendable {
             isAwaitingInput = false
         case .generating(let b):
             isGenerating = b
+        case .loading(let text):
+            loadingText = text
         case .awaitingInput:
+            loadingText = nil
             isBusy = false
             isGenerating = false
             isAwaitingInput = true
@@ -80,10 +85,11 @@ public struct EngineTranscript: Equatable, Sendable {
         case .refused(let t), .error(let t):
             rows.append(.error(t))
         case .closed:
+            loadingText = nil
             isBusy = false
             isGenerating = false
             isAwaitingInput = false
-        case .ready, .loading, .session, .pause, .memory, .protocolError, .ignored:
+        case .ready, .session, .pause, .memory, .protocolError, .ignored:
             break
         }
     }

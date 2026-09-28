@@ -121,6 +121,23 @@ struct EngineWireParserTests {
         #expect(t.contains("/status"))
     }
 
+    @Test func exportedNamesThePath() {
+        var p = Self.ready()
+        #expect(p.parse(Self.event(#""kind":"exported","path":"/s/export.md""#)) == .notice("Exported to /s/export.md"))
+    }
+
+    @Test func statusReportIsOneReadableLine() {
+        var p = Self.ready()
+        let e = p.parse(Self.event(
+            #""kind":"status_report","model_id":"ds4-flash","context_used":1956,"context_size":65536,"gpu_allocated_bytes":10737418240,"gpu_budget_bytes":21474836480,"prompts":3,"where":null"#))
+        guard case .notice(let t) = e else { Issue.record("expected notice"); return }
+        #expect(!t.contains("\n"))
+        #expect(t.contains("ds4-flash"))
+        #expect(t.contains("1956 / 65536"))
+        #expect(t.contains("10.0 GiB / 20.0 GiB"))
+        #expect(t != "status_report")
+    }
+
     @Test func noticeWithoutTextFallsBackToKind() {
         var p = Self.ready()
         #expect(p.parse(Self.event(#""kind":"clear""#)) == .notice("clear"))

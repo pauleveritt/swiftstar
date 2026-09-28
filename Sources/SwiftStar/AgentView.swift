@@ -311,8 +311,10 @@ struct AgentView: View {
         case .notFound: return "Engine not found"
         case .ended(let exit): return "Ended (exit \(exit.code))"
         case .running:
-            let activity = controller.transcript.isGenerating
-                ? "Generating…" : (controller.transcript.isBusy ? "Working…" : "Ready")
+            let t = controller.transcript
+            let activity = t.isGenerating ? "Generating…"
+                : t.isBusy ? "Working…"
+                : (t.loadingText.map { $0.isEmpty ? "Loading…" : $0 } ?? "Ready")
             return "Prefill \(rateText(controller.metrics.prefillTPS)) tok/s · "
                 + "Generation \(rateText(controller.metrics.generationTPS)) tok/s · \(activity)"
         }

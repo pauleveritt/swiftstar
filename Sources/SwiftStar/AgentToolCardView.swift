@@ -105,9 +105,9 @@ struct AgentToolCardView: View {
         case "bash", "bash_status", "bash_stop": return "terminal"
         case "write": return "doc.badge.plus"
         case "edit": return "square.and.pencil"
-        case "list": return "folder"
+        case "ls": return "folder"
         case "read", "more": return "doc.text.magnifyingglass"
-        case "search": return "magnifyingglass"
+        case "grep": return "magnifyingglass"
         default: return "wrench.and.screwdriver"
         }
     }

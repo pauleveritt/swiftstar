@@ -170,7 +170,7 @@ shifts width tick to tick.
 - **swiftstar**: `AgentView.bottomStatusText` / `AgentStatusText.promptDecodeLine` —
   [`AgentView.swift:296-305`](../Sources/SwiftStar/AgentView.swift#L296-L305),
   logic factored out into `SwiftStarKit`'s
-  [`AgentStatusText.swift`](../Sources/SwiftStarKit/AgentStatusText.swift)
+  `AgentStatusText.swift` (removed in P28)
   rather than living as a `static func` on the view itself. Same
   `.monospacedDigit()`/`.contentTransition(.numericText())` treatment
   (`.swift:264-266`).

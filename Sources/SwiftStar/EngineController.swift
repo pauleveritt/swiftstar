@@ -31,6 +31,7 @@ final class EngineController {
     }
 
     @ObservationIgnored private var session: EngineSession?
+    @ObservationIgnored private var quitGeneration = 0
     @ObservationIgnored private var quitWaiters: [CheckedContinuation<Void, Never>] = []
 
     init() {
@@ -116,9 +117,13 @@ final class EngineController {
     func quit(deadline: Duration = .seconds(10)) async {
         guard let session, session.isRunning else { return }
         session.quit()
+        quitGeneration += 1
+        let generation = quitGeneration
         Task { [weak self] in
             try? await Task.sleep(for: deadline)
-            self?.resumeQuitWaiters()
+            // A deadline releases only the quit it was started for.
+            guard let self, self.quitGeneration == generation else { return }
+            self.resumeQuitWaiters()
         }
         await withCheckedContinuation { quitWaiters.append($0) }
     }
@@ -147,6 +152,7 @@ final class EngineController {
                 "Session: \(directory.path)\nTo take its changes: \(EngineCommand.applyCommand(sessionDirectory: directory))")
         }
         phase = .ended(exit)
+        quitGeneration += 1
         resumeQuitWaiters()
     }
 }

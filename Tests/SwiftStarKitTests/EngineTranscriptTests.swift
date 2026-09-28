@@ -65,6 +65,14 @@ struct EngineTranscriptTests {
         #expect(!t.isBusy)
     }
 
+    @Test func loadingTextClearedOnFirstInput() {
+        var t = EngineTranscript()
+        t.apply(.loading("Loading model"))
+        #expect(t.loadingText == "Loading model")
+        t.apply(.awaitingInput)
+        #expect(t.loadingText == nil)
+    }
+
     @Test func stopDisabledWhenAwaitingInput() {
         var t = EngineTranscript()
         t.apply(.awaitingInput)

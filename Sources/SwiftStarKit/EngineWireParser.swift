@@ -97,13 +97,42 @@ public struct EngineWireParser: Sendable {
             return .generating(false)
         case "closed":
             return .closed(capturePath: e["capture_path"] as? String)
-        case "help", "status_report", "clear", "exported", "models":
+        case "exported":
+            let path = e["path"] as? String
+            return .notice(path.map { "Exported to \($0)" } ?? "Exported")
+        case "status_report":
+            return .notice(statusLine(e))
+        case "help", "clear", "models":
             return .notice(text(e, kind: kind))
         case _ where kind.hasSuffix("_refused"):
             return .refused(text(e, kind: kind))
         default:
             return .ignored
         }
+    }
+
+    /// One readable line from the `status_report` payload.
+    private static func statusLine(_ e: [String: Any]) -> String {
+        var parts: [String] = []
+        if let id = e["model_id"] as? String { parts.append(id) }
+        if let used = int(e["context_used"]) {
+            if let size = int(e["context_size"]) {
+                parts.append("context \(used) / \(size) tokens")
+            } else {
+                parts.append("context \(used) tokens")
+            }
+        }
+        if let a = int64(e["gpu_allocated_bytes"]) {
+            var s = "GPU \(gib(a))"
+            if let b = int64(e["gpu_budget_bytes"]) { s += " / \(gib(b))" }
+            parts.append(s)
+        }
+        if let n = int(e["prompts"]) { parts.append("\(n) prompts") }
+        return parts.isEmpty ? "status" : "Status: " + parts.joined(separator: " · ")
+    }
+
+    private static func gib(_ bytes: Int64) -> String {
+        String(format: "%.1f GiB", Double(bytes) / 1_073_741_824)
     }
 
     private static func tool(_ e: [String: Any]) -> EngineTool {

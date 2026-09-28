@@ -161,7 +161,7 @@ struct EngineSessionTests {
         var session: EngineSession?
         let rec: Recorder
         do {  // scope the tuple so only `session` keeps the engine alive
-            let made = make(fixture: "tool-read", extra: ["FAKE_ENGINE_PIDFILE": pidFile.path])
+            let made = make(fixture: "tool-read", extra: ["FAKE_ENGINE_PIDFILE": pidFile.path, "FAKE_ENGINE_IGNORE_QUIT": "1"])
             session = made.0
             rec = made.1
         }

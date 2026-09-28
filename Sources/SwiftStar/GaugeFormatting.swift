@@ -8,8 +8,8 @@ enum Severity: Equatable, Hashable {
 }
 
 // Absolute-token curve, not a fraction of the window: warning at about half of
-// the 51,200-token default context, critical at about 73%, so critical is
-// reachable at that size.
+// a 51,200-token context (the P21 baseline; the engine now picks its own
+// default), critical at about 73%, so critical is reachable at that size.
 private let contextWarningTokens = 25_000
 private let contextCriticalTokens = 37_500
 
