@@ -1,8 +1,8 @@
 # SwiftStar
 
-A macOS application for running a large language model locally on Apple
-silicon. It supervises a local inference engine, downloads weights, shows what
-the machine is doing, and explains why a session got slow.
+A macOS front-end for [ds4-engine](https://github.com/pauleveritt/ds4-engine):
+one held local-model session, driven as a child process over its NDJSON
+protocol, with a prompt, a transcript, tool cards, and per-pause metrics.
 
 This site is scaffolding. It gains content in phase P14, once there is a reader
 who isn't the author — see [the roadmap](https://github.com/pauleveritt/swiftstar/blob/main/ROADMAP.md).
@@ -21,6 +21,7 @@ For now, the durable documents are in the repository root:
 sdd
 laptop-ai
 pathologies
+remediations
 glossary
 harvest/index
 ```

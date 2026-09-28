@@ -6,6 +6,10 @@ It records what four bodies of prior work proved, so that SwiftStar can re-earn
 each behavior deliberately instead of rediscovering it by incident — and so
 that nothing valuable is lost when those repositories are retired.
 
+**Written before P28 (2026-09-28).** These briefs describe the engine and the
+app as they were: the `external/ds4` fork, `ds4-agent`, `swiftstar-drive`. They
+are still evidence; they no longer describe this repository.
+
 Read `BRIEF.md`'s "Clean-room policy" first. The short version: **code does not
 cross; facts may cross, with a citation and a fresh test.** Every fact recorded
 here carries the citation that lets a future phase transplant it honestly.

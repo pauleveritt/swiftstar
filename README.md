@@ -1,31 +1,26 @@
 # SwiftStar
 
-A macOS application for running a large language model locally on Apple
-silicon.
+A macOS front-end for a local model running on Apple silicon.
 
-SwiftStar launches and supervises a local inference engine, downloads model
-weights, shows you what your machine is doing while the model runs, gives you
-an agent — and tells you *why* your session got slow, from measurement rather
-than folklore.
+SwiftStar holds one session of [ds4-engine](https://github.com/pauleveritt/ds4-engine)
+open and gives it a window: a prompt, a transcript, tool cards, per-pause
+metrics, stop, and quit.
 
-It does no inference itself. Inference is delegated to `ds4-agent`, a child
-process built from a fork of [antirez/ds4](https://github.com/antirez/ds4)
-carried as a submodule.
+It does no inference and runs no tools itself. It spawns
+`ds4-dogfood tui --ndjson` as a child process and renders what that process
+reports. ds4-engine owns the model, the memory plan, the tools, the candidate
+worktree and the session capture.
 
 ## Status
 
-**A working local-agent app.** SwiftStar launches a regular macOS app — a
-single Agent surface via `ds4-agent` NDJSON with tool cards, consent
-controls, and interruptible turns — that downloads weights and gates model
-feasibility before every spawn, replays Metrics and Diagnostics from
-committed captures, bootstraps the Superpowers skills, answers tool calls
-over a bidirectional wire, dispatches worktree-isolated attempts, coordinates
-multi-phase work through an `/orchestrate` loop, and runs a subagent pool —
-context-isolated subagents sharing one locked engine, driven through a queue
-over the serialized GPU, with the context-curve win measured (3.70x realized
-vs the 4.2x ceiling). A model ladder (Mellum, Laguna XS, Laguna S, DeepSeek V4
-Flash) is switchable live, admission-gated before any stop. See
-[`ROADMAP.md`](ROADMAP.md) for current phase status.
+**A front-end for one ds4-engine session** (P28, in progress; design in
+[`docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md`](docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md)).
+Before P28 the app carried a forked C engine as a submodule, host-run tools, a
+subagent pool and two eval CLIs; P28 removes all of that, and the old text
+survives in git. Edits the engine makes land in the session's
+`candidate.diff`; SwiftStar shows the session directory and the
+`ds4-dogfood apply <id>` command when a session closes, and applying stays a
+terminal step. See [`ROADMAP.md`](ROADMAP.md) for current phase status.
 
 - [`BRIEF.md`](BRIEF.md) — the design. Read this first.
 - [`ROADMAP.md`](ROADMAP.md) — phases, backlog.
@@ -35,17 +30,18 @@ Flash) is switchable live, admission-gated before any stop. See
 
 ## Requirements
 
-macOS 26 or later, Apple silicon, Swift 6. Running a model needs the weights on
-disk — tens of gigabytes, depending on the variant — and enough unified memory
-to hold the resident set. SwiftStar refuses a launch it cannot fit and explains
-why rather than letting the engine die mid-load.
+macOS 26 or later, Apple silicon, Swift 6. Install ds4-engine yourself
+(`uv tool install` of its wheel) and have model weights on disk, as
+ds4-engine's own docs describe. SwiftStar finds `ds4-dogfood` from its
+Settings path, then `PATH`, then `~/.local/bin/ds4-dogfood`. The engine needs a
+git repository as its source; SwiftStar passes the git root of the workspace
+folder you choose.
 
 ## Predecessors
 
 SwiftStar replaces **DS4 Control**, a menu-bar app that worked and is being
-retired. This is a clean-room rewrite in the gardened sense: implementation is
-written fresh, while facts that cost incidents to learn cross with a citation
-and a new test. See `BRIEF.md`, "Clean-room policy."
+retired. Implementation is written fresh; facts that cost incidents to learn
+cross with a citation and a new test. See `BRIEF.md`, "Clean-room policy."
 
 ## License
 

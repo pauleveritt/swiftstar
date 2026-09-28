@@ -4,6 +4,10 @@ The changes actually made against [`pathologies.md`](pathologies.md), ranked
 by measured impact. Companion to that list: pathologies are what we saw,
 these are what we did about it and whether it worked.
 
+Source files cited here by name (`LabeledBlockParser.swift`,
+`RepairLoop.swift`, and the rest of the repair harness) were removed in P28;
+the commit hashes still resolve in git.
+
 **Every entry carries its denominator.** A remediation that was built but
 never measured says so in those words; a remediation that was measured and
 did not work is kept here, in its own section, because knowing a lever is
