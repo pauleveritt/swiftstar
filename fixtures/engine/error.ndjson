@@ -1,0 +1,10 @@
+{"kind": "ready", "protocol": 1}
+{"kind": "status", "text": "Loading model — input resumes at the next pause"}
+{"kind": "event", "event": {"schema_version": 1, "session_id": "04b9b03668684169b2c5ed078f9abe95", "seq": 0, "turn": 0, "elapsed_ms": 1.1852090246975422, "kind": "session", "seed": 7, "max_tool_calls": 32, "max_tokens": 20000, "model_id": "laguna-xs-2.1", "model_path": "/Users/pauleveritt/models/Laguna-XS-2.1-Q4_K_M.gguf", "family": "laguna-xs-chat", "emission_mechanism": "upstream", "mask_retries": false, "context_size": 20000, "ssd_streaming_cache_gib": null, "source": "/Users/pauleveritt/projects/pauleveritt/swiftstar/.claude/worktrees/ds4-engine-subprocess", "commit": "HEAD", "machine": {"platform": "Darwin 27.0", "machine": "arm64", "cpu": "Apple M5 Max", "memory_bytes": 137438953472}, "status_line": ["model", "context", "gpu", "compactions", "turn", "cwd", "branch", "worktree"], "turn_notice": {"kind": "bell", "after_s": 20}}}
+{"kind": "event", "event": {"schema_version": 1, "session_id": "04b9b03668684169b2c5ed078f9abe95", "seq": 1, "turn": 0, "elapsed_ms": 297.0822500064969, "kind": "memory", "gpu_allocated_bytes": 25421611008, "gpu_budget_bytes": 115448725504, "engine_plan": {"total_gib": 23.67, "parts": [["KV", 0.82], ["buffers", 3.97], ["model", 18.88]]}}}
+{"kind": "event", "event": {"schema_version": 1, "session_id": "04b9b03668684169b2c5ed078f9abe95", "seq": 2, "turn": 0, "elapsed_ms": 297.4367090500891, "kind": "where", "cwd": "~/projects/pauleveritt/swiftstar/.claude/worktrees/ds4-engine-subprocess", "host": "US-BOS-UNIT-0045", "ip": null, "remote": false, "branch": "worktree-ds4-engine-subprocess", "worktree": "ds4-engine-subprocess"}}
+{"kind": "input"}
+{"kind": "error", "text": "unknown kind 'bogus'; expected prompt, stop or quit"}
+{"kind": "quitting"}
+{"kind": "event", "event": {"schema_version": 1, "session_id": "04b9b03668684169b2c5ed078f9abe95", "seq": 3, "turn": 0, "elapsed_ms": 492.1721670543775, "kind": "closed", "capture_path": null, "capture_sha256": null, "telemetry_ok": true, "snapshot": {"status": "unavailable"}}}
+{"kind": "close"}

@@ -133,20 +133,12 @@ engine:
 eval *ARGS:
     swift run swiftstar-eval {{ARGS}}
 
-# Live capture against the real engine. Never part of CI; takes minutes.
-# Landed 2026-08-26 (P21). Re-pointed 2026-08-31 (eval-cli task 8):
-# `swiftstar-drive` is retired; `swiftstar-eval run --bare` reproduces its
-# exact P5 argv (`-m`, `-c`, `--metal`, `--non-interactive`, `--json-events`,
-# `--trace` — no `--workspace`/`--shell`/`--host-tools`/`--per-turn-think`),
-# the shape `fixtures/agent/provenance.md`'s recapture rule requires. See
-# that file for the invariants a recapture re-verifies and for copying the
-# result to the bundled `Sources/SwiftStarAppKit/Resources/golden.*` (both
-# steps stay manual).
-capture:
-    swift run swiftstar-eval run --bare \
-        --gguf "${CAPTURE_GGUF:?CAPTURE_GGUF (absolute path to the gguf) is required}" \
-        --ctx "${CAPTURE_CTX:-32768}" \
-        --prompt "${CAPTURE_PROMPT:-Explain, in three sentences, why the sky is blue.}"
+# Live tier: record one engine fixture (tool-read, stop or error) from the
+# real `ds4-dogfood tui --ndjson` into fixtures/engine/. Needs ds4-engine and
+# Laguna XS; never in CI. See fixtures/engine/provenance.md for the
+# re-record rule and what each fixture must contain.
+capture SCENARIO:
+    Tools/record-engine-fixture.py "${DS4_DOGFOOD:-ds4-dogfood}" "$PWD" {{SCENARIO}} fixtures/engine/{{SCENARIO}}.ndjson
 
 # Assemble .build/SwiftStar.app (release build + Info.plist + icon)
 app:
