@@ -78,4 +78,46 @@ struct EngineCommandTests {
         #expect(EngineCommand.applyCommand(sessionDirectory: URL(fileURLWithPath: "/x/sessions/20260928-101010-repo"))
                 == "ds4-dogfood apply 20260928-101010-repo")
     }
+
+    private let src = URL(fileURLWithPath: "/tmp/r")
+    private let p28 = ["tui", "--ndjson", "--source", "/tmp/r", "--commit", "HEAD"]
+
+    @Test func emptySettingsKeepP28Argv() {
+        #expect(EngineCommand.arguments(source: src, modelID: "", contextSize: 0) == p28)
+    }
+
+    @Test func modelIDAppended() {
+        #expect(EngineCommand.arguments(source: src, modelID: "qwen3.8-flash-next")
+                == p28 + ["--model-id", "qwen3.8-flash-next"])
+    }
+
+    @Test func contextAppended() {
+        #expect(EngineCommand.arguments(source: src, contextSize: 20000)
+                == p28 + ["--context-size", "20000"])
+    }
+
+    @Test func bothInOrder() {
+        #expect(EngineCommand.arguments(source: src, modelID: "m", contextSize: 8192)
+                == p28 + ["--model-id", "m", "--context-size", "8192"])
+    }
+
+    @Test func whitespaceIDAndNonPositiveContextIgnored() {
+        #expect(EngineCommand.arguments(source: src, modelID: "  ", contextSize: -1) == p28)
+    }
+
+    private func info(_ m: String?, _ c: Int?) -> EngineSessionInfo {
+        EngineSessionInfo(id: "s", modelID: m, contextSize: c)
+    }
+
+    @Test func restartNeededOnlyWhileSessionRunsAndSettingsDiffer() {
+        let loaded = info("laguna-xs-2.1", 20000)
+        #expect(!EngineCommand.restartNeeded(session: nil, modelID: "x", contextSize: 1))
+        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: "", contextSize: 0))
+        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: " ", contextSize: -5))
+        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: "laguna-xs-2.1", contextSize: 20000))
+        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: " laguna-xs-2.1 ", contextSize: 0))
+        #expect(EngineCommand.restartNeeded(session: loaded, modelID: "qwen3.8-flash-next", contextSize: 0))
+        #expect(EngineCommand.restartNeeded(session: loaded, modelID: "", contextSize: 8192))
+        #expect(EngineCommand.restartNeeded(session: info(nil, nil), modelID: "m", contextSize: 0))
+    }
 }

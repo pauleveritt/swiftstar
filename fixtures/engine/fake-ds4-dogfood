@@ -2,7 +2,8 @@
 """Fake `ds4-dogfood tui --ndjson` for integration tests (stdlib only).
 
 Env: FAKE_ENGINE_FIXTURE, FAKE_ENGINE_PACE_MS (300), FAKE_ENGINE_EXIT (0),
-FAKE_ENGINE_REFUSE, FAKE_ENGINE_IGNORE_QUIT, FAKE_ENGINE_LOG.
+FAKE_ENGINE_REFUSE, FAKE_ENGINE_IGNORE_QUIT, FAKE_ENGINE_LOG,
+FAKE_ENGINE_ARGV_LOG (write argv, one per line, at start).
 Replays the fixture up to and including each `input` line, pausing after every
 `tool_start` until a stdin line arrives or the pace elapses.
 """
@@ -22,6 +23,10 @@ def on_term(_signo, _frame):
 
 
 signal.signal(signal.SIGTERM, on_term)
+
+if env.get("FAKE_ENGINE_ARGV_LOG"):
+    with open(env["FAKE_ENGINE_ARGV_LOG"], "w") as f:
+        f.write("".join(a + "\n" for a in sys.argv[1:]))
 
 if env.get("FAKE_ENGINE_REFUSE") == "1":
     sys.stderr.write("ds4-dogfood tui: error: no model on this Mac\n")

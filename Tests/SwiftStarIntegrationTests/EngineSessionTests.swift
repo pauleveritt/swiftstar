@@ -56,6 +56,33 @@ struct EngineSessionTests {
     private func isInterrupted(_ e: EngineEvent) -> Bool { if case .interrupted = e { true } else { false } }
     private func isProtocolError(_ e: EngineEvent) -> Bool { if case .protocolError = e { true } else { false } }
 
+    @Test func fakeReceivesModelFlags() async throws {
+        let argvLog = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fake-argv-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: argvLog) }
+        var env = ProcessInfo.processInfo.environment
+        env["FAKE_ENGINE_FIXTURE"] = Self.repoRoot.appendingPathComponent("fixtures/engine/tool-read.ndjson").path
+        env["FAKE_ENGINE_PACE_MS"] = "20"
+        env["FAKE_ENGINE_ARGV_LOG"] = argvLog.path
+        let args = EngineCommand.arguments(
+            source: URL(fileURLWithPath: "/tmp/r"), modelID: "qwen3.8-flash-next", contextSize: 20000)
+        let session = EngineSession(executable: Self.fake, arguments: args, environment: env)
+        let rec = Recorder()
+        session.onEvent = { rec.events.append($0) }
+        session.onExit = { rec.exits.append(($0, $1)) }
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        session.quit()
+        #expect(await wait { rec.exit != nil })
+        let logged = try String(contentsOf: argvLog, encoding: .utf8)
+            .split(separator: "\n").map(String.init)
+        #expect(logged == args)
+        let i = try #require(logged.firstIndex(of: "--model-id"))
+        #expect(logged[i + 1] == "qwen3.8-flash-next")
+        let j = try #require(logged.firstIndex(of: "--context-size"))
+        #expect(logged[j + 1] == "20000")
+    }
+
     @Test func promptRoundTrip() async throws {
         let (session, rec) = make(fixture: "tool-read", pace: 20)
         try session.start()
