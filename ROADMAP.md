@@ -98,6 +98,40 @@ group's order is not a priority order.
   `uv tool install`; SwiftStar finds it. *Reopens when a reader who is not the
   author needs to run the app without a terminal.*
 
+- **Shell toggle (was the Agent tab's, then Settings').** Now an engine
+  concern: shell and tool policy belong to ds4-engine. *Reopens only if
+  ds4-engine exposes a spawn-time tool-policy flag worth a Settings control.*
+- **A session browser.** Listing and searching past sessions, now over
+  ds4-engine's `~/.local/state/ds4-engine/sessions/` rather than
+  `~/.ds4/kvcache`. Same item as the session picker above.
+
+### Process and tooling
+
+- **P6 has no verification record**, unlike P1–P5 and P7–P11. Not a defect in
+  the phase — its analyzer and fixtures were committed and tested (P28 later
+  removed them) — but the house convention is a record per closed phase, and
+  P6's absence was only noticed during the 2026-08-25 P12 audit. *Reopens as
+  cheap cleanup alongside another docs pass.*
+- **A standing guard against under-specified authored prompts.** Four
+  instances in one day on 2026-08-29 (P17's "exactly one file", a singular
+  emission follow-up, a directive silent on ordering, a missing
+  `projectContext`). Form is an open question — test, lint, or review step —
+  and picking wrong yields something that gets disabled in three months.
+- **Agent harness (Pi) tooling: lazy Context7 stays, Superpowers goes lazy.**
+  The dev harness runs both as Pi packages (`npm:@upstash/context7-pi`,
+  `git:github.com/obra/superpowers`). Context7 ships the right shape — two
+  native tools plus a progressive-disclosure skill, ~160 tokens of description
+  and nothing else until a library question matches. Superpowers is the
+  outlier: `.pi/extensions/superpowers.ts` force-injects a ~1.1k-token
+  bootstrap into the first run of every session and after each compaction,
+  heavy on 8–16K windows (11–22% peak overhead). *Reopens as: a small
+  Pi-harness work item — drop the bootstrap injection (a local extension, so it
+  survives package reconciles), trim the skill list via a settings `skills`
+  filter, optionally gate the rest with `disable-model-invocation` — validated
+  by re-measuring system-prompt and first-run token cost on small-context
+  models.* Source:
+  [`2026-08-27-pi-harness-context7-superpowers.md`](docs/superpowers/research/2026-08-27-pi-harness-context7-superpowers.md).
+
 ### Closed or re-homed by P28
 
 The pre-P28 Backlog assumed a forked engine and host-side machinery. Each group
@@ -108,13 +142,13 @@ having it belongs in ds4-engine's own backlog, not here.
 - **Agent architecture and process** — the repair loop and its evidence
   coherence, harvest limits, `AGENTTEST_*` switches, specialized tool subagents,
   the dispatch decision, house style, the orchestrate directive, "Swift body,
-  Python brain", the two-phase `/spike`, the shell toggle. Closed: host tools,
+  Python brain", the two-phase `/spike`. Closed: host tools,
   dispatch, repair and the agent-test CLI are removed. Agent policy is
   ds4-engine's.
 - **Mellum inactive until 2026-09-05** — closed. Which model runs is the
   engine's choice; Mellum work, if it resumes, resumes there.
 - **Pool and context economy** — small-ctx workers, context-economy tooling,
-  `recall`, a session browser over `~/.ds4/kvcache`, a compaction skeleton, RLM
+  `recall`, a compaction skeleton, RLM
   sub-queries, multi-project residency, snapshot/rewind, compare-before-commit,
   the admission scheduler, `.kv` replay fixtures, cross-session mining. Closed:
   there is no pool and no `.kv` handling in this repository. Re-homed to
@@ -132,13 +166,14 @@ having it belongs in ds4-engine's own backlog, not here.
 - **ANE watcher tier** (a librarian and an inspector over Monty) — closed as a
   design note; it was a third tier beside the removed pool. It would re-enter as
   a new proposal against ds4-engine's tool surface.
-- **Process and tooling** — the `ROADMAP.md` size entry, the duplicate golden
-  fixtures, the fork branch name, the strict-docs-build failure, the parked
-  `main.swift` items, the golden `kind` fixture, P6's missing verification
-  record, warm-started agent-test metrics, Pi harness tooling. Closed: each
-  named a removed file, the fork or the agent-test CLI. The size concern is
-  resolved by this rewrite (the Backlog is now short) and the docs build is
-  green again.
+- **Process and tooling** (closed part) — the duplicate golden fixtures, the
+  fork branch name, parked `main.swift` items (a)–(c), the golden `kind`
+  fixture, warm-started agent-test metrics. Closed: each named a removed file,
+  the fork or the agent-test CLI. The `ROADMAP.md` size entry and the
+  strict-docs-build failure are resolved (the Backlog is now short; the docs
+  build is green). The engine-independent items (P6's verification record, the
+  under-specified-prompts guard, Pi harness tooling) were kept in "Process and
+  tooling" above; the shell toggle and session browser moved to "Front-end".
 - **Retired earlier** — Chat as a separate surface (2026-08-26), phase-level
   recovery, `RepairLoop` receipt exits, workspace isolation and the handoff
   packet (P10): landed or retired, and their machinery removed.

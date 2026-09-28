@@ -210,8 +210,6 @@ sees those.
 6. **The wire announces itself.** `ready` with `protocol == 1` is the first
    line; a mismatch refuses loudly rather than degrading.
 7. **Gardened facts arrive with the phase that needs them**, never in bulk.
-8. **Zero and "already covered" are claims with a definition.** State what was
-   counted before reporting that nothing was found.
 
 ## The trap we are avoiding
 
@@ -234,12 +232,13 @@ tangents go to the Backlog, never into the current phase.
 - swift-testing for new tests, not XCTest.
 - Docs are Sphinx + MyST + Furo, built through `uv` (`just docs`,
   `just watch-docs`). Python in this repository is the docs build, plus the
-  fixture recorder and the fake `ds4-dogfood` under `Tools/` and `fixtures/`.
+  fixture recorder and the fake `ds4-dogfood` under `Tools/` and `fixtures/` (unlinted; the host
+  ruff configuration went with P28).
 - `ds4-dogfood` comes from ds4-engine, installed with `uv tool install`. A live
   capture needs it on the machine and real weights on disk; it is never part of
   CI.
 
 ## Where to start
 
-`ROADMAP.md`, `## Now`. Phase **P28** is the cut-over: read its spec and plans
-before touching the app.
+`ROADMAP.md`, `## Now`, for what is in flight. The cut-over that produced this
+design is in the P28 spec and plans; read them before changing the engine seam.
