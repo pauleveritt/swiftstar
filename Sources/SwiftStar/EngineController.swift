@@ -50,26 +50,21 @@ final class EngineController {
         return ProjectRoot.locate(anchor: anchor) ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
-    /// True while a session runs and Settings name a different model or
-    /// context size than the one loaded. Never touches the running session.
-    var restartNeeded: Bool {
-        guard phase == .running else { return false }
-        return EngineCommand.restartNeeded(
-            session: transcript.session,
-            modelID: UserDefaults.standard.string(forKey: Self.modelIDDefaultsKey),
-            contextSize: UserDefaults.standard.integer(forKey: Self.contextSizeDefaultsKey))
-    }
-
-    /// The model id Settings would start the engine with, trimmed; nil if unset.
-    var settingsModelID: String? {
-        let t = UserDefaults.standard.string(forKey: Self.modelIDDefaultsKey)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (t?.isEmpty ?? true) ? nil : t
+    /// True while a session runs and the given Settings values name a
+    /// different model or context size than the one loaded. The view passes
+    /// its `@AppStorage` values so SwiftUI tracks Settings edits.
+    func restartNeeded(modelID: String?, contextSize: Int?) -> Bool {
+        phase == .running && EngineCommand.restartNeeded(
+            session: transcript.session, modelID: modelID, contextSize: contextSize)
     }
 
     /// Quits the running session, then starts a new one with current Settings.
     func restart() async {
         await quit()
+        guard !isActive else {
+            transcript.appendSystem("Restart skipped: the engine has not exited yet. Try again in a moment.")
+            return
+        }
         start()
     }
 

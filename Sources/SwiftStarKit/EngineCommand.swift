@@ -25,13 +25,15 @@ public enum EngineCommand {
     }
 
     /// True while a session runs (`session` non-nil) and Settings name a model
-    /// or context size other than the loaded one. Unset settings never differ.
+    /// or context size other than the loaded one. Unset settings never differ,
+    /// and a field the session did not report is not compared (a restart
+    /// could never satisfy it).
     public static func restartNeeded(
         session: EngineSessionInfo?, modelID: String?, contextSize: Int?
     ) -> Bool {
         guard let session else { return false }
-        if let id = trimmedModelID(modelID), id != session.modelID { return true }
-        if let n = contextSize, n > 0, n != session.contextSize { return true }
+        if let id = trimmedModelID(modelID), let loaded = session.modelID, id != loaded { return true }
+        if let n = contextSize, n > 0, let loaded = session.contextSize, n != loaded { return true }
         return false
     }
 

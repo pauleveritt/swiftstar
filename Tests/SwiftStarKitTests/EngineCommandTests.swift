@@ -118,6 +118,9 @@ struct EngineCommandTests {
         #expect(!EngineCommand.restartNeeded(session: loaded, modelID: " laguna-xs-2.1 ", contextSize: 0))
         #expect(EngineCommand.restartNeeded(session: loaded, modelID: "qwen3.8-flash-next", contextSize: 0))
         #expect(EngineCommand.restartNeeded(session: loaded, modelID: "", contextSize: 8192))
-        #expect(EngineCommand.restartNeeded(session: info(nil, nil), modelID: "m", contextSize: 0))
+        // Fields the session did not report are not compared.
+        #expect(!EngineCommand.restartNeeded(session: info(nil, nil), modelID: "m", contextSize: 8192))
+        #expect(EngineCommand.restartNeeded(session: info(nil, 8192), modelID: "m", contextSize: 4096))
+        #expect(!EngineCommand.restartNeeded(session: info(nil, 8192), modelID: "m", contextSize: 8192))
     }
 }

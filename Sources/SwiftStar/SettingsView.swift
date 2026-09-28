@@ -15,9 +15,8 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 TextField("Model id", text: $engineModelID, prompt: Text("Engine default"))
-                TextField("Context size", value: $engineContextSize, format: .number.grouping(.never),
-                          prompt: Text("Engine default"))
-                Text("Model id, e.g. laguna-xs-2.1 or qwen3.8-flash-next. Empty (or 0) = engine default. A running session keeps its model; use Restart in the Agent toolbar.")
+                TextField("Context size", text: contextText, prompt: Text("Engine default"))
+                Text("Model id, e.g. laguna-xs-2.1 or qwen3.8-flash-next. Empty = engine default. A running session keeps its model; use Restart in the Agent toolbar.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -38,6 +37,15 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 380)
+    }
+
+    /// Empty or non-numeric text stores 0 (engine default), so the field shows
+    /// its prompt instead of "0".
+    private var contextText: Binding<String> {
+        Binding(
+            get: { engineContextSize > 0 ? String(engineContextSize) : "" },
+            set: { engineContextSize = max(0, Int($0.trimmingCharacters(in: .whitespaces)) ?? 0) }
+        )
     }
 
     /// The slider's 0…3 slot index, mapped through `TranscriptFontScale.sizes`
