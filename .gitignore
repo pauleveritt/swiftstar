@@ -19,13 +19,6 @@ docs/_build/
 # during a task run. Durable output belongs in docs/superpowers/, not here.
 .superpowers/
 
-# Capture output. `swiftstar-drive` writes NDJSON, timestamp sidecars, and
-# telemetry logs here; committed fixtures live under fixtures/ instead, chosen
-# deliberately rather than by accumulation.
-captures/
-
-# App runtime state: the agent stages Superpowers skills into its workspace.
-.swiftstar/
 .DS_Store
 
 .swiftpm/

@@ -7,6 +7,10 @@ list. Not a roadmap — some of these are model behavior, some are harness bugs
 that provoke the behavior; both belong here because either can produce the
 same symptom.
 
+These were observed under the pre-P28 harness, which P28 removed; the model
+behaviors still apply to whatever runs a small local model, but the harness
+bugs among them no longer have code to fix.
+
 What was done about these, and whether it worked, is the companion file:
 [`remediations.md`](remediations.md), cross-referenced by the entry numbers
 below.

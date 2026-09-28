@@ -1,5 +1,9 @@
 # Old UI element inventory — `docs/old_ui.png`
 
+> **Snapshot, 2026-08-26.** Line anchors into `AgentView.swift` are as of that
+> date; P28 reworked the view around one engine session and dropped its model
+> menu, so treat the swiftstar column as history.
+
 `docs/old_ui.png` is a screenshot of a "DS4 Agent" window — the same agent
 window this repo's [`AgentView.swift`](../Sources/SwiftStar/AgentView.swift)
 is a port of. This doc names every visible UI element in the screenshot and
@@ -166,7 +170,7 @@ shifts width tick to tick.
 - **swiftstar**: `AgentView.bottomStatusText` / `AgentStatusText.promptDecodeLine` —
   [`AgentView.swift:296-305`](../Sources/SwiftStar/AgentView.swift#L296-L305),
   logic factored out into `SwiftStarKit`'s
-  [`AgentStatusText.swift`](../Sources/SwiftStarKit/AgentStatusText.swift)
+  `AgentStatusText.swift` (removed in P28)
   rather than living as a `static func` on the view itself. Same
   `.monospacedDigit()`/`.contentTransition(.numericText())` treatment
   (`.swift:264-266`).

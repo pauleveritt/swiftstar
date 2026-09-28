@@ -1,128 +1,64 @@
 import SwiftUI
 
-enum InspectorTab: CaseIterable, Hashable, Identifiable {
-    case metrics, diagnostics
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .metrics: "Metrics"
-        case .diagnostics: "Diagnostics"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .metrics: "gauge"
-        case .diagnostics: "stethoscope"
-        }
-    }
-}
-
 struct InspectorView: View {
-    @Binding var tab: InspectorTab
     let metricsModel: MetricsModel
-    let diagnosticsModel: DiagnosticsModel
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 8) {
-                ForEach(InspectorTab.allCases) { item in
-                    Button {
-                        withAnimation(.snappy(duration: 0.22)) {
-                            tab = item
-                        }
-                    } label: {
-                        Image(systemName: item.systemImage)
-                            .font(.system(size: 15, weight: .medium))
-                            .frame(width: 30, height: 30)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(tab == item ? .primary : .secondary)
-                    .background {
-                        RoundedRectangle(cornerRadius: 7)
-                            .fill(tab == item ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(.clear))
-                    }
-                    .help(item.title)
-                    .accessibilityLabel(item.title)
-                    .accessibilityHint("Show (item.title) in the inspector")
-                    .accessibilityAddTraits(tab == item ? .isSelected : [])
-                }
-
-                Spacer()
-            }
-            .padding(.top, 10)
-            .padding(.horizontal, 7)
-            .frame(width: 46)
-
-            Divider()
-
-            Group {
-                switch tab {
-                case .metrics:
-                    MetricsInspectorView(model: metricsModel)
-                case .diagnostics:
-                    DiagnosticsView(model: diagnosticsModel)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(minWidth: 280, idealWidth: 320)
-    }
-}
-
-private struct MetricsInspectorView: View {
-    let model: MetricsModel
-
-    var body: some View {
+        let state = metricsModel.state
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if model.provenance == .recorded {
-                    Label("Recorded session", systemImage: "film")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Context").font(.headline)
-                    metricRow("Used", value: model.state.ctxUsed.map(String.init) ?? "—")
-                    metricRow("Window", value: model.state.ctxSize.map(String.init) ?? "—")
+                    HStack(spacing: 10) {
+                        if let used = state.contextUsed, let size = state.contextSize, size > 0 {
+                            ValueGaugeView(
+                                fraction: Double(used) / Double(size),
+                                text: nil, textFontSize: 0,
+                                trackColor: color(contextSeverity(ctxUsed: used)),
+                                diameter: 30)
+                        }
+                        VStack(alignment: .leading, spacing: 10) {
+                            metricRow("Used", value: state.contextUsed.map { $0.formatted() } ?? "—")
+                            metricRow("Window", value: state.contextSize.map { $0.formatted() } ?? "—")
+                        }
+                    }
                 }
                 .inspectorCard()
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Throughput").font(.headline)
-                    metricRow("Prompt", value: String(format: "%.1f tok/s", model.state.prefillTPS))
-                    metricRow("Decode", value: String(format: "%.1f tok/s", model.state.genTPS))
+                    metricRow("Prefill", value: rate(state.prefillTPS))
+                    metricRow("Generation", value: rate(state.generationTPS))
                 }
                 .inspectorCard()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Machine").font(.headline)
-                    metricRow("Memory", value: memoryValue)
-                    metricRow("GPU", value: sampled("%.0f%%", model.machine.gpuUtilization))
-                    metricRow("CPU", value: sampled("%.0f%%", model.machine.cpuUtilization))
-                    metricRow("Power", value: sampled("%.1f W", model.machine.watts))
-                    metricRow("Throttle", value: model.provenance == .live
-                              ? String(format: "%.0f%%", model.state.throttlePercent) : "—")
+                    Text("GPU memory").font(.headline)
+                    metricRow("Allocated", value: bytes(state.gpuAllocatedBytes))
+                    metricRow("Budget", value: bytes(state.gpuBudgetBytes))
+                    metricRow("Plan", value: state.planGiB.map { String(format: "%.1f GiB", $0) } ?? "—")
                 }
                 .inspectorCard()
             }
             .padding(16)
         }
+        .frame(minWidth: 280, idealWidth: 320)
     }
 
-    private var memoryValue: String {
-        guard let resident = model.machine.residentBytes,
-              let budget = model.memoryBudgetPlannedBytes else { return "—" }
-        return resident.formatted(.byteCount(style: .memory)) + " / "
-            + budget.formatted(.byteCount(style: .memory))
+    private func color(_ severity: Severity) -> Color {
+        switch severity {
+        case .healthy: .green
+        case .warning: .orange
+        case .critical: .red
+        }
     }
 
-    private func sampled(_ format: String, _ value: Double) -> String {
-        model.sampling ? String(format: format, value) : "—"
+    private func rate(_ value: Double?) -> String {
+        value.map { String(format: "%.1f tok/s", $0) } ?? "—"
+    }
+
+    private func bytes(_ value: Int64?) -> String {
+        value.map { $0.formatted(.byteCount(style: .memory)) } ?? "—"
     }
 
     private func metricRow(_ title: String, value: String) -> some View {

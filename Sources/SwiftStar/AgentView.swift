@@ -3,11 +3,13 @@ import SwiftUI
 import SwiftStarKit
 
 struct AgentView: View {
-    let controller: AgentController
+    let controller: EngineController
     @State private var input = ""
     @FocusState private var inputFocused: Bool
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
     @Environment(\.transcriptFontSize) private var envTranscriptFontSize: CGFloat
+
+    private var isRunning: Bool { controller.phase == .running }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,40 +25,27 @@ struct AgentView: View {
             ToolbarItem(placement: .automatic) {
                 workspaceButton
             }
-            ToolbarItem(placement: .automatic) {
-                ModelMenu(
-                    isGenerating: controller.isGenerating,
-                    isConsulting: controller.isConsulting,
-                    isUp: controller.isUp,
-                    isFailed: controller.isFailed,
-                    onApply: { controller.applyModelSelection() },
-                    onStart: { controller.startAgent() })
-            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    switch controller.state {
-                    case .stopped, .failed:
-                        controller.startAgent()
-                    case .starting, .ready, .generating:
-                        controller.stopAgent()
-                    case .stopping:
-                        break
+                    if controller.isActive {
+                        Task { await controller.quit() }
+                    } else {
+                        controller.start()
                     }
                 } label: {
                     Label(sessionActionTitle, systemImage: sessionActionIcon)
                 }
-                .disabled(controller.state == .stopping)
                 .help(sessionActionHelp)
             }
         }
-        .task { controller.startIfNeeded() }
+        .task { if controller.phase == .idle { controller.start() } }
     }
 
     private var workspaceButton: some View {
         Button(action: pickWorkspace) {
             HStack(spacing: 4) {
                 Image(systemName: "folder")
-                Text(PathAbbreviation.leafName(controller.settings.workspace))
+                Text(controller.workspace.map(PathAbbreviation.leafName) ?? "Choose folder")
             }
             .font(.system(size: envTranscriptFontSize))
             // Keep the toolbar item at its natural width as the transcript
@@ -65,7 +54,7 @@ struct AgentView: View {
             .padding(.horizontal, 8)
         }
         .buttonStyle(.borderless)
-        .help("Workspace: the directory the agent may touch (applied at next start)")
+        .help("Workspace: its git repository is the engine's source (applied at next start)")
     }
 
     private func pickWorkspace() {
@@ -73,22 +62,10 @@ struct AgentView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.directoryURL = controller.settings.workspace
-        panel.message = "Choose the workspace the agent may touch"
+        panel.directoryURL = controller.workspace
+        panel.message = "Choose a folder in the git repository the engine should work on"
         if panel.runModal() == .OK, let url = panel.url {
-            controller.settings.workspace = url
-            UserDefaults.standard.set(url.path, forKey: "agentWorkspace")
-        }
-    }
-
-    private var statusText: String {
-        switch controller.state {
-        case .stopped: return "Agent stopped"
-        case .starting: return "Starting agent…"
-        case .ready: return "Agent ready"
-        case .generating: return "Working…"
-        case .stopping: return "Stopping…"
-        case .failed(let message): return "Failed: \(message)"
+            controller.workspace = url
         }
     }
 
@@ -96,12 +73,9 @@ struct AgentView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    // Rows are keyed by offset — a stable-row-ID decision (P19.0):
-                    // the transcript reducer is append-only (never inserts before
-                    // or removes a row), so an offset is a stable identity for the
-                    // row's whole lifetime. Pinned by
-                    // `AgentTranscriptTests.reducerIsAppendOnly`; revisit if a
-                    // reorder/insert/delete path ever lands (then stable IDs, not offsets).
+                    // Rows are keyed by offset: the transcript only appends
+                    // rows (a tool card fills in place), so an offset is a
+                    // stable identity for a row's whole lifetime.
                     ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { _, row in
                         rowView(row)
                     }
@@ -110,18 +84,12 @@ struct AgentView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .onChange(of: controller.transcript.rows) { _, _ in
-                // The whole array, not `.count`: a streamed `text`/`think` event
-                // mutates the trailing row in place, so `.count` never changes
-                // mid-response and would freeze autoscroll for the whole answer
-                // (the DS4 Control lesson). The array is Equatable over its
-                // value-type rows, so comparing it fires on that in-place growth.
+                // Compare the whole array, not `.count`: a tool card fills in
+                // place, so the count alone would miss it.
                 let last = controller.transcript.rows.count - 1
                 guard last >= 0 else { return }
-                // Streamed rows change height many times per second. Starting
-                // an animated scroll for each mutation continually interrupts
-                // the previous animation, producing the visible up/down
-                // oscillation. Follow the latest row in a transaction that
-                // explicitly disables animation instead.
+                // Follow the latest row without animating; an animated scroll
+                // per mutation keeps interrupting the previous one.
                 var transaction = Transaction()
                 transaction.animation = nil
                 transaction.disablesAnimations = true
@@ -133,20 +101,22 @@ struct AgentView: View {
     }
 
     @ViewBuilder
-    private func rowView(_ row: AgentTranscriptRow) -> some View {
+    private func rowView(_ row: TranscriptRow) -> some View {
         switch row {
-        case .user(let text, let stats):
-            AgentPromptBubble(text: text, stats: stats)
+        case .user(let text):
+            AgentPromptBubble(text: text)
         case .thinking(let text):
             ThinkingDisclosure(text: text)
-        case .content(let text, let summary):
+        case .narration(let text):
+            MarkdownText(text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .answer(let answer):
             VStack(alignment: .leading, spacing: 4) {
-                MarkdownText(text)
-                if let summary {
-                    // The frozen per-turn summary: decode average, tokens, ctx —
-                    // styled small and secondary so engine telemetry never reads
-                    // as part of the answer (the DS4 stats-line precedent).
-                    Text(summary.line)
+                MarkdownText(answer.text)
+                if let line = Self.answerSummary(answer) {
+                    // Engine telemetry, styled small and secondary so it never
+                    // reads as part of the answer.
+                    Text(line)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -155,54 +125,43 @@ struct AgentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
-            AgentToolCardView(card: card, workspace: controller.settings.workspace)
-        case .consulted(let worker, let text, let stats):
-            ConsultedAnswerView(worker: worker, text: text, stats: stats)
-        case .system(let text, let stats):
-            VStack(alignment: .leading, spacing: 2) {
-                Text(text).font(.system(size: envTranscriptFontSize)).foregroundStyle(.tertiary)
-                if let stats {
-                    Text(stats.timestamp.formatted(date: .omitted, time: .shortened))
-                        .font(.caption2)
-                        .foregroundStyle(.quaternary)
-                        .monospacedDigit()
-                }
-            }
-        case .compaction(let summary):
-            CompactionRow(summary: summary)
+            AgentToolCardView(card: card, workspace: controller.workspace)
+        case .system(let text):
+            Text(text)
+                .font(.system(size: envTranscriptFontSize))
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+        case .error(let text):
+            Text(text)
+                .font(.system(size: envTranscriptFontSize))
+                .foregroundStyle(.red)
+                .textSelection(.enabled)
         }
+    }
+
+    private static func answerSummary(_ answer: EngineAnswer) -> String? {
+        var parts: [String] = []
+        if let ms = answer.durationMs, ms.isFinite, ms >= 0 {
+            parts.append(String(format: "%.1fs", ms / 1000))
+        }
+        if let used = answer.contextUsed, let size = answer.contextSize {
+            parts.append("ctx \(used.formatted()) / \(size.formatted())")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var composer: some View {
         VStack(spacing: 4) {
-            if let error = errorText {
+            if let notice = noticeText {
                 HStack {
-                    Text(error)
+                    Text(notice)
                         .font(.system(size: envTranscriptFontSize))
                         .foregroundStyle(.red)
-                    Spacer()
-                }
-            }
-            // Item 2 (P22 cleanup): `state` stays `.ready` for the whole
-            // consult worker turn (see AgentController.isConsulting's doc —
-            // `.generating` is load-bearing elsewhere and must not be
-            // reused), so without this the composer looks idle while a
-            // worker actually runs. A small spinner + label, matching the
-            // errorText row's shape, closes that gap without touching
-            // canSend/isGenerating.
-            if controller.isConsulting {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Consulting a worker…")
-                        .font(.system(size: envTranscriptFontSize))
-                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                     Spacer()
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
-                // D8 attachment seam (reserved): a future clipboard-paste/attachment
-                // chip renders directly above this field. No paste code this phase.
                 TextField("Ask the agent…", text: $input, axis: .vertical)
                     .font(.system(size: CGFloat(TranscriptFontScale.clamp(transcriptFontSize))))
                     .textFieldStyle(.plain)
@@ -221,151 +180,96 @@ struct AgentView: View {
                             input += "\n"
                             return .handled
                         }
-                        if controller.canSend && !controller.isConsulting {
-                            send()
-                        }
+                        send()
                         return .handled
                     }
-                    // `canSend` alone stays true through a consult worker's
-                    // turn (state never leaves `.ready`) — `isConsulting`
-                    // closes that gap so the field visibly can't fire a
-                    // conflicting turn while a worker is running.
-                    .disabled(!controller.canSend || controller.isConsulting)
+                    .disabled(!isRunning)
                 Button {
-                    if controller.isTurnActive {
-                        controller.interrupt()
+                    if controller.transcript.canStop {
+                        controller.stop()
                     } else {
                         send()
                     }
                 } label: {
-                    Image(systemName: controller.isTurnActive ? "stop.circle.fill" : "arrow.up.circle.fill")
+                    Image(systemName: controller.transcript.canStop ? "stop.circle.fill" : "arrow.up.circle.fill")
                         .font(.system(size: 28))
-                        .symbolEffect(.variableColor.iterative,
-                                      isActive: controller.isTurnActive && !controller.interruptPending)
-                        .foregroundStyle(controller.isTurnActive ? .red : .accentColor)
+                        .symbolEffect(.variableColor.iterative, isActive: controller.transcript.canStop)
+                        .foregroundStyle(controller.transcript.canStop ? .red : .accentColor)
                 }
                 .buttonStyle(.plain)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 // Icon-only, and the icon carries the whole meaning — the label
                 // has to move with the state or VoiceOver announces nothing.
-                .accessibilityLabel(controller.isTurnActive
-                    ? (controller.interruptPending
-                        ? (controller.isConsulting ? "Stopping consult" : "Stopping generation")
-                        : (controller.isConsulting ? "Stop consult" : "Stop generating"))
-                    : "Send message")
-                .disabled(
-                    controller.isTurnActive
-                        ? controller.interruptPending
-                        : (controller.state != .ready
-                            || controller.isConsulting
-                            || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                )
+                .accessibilityLabel(controller.transcript.canStop ? "Stop generating" : "Send message")
+                .disabled(controller.transcript.canStop
+                    ? false
+                    : (!isRunning || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .onChange(of: controller.isGenerating) { _, generating in
-            if !generating { inputFocused = true }
+        .onChange(of: controller.transcript.isBusy) { _, busy in
+            if !busy { inputFocused = true }
         }
     }
 
-    private var errorText: String? {
-        if case .failed(let message) = controller.state { return message }
+    /// Shown above the prompt field when the engine could not be found.
+    private var noticeText: String? {
+        if case .notFound(let searched) = controller.phase {
+            return "ds4-dogfood was not found. Searched:\n" + searched.joined(separator: "\n")
+        }
         return nil
     }
 
     private var sessionActionTitle: String {
-        switch controller.state {
-        case .stopped, .failed: return "Start session"
-        case .stopping: return "Stopping…"
-        case .starting, .ready, .generating: return "End session"
-        }
+        controller.isActive ? "End session" : "Start session"
     }
 
     private var sessionActionIcon: String {
-        switch controller.state {
-        case .stopped, .failed: return "play.circle"
-        case .stopping: return "hourglass"
-        case .starting, .ready, .generating: return "stop.circle"
-        }
+        controller.isActive ? "stop.circle" : "play.circle"
     }
 
     private var sessionActionHelp: String {
-        switch controller.state {
-        case .stopped, .failed: return "Start a new agent session"
-        case .stopping: return "Waiting for the agent session to stop"
-        case .starting, .ready, .generating: return "End the current agent session"
-        }
+        controller.isActive ? "End the current agent session" : "Start a new agent session"
     }
 
     private func send() {
         let message = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Commands (P19.1 D10, glossary): `/chat` runs a read-only worker;
-        // `/orchestrate` is the coordination loop (P20-forward). A bare prompt
-        // is the default agent mode. Command names MUST agree with the glossary.
-        switch CommandRouter.parse(message) {
-        case .chat(let task):
-            input = ""
-            controller.consult(task: task, writableFiles: [])
-        case .orchestrate(let task, let writableFiles):
-            input = ""
-            controller.orchestrate(task: task, writableFiles: writableFiles)
-        case .quick(let task):
-            input = ""
-            controller.quick(task: task)
-        case nil:
-            guard controller.canSend, !message.isEmpty else { return }
-            input = ""
-            controller.send(message)
-        }
-        return
+        guard isRunning, !message.isEmpty else { return }
+        input = ""
+        controller.send(message)
     }
 
-    /// Bottom readout bar (ported from the DS4 Control agent window): left =
-    /// fixed-width Prompt/Decode rates + activity, right = the context-fill
-    /// ring. Hidden while the agent is down; the rates are ratcheted in the
-    /// controller so a zero reading never blanks a live rate.
+    /// Bottom readout bar: left = fixed-width prefill/generation rates and the
+    /// phase, right = memory and the context-fill ring.
     private var bottomStatusBar: some View {
         HStack(spacing: 8) {
-            // The engine's own per-worker error (StatusSnapshot.error, wire
-            // field `status.error`) is a live, non-fatal report — distinct
-            // from `AgentState.failed` (a process exit). Nothing consumed
-            // this field before (a doc-comment on StatusSnapshot claimed
-            // otherwise); it takes over the readout slot, in red, whenever
-            // non-empty, matching the composer's existing red-error styling.
-            if let engineError = controller.lastStatus?.error, !engineError.isEmpty {
-                Text("Engine error: \(engineError)")
-                    .font(.system(size: envTranscriptFontSize))
-                    .foregroundStyle(.red)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(engineError)
-            } else {
-                Text(bottomStatusText)
-                    .font(.system(size: envTranscriptFontSize))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(.default, value: bottomStatusText)
-            }
+            Text(bottomStatusText)
+                .font(.system(size: envTranscriptFontSize))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.default, value: bottomStatusText)
             Spacer(minLength: 12)
             memoryStatusWidget
-            if controller.isUp, let s = controller.lastStatus, s.ctxSize > 0 {
+            if let used = controller.metrics.contextUsed,
+               let size = controller.metrics.contextSize, size > 0 {
+                let tooltip = contextRingTooltip(used: used, size: size)
                 ValueGaugeView(
-                    fraction: Double(s.ctxUsed) / Double(s.ctxSize),
+                    fraction: Double(used) / Double(size),
                     text: nil, textFontSize: 0,
-                    trackColor: contextRingColor(ctxUsed: s.ctxUsed),
+                    trackColor: contextRingColor(ctxUsed: used),
                     diameter: 15)
                     .padding(.horizontal, 4)
                     .contentShape(Rectangle())
-                    .help(contextRingTooltip(s))
+                    .help(tooltip)
                     .accessibilityElement()
                     .accessibilityLabel("Context window")
-                    .accessibilityValue(contextRingTooltip(s))
-                    .nativeTooltip(contextRingTooltip(s))
+                    .accessibilityValue(tooltip)
+                    .nativeTooltip(tooltip)
             }
         }
         .padding(.horizontal, 10)
@@ -375,21 +279,16 @@ struct AgentView: View {
 
     @ViewBuilder
     private var memoryStatusWidget: some View {
-        if controller.isUp,
-           controller.lastPlannedModel == controller.settings.modelPath.lastPathComponent,
-           let footprint = controller.lastFootprintBytes,
-           let planned = controller.lastPlannedBytes, planned > 0 {
-            // Keep the ring as a quick severity glance, but show the actual
-            // resident/planned values beside it so memory use is discoverable
-            // without requiring a hover or accessibility tooling.
-            let tooltip = memoryRingTooltip(footprint: footprint, planned: planned)
+        if let allocated = controller.metrics.gpuAllocatedBytes,
+           let budget = controller.metrics.gpuBudgetBytes, budget > 0 {
+            let tooltip = "GPU memory: \(memoryDisplay(allocated)) allocated of \(memoryDisplay(budget)) budget."
             HStack(spacing: 4) {
                 ValueGaugeView(
-                    fraction: min(Double(footprint) / Double(planned), 1.0),
+                    fraction: min(Double(allocated) / Double(budget), 1.0),
                     text: nil, textFontSize: 0,
-                    trackColor: memoryRingColor(footprint: footprint, planned: planned),
+                    trackColor: .green,
                     diameter: 15)
-                Text("\(memoryDisplay(footprint)) / \(memoryDisplay(planned))")
+                Text("\(memoryDisplay(allocated)) / \(memoryDisplay(budget))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -398,79 +297,51 @@ struct AgentView: View {
             .contentShape(Rectangle())
             .help(tooltip)
             .accessibilityElement()
-            .accessibilityLabel("Agent memory")
+            .accessibilityLabel("GPU memory")
             .accessibilityValue(tooltip)
             .nativeTooltip(tooltip)
         }
     }
 
-    /// Rates + activity while the agent is up, else the same state text as
-    /// the top bar (a readout, not a second control).
+    /// Rates and activity while the session is up, else the phase.
     private var bottomStatusText: String {
-        if controller.state == .ready || controller.state == .generating {
-            return AgentStatusText.promptDecodeLine(
-                promptTPS: controller.lastPrefillTPS,
-                decodeTPS: controller.lastGenTPS,
-                message: AgentStatusText.stateMessage(controller.lastStatus?.state ?? ""))
+        switch controller.phase {
+        case .idle: return "No session"
+        case .starting: return "Starting engine…"
+        case .notFound: return "Engine not found"
+        case .ended(let exit): return "Ended (exit \(exit.code))"
+        case .running:
+            let t = controller.transcript
+            let activity = t.isGenerating ? "Generating…"
+                : t.isBusy ? "Working…"
+                : (t.loadingText.map { $0.isEmpty ? "Loading…" : $0 } ?? "Ready")
+            return "Prefill \(rateText(controller.metrics.prefillTPS)) tok/s · "
+                + "Generation \(rateText(controller.metrics.generationTPS)) tok/s · \(activity)"
         }
-        return statusText
     }
 
-    /// Absolute-token severity (DialLogic), not a fraction threshold: ctx_size
-    /// varies 256k–1M by RAM/variant, so fraction-anchored colors fire at the
-    /// wrong absolute usage (the P11 findings lesson).
+    private func rateText(_ value: Double?) -> String {
+        fixedWidth(value.map { String(format: "%.1f", $0) } ?? "—", width: 6)
+    }
+
+    /// Absolute-token severity, not a fraction threshold: the window size
+    /// varies, so fraction-anchored colors would fire at the wrong usage.
     private func contextRingColor(ctxUsed: Int) -> Color {
-        switch DialLogic.contextSeverity(ctxUsed: ctxUsed) {
+        switch contextSeverity(ctxUsed: ctxUsed) {
         case .healthy: return .green
         case .warning: return .orange
         case .critical: return .red
         }
-    }
-
-    /// Generic 70/90 memory thresholds (DialLogic), unlike the context ring's
-    /// telemetry-derived absolute anchors — memory stayed well under budget in
-    /// every captured session, so there is no measured overshoot curve.
-    private func memoryRingColor(footprint: Int64, planned: Int64) -> Color {
-        switch DialLogic.memorySeverity(residentBytes: footprint, plannedBytes: planned) {
-        case .healthy: return .green
-        case .warning: return .orange
-        case .critical: return .red
-        }
-    }
-
-    private func memoryRingTooltip(footprint: Int64, planned: Int64) -> String {
-        let percent = Double(footprint) / Double(planned) * 100
-        var text = String(
-            format: "Agent memory: %@ resident of %@ planned (%.0f%%).",
-            memoryDisplay(footprint), memoryDisplay(planned), percent)
-        if Double(footprint) > Double(planned) {
-            // Resident includes the mapped model, so over-budget is normal for
-            // a large model — say so rather than letting the critical color
-            // stand unexplained.
-            text += " Over budget (resident includes the mapped model)."
-        }
-        return text
     }
 
     private func memoryDisplay(_ bytes: Int64) -> String {
         bytes.formatted(.byteCount(style: .memory))
     }
 
-    /// Carries the mechanism, not just the numbers: prefill speed is the
-    /// figure the investigation showed actually degrades as context grows.
-    private func contextRingTooltip(_ s: StatusSnapshot) -> String {
-        let percent = Double(s.ctxUsed) / Double(s.ctxSize) * 100
-        var text =
-            String(format: "Context window: %@ of %@ tokens (%.0f%% used).",
-                   s.ctxUsed.formatted(), s.ctxSize.formatted(), percent)
-            + " Once this fills, ds4-agent compacts the conversation to make room."
-        if s.prefillTPS > 0 {
-            text += String(format: " Current prefill: %.1f tok/s.", s.prefillTPS)
-        }
-        if s.genTPS > 0 {
-            text += String(format: " Current decode: %.1f tok/s.", s.genTPS)
-        }
-        return text
+    private func contextRingTooltip(used: Int, size: Int) -> String {
+        let percent = Double(used) / Double(size) * 100
+        return String(format: "Context window: %@ of %@ tokens (%.0f%% used).",
+                      used.formatted(), size.formatted(), percent)
     }
 }
 
@@ -506,84 +377,5 @@ private struct NativeTooltipModifier: ViewModifier {
 private extension View {
     func nativeTooltip(_ text: String) -> some View {
         modifier(NativeTooltipModifier(text: text))
-    }
-}
-
-/// The toolbar model menu (P19.1 D4): enumerates the effective model (Laguna S
-/// default + registry variants + custom), disabled mid-generation. A selection
-/// is a no-op for the same model; the actual switch behavior lands with P22.
-struct ModelMenu: View {
-    @AppStorage("selectedVariantID") private var selectedVariantID = ""
-    @AppStorage("modelPath") private var modelPath = ""
-    var isGenerating: Bool
-    /// True while a `/chat` consult worker turn is running. `state` stays
-    /// `.ready` for the whole turn (see `AgentController.isConsulting`), so
-    /// this is checked separately from `isGenerating` to keep "Apply this
-    /// model" from killing an in-flight consult with no refusal.
-    var isConsulting: Bool
-    /// The agent is up (ready or generating) — a live session exists to switch.
-    var isUp: Bool
-    /// A spawn refusal landed `.failed` — no process to switch away from, but
-    /// picking a different model should still be startable from here.
-    var isFailed: Bool
-    /// Runs `AgentController.applyModelSelection()`: the pure decision gates
-    /// the stop; refusals/no-ops surface as transcript system rows.
-    var onApply: () -> Void
-    /// Runs `AgentController.startAgent()` directly — the `.failed` recovery
-    /// path, since `startIfNeeded()` only fires once for `.stopped`.
-    var onStart: () -> Void
-
-    var body: some View {
-        Menu {
-            ForEach(ModelChoice.list(variants: VariantRegistry.all)) { choice in
-                Button(choice.label) {
-                    switch choice.id {
-                    case ModelChoice.defaultID:
-                        // The default is the *empty* state, not a persisted id:
-                        // "" + empty modelPath is the Laguna S fallback. Persisting
-                        // "default" was unrepresentable in Settings/VariantResolver.
-                        selectedVariantID = ""
-                        modelPath = ""
-                    case ModelChoice.customID:
-                        selectedVariantID = ""
-                    default:
-                        selectedVariantID = choice.id
-                    }
-                }
-            }
-            if isUp {
-                Divider()
-                Button("Apply this model") { onApply() }
-            } else if isFailed {
-                Divider()
-                Button("Start with this model") { onStart() }
-            }
-        } label: {
-            Label(currentLabel, systemImage: "cpu")
-        }
-        .disabled(isGenerating || isConsulting)
-        .help(isGenerating
-            ? "Model switching is disabled while generating"
-            : isConsulting
-                ? "Model switching is disabled while a /chat consult is running"
-                : "Pick a model for the next session, or choose Apply this model to switch the running session now.")
-    }
-
-    /// The model the next spawn will actually load. Resolved through
-    /// `VariantResolver` — the same resolver `AgentController.defaultSettings()`
-    /// uses — rather than re-deriving it here: a stale `selectedVariantID` (a
-    /// variant id left in defaults after the registry changed) used to fall to a
-    /// hardcoded "Laguna S" while the session launched something else entirely.
-    private var currentLabel: String {
-        if !selectedVariantID.isEmpty,
-           let variant = VariantRegistry.resolve(selectedVariantID) {
-            return variant.displayName
-        }
-        let resolved = VariantResolver.resolveModelFile(
-            selectedVariantID: selectedVariantID.isEmpty ? nil : selectedVariantID,
-            modelPath: modelPath.isEmpty ? nil : modelPath,
-            envModel: ProcessInfo.processInfo.environment["SWIFTSTAR_MODEL"],
-            fallback: AgentController.defaultModelFallback)
-        return resolved.url.lastPathComponent
     }
 }

@@ -53,10 +53,10 @@ re-litigate from scratch.
 
 - **Fast** (`just test`) — `SwiftStarKit` against fixtures. No model, no
   network, no subprocess, enforced by a tripwire that fails the build.
-- **Integration** — real processes and files against fake engine binaries
-  generated from committed captures.
-- **Live** (`just capture`) — the real engine and real weights. Minutes to run,
-  never in CI.
+- **Integration** — real processes and files against a fake `ds4-dogfood`
+  that replays committed `--ndjson` fixtures.
+- **Live** (`just capture SCENARIO`) — the real `ds4-dogfood tui --ndjson` and
+  real weights. Minutes to run, never in CI.
 
 ## The phase table
 
@@ -79,8 +79,7 @@ Enforced mechanically by `just lint-docs`, checking phase-table cell length
 and current-scope plan metadata, fenced-code fraction, fence length, and line
 count. A written convention that nothing checks gets ignored under deadline
 pressure — this project has already proven that twice on two different rules
-(see `ROADMAP.md`'s Backlog, "eval-system consolidation" and the P26
-schema-freeze note) — so the gate exists precisely because prose alone did
+(recorded in the pre-P28 `ROADMAP.md` Backlog, in git) — so the gate exists precisely because prose alone did
 not hold. The 2026-08-29 policy change deliberately left earlier plans
 untouched; this scope rule makes that decision explicit instead of printing
 historical debt as if it were a current-plan regression. The archive index
@@ -114,8 +113,9 @@ easiest to forget:
 
 - **Every new test must be shown to fail** when the behavior it pins is broken.
   Break it, watch it fail, restore it.
-- **Every submodule bump owes a golden-fixture recapture** against the real
-  binary. A rebase can apply cleanly and still be semantically wrong.
+- **Every ds4-engine protocol change owes a fixture recapture** against the
+  real `ds4-dogfood`. A parser can keep passing on stale fixtures while the
+  wire has moved.
 - **Finishing a branch that closes a phase or feature cycle updates
   `ROADMAP.md` and passes `just lint-docs`, before the branch is considered
   done** — merged, PR'd, or otherwise handed off. This is enforced two ways,

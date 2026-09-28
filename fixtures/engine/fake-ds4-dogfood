@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""Fake `ds4-dogfood tui --ndjson` for integration tests (stdlib only).
+
+Env: FAKE_ENGINE_FIXTURE, FAKE_ENGINE_PACE_MS (300), FAKE_ENGINE_EXIT (0),
+FAKE_ENGINE_REFUSE, FAKE_ENGINE_IGNORE_QUIT, FAKE_ENGINE_LOG.
+Replays the fixture up to and including each `input` line, pausing after every
+`tool_start` until a stdin line arrives or the pace elapses.
+"""
+import json
+import os
+import queue
+import signal
+import sys
+import threading
+import time
+
+env = os.environ
+
+
+def on_term(_signo, _frame):
+    os._exit(130)
+
+
+signal.signal(signal.SIGTERM, on_term)
+
+if env.get("FAKE_ENGINE_REFUSE") == "1":
+    sys.stderr.write("ds4-dogfood tui: error: no model on this Mac\n")
+    sys.stderr.flush()
+    sys.exit(2)
+
+pace = int(env.get("FAKE_ENGINE_PACE_MS", "300")) / 1000.0
+exit_code = int(env.get("FAKE_ENGINE_EXIT", "0"))
+ignore_quit = env.get("FAKE_ENGINE_IGNORE_QUIT") == "1"
+log_path = env.get("FAKE_ENGINE_LOG")
+with open(env["FAKE_ENGINE_FIXTURE"]) as f:
+    fixture = [ln.rstrip("\n") for ln in f if ln.strip()]
+
+inbox = queue.Queue()
+
+if env.get("FAKE_ENGINE_PIDFILE"):
+    with open(env["FAKE_ENGINE_PIDFILE"], "w") as f:
+        f.write(str(os.getpid()))
+
+
+def log(text):
+    if log_path:
+        with open(log_path, "a") as f:
+            f.write(text + "\n")
+
+
+def handle_line(raw):
+    text = raw.decode("utf-8", "replace")
+    if not text.strip():
+        return
+    log(text)
+    try:
+        kind = json.loads(text).get("kind")
+    except Exception:
+        kind = None
+    inbox.put((kind or "?", text))
+
+
+def reader():
+    buf = b""
+    fd = sys.stdin.fileno()
+    while True:
+        chunk = os.read(fd, 4096)
+        if not chunk:
+            inbox.put(("eof", None))
+            return
+        buf += chunk
+        while True:
+            # 0x03 is its own message; newline ends a JSON line.
+            positions = [p for p in (buf.find(b"\n"), buf.find(b"\x03")) if p >= 0]
+            if not positions:
+                break
+            p = min(positions)
+            piece, sep, buf = buf[:p], buf[p:p + 1], buf[p + 1:]
+            if sep == b"\x03":
+                if piece.strip():
+                    handle_line(piece)
+                log("<0x03>")
+                inbox.put(("stop", None))
+            else:
+                handle_line(piece)
+
+
+def emit(line):
+    try:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        os._exit(0)
+
+
+def is_kind(line, kind):
+    try:
+        return json.loads(line).get("kind") == kind
+    except Exception:
+        return False
+
+
+def is_tool_start(line):
+    try:
+        obj = json.loads(line)
+        return obj.get("kind") == "event" and obj["event"].get("kind") == "tool_start"
+    except Exception:
+        return False
+
+
+def finish():
+    emit('{"kind": "quitting"}')
+    capture = env.get("FAKE_ENGINE_CAPTURE_PATH")
+    if capture:
+        emit(json.dumps({"kind": "event", "event": {"kind": "closed", "capture_path": capture}}))
+    emit('{"kind": "close"}')
+    sys.stderr.write("Session artifacts: /tmp/fake-session\n")
+    sys.stderr.flush()
+    sys.exit(exit_code)
+
+
+def hang():
+    while True:
+        time.sleep(3600)
+
+
+idx = 0
+
+
+def interrupt():
+    """Discard the fixture through the turn's next `input`, then fake the stop."""
+    global idx
+    while idx < len(fixture):
+        line = fixture[idx]
+        idx += 1
+        if is_kind(line, "input"):
+            break
+    emit('{"kind": "event", "event": {"kind": "interrupted"}}')
+    emit('{"kind": "input"}')
+
+
+def replay():
+    """Emit through the next `input`, pausing after each tool_start."""
+    global idx
+    while idx < len(fixture):
+        line = fixture[idx]
+        idx += 1
+        emit(line)
+        if is_kind(line, "input"):
+            return
+        if is_tool_start(line):
+            try:
+                kind, _ = inbox.get(timeout=pace)
+            except queue.Empty:
+                continue
+            if kind == "stop":
+                interrupt()
+                return
+            if kind in ("quit", "eof") and not ignore_quit:
+                finish()
+            # prompt (or anything else) resumes the replay.
+
+
+threading.Thread(target=reader, daemon=True).start()
+replay()  # handshake through the first `input`
+while True:
+    kind, text = inbox.get()
+    if kind == "prompt":
+        replay()
+    elif kind == "stop":
+        emit('{"kind": "error", "text": "no turn is running"}')
+    elif kind in ("quit", "eof"):
+        if not ignore_quit:
+            finish()
+        if kind == "eof":
+            hang()
+    else:
+        emit(json.dumps({"kind": "error", "text": "unknown kind '%s'; expected prompt, stop or quit" % kind}))
