@@ -19,11 +19,11 @@ struct AgentView: View {
         }
         .navigationTitle("Agent")
         .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(transcriptFontSize)))
-        .toolbar(id: "main") {
-            ToolbarItem(id: "workspace", placement: .automatic) {
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
                 workspaceButton
             }
-            ToolbarItem(id: "model", placement: .automatic) {
+            ToolbarItem(placement: .automatic) {
                 ModelMenu(
                     isGenerating: controller.isGenerating,
                     isConsulting: controller.isConsulting,
@@ -32,7 +32,7 @@ struct AgentView: View {
                     onApply: { controller.applyModelSelection() },
                     onStart: { controller.startAgent() })
             }
-            ToolbarItem(id: "endSession", placement: .primaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 Button {
                     switch controller.state {
                     case .stopped, .failed:
