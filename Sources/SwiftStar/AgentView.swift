@@ -6,6 +6,8 @@ struct AgentView: View {
     let controller: EngineController
     @State private var input = ""
     @FocusState private var inputFocused: Bool
+    @AppStorage("engineModelID") private var engineModelID = ""
+    @AppStorage("engineContextSize") private var engineContextSize = 0
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
     @Environment(\.transcriptFontSize) private var envTranscriptFontSize: CGFloat
 
@@ -25,6 +27,9 @@ struct AgentView: View {
             ToolbarItem(placement: .automatic) {
                 workspaceButton
             }
+            ToolbarItem(placement: .automatic) {
+                modelStatus
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     if controller.isActive {
@@ -39,6 +44,42 @@ struct AgentView: View {
             }
         }
         .task { if controller.phase == .idle { controller.start() } }
+    }
+
+    /// Loaded model label plus, when Settings differ, the restart button.
+    /// One toolbar item, so nothing renders as a blank slot.
+    private var modelStatus: some View {
+        HStack(spacing: 8) {
+            modelLabel
+            if controller.restartNeeded(modelID: engineModelID, contextSize: engineContextSize) {
+                Button {
+                    Task { await controller.restart() }
+                } label: {
+                    Label(restartTitle, systemImage: "arrow.clockwise")
+                }
+                .help("Settings changed the model or context size; restart the session to apply")
+            }
+        }
+    }
+
+    private var restartTitle: String {
+        let id = engineModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let loaded = controller.transcript.session?.modelID
+        if !id.isEmpty, let loaded, id != loaded { return "Restart to use \(id)" }
+        if !id.isEmpty, loaded == nil, engineContextSize <= 0 { return "Restart to use \(id)" }
+        return "Restart with context \(engineContextSize.formatted(.number.grouping(.never)))"
+    }
+
+    /// The loaded model and context size; empty for an older engine that
+    /// sends no `session` event.
+    @ViewBuilder private var modelLabel: some View {
+        if let info = controller.transcript.session, info.modelID != nil || info.contextSize != nil {
+            let context = info.contextSize.map { " · \($0.formatted(.number.grouping(.never))) ctx" } ?? ""
+            Text((info.modelID ?? "model") + context)
+                .font(.system(size: envTranscriptFontSize))
+                .foregroundStyle(.secondary)
+                .help("Model and context size loaded in the running session")
+        }
     }
 
     private var workspaceButton: some View {

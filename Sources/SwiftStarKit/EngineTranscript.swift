@@ -32,6 +32,8 @@ public struct EngineTranscript: Equatable, Sendable {
     public private(set) var isAwaitingInput = false
     /// Engine status text while the model loads; cleared at the first `input`.
     public private(set) var loadingText: String?
+    /// The loaded model and context size; set on `.session`, cleared on `.closed`.
+    public private(set) var session: EngineSessionInfo?
 
     public var canStop: Bool { isBusy }
 
@@ -84,12 +86,15 @@ public struct EngineTranscript: Equatable, Sendable {
             rows.append(.system(t))
         case .refused(let t), .error(let t):
             rows.append(.error(t))
+        case .session(let info):
+            session = info
         case .closed:
+            session = nil
             loadingText = nil
             isBusy = false
             isGenerating = false
             isAwaitingInput = false
-        case .ready, .session, .pause, .memory, .protocolError, .ignored:
+        case .ready, .pause, .memory, .protocolError, .ignored:
             break
         }
     }

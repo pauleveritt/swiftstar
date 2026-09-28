@@ -8,8 +8,33 @@ public enum EngineResolution: Equatable, Sendable {
 public enum EngineCommand {
     public static let executableName = "ds4-dogfood"
 
-    public static func arguments(source: URL) -> [String] {
-        ["tui", "--ndjson", "--source", source.path, "--commit", "HEAD"]
+    /// The P28 argv, plus `--model-id` / `--context-size` when set. A blank
+    /// model id or a non-positive context size means "engine default".
+    public static func arguments(
+        source: URL, modelID: String? = nil, contextSize: Int? = nil
+    ) -> [String] {
+        var args = ["tui", "--ndjson", "--source", source.path, "--commit", "HEAD"]
+        if let id = trimmedModelID(modelID) { args += ["--model-id", id] }
+        if let n = contextSize, n > 0 { args += ["--context-size", String(n)] }
+        return args
+    }
+
+    private static func trimmedModelID(_ id: String?) -> String? {
+        guard let t = id?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
+        return t
+    }
+
+    /// True while a session runs (`session` non-nil) and Settings name a model
+    /// or context size other than the loaded one. Unset settings never differ,
+    /// and a field the session did not report is not compared (a restart
+    /// could never satisfy it).
+    public static func restartNeeded(
+        session: EngineSessionInfo?, modelID: String?, contextSize: Int?
+    ) -> Bool {
+        guard let session else { return false }
+        if let id = trimmedModelID(modelID), let loaded = session.modelID, id != loaded { return true }
+        if let n = contextSize, n > 0, let loaded = session.contextSize, n != loaded { return true }
+        return false
     }
 
     /// Looks for the engine executable: the settings path, then each `PATH`

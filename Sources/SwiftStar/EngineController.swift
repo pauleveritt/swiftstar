@@ -18,6 +18,8 @@ final class EngineController {
 
     static let workspaceDefaultsKey = "agentWorkspace"
     static let executableDefaultsKey = "engineExecutable"
+    static let modelIDDefaultsKey = "engineModelID"
+    static let contextSizeDefaultsKey = "engineContextSize"
 
     private(set) var transcript = EngineTranscript()
     private(set) var metrics = EngineMetricsState()
@@ -48,6 +50,24 @@ final class EngineController {
         return ProjectRoot.locate(anchor: anchor) ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
+    /// True while a session runs and the given Settings values name a
+    /// different model or context size than the one loaded. The view passes
+    /// its `@AppStorage` values so SwiftUI tracks Settings edits.
+    func restartNeeded(modelID: String?, contextSize: Int?) -> Bool {
+        phase == .running && EngineCommand.restartNeeded(
+            session: transcript.session, modelID: modelID, contextSize: contextSize)
+    }
+
+    /// Quits the running session, then starts a new one with current Settings.
+    func restart() async {
+        await quit()
+        guard !isActive else {
+            transcript.appendSystem("Restart skipped: the engine has not exited yet. Try again in a moment.")
+            return
+        }
+        start()
+    }
+
     var isActive: Bool { phase == .starting || phase == .running }
 
     func start() {
@@ -75,7 +95,10 @@ final class EngineController {
 
         let session = EngineSession(
             executable: executable,
-            arguments: EngineCommand.arguments(source: source),
+            arguments: EngineCommand.arguments(
+                source: source,
+                modelID: UserDefaults.standard.string(forKey: Self.modelIDDefaultsKey),
+                contextSize: UserDefaults.standard.integer(forKey: Self.contextSizeDefaultsKey)),
             workingDirectory: source)
         session.onEvent = { [weak self] event in self?.handle(event) }
         session.onExit = { [weak self] exit, directory in self?.handleExit(exit, directory) }

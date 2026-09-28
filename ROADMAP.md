@@ -68,7 +68,7 @@ Source: [`.superpowers/p28-deep-review.md`](.superpowers/p28-deep-review.md)
 6. **P29.6 Stream and structure cleanup.** Replace `readabilityHandler` + `AsyncStream` + `LineBuffer` with `FileHandle.bytes.lines`; drop `FastTierGuard` (plugin and tool target) for one grep line in `just test`; rename `SwiftStarAppKit` to `SwiftStarEngine`; delete the B5 dead code (`PathAbbreviation.abbreviate`, `MarkdownPreprocess.fenced`/`language(forPath:)`, unread `EngineSessionInfo`/`outputTokens`/`resultKind`/`isAwaitingInput`/`interrupt()`, `ValueGaugeView.text`, `MetricsModel`, `fixedWidth`, `Tools/make-icon.swift`, `goal.md`, old-UI docs); rename `Agent*` views to `SessionView`/`PromptBubble`/`ToolCardView`; one `DefaultsKey` enum; fix B6 stale comments; SwiftMath never renders (`deLaTeXed` strips math, `MarkdownText.swift:39-41`), so drop it or wire it. Why: C5–C8, B4–B7. Done when: build and both test tiers are green, `LineBuffer` and the plugin are gone, and no symbol in the B5 list is left without a caller.
 7. **P29.7 SwiftUI modernisation.** Inject `EngineController` via `@Environment` and delete the `onChange` copy; composer as `TextField(axis: .vertical)` + `.onSubmit` (fixes A8); transcript with `.defaultScrollAnchor(.bottom)` and stable row ids; close-last-window quits plus `.restorationBehavior(.disabled)`; README "Build and run". Why: C9–C13, A8, A11 (`AgentView.swift:178-185`, `SwiftStarApp.swift:14`). Done when: owner GUI pass confirms Return submits, Option-Return newlines, and Cmd-W ends the engine.
 8. **P29.8 Later (own cycle, not scheduled).** Native Markdown renderer replacing the pinned `MarkdownView` fork (C14), delta metrics from consecutive `checkpoint`s with the cumulative rate labelled "session avg" (C15, B3), Liquid Glass affordances (C16), plus C17–C20 and A9/A10 (apply command kept across sessions, first-launch workspace). Done when: each is either its own plan or declined.
-9. **P29.x Model picker: pass `--model-id`/`--context-size` to `ds4-dogfood tui`.** *Design pending* — the controller is designing it; the Backlog's "A model chooser" entry is removed because this covers it. Done when: a design doc exists and this placeholder is replaced by numbered steps.
+9. **P29.9 Model picker: pass `--model-id`/`--context-size` to `ds4-dogfood tui`.** *Done (2026-09-28).* Settings has optional Model and Context size fields; the toolbar shows the loaded model and offers "Restart to use …" when Settings differ. Spec [`2026-09-28-p29-9-model-picker-design.md`](docs/superpowers/specs/2026-09-28-p29-9-model-picker-design.md). Live: `qwen3.8-flash-next` loaded from Settings alone; a bogus id is refused with the engine's reason. A dropdown waits on the Backlog's `models --json` entry.
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
@@ -97,6 +97,10 @@ group's order is not a priority order.
 
 ### Front-end
 
+- **A model dropdown.** P29.9 takes a typed model id. A menu of models that
+  fit needs ds4-engine to list them machine-readably — e.g.
+  `ds4-dogfood models --json` (id, name, on disk, fits, measured contexts).
+  *Reopens when ds4-engine ships that listing.*
 - **An Apply button.** The engine records edits in the session's
   `candidate.diff`; SwiftStar shows the session directory and
   `ds4-dogfood apply <id>` and applying stays a terminal step (P28 decision 4).

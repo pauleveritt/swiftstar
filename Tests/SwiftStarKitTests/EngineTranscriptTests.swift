@@ -27,6 +27,23 @@ struct EngineTranscriptTests {
         #expect(!t.isBusy && !t.isGenerating && !t.isAwaitingInput)
     }
 
+    @Test func transcriptKeepsSessionInfo() throws {
+        var t = EngineTranscript()
+        #expect(t.session == nil)
+        var sawSession = false
+        for e in try Self.events(fromFixture: "tool-read.ndjson") {
+            t.apply(e)
+            if case .session = e {
+                sawSession = true
+                #expect(t.session?.modelID == "laguna-xs-2.1")
+                #expect(t.session?.contextSize == 20000)
+            }
+        }
+        #expect(sawSession)
+        t.apply(.closed(capturePath: nil))
+        #expect(t.session == nil)
+    }
+
     @Test func repeatedReadsGetOwnResults() {
         let tool = EngineTool(op: "read", path: "a")
         let res = EngineToolResult(tool: tool, resultKind: "k", preview: "p", truncated: false)
