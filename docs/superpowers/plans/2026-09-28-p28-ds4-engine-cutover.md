@@ -309,4 +309,4 @@ review, Opus for Task 5's review, Fable for the final whole-branch review).
   `droppedSessionTerminatesTheEngine`, `closedCapturePathResolvesSessionDirectory`,
   `startIsOneShot`, `loadingTextClearedOnFirstInput`, `exportedNamesThePath`,
   `statusReportIsOneReadableLine`.
-- **Descoped:** nothing. Deferred minors are in the final review record.
+- **Descoped:** nothing. Deferred minors are listed in plan B's Result.

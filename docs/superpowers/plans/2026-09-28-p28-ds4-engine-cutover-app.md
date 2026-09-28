@@ -181,3 +181,11 @@ Closed 2026-09-28.
   1,956 / 65,536), `/help` as a notice, Stop mid-turn → interrupted, and
   quit → exit 0 with session directory and `ds4-dogfood apply <id>`.
 - **Descoped:** nothing; the owner's GUI pass remains the last check.
+- **Deferred minors** (final review triaged; none blocks merge): Quick Look
+  resolves tool paths against the picked folder, not the git root
+  (`AgentToolCardView`); status wording "Ended (exit -1)" / "code 15"
+  (`terminationReason` ignored); no SIGKILL after SIGTERM; `/status` omits
+  context size before the first prompt; the fake finishes a `quit` sent
+  during a pause at once and emits no `stopping`; test gaps for unmatched
+  `toolEnd`/`toolResult` and nil-overwrite metrics; new Python under
+  `Tools/` and `fixtures/` is unlinted.
