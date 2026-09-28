@@ -218,6 +218,69 @@ dependency; `Tools/` entries that serve the app build (`make-app`).
 - Packaging ds4-engine inside the `.app`. The user installs it
   (`uv tool install` of the wheel); SwiftStar finds it.
 
+## Revisions after the design review (2026-09-28)
+
+An independent review (Fable) checked this spec against ds4-engine's
+source. These corrections supersede the text above where they conflict; the
+original text stays as written.
+
+1. **Exit codes.** 0 = orderly end with the checkout untouched and the last
+   outcome answered or cancelled. 1 = any other orderly end (token, tool or
+   context limit, no answer, checkout touched) *or* a failure — message:
+   "ended without a clean answer — see the session directory", plus the
+   stderr tail. 2 = the engine refused to start (argparse: no model, source
+   not a git repo, model file missing, capture dir reused) — message:
+   "refused to start: " + last non-empty stderr line. 130 = interrupted.
+   An exit before any stdout line is a start refusal, not a protocol error
+   (`tui_cli.py:610-641` runs before the relay starts).
+2. **Checkpoint snapshots are partial.** A snapshot may be
+   `{"status":"unavailable"}` or carry `null`s (`operator_telemetry.py`).
+   Every `PauseMetrics` field is optional; a snapshot without `eval_count`
+   decodes to `.ignored`. `EngineMemory.planGiB` reads
+   `engine_plan.total_gib`.
+3. **Session directory and apply id.** `closed.capture_path` is a *file*
+   inside the session directory, possibly relative to the engine's cwd. The
+   session directory is its parent (resolved against the engine cwd), else
+   the `Session artifacts: <dir>` stderr line, which is printed after
+   `close`, just before exit. `EngineSession` drains stderr to EOF before
+   reporting exit. The apply id is the directory's last path component, not
+   `session.session_id`.
+4. **Slash commands are not silent.** In stdio mode the engine answers
+   `/help`, `/status`, `/clear`, `/export`, `/models` only with `help`,
+   `status_report`, `clear`, `exported`, `models` events, and refuses
+   `/apply`, `/resume`, `/rewind`, `/model` with `apply_refused`,
+   `resume_refused`, `rewind_refused`, `model_refused`. These map to
+   `.notice(String)` (a system row) and `.refused(String)` (an error row)
+   respectively, not `.ignored`.
+5. **Busy is per turn, not per native call.** Tools run between native
+   calls, so `native_start`/`native_end` flip mid-turn. A turn is busy from
+   `.prompt` to `.awaitingInput`; native events only drive a "generating"
+   sub-state. Stop is enabled only while busy, because the engine answers
+   an idle `stop` with an `error` line.
+6. **No `SubprocessRunner`.** It runs processes to completion with no stdin;
+   `EngineSession` uses `Process`/`Pipe`/`LineBuffer` directly, as
+   `AgentSession` did, and is `@MainActor` (pipe handlers hop to the main
+   actor). `SubprocessRunner` is removed.
+7. **Source selection.** The engine needs a git repository. SwiftStar keeps
+   its workspace folder picker (default: the last chosen folder) and passes
+   that folder's git root as `--source`; a non-repository ends in the exit-2
+   message.
+8. **Kept, corrected.** `AgentTranscript` and `MetricsReducer` are replaced
+   by new `EngineTranscript` and `EngineMetricsReducer`, not re-fed.
+   `MetricsView.swift` is already unreferenced and is removed. The view
+   helpers `Severity`, `contextSeverity` and `fixedWidth` move from
+   `DialLogic` into the app target; `DialLogic` is removed. The model menu
+   in `AgentView` goes.
+9. **App quit.** Quitting waits for the engine through
+   `applicationShouldTerminate` → `.terminateLater`, bounded by the quit
+   timeout, so SIGTERM actually runs.
+10. **Hidden work.** Also in scope: `pyproject.toml` groups and `uv.lock`
+    entries that served removed host tools; `.gitignore` entries for
+    `captures/` and `.swiftstar/`; `Tests/SwiftStarKitTests/Fixtures/eval-*`;
+    comments in kept app files that name `ds4-agent`/`external/ds4`;
+    `docs/remediations.md` missing from the Sphinx toctree (`just docs` is
+    red before P28 starts); links to deleted sources in `docs/*.md`.
+
 ## Success criteria
 
 1. `git grep -il 'ds4-agent\|external/ds4\|submodule'` over `Sources/`,
