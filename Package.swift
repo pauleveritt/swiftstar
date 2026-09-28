@@ -26,13 +26,7 @@ let package = Package(
         .target(
             name: "SwiftStarAppKit",
             dependencies: ["SwiftStarKit"],
-            resources: [.process("Resources")],
-            swiftSettings: [.swiftLanguageMode(.v6)],
-            linkerSettings: [
-                // Private dyld-cache lib for power (Apple Silicon); cited from
-                // ds4-control's Package.swift (facts cross, code does not).
-                .linkedLibrary("IOReport")
-            ]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
             name: "SwiftStar",
@@ -45,14 +39,6 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
         ),
-        // swiftstar-drive retired 2026-08-31 (eval-cli task 8): its P5 argv
-        // shape lives on as `swiftstar-eval run --bare` (`AgentSettings.bare`,
-        // `AgentCommand.argv`) — see `fixtures/agent/provenance.md`'s
-        // recapture rule and `Justfile`'s `capture` recipe.
-        .executableTarget(name: "swiftstar-agenttest", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
-        // Task 5: the `run` verb spawns a real turn through `AgentSession`
-        // (`SwiftStarAppKit`) — the same seam `swiftstar-agenttest` uses.
-        .executableTarget(name: "swiftstar-eval", dependencies: ["SwiftStarKit", "SwiftStarAppKit"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "SwiftStarKitTests",
             dependencies: ["SwiftStarKit"],

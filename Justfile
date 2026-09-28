@@ -116,23 +116,6 @@ test:
 integration:
     SWIFTSTAR_INTEGRATION=1 swift test
 
-# Build ds4-agent from the pinned submodule SHA (P1).
-#
-# STANDING RULE — recapture on every bump: whenever external/ds4's pinned SHA
-# changes, golden fixtures MUST be recaptured against the freshly rebuilt
-# binary before the bump lands. A rebase can apply cleanly and still be
-# semantically wrong (the patch set instruments ds4_agent.c's decode loops and
-# emitters). See BRIEF.md "The fork" and external/ds4/docs/fork-ledger.md.
-engine:
-    git submodule update --init external/ds4
-    make -C external/ds4 ds4-agent
-
-# Passthrough to swiftstar-eval, the one eval CLI (eval-cli, retiring
-# swiftstar-analyze/-drive/-agenttest). e.g. `just eval run --prompt "hi" \
-# --gguf <path>` or `just eval list`.
-eval *ARGS:
-    swift run swiftstar-eval {{ARGS}}
-
 # Live tier: record one engine fixture (tool-read, stop or error) from the
 # real `ds4-dogfood tui --ndjson` into fixtures/engine/. Needs ds4-engine and
 # Laguna XS; never in CI. See fixtures/engine/provenance.md for the
