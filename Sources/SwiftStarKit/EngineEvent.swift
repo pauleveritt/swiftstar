@@ -1,0 +1,105 @@
+import Foundation
+
+public struct EngineTool: Equatable, Sendable {
+    public let op: String
+    public let path: String?
+
+    public init(op: String, path: String?) {
+        self.op = op
+        self.path = path
+    }
+}
+
+public struct EngineToolResult: Equatable, Sendable {
+    public let tool: EngineTool
+    public let resultKind: String
+    public let preview: String
+    public let truncated: Bool
+
+    public init(tool: EngineTool, resultKind: String, preview: String, truncated: Bool) {
+        self.tool = tool
+        self.resultKind = resultKind
+        self.preview = preview
+        self.truncated = truncated
+    }
+}
+
+public struct EngineAnswer: Equatable, Sendable {
+    public let text: String
+    public let contextUsed: Int?
+    public let contextSize: Int?
+    public let durationMs: Double?
+
+    public init(text: String, contextUsed: Int?, contextSize: Int?, durationMs: Double?) {
+        self.text = text
+        self.contextUsed = contextUsed
+        self.contextSize = contextSize
+        self.durationMs = durationMs
+    }
+}
+
+/// Per-pause measurements from a `checkpoint` snapshot; every field but
+/// `evalCount` may be absent (the engine's snapshots are partial).
+public struct PauseMetrics: Equatable, Sendable {
+    public let prefillTokens: Int?
+    public let prefillMs: Double?
+    public let evalCount: Int
+    public let evalMs: Double?
+    public let outputTokens: Int?
+
+    public init(prefillTokens: Int?, prefillMs: Double?, evalCount: Int, evalMs: Double?, outputTokens: Int?) {
+        self.prefillTokens = prefillTokens
+        self.prefillMs = prefillMs
+        self.evalCount = evalCount
+        self.evalMs = evalMs
+        self.outputTokens = outputTokens
+    }
+}
+
+public struct EngineMemory: Equatable, Sendable {
+    public let allocatedBytes: Int64?
+    public let budgetBytes: Int64?
+    public let planGiB: Double?
+
+    public init(allocatedBytes: Int64?, budgetBytes: Int64?, planGiB: Double?) {
+        self.allocatedBytes = allocatedBytes
+        self.budgetBytes = budgetBytes
+        self.planGiB = planGiB
+    }
+}
+
+public struct EngineSessionInfo: Equatable, Sendable {
+    public let id: String
+    public let modelID: String?
+    public let contextSize: Int?
+
+    public init(id: String, modelID: String?, contextSize: Int?) {
+        self.id = id
+        self.modelID = modelID
+        self.contextSize = contextSize
+    }
+}
+
+public enum EngineEvent: Equatable, Sendable {
+    case ready
+    case loading(String)
+    case session(EngineSessionInfo)
+    case generating(Bool)
+    case prompt(String)
+    case narration(String)
+    case thinking(String)
+    case toolStart(EngineTool)
+    case toolEnd(EngineTool, ok: Bool, durationMs: Double?)
+    case toolResult(EngineToolResult)
+    case answer(EngineAnswer)
+    case pause(PauseMetrics)
+    case memory(EngineMemory)
+    case interrupted
+    case notice(String)
+    case refused(String)
+    case awaitingInput
+    case error(String)
+    case closed(capturePath: String?)
+    case protocolError(String)
+    case ignored
+}
