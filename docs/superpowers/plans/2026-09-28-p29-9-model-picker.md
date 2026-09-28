@@ -1,7 +1,7 @@
 ---
 phase: P29
 cycle: P29.9-model-picker
-lifecycle: active
+lifecycle: closed
 ---
 
 # P29.9 model picker implementation plan
@@ -110,3 +110,25 @@ never ask for a restart. Settings changes never touch a running session.
 - [ ] **Step 2:** ROADMAP: P29.x placeholder → "P29.9 Model picker — done";
   Backlog gains "engine: `ds4-dogfood models --json` for a dropdown";
   plan `## Result`, `lifecycle: closed`; `just lint-docs` green; commit.
+
+## Result
+
+Closed 2026-09-28. Tasks 1–2 batched in one Sonnet dispatch, one review,
+one fix round; Task 3 by the controller.
+
+- **Commits:** `e146a5e` (T1), `2e8993a` (T2), `e606dab` (review fixes).
+- **Diverged:** the restart comparison lives in Kit as
+  `EngineCommand.restartNeeded(session:modelID:contextSize:)` (fast-tested);
+  `AgentView` observes both settings with `@AppStorage` so the Restart
+  button tracks Settings edits; the Context size field is a String binding
+  (empty or invalid = engine default); the button reads "Restart with context
+  N" when only the context differs; model label and button share one
+  toolbar item.
+- **Live (Task 3):** Settings Model = `qwen3.8-flash-next`, no wrapper: argv
+  ended `--model-id qwen3.8-flash-next`, the session event reported that
+  model at context 20,000 (77.91 GiB); a bogus id is refused with
+  `unknown model id '…'`; quit left no engine (idle). GUI rendering (toolbar
+  label, Settings height 380) not agent-verified — no screen access.
+- **Found in passing:** `ds4-dogfood` is not on `PATH` or in `~/.local/bin`
+  on this Mac; SwiftStar needs the Settings path (the venv's `ds4-dogfood`).
+- **Descoped:** the dropdown (Backlog, waits on `ds4-dogfood models --json`).
