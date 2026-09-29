@@ -24,6 +24,13 @@ public enum EngineModelCatalogLoader {
         var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
     }
 
+    private final class DataBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var data = Data()
+        func set(_ d: Data) { lock.lock(); data = d; lock.unlock() }
+        var value: Data { lock.lock(); defer { lock.unlock() }; return data }
+    }
+
     private static func run(
         executable: String, timeout: Duration, environment: [String: String]?
     ) -> Result<EngineModelList, CatalogError> {
@@ -43,14 +50,33 @@ public enum EngineModelCatalogLoader {
         let timedOut = Flag()
         let seconds = Double(timeout.components.seconds)
             + Double(timeout.components.attoseconds) / 1e18
+        let pid = process.processIdentifier
         let killer = DispatchWorkItem {
             timedOut.set()
             if process.isRunning { process.terminate() }
+            // A child that ignores SIGTERM is killed a second later.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
+                if process.isRunning { kill(pid, SIGKILL) }
+            }
         }
         DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: killer)
-        let data = out.fileHandleForReading.readDataToEndOfFile()
+        // Read on its own thread so a pipe held open by a grandchild cannot
+        // outlive the bound: the wait below gives up and closes the read end.
+        let box = DataBox()
+        let done = DispatchSemaphore(value: 0)
+        let handle = out.fileHandleForReading
+        DispatchQueue.global(qos: .utility).async {
+            box.set(handle.readDataToEndOfFile())
+            done.signal()
+        }
+        if done.wait(timeout: .now() + seconds + 2) == .timedOut {
+            timedOut.set()
+            try? handle.close()
+            return .failure(.timedOut)
+        }
         process.waitUntilExit()
         killer.cancel()
+        let data = box.value
         if timedOut.isSet { return .failure(.timedOut) }
         guard process.terminationStatus == 0 else {
             return .failure(.failed("exit code \(process.terminationStatus)"))

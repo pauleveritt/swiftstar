@@ -41,4 +41,13 @@ struct EngineModelCatalogLoaderTests {
         #expect(result == .failure(.timedOut))
         #expect(Date().timeIntervalSince(started) < 3)
     }
+
+    @Test func loaderTimesOutOnChildIgnoringSIGTERM() async {
+        let started = Date()
+        let result = await EngineModelCatalogLoader.load(
+            executable: Self.fake, timeout: .milliseconds(500),
+            environment: env(["FAKE_ENGINE_MODELS_SLEEP_MS": "8000", "FAKE_ENGINE_IGNORE_SIGTERM": "1"]))
+        #expect(result == .failure(.timedOut))
+        #expect(Date().timeIntervalSince(started) < 2.5)
+    }
 }

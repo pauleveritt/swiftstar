@@ -96,7 +96,7 @@ final class EngineController {
         let list = RecentWorkspaces.updated(recentWorkspaces, adding: url.path)
         recentWorkspaces = list
         UserDefaults.standard.set(list, forKey: Self.recentWorkspacesDefaultsKey)
-        guard url != workspace else { return }
+        guard url.standardizedFileURL.path != workspace?.standardizedFileURL.path else { return }
         workspace = url
         restartIfRunning()
     }
@@ -134,6 +134,13 @@ final class EngineController {
             return path
         }
         return nil
+    }
+
+    /// Loads the list once per engine path (a failed load is not retried until
+    /// the path changes).
+    func loadCatalogIfNeeded() async {
+        guard let path = resolveExecutablePath(), path != catalogExecutable else { return }
+        await loadCatalog()
     }
 
     /// Reads the engine's model list; never blocks a session start. On failure
