@@ -87,8 +87,9 @@ struct EngineSessionModelTests {
         #expect(m.composer.canSend && m.composer.canType && !m.composer.canStop)
         m.apply(.prompt("a"))
         #expect(m.composer.label == "Working…")
-        #expect(!m.composer.canSend && m.composer.canStop)
+        #expect(m.composer.canSend && m.composer.canStop)
         m.willQuit()
+        #expect(!m.composer.canSend)
         #expect(m.composer.label == "Ending…")
         #expect(!m.composer.canType)
         let exit = EngineExit(code: 0, message: "ended")
@@ -97,6 +98,17 @@ struct EngineSessionModelTests {
         var nf = EngineSessionModel()
         nf.didNotFind(searched: ["/x"])
         #expect(nf.composer.label == "ds4-dogfood not found")
+    }
+
+    @Test func canSendWhileBusy() {
+        var m = running()
+        m.apply(.prompt("x"))
+        #expect(m.transcript.isBusy)
+        #expect(m.composer.canSend && m.composer.canStop)
+        // A mid-turn prompt is appended and shows as queued until steering.
+        let sent = m.send("more")
+        #expect(sent)
+        #expect(m.transcript.pendingUserCount == 1)
     }
 
     @Test func failedLaunchEndsTranscript() {

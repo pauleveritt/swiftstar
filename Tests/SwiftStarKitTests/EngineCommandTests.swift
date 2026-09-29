@@ -89,6 +89,15 @@ struct EngineCommandTests {
             .message == "killed by signal 15 (SIGTERM)")
     }
 
+    @Test func ownSigtermExit130ReadsAsQuitTimeout() {
+        // The real engine catches SIGTERM and exits 130 through a normal exit.
+        let exit = EngineExit.describe(
+            code: 130, stderrTail: "", sawReady: true, reason: .exit, terminated: true)
+        #expect(exit.message == "ended after the quit timed out")
+        #expect(EngineExit.describe(code: 130, stderrTail: "", sawReady: true, reason: .exit)
+            .message == "interrupted")
+    }
+
     @Test func forcedExitReadsAsForced() {
         let exit = EngineExit.describe(
             code: 9, stderrTail: "", sawReady: true, reason: .signal, forced: true)

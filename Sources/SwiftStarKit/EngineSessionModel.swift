@@ -39,7 +39,7 @@ public struct EngineComposer: Equatable, Sendable {
             } else {
                 label = transcript.isGenerating ? "Generating…" : busy ? "Working…" : "Ready"
             }
-            return EngineComposer(canType: true, canSend: !busy, canStop: busy, label: label)
+            return EngineComposer(canType: true, canSend: true, canStop: busy, label: label)
         case .quitting:
             return EngineComposer(canType: false, canSend: false, canStop: false, label: "Ending…")
         case .ended(let exit):

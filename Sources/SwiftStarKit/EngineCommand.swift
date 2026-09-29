@@ -88,6 +88,10 @@ public struct EngineExit: Equatable, Sendable {
             let name = signalName(code).map { " (\($0))" } ?? ""
             return EngineExit(code: code, message: "killed by signal \(code)\(name)")
         }
+        if terminated && reason == .exit && code == 130 {
+            // The engine catches our SIGTERM and exits 130; that is our doing.
+            return EngineExit(code: code, message: "ended after the quit timed out")
+        }
         let tail = stderrTail.trimmingCharacters(in: .whitespacesAndNewlines)
         let lastLine = stderrTail.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }

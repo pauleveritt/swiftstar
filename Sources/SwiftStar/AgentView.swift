@@ -226,27 +226,28 @@ struct AgentView: View {
                         return .handled
                     }
                     .disabled(!composerState.canType)
+                // Busy with text typed: the button sends (the engine queues it);
+                // busy with an empty field it stops.
+                let showsStop = composerState.canStop && trimmedInput.isEmpty
                 Button {
-                    if composerState.canStop {
+                    if showsStop {
                         controller.stop()
                     } else {
                         send()
                     }
                 } label: {
-                    Image(systemName: composerState.canStop ? "stop.circle.fill" : "arrow.up.circle.fill")
+                    Image(systemName: showsStop ? "stop.circle.fill" : "arrow.up.circle.fill")
                         .font(.system(size: 28))
-                        .symbolEffect(.variableColor.iterative, isActive: composerState.canStop)
-                        .foregroundStyle(composerState.canStop ? .red : .accentColor)
+                        .symbolEffect(.variableColor.iterative, isActive: showsStop)
+                        .foregroundStyle(showsStop ? .red : .accentColor)
                 }
                 .buttonStyle(.plain)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 // Icon-only, and the icon carries the whole meaning — the label
                 // has to move with the state or VoiceOver announces nothing.
-                .accessibilityLabel(composerState.canStop ? "Stop generating" : "Send message")
-                .disabled(composerState.canStop
-                    ? false
-                    : (!composerState.canSend || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                .accessibilityLabel(showsStop ? "Stop generating" : "Send message")
+                .disabled(showsStop ? false : (!composerState.canSend || trimmedInput.isEmpty))
             }
         }
         .padding(.horizontal, 12)
@@ -276,8 +277,12 @@ struct AgentView: View {
         controller.isActive ? "End the current agent session" : "Start a new agent session"
     }
 
+    private var trimmedInput: String {
+        input.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func send() {
-        let message = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = trimmedInput
         guard composerState.canSend, !message.isEmpty else { return }
         input = ""
         controller.send(message)
