@@ -95,6 +95,8 @@ struct EngineTranscriptTests {
         t.apply(.awaitingInput)
         #expect(!t.canStop)
         t.appendUser("hi")
+        #expect(!t.canStop)
+        t.apply(.prompt("hi"))
         #expect(t.canStop)
     }
 
@@ -113,5 +115,57 @@ struct EngineTranscriptTests {
         t.apply(.notice("h"))
         t.apply(.refused("r"))
         #expect(t.rows == [.system("h"), .error("r")])
+    }
+}
+
+struct EngineTranscriptPendingTests {
+    @Test func stopDisabledWhileQueued() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        #expect(!t.canStop)
+    }
+
+    @Test func busyStartsOnPromptEvent() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        t.apply(.prompt("x"))
+        #expect(t.canStop)
+        #expect(t.pendingUserCount == 0)
+    }
+
+    @Test func commandRowIsNotLeftPending() {
+        var t = EngineTranscript()
+        t.appendUser("/help")
+        t.apply(.notice("commands: ..."))
+        t.apply(.awaitingInput)
+        #expect(t.pendingUserCount == 0)
+        #expect(!t.isPending(rowAt: 0))
+    }
+
+    @Test func pendingClearsOnError() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        #expect(t.isPending(rowAt: 0))
+        t.apply(.error("queue full"))
+        #expect(t.pendingUserCount == 0)
+        #expect(!t.isBusy)
+    }
+
+    @Test func pendingSurvivesLoadingAndGenerating() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        t.apply(.loading("mapping"))
+        t.apply(.generating(true))
+        #expect(t.isPending(rowAt: 0))
+    }
+
+    @Test func endClearsEverything() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        t.apply(.prompt("x"))
+        t.appendUser("y")
+        t.end()
+        #expect(!t.isBusy && !t.isGenerating && !t.isAwaitingInput)
+        #expect(t.loadingText == nil && t.pendingUserCount == 0)
     }
 }
