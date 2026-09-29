@@ -1,10 +1,18 @@
 import Foundation
 import SwiftStarKit
 
-public enum EngineSessionError: Error, Equatable {
+public enum EngineSessionError: Error, Equatable, LocalizedError {
     case notRunning
     case encoding
     case alreadyStarted
+
+    public var errorDescription: String? {
+        switch self {
+        case .notRunning: "The engine is not running."
+        case .encoding: "The command could not be encoded."
+        case .alreadyStarted: "The engine session was already started."
+        }
+    }
 }
 
 /// Owns one `ds4-dogfood tui --ndjson` subprocess: writes commands to its
@@ -42,11 +50,26 @@ public final class EngineSession {
     private var stdoutDone = false
     private var stderrDone = false
     private var exitFired = false
+    private var exitReason: Process.TerminationReason = .exit
+
+    /// True from the first `.prompt` until the next `.awaitingInput`/`.closed`.
+    private var inTurn = false
+    private var quitting = false
+    private var forced = false
+    private var quitTask: Task<Void, Never>?
+    private let stopGrace: Duration
+    private let termGrace: Duration
+    private let killGrace: Duration
 
     public init(
         executable: String, arguments: [String],
-        environment: [String: String]? = nil, workingDirectory: URL? = nil
+        environment: [String: String]? = nil, workingDirectory: URL? = nil,
+        stopGrace: Duration = .seconds(10), termGrace: Duration = .seconds(5),
+        killGrace: Duration = .seconds(10)
     ) {
+        self.stopGrace = stopGrace
+        self.termGrace = termGrace
+        self.killGrace = killGrace
         self.executable = executable
         self.arguments = arguments
         self.environment = environment
@@ -77,7 +100,8 @@ public final class EngineSession {
         let errStream = Self.stream(from: stderrPipe.fileHandleForReading)
         process.terminationHandler = { [weak self] p in
             let status = p.terminationStatus
-            Task { @MainActor in self?.processExited(status) }
+            let reason = p.terminationReason
+            Task { @MainActor in self?.processExited(status, reason) }
         }
 
         try process.run()
@@ -101,6 +125,7 @@ public final class EngineSession {
     /// Dropping a still-running session must not orphan the engine (model and
     /// GPU memory): close stdin, then terminate.
     isolated deinit {
+        quitTask?.cancel()
         try? stdin?.close()
         if let process, process.isRunning { process.terminate() }
     }
@@ -118,20 +143,42 @@ public final class EngineSession {
         try write(Data([0x03]))
     }
 
-    /// Asks the engine to quit, closes stdin, and SIGTERMs it if it is still
-    /// running after `timeout`.
-    public func quit(timeout: Duration = .seconds(5)) {
-        guard let process, !exited else { return }
-        if let data = try? Self.command(["kind": "quit"]) {
-            try? stdin?.write(contentsOf: data)
+    /// Ends the engine: in a turn, `stop` first (up to `stopGrace`); then
+    /// `quit` and close stdin; SIGTERM after `termGrace`; SIGKILL after
+    /// `killGrace` more. Idempotent: a second call while quitting is a no-op.
+    public func quit() {
+        guard process != nil, !exited, !quitting else { return }
+        quitting = true
+        quitTask = Task { @MainActor [self] in await runQuitSequence() }
+    }
+
+    private func runQuitSequence() async {
+        if inTurn, !exited {
+            if let data = try? Self.command(["kind": "stop"]) { try? stdin?.write(contentsOf: data) }
+            _ = await waitUntil(stopGrace) { !self.inTurn }
         }
+        guard !exited else { return }
+        if let data = try? Self.command(["kind": "quit"]) { try? stdin?.write(contentsOf: data) }
         try? stdin?.close()
         stdin = nil
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: timeout)
-            guard let self, !self.exited, self.process === process else { return }
-            process.terminate()
+        if await waitUntil(termGrace, { false }) { return }
+        guard !exited, let process else { return }
+        process.terminate()
+        _ = await waitUntil(killGrace) { false }
+        guard !exited, let process = self.process else { return }
+        forced = true
+        kill(process.processIdentifier, SIGKILL)
+    }
+
+    /// Polls until `condition` holds or the process has exited (true), or the
+    /// duration elapses (false). Cancellation (set on exit) ends it at once.
+    private func waitUntil(_ duration: Duration, _ condition: () -> Bool) async -> Bool {
+        let deadline = ContinuousClock.now + duration
+        while !exited, !Task.isCancelled, !condition() {
+            if ContinuousClock.now >= deadline { return false }
+            try? await Task.sleep(for: .milliseconds(10))
         }
+        return true
     }
 
     // MARK: - Private
@@ -179,7 +226,12 @@ public final class EngineSession {
             return
         case .ready:
             sawReady = true
+        case .prompt:
+            inTurn = true
+        case .awaitingInput, .turnEnded:
+            inTurn = false
         case .closed(let capturePath):
+            inTurn = false
             if let capturePath, !capturePath.isEmpty {
                 sessionDirectory = resolve(capturePath).deletingLastPathComponent().standardizedFileURL
             }
@@ -232,9 +284,11 @@ public final class EngineSession {
         finishIfComplete()
     }
 
-    private func processExited(_ status: Int32) {
+    private func processExited(_ status: Int32, _ reason: Process.TerminationReason) {
         exited = true
         exitStatus = status
+        exitReason = reason
+        quitTask?.cancel()
         finishIfComplete()
     }
 
@@ -245,7 +299,9 @@ public final class EngineSession {
         stdin = nil
         process = nil
         let exit = EngineExit.describe(
-            code: exitStatus, stderrTail: String(decoding: stderrTail, as: UTF8.self), sawReady: sawReady)
+            code: exitStatus, stderrTail: String(decoding: stderrTail, as: UTF8.self), sawReady: sawReady,
+            reason: exitReason == .uncaughtSignal ? .signal : .exit, forced: forced)
+        quitTask = nil
         onExit?(exit, sessionDirectory)
     }
 }

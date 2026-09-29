@@ -23,9 +23,11 @@ struct EngineSessionTests {
         func has(_ match: (EngineEvent) -> Bool) -> Bool { events.contains(where: match) }
     }
 
+    private let shortGrace = Duration.milliseconds(300)
+
     private func make(
         fixture: String, pace: Int = 5000, extra: [String: String] = [:], log: URL? = nil,
-        workingDirectory: URL? = nil
+        workingDirectory: URL? = nil, grace: Duration? = nil
     ) -> (EngineSession, Recorder) {
         var env = ProcessInfo.processInfo.environment
         env["FAKE_ENGINE_FIXTURE"] = Self.repoRoot.appendingPathComponent("fixtures/engine/\(fixture).ndjson").path
@@ -33,7 +35,8 @@ struct EngineSessionTests {
         if let log { env["FAKE_ENGINE_LOG"] = log.path }
         for (k, v) in extra { env[k] = v }
         let session = EngineSession(
-            executable: Self.fake, arguments: [], environment: env, workingDirectory: workingDirectory)
+            executable: Self.fake, arguments: [], environment: env, workingDirectory: workingDirectory,
+            stopGrace: grace ?? .seconds(10), termGrace: grace ?? .seconds(5), killGrace: grace ?? .seconds(10))
         let recorder = Recorder()
         session.onEvent = { recorder.events.append($0) }
         session.onExit = { recorder.exits.append(($0, $1)) }
@@ -164,12 +167,72 @@ struct EngineSessionTests {
     }
 
     @Test func quitAfterTimeoutSendsSIGTERM() async throws {
-        let (session, rec) = make(fixture: "tool-read", extra: ["FAKE_ENGINE_IGNORE_QUIT": "1"])
+        let (session, rec) = make(
+            fixture: "tool-read", extra: ["FAKE_ENGINE_IGNORE_QUIT": "1"], grace: shortGrace)
         try session.start()
         #expect(await wait { rec.count(isAwaiting) == 1 })
-        session.quit(timeout: .seconds(1))
+        session.quit()
         #expect(await wait(3) { rec.exit != nil })
         #expect(rec.exit?.code == 130)
+    }
+
+    @Test func quitMidTurnEndsTheEngine() async throws {
+        let pidFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("engine-pid-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pidFile) }
+        let (session, rec) = make(
+            fixture: "tool-read", pace: 30000,
+            extra: ["FAKE_ENGINE_PIDFILE": pidFile.path, "FAKE_ENGINE_IGNORE_QUIT": "1",
+                    "FAKE_ENGINE_IGNORE_SIGTERM": "1"],
+            grace: shortGrace)
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        let pid = Int32((try? String(contentsOf: pidFile, encoding: .utf8)) ?? "") ?? 0
+        #expect(pid > 0)
+        try session.send(prompt: "read Package.swift")
+        #expect(await wait { rec.has(isToolStart) })
+        session.quit()
+        #expect(await wait(2) { kill(pid, 0) != 0 })
+        #expect(await wait { rec.exit != nil })
+        #expect(rec.exit?.message == "ended by force after the quit timed out")
+        #expect(rec.exits.count == 1)
+        if pid > 0, kill(pid, 0) == 0 { kill(pid, SIGKILL) }
+    }
+
+    @Test func quitMidTurnStopsFirst() async throws {
+        let log = FileManager.default.temporaryDirectory
+            .appendingPathComponent("engine-session-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        let (session, rec) = make(fixture: "tool-read", pace: 30000, log: log)
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        try session.send(prompt: "read Package.swift")
+        #expect(await wait { rec.has(isToolStart) })
+        session.quit()
+        #expect(await wait { rec.exit != nil })
+        let kinds = try String(contentsOf: log, encoding: .utf8).split(separator: "\n").compactMap { line in
+            (try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])?["kind"] as? String
+        }
+        let stop = try #require(kinds.firstIndex(of: "stop"))
+        let quit = try #require(kinds.firstIndex(of: "quit"))
+        #expect(stop < quit, "\(kinds)")
+        #expect(rec.exit?.code == 0)
+    }
+
+    @Test func quitIsIdempotent() async throws {
+        let (session, rec) = make(fixture: "tool-read")
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        session.quit()
+        session.quit()
+        #expect(await wait { rec.exit != nil })
+        session.quit()
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(rec.exits.count == 1)
+    }
+
+    @Test func notRunningErrorIsReadable() {
+        #expect(EngineSessionError.notRunning.localizedDescription == "The engine is not running.")
     }
 
     @Test func closedCapturePathResolvesSessionDirectory() async throws {

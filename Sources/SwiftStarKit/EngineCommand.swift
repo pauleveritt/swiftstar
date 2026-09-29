@@ -59,11 +59,30 @@ public enum EngineCommand {
     }
 }
 
+/// How the engine process ended, as `Process.terminationReason` reports it.
+public enum EngineTermination: Equatable, Sendable {
+    /// A normal exit; the code is the exit status.
+    case exit
+    /// An uncaught signal; the code is the signal number.
+    case signal
+}
+
 public struct EngineExit: Equatable, Sendable {
     public let code: Int32
     public let message: String
 
-    public static func describe(code: Int32, stderrTail: String, sawReady: Bool) -> EngineExit {
+    /// `forced` means SwiftStar itself escalated to SIGKILL after the quit
+    /// timed out: that is our doing, not a crash.
+    public static func describe(
+        code: Int32, stderrTail: String, sawReady: Bool,
+        reason: EngineTermination = .exit, forced: Bool = false
+    ) -> EngineExit {
+        if forced {
+            return EngineExit(code: code, message: "ended by force after the quit timed out")
+        }
+        if reason == .signal {
+            return EngineExit(code: code, message: "killed by signal \(code) (\(signalName(code)))")
+        }
         let tail = stderrTail.trimmingCharacters(in: .whitespacesAndNewlines)
         let lastLine = stderrTail.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -82,5 +101,14 @@ public struct EngineExit: Equatable, Sendable {
             message = "exited with code \(code)" + (tail.isEmpty ? "" : "\n\(tail)")
         }
         return EngineExit(code: code, message: message)
+    }
+
+    private static func signalName(_ n: Int32) -> String {
+        let names: [Int32: String] = [
+            1: "SIGHUP", 2: "SIGINT", 3: "SIGQUIT", 4: "SIGILL", 5: "SIGTRAP", 6: "SIGABRT",
+            8: "SIGFPE", 9: "SIGKILL", 10: "SIGBUS", 11: "SIGSEGV", 13: "SIGPIPE",
+            14: "SIGALRM", 15: "SIGTERM",
+        ]
+        return names[n] ?? "signal \(n)"
     }
 }

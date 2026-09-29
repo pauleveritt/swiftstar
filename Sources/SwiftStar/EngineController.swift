@@ -110,7 +110,7 @@ final class EngineController {
             // `describe` with no ready line reads as a start refusal.
             let exit = EngineExit.describe(
                 code: -1, stderrTail: "could not launch \(executable): \(error.localizedDescription)",
-                sawReady: false)
+                sawReady: false, reason: .exit, forced: false)
             transcript.appendSystem(exit.message)
             phase = .ended(exit)
         }
