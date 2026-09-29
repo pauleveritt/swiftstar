@@ -126,6 +126,79 @@ P29.5 (full fake fidelity: queueing, `stopping`, deferred quit, load gap),
 P29.6–P29.8, the minors A8–A11 and A14 (they stay in the review for later
 steps), and the ds4-engine prompt fix for Qwen.
 
+## Revisions after the design review (2026-09-28)
+
+An adversarial review (Fable, `.superpowers/p29-1-4-spec-review.md`,
+checked against ds4-engine source and live sessions) found five majors and
+six minors. These supersede the body where they conflict.
+
+1. **Pending marks clear without matching.** All pending user rows are
+   cleared by the next `.prompt`, `.steering`, `.awaitingInput`, `.closed`,
+   `.error`/`.refused`, or `end()`; `.queued`, `.loading`, `.generating`,
+   `.pause`, `.memory` leave them. Turnless commands (`/clear`, `/status`,
+   `/help`, `/export`, `/apply`, `commands.py:39`) never emit `prompt`;
+   queued prompts are joined with `"\n\n"` into one `prompt`/`steering_*`
+   text, so no row is matched by text. Test `commandRowIsNotLeftPending`.
+2. **A Kit session model owns the calls.** `EngineSessionModel` (Kit) holds
+   phase, transcript and metrics and exposes `apply(_ event:)`,
+   `didExit(_:)`, `willQuit()`, `didStart()`, and the composer state.
+   `.ready → running`, exit → `end()`, quit → `quitting` happen there and are
+   fast-tested; `EngineController` only owns the `EngineSession` and forwards.
+3. **`isActive` includes `quitting`.** `applicationShouldTerminate` while
+   quitting returns `.terminateLater` and joins the in-flight quit;
+   `EngineSession.quit()` is idempotent; `start()`/`restart()` refuse while
+   quitting. Reply-once guard kept.
+4. **Quit sequence details.** The stop wait ends on `.awaitingInput`,
+   `.closed`, or exit (after `terminal` no `input` comes). Quit during model
+   load reaches SIGKILL (SIGTERM is deferred inside the native load) and
+   drops a queued prompt — acceptable before the first answer; the UI says
+   "Ending…". `killGrace` defaults to 10 s until the live check measures
+   `quitting → exit` (model unload ~19 GiB overlaps `termGrace`). After our
+   own escalation the exit reads "ended by force after the quit timed out",
+   not a crash. `processExited` receives `Process.TerminationReason`.
+5. **Wire facts for P29.3** (all cited in the review):
+   `terminal` = `{outcome, capture_path, duration_ms}`, outcomes `answered`,
+   `cancelled`, `tool-limit`, `no-answer`, …; it is followed by `close` and
+   exit 1, never `input`. `telemetry_error` text is in `error`.
+   `mentions` = `{attached, missing}`, emitted when either is non-empty —
+   error row only for `missing`; `attached` renders a notice "Attached:
+   <paths>". `steering_*` carry `text`, emitted after the next `resume`.
+   `compacting` has only nullable `focus` → notice "Compacting…";
+   `compacted` renders "Conversation compacted (<tokens> tokens)" (not the
+   summary text). Empty-answer `reason` exists only for `laguna-xs-chat`, so
+   the no-reason fallback is the common path.
+6. **Hand-written payloads, owed recapture.** No live session contains
+   `terminal`, `mentions`, `steering_*`, `telemetry_error`, `compact*` or
+   `clear`; their tests use payloads written from engine source, and a
+   fixture recapture is owed (ROADMAP P29.5 note).
+7. **Red runs.** "Must fail on the old code" means: red on existing API where
+   possible (e.g. `stopDisabledWhileQueued` as "`appendUser` alone →
+   `canStop == false`"; `emptyAnswerShowsReason`; `quitMidTurnEndsTheEngine`),
+   otherwise "fails with the new rule reverted", recorded by the implementer.
+8. **`quitMidTurnEndsTheEngine` reaches SIGKILL.** Fake flags
+   `FAKE_ENGINE_IGNORE_QUIT=1` + new `FAKE_ENGINE_IGNORE_SIGTERM=1` (SIG_IGN) +
+   `FAKE_ENGINE_PIDFILE`, pace 30000; prompt, wait for `.toolStart`, `quit()`
+   with graces 0.3 s; assert `kill(pid, 0) != 0` within 2 s.
+   `quitMidTurnStopsFirst` uses today's fake (pace 30000). No P29.5
+   dependency remains.
+9. **One severity type.** `Severity` moves to Kit with
+   `Severity.ofContext(used:size:)` using integer thresholds
+   (`used*4 >= size*3` critical, `used*2 >= size` warning, `size <= 0` →
+   healthy); the app copy is deleted.
+10. **Composer labels.** idle "Not started" · starting "Starting…" ·
+    running+loading "Loading model…" (+ "· n queued") · running+busy
+    "Working…" · running idle "Ready" · quitting "Ending…" · ended the exit
+    message · notFound "ds4-dogfood not found". ("starting before ready" is
+    dropped: `running` begins on `.ready`.)
+11. **A7 scope.** After `ready`, any line the parser cannot decode (non-JSON,
+    or a JSON object without `kind`) becomes a notice. `/resume`, `/model`,
+    `/rewind` print and `execv` in place (same pid, a second `ready`):
+    recorded as a Backlog item, not handled here.
+12. **Drift.** ROADMAP steps are reconciled at close (test names, A12 now
+    mandatory, `compacting`/`telemetry_error`); the engine-side "rejected
+    tool calls emit no event" gap goes in the ROADMAP Backlog under a new
+    "Engine requests" group.
+
 ## Success criteria
 
 1. After the engine dies mid-turn, Stop is disabled and the status reads
