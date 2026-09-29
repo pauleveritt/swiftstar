@@ -1,7 +1,7 @@
 ---
 phase: P29
 cycle: P29.10-toolbar-menus
-lifecycle: active
+lifecycle: closed
 ---
 
 # P29.10 toolbar menus implementation plan
@@ -90,3 +90,27 @@ model list read from `ds4-dogfood models --json`.
 - [ ] **Step 2:** ROADMAP P29.10 row step + Backlog "model dropdown" entry
   resolved (engine side stays in "Engine requests" until shipped); plan
   `## Result`, `lifecycle: closed`; `just lint-docs` green; commit.
+
+## Result
+
+Closed 2026-09-29. Tasks 1–2 in one Sonnet dispatch; one code review and
+five fix rounds, three of them from the owner's look at the running app.
+
+- **Commits:** `5ed8a93` (T1), `2272f1f` (T2), `7d8739f` (loader SIGKILL and
+  bounded read, path compare, load once, divergence cue), `5039583` (separate
+  capsules via `ToolbarSpacer(.fixed)`, sidebar toggle trailing,
+  `runs_in_tui`, real capture fixture), `ffe2e1b` (note once per engine path,
+  actionable missing-command reason), `ab02a23` (label inset), `52b9325`
+  (exit text drops the `Session artifacts:` line).
+- **Diverged:** ds4-engine named the per-model key `runs_in_tui`, not
+  `interactive`; its `default_model_id` falls back to Laguna XS when nothing
+  is saved. `fixtures/engine/models-real.json` is a real capture (home paths
+  anonymised) beside the hand-written `models.json`.
+- **Live:** owner confirmed three separate menu buttons, the trailing sidebar
+  toggle, and a model menu listing every engine model, against ds4-engine's
+  `feat/models-json` worktree (TUI.33 `baeb297f`, linked with `lld`).
+- **Deferred minors:** the select/restart logic in `EngineController` has no
+  automated test; a grandchild holding the catalog pipe can leave the reader
+  thread lingering; a `start()` during another path's in-flight load can
+  claim the wrong note; stderr's "last line" is the last line of its first
+  4 KiB.
