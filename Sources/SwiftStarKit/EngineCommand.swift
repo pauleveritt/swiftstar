@@ -103,6 +103,12 @@ public struct EngineExit: Equatable, Sendable {
         return EngineExit(code: code, message: message)
     }
 
+    /// The process could not be launched at all: there is no exit status, so
+    /// the message is the reason, not "refused to start" or an exit code.
+    public static func launchFailure(path: String, reason: String) -> EngineExit {
+        EngineExit(code: -1, message: "could not launch \(path): \(reason)")
+    }
+
     private static func signalName(_ n: Int32) -> String {
         let names: [Int32: String] = [
             1: "SIGHUP", 2: "SIGINT", 3: "SIGQUIT", 4: "SIGILL", 5: "SIGTRAP", 6: "SIGABRT",

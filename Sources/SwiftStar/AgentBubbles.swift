@@ -3,11 +3,18 @@ import SwiftUI
 /// The user's echoed prompt — a right-aligned, accent-filled pill.
 struct AgentPromptBubble: View {
     let text: String
+    /// The engine has not started a turn for this prompt yet.
+    var queued = false
     @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     var body: some View {
-        HStack {
+        HStack(alignment: .bottom, spacing: 6) {
             Spacer(minLength: 60)
+            if queued {
+                Text("Queued")
+                    .font(.system(size: transcriptFontSize - 2))
+                    .foregroundStyle(.secondary)
+            }
             Text(text)
                 .font(.system(size: transcriptFontSize))
                 .foregroundStyle(Color(nsColor: .alternateSelectedControlTextColor))

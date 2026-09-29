@@ -80,6 +80,9 @@ What binds this project now:
    the same percentage means a wildly different token count. Anchor any
    threshold on absolute `ctx_used`, and re-anchor against fresh measurement
    before trusting one far from where it was measured.
+   The context *display* (ring, colors) is the fraction of the window the
+   engine reports; *findings* and quoted thresholds stay absolute `ctx_used`
+   tokens.
 2. **Metrics are per pause, not live.** ds4-engine's `--ndjson` protocol
    reports no throughput during generation. Each pause emits a `checkpoint`
    snapshot (`prefill_tokens`, `sync_ms`, `eval_count`, `eval_ms`), each

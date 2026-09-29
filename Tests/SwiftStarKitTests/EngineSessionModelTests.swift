@@ -94,7 +94,8 @@ struct EngineSessionModelTests {
     @Test func failedLaunchEndsTranscript() {
         var m = EngineSessionModel()
         m.didStart()
-        let exit = EngineExit(code: -1, message: "refused to start: nope")
+        let exit = EngineExit.launchFailure(path: "/x/ds4", reason: "no such file")
+        #expect(exit.message == "could not launch /x/ds4: no such file")
         m.didFailToLaunch(exit)
         #expect(m.phase == .ended(exit))
         #expect(!m.transcript.isBusy)

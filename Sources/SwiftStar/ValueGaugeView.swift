@@ -1,4 +1,16 @@
 import SwiftUI
+import SwiftStarKit
+
+extension Severity {
+    /// The gauge track color for this health level.
+    var color: Color {
+        switch self {
+        case .healthy: .green
+        case .warning: .orange
+        case .critical: .red
+        }
+    }
+}
 
 /// 3/4-arc ring gauge (270° sweep, gap at the bottom, rounded caps),
 /// severity-colored — ported from the DS4 Control agent window's status bar.
