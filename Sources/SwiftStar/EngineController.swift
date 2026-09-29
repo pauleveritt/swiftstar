@@ -31,6 +31,10 @@ final class EngineController {
 
     @ObservationIgnored private var session: EngineSession?
     @ObservationIgnored private var quitGeneration = 0
+    /// Set once app termination has begun: nothing may start an engine after.
+    @ObservationIgnored private var isTerminating = false
+    /// The safety bound fired for the current quit; later joiners return at once.
+    @ObservationIgnored private var quitBoundFired = false
 
     private static let stopGrace: Duration = .seconds(10)
     private static let termGrace: Duration = .seconds(5)
@@ -63,8 +67,9 @@ final class EngineController {
 
     /// Quits the running session, then starts a new one with current Settings.
     func restart() async {
-        guard model.phase != .quitting else { return }
+        guard model.phase != .quitting, !isTerminating else { return }
         await quit()
+        guard !isTerminating else { return }
         guard !isActive else {
             model.apply(.notice("Restart skipped: the engine has not exited yet. Try again in a moment."))
             return
@@ -72,8 +77,11 @@ final class EngineController {
         start()
     }
 
+    /// Called when the app is terminating; quit waiters are still released.
+    func beginTerminating() { isTerminating = true }
+
     func start() {
-        guard !isActive else { return }
+        guard !isActive, !isTerminating else { return }
         let settingsPath = UserDefaults.standard.string(forKey: Self.executableDefaultsKey)
         let resolution = EngineCommand.resolveExecutable(
             settingsPath: settingsPath,
@@ -139,14 +147,17 @@ final class EngineController {
             model.willQuit()
             session.quit()
             quitGeneration += 1
+            quitBoundFired = false
             let generation = quitGeneration
             Task { [weak self] in
                 try? await Task.sleep(for: Self.quitSafetyBound)
                 // The bound releases only the quit it was started for.
                 guard let self, self.quitGeneration == generation else { return }
+                self.quitBoundFired = true
                 self.resumeQuitWaiters()
             }
         }
+        if quitBoundFired { return }
         await withCheckedContinuation { quitWaiters.append($0) }
     }
 

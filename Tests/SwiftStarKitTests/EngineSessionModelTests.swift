@@ -18,6 +18,14 @@ struct EngineSessionModelTests {
         #expect(m.phase == .running)
     }
 
+    @Test func generatingLabelComesFromComposer() {
+        var m = running()
+        m.apply(.prompt("hi"))
+        #expect(m.composer.label == "Working…")
+        m.apply(.generating(true))
+        #expect(m.composer.label == "Generating…")
+    }
+
     @Test func willQuitMovesToQuitting() {
         var m = running()
         m.willQuit()

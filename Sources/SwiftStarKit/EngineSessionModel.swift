@@ -37,7 +37,7 @@ public struct EngineComposer: Equatable, Sendable {
                 let queued = transcript.pendingUserCount
                 label = queued > 0 ? "Loading model… · \(queued) queued" : "Loading model…"
             } else {
-                label = busy ? "Working…" : "Ready"
+                label = transcript.isGenerating ? "Generating…" : busy ? "Working…" : "Ready"
             }
             return EngineComposer(canType: true, canSend: !busy, canStop: busy, label: label)
         case .quitting:

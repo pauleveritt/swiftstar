@@ -41,6 +41,7 @@ struct AgentView: View {
                     Label(sessionActionTitle, systemImage: sessionActionIcon)
                 }
                 .help(sessionActionHelp)
+                .disabled(controller.phase == .quitting)
             }
         }
         .task { if controller.phase == .idle { controller.start() } }
@@ -277,7 +278,7 @@ struct AgentView: View {
 
     private func send() {
         let message = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard composerState.canType, !message.isEmpty else { return }
+        guard composerState.canSend, !message.isEmpty else { return }
         input = ""
         controller.send(message)
     }
@@ -348,7 +349,7 @@ struct AgentView: View {
     /// status label (which carries the exit message once it has ended).
     private var bottomStatusText: String {
         guard controller.phase == .running else { return composerState.label }
-        let activity = controller.transcript.isGenerating ? "Generating…" : composerState.label
+        let activity = composerState.label
         return "Prefill \(rateText(controller.metrics.prefillTPS)) tok/s · "
             + "Generation \(rateText(controller.metrics.generationTPS)) tok/s · \(activity)"
     }

@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let engine, engine.isActive else { return .terminateNow }
         guard !terminationPending else { return .terminateLater }
         terminationPending = true
+        engine.beginTerminating()
         Task { @MainActor in
             await engine.quit()
             terminationPending = false
