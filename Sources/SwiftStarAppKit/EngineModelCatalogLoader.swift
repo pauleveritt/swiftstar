@@ -40,7 +40,8 @@ public enum EngineModelCatalogLoader {
         process.environment = environment
         let out = Pipe()
         process.standardOutput = out
-        process.standardError = FileHandle.nullDevice
+        let err = Pipe()
+        process.standardError = err
         process.standardInput = FileHandle.nullDevice
         do {
             try process.run()
@@ -69,6 +70,13 @@ public enum EngineModelCatalogLoader {
             box.set(handle.readDataToEndOfFile())
             done.signal()
         }
+        let errBox = DataBox()
+        let errDone = DispatchSemaphore(value: 0)
+        let errHandle = err.fileHandleForReading
+        DispatchQueue.global(qos: .utility).async {
+            errBox.set(errHandle.readDataToEndOfFile())
+            errDone.signal()
+        }
         if done.wait(timeout: .now() + seconds + 2) == .timedOut {
             timedOut.set()
             try? handle.close()
@@ -79,7 +87,15 @@ public enum EngineModelCatalogLoader {
         let data = box.value
         if timedOut.isSet { return .failure(.timedOut) }
         guard process.terminationStatus == 0 else {
-            return .failure(.failed("exit code \(process.terminationStatus)"))
+            _ = errDone.wait(timeout: .now() + 1)
+            let text = String(decoding: errBox.value.prefix(4096), as: UTF8.self)
+            if process.terminationStatus == 2,
+               text.contains("invalid choice") || text.contains("unknown command") {
+                return .failure(.commandMissing)
+            }
+            let last = text.split(whereSeparator: \.isNewline).last.map { String($0.prefix(200)) }
+            return .failure(.failed(
+                "exit code \(process.terminationStatus)" + (last.map { ": \($0)" } ?? "")))
         }
         return EngineModelList.decode(data)
     }

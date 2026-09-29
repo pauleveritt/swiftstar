@@ -38,7 +38,7 @@ final class EngineController {
     /// `models --json` (the menus then use their fallbacks).
     private(set) var catalog: EngineModelList?
     @ObservationIgnored private var catalogNote: String?
-    @ObservationIgnored private var catalogNoteShown = false
+    @ObservationIgnored private var noteGate = CatalogNoteGate()
     @ObservationIgnored private var catalogExecutable: String?
     @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
 
@@ -157,14 +157,13 @@ final class EngineController {
         case .failure(let error):
             catalog = nil
             catalogNote = "Model list unavailable: \(error.reason)"
-            catalogNoteShown = false
             if isActive { showCatalogNote() }
         }
     }
 
     private func showCatalogNote() {
-        guard let note = catalogNote, !catalogNoteShown else { return }
-        catalogNoteShown = true
+        guard let note = catalogNote, let path = catalogExecutable,
+              noteGate.claim(path: path) else { return }
         model.apply(.notice(note))
     }
 

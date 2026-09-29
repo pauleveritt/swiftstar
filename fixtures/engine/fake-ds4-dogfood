@@ -7,7 +7,8 @@ FAKE_ENGINE_QUEUE (prompts sent mid-turn queue; after a stop the queued turn
 starts unless a quit follows at once, like the relay), FAKE_ENGINE_LOG, FAKE_ENGINE_PIDFILE,
 FAKE_ENGINE_ARGV_LOG (write argv, one per line, at start).
 `models --json` mode (argv[1] == "models"): prints the FAKE_ENGINE_MODELS file, or
-exits 2 when FAKE_ENGINE_MODELS_FAIL=1; FAKE_ENGINE_MODELS_SLEEP_MS delays first.
+exits 2 with "boom" when FAKE_ENGINE_MODELS_FAIL=1, or with argparse's "invalid choice"
+message when FAKE_ENGINE_MODELS_UNKNOWN=1 (or no file is set, like an older engine); FAKE_ENGINE_MODELS_SLEEP_MS delays first.
 Replays the fixture up to and including each `input` line, pausing after every
 `tool_start` until a stdin line arrives or the pace elapses.
 """
@@ -37,8 +38,16 @@ if env.get("FAKE_ENGINE_ARGV_LOG"):
 
 if sys.argv[1:2] == ["models"]:
     time.sleep(int(env.get("FAKE_ENGINE_MODELS_SLEEP_MS", "0")) / 1000.0)
-    if env.get("FAKE_ENGINE_MODELS_FAIL") == "1" or not env.get("FAKE_ENGINE_MODELS"):
-        sys.stderr.write("ds4-dogfood: error: unknown command 'models'\n")
+    if env.get("FAKE_ENGINE_MODELS_FAIL") == "1":
+        sys.stderr.write("ds4-dogfood: error: boom\n")
+        sys.stderr.flush()
+        sys.exit(2)
+    if env.get("FAKE_ENGINE_MODELS_UNKNOWN") == "1" or not env.get("FAKE_ENGINE_MODELS"):
+        sys.stderr.write(
+            "usage: ds4-dogfood [-h] [--version]\n"
+            "                   [{run,audit,report,session,tui,sessions,apply,export,suite,suite-grade}]\n"
+            "ds4-dogfood: error: argument command: invalid choice: 'models' "
+            "(choose from run, audit, report, session, tui, sessions, apply, export, suite, suite-grade)\n")
         sys.stderr.flush()
         sys.exit(2)
     with open(env["FAKE_ENGINE_MODELS"]) as f:

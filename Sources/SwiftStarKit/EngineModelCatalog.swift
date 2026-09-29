@@ -10,6 +10,8 @@ public enum CatalogError: Error, Equatable, Sendable {
     /// The command exited non-zero or could not be launched.
     case failed(String)
     case timedOut
+    /// An engine older than ds4-engine TUI.33: the subcommand does not exist.
+    case commandMissing
 
     /// One line for the transcript note.
     public var reason: String {
@@ -18,6 +20,8 @@ public enum CatalogError: Error, Equatable, Sendable {
         case .malformed(let m): "unreadable output (\(m))"
         case .failed(let m): m
         case .timedOut: "timed out"
+        case .commandMissing:
+            "this ds4-dogfood has no `models` command (needs ds4-engine TUI.33 or later)"
         }
     }
 }
@@ -211,4 +215,14 @@ public enum RecentWorkspaces {
                 disabledReason: exists(path) ? nil : "folder not found")
         }
     }
+}
+
+/// The "Model list unavailable" note is shown once per engine path, however
+/// many loads, starts or restarts follow.
+public struct CatalogNoteGate: Sendable {
+    private var noted: Set<String> = []
+    public init() {}
+
+    /// True the first time `path` is claimed.
+    public mutating func claim(path: String) -> Bool { noted.insert(path).inserted }
 }
