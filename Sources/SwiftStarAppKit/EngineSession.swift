@@ -52,10 +52,11 @@ public final class EngineSession {
     private var exitFired = false
     private var exitReason: Process.TerminationReason = .exit
 
-    /// True from the first `.prompt` until the next `.awaitingInput`/`.closed`.
+    /// True from the first `.prompt` until the next `.awaitingInput`, `.turnEnded` or `.closed`.
     private var inTurn = false
     private var quitting = false
     private var forced = false
+    private var terminated = false
     private var quitTask: Task<Void, Never>?
     private let stopGrace: Duration
     private let termGrace: Duration
@@ -143,29 +144,29 @@ public final class EngineSession {
         try write(Data([0x03]))
     }
 
-    /// Ends the engine: in a turn, `stop` first (up to `stopGrace`); then
-    /// `quit` and close stdin; SIGTERM after `termGrace`; SIGKILL after
-    /// `killGrace` more. Idempotent: a second call while quitting is a no-op.
+    /// Ends the engine. In a turn: `stop` and `quit` back to back (the relay
+    /// handles `quit` before its queue, so a queued prompt cannot start), then
+    /// close stdin; SIGTERM after `stopGrace`. Idle: `quit`, close stdin,
+    /// SIGTERM after `termGrace`. SIGKILL `killGrace` after SIGTERM.
+    /// Idempotent: a second call while quitting is a no-op.
     public func quit() {
         guard process != nil, !exited, !quitting else { return }
         quitting = true
-        quitTask = Task { @MainActor [self] in await runQuitSequence() }
-    }
-
-    private func runQuitSequence() async {
-        if inTurn, !exited {
-            if let data = try? Self.command(["kind": "stop"]) { try? stdin?.write(contentsOf: data) }
-            _ = await waitUntil(stopGrace) { !self.inTurn }
-        }
-        guard !exited else { return }
+        let grace = inTurn ? stopGrace : termGrace
+        if inTurn, let data = try? Self.command(["kind": "stop"]) { try? stdin?.write(contentsOf: data) }
         if let data = try? Self.command(["kind": "quit"]) { try? stdin?.write(contentsOf: data) }
         try? stdin?.close()
         stdin = nil
-        if await waitUntil(termGrace, { false }) { return }
-        guard !exited, let process else { return }
+        quitTask = Task { @MainActor [self] in await escalate(after: grace) }
+    }
+
+    private func escalate(after grace: Duration) async {
+        if await waitUntil(grace, { false }) { return }
+        guard !exited, let process, process.isRunning else { return }
+        terminated = true
         process.terminate()
-        _ = await waitUntil(killGrace) { false }
-        guard !exited, let process = self.process else { return }
+        if await waitUntil(killGrace, { false }) { return }
+        guard !exited, let process = self.process, process.isRunning else { return }
         forced = true
         kill(process.processIdentifier, SIGKILL)
     }
@@ -300,7 +301,7 @@ public final class EngineSession {
         process = nil
         let exit = EngineExit.describe(
             code: exitStatus, stderrTail: String(decoding: stderrTail, as: UTF8.self), sawReady: sawReady,
-            reason: exitReason == .uncaughtSignal ? .signal : .exit, forced: forced)
+            reason: exitReason == .uncaughtSignal ? .signal : .exit, forced: forced, terminated: terminated)
         quitTask = nil
         onExit?(exit, sessionDirectory)
     }

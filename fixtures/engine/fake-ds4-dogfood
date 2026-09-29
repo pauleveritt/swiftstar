@@ -3,7 +3,8 @@
 
 Env: FAKE_ENGINE_FIXTURE, FAKE_ENGINE_PACE_MS (300), FAKE_ENGINE_EXIT (0),
 FAKE_ENGINE_REFUSE, FAKE_ENGINE_IGNORE_QUIT, FAKE_ENGINE_IGNORE_SIGTERM (SIG_IGN),
-FAKE_ENGINE_LOG, FAKE_ENGINE_PIDFILE,
+FAKE_ENGINE_QUEUE (prompts sent mid-turn queue; after a stop the queued turn
+starts unless a quit follows at once, like the relay), FAKE_ENGINE_LOG, FAKE_ENGINE_PIDFILE,
 FAKE_ENGINE_ARGV_LOG (write argv, one per line, at start).
 Replays the fixture up to and including each `input` line, pausing after every
 `tool_start` until a stdin line arrives or the pace elapses.
@@ -40,6 +41,8 @@ if env.get("FAKE_ENGINE_REFUSE") == "1":
 pace = int(env.get("FAKE_ENGINE_PACE_MS", "300")) / 1000.0
 exit_code = int(env.get("FAKE_ENGINE_EXIT", "0"))
 ignore_quit = env.get("FAKE_ENGINE_IGNORE_QUIT") == "1"
+queue_mode = env.get("FAKE_ENGINE_QUEUE") == "1"
+queued = []
 log_path = env.get("FAKE_ENGINE_LOG")
 with open(env["FAKE_ENGINE_FIXTURE"]) as f:
     fixture = [ln.rstrip("\n") for ln in f if ln.strip()]
@@ -145,7 +148,34 @@ def interrupt():
         if is_kind(line, "input"):
             break
     emit('{"kind": "event", "event": {"kind": "interrupted"}}')
+    if queue_mode:
+        # The relay handles a quit before its queue: a quit that follows the
+        # stop at once ends the session; otherwise the queued prompt runs.
+        try:
+            kind, _ = inbox.get(timeout=0.2)
+        except queue.Empty:
+            kind = None
+        if kind in ("quit", "eof") and not ignore_quit:
+            finish()
+        if queued:
+            run_queued(queued.pop(0))
+            return
     emit('{"kind": "input"}')
+
+
+def run_queued(text):
+    """A queued turn: starts, then waits for a quit or stop like a busy turn."""
+    emit(json.dumps({"kind": "event", "event": {"kind": "prompt", "text": text}}))
+    while True:
+        try:
+            kind, _ = inbox.get(timeout=pace)
+        except queue.Empty:
+            continue
+        if kind in ("quit", "eof") and not ignore_quit:
+            finish()
+        if kind == "stop":
+            emit('{"kind": "input"}')
+            return
 
 
 def replay():
@@ -159,7 +189,10 @@ def replay():
             return
         if is_tool_start(line):
             try:
-                kind, _ = inbox.get(timeout=pace)
+                kind, text = inbox.get(timeout=pace)
+                while queue_mode and kind == "prompt":
+                    queued.append(json.loads(text).get("text", ""))
+                    kind, text = inbox.get(timeout=pace)
             except queue.Empty:
                 continue
             if kind == "stop":

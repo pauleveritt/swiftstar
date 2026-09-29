@@ -219,16 +219,54 @@ struct EngineSessionTests {
         #expect(rec.exit?.code == 0)
     }
 
+    private func loggedKinds(_ log: URL) throws -> [String] {
+        try String(contentsOf: log, encoding: .utf8).split(separator: "\n").compactMap { line in
+            (try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])?["kind"] as? String
+        }
+    }
+
     @Test func quitIsIdempotent() async throws {
-        let (session, rec) = make(fixture: "tool-read")
+        let log = FileManager.default.temporaryDirectory
+            .appendingPathComponent("engine-session-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        // The engine ignores quit, so a non-idempotent quit() would write it again.
+        let (session, rec) = make(
+            fixture: "tool-read", extra: ["FAKE_ENGINE_IGNORE_QUIT": "1"], log: log, grace: shortGrace)
         try session.start()
         #expect(await wait { rec.count(isAwaiting) == 1 })
         session.quit()
+        session.quit()
+        try? await Task.sleep(for: .milliseconds(50))
         session.quit()
         #expect(await wait { rec.exit != nil })
         session.quit()
         try? await Task.sleep(for: .milliseconds(100))
         #expect(rec.exits.count == 1)
+        #expect(try loggedKinds(log).filter { $0 == "quit" }.count == 1)
+    }
+
+    @Test func quitWithQueuedPromptEndsPromptly() async throws {
+        let log = FileManager.default.temporaryDirectory
+            .appendingPathComponent("engine-session-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: log) }
+        // Default graces: only a prompt quit (not a stopGrace wait) is fast enough.
+        let (session, rec) = make(
+            fixture: "tool-read", pace: 30000, extra: ["FAKE_ENGINE_QUEUE": "1"], log: log)
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        try session.send(prompt: "first")
+        #expect(await wait { rec.has(isToolStart) })
+        try session.send(prompt: "second, queued")
+        let began = ContinuousClock.now
+        session.quit()
+        #expect(await wait(1.5) { rec.exit != nil })
+        #expect(ContinuousClock.now - began < .seconds(1.5))
+        let kinds = try loggedKinds(log)
+        let stop = try #require(kinds.firstIndex(of: "stop"))
+        let quit = try #require(kinds.firstIndex(of: "quit"))
+        #expect(stop < quit, "\(kinds)")
+        #expect(rec.exit?.message == "ended", "\(String(describing: rec.exit))")
+        #expect(!rec.events.contains { if case .prompt(let t) = $0 { t == "second, queued" } else { false } })
     }
 
     @Test func notRunningErrorIsReadable() {
