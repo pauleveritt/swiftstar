@@ -12,6 +12,7 @@ final class EngineController {
     static let executableDefaultsKey = "engineExecutable"
     static let modelIDDefaultsKey = "engineModelID"
     static let contextSizeDefaultsKey = "engineContextSize"
+    static let recentWorkspacesDefaultsKey = "recentWorkspaces"
 
     /// Every session rule (phase, busy/stop/pending, labels) lives in the
     /// model; the controller forwards to it and owns the process.
@@ -29,6 +30,18 @@ final class EngineController {
         }
     }
 
+    /// The Settings choices the toolbar menus own ("" / 0 = engine default).
+    private(set) var modelID: String
+    private(set) var contextSize: Int
+    private(set) var recentWorkspaces: [String]
+    /// The engine's model list; nil until loaded or when the engine has no
+    /// `models --json` (the menus then use their fallbacks).
+    private(set) var catalog: EngineModelList?
+    @ObservationIgnored private var catalogNote: String?
+    @ObservationIgnored private var catalogNoteShown = false
+    @ObservationIgnored private var catalogExecutable: String?
+    @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
+
     @ObservationIgnored private var session: EngineSession?
     @ObservationIgnored private var quitGeneration = 0
     /// Set once app termination has begun: nothing may start an engine after.
@@ -44,7 +57,21 @@ final class EngineController {
     @ObservationIgnored private var quitWaiters: [CheckedContinuation<Void, Never>] = []
 
     init() {
+        let defaults = UserDefaults.standard
+        modelID = defaults.string(forKey: Self.modelIDDefaultsKey) ?? ""
+        contextSize = defaults.integer(forKey: Self.contextSizeDefaultsKey)
+        recentWorkspaces = defaults.stringArray(forKey: Self.recentWorkspacesDefaultsKey) ?? []
         workspace = Self.defaultWorkspace()
+        // Reload the model list when Settings changes the engine path.
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let path = self.resolveExecutablePath(), path != self.catalogExecutable
+                else { return }
+                Task { await self.loadCatalog() }
+            }
+        }
     }
 
     /// The last chosen folder, else the checkout the app runs from, else home.
@@ -57,12 +84,81 @@ final class EngineController {
         return ProjectRoot.locate(anchor: anchor) ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
-    /// True while a session runs and the given Settings values name a
-    /// different model or context size than the one loaded. The view passes
-    /// its `@AppStorage` values so SwiftUI tracks Settings edits.
-    func restartNeeded(modelID: String?, contextSize: Int?) -> Bool {
-        model.phase == .running && EngineCommand.restartNeeded(
-            session: model.transcript.session, modelID: modelID, contextSize: contextSize)
+    /// Choosing a value that differs from the current one writes Settings and,
+    /// while a session runs, restarts it; the menu choice is the confirmation.
+    /// Ignored while a session starts or quits, and when nothing changes.
+    private var canChoose: Bool {
+        !isTerminating && model.phase != .starting && model.phase != .quitting
+    }
+
+    func select(workspace url: URL) {
+        guard canChoose else { return }
+        let list = RecentWorkspaces.updated(recentWorkspaces, adding: url.path)
+        recentWorkspaces = list
+        UserDefaults.standard.set(list, forKey: Self.recentWorkspacesDefaultsKey)
+        guard url != workspace else { return }
+        workspace = url
+        restartIfRunning()
+    }
+
+    func select(modelID id: String) {
+        guard canChoose else { return }
+        let id = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard id != modelID else { return }
+        modelID = id
+        UserDefaults.standard.set(id, forKey: Self.modelIDDefaultsKey)
+        restartIfRunning()
+    }
+
+    func select(contextSize size: Int) {
+        guard canChoose else { return }
+        let size = max(0, size)
+        guard size != contextSize else { return }
+        contextSize = size
+        UserDefaults.standard.set(size, forKey: Self.contextSizeDefaultsKey)
+        restartIfRunning()
+    }
+
+    private func restartIfRunning() {
+        guard model.phase == .running else { return }
+        Task { await restart() }
+    }
+
+    private func resolveExecutablePath() -> String? {
+        let settingsPath = UserDefaults.standard.string(forKey: Self.executableDefaultsKey)
+        if case .found(let path) = EngineCommand.resolveExecutable(
+            settingsPath: settingsPath,
+            pathEnv: ProcessInfo.processInfo.environment["PATH"],
+            home: FileManager.default.homeDirectoryForCurrentUser,
+            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return path
+        }
+        return nil
+    }
+
+    /// Reads the engine's model list; never blocks a session start. On failure
+    /// the menus fall back and one transcript note says why.
+    func loadCatalog() async {
+        guard let path = resolveExecutablePath() else { return }
+        catalogExecutable = path
+        let result = await EngineModelCatalogLoader.load(executable: path)
+        guard path == catalogExecutable else { return }
+        switch result {
+        case .success(let list):
+            catalog = list
+            catalogNote = nil
+        case .failure(let error):
+            catalog = nil
+            catalogNote = "Model list unavailable: \(error.reason)"
+            catalogNoteShown = false
+            if isActive { showCatalogNote() }
+        }
+    }
+
+    private func showCatalogNote() {
+        guard let note = catalogNote, !catalogNoteShown else { return }
+        catalogNoteShown = true
+        model.apply(.notice(note))
     }
 
     /// Quits the running session, then starts a new one with current Settings.
@@ -104,13 +200,13 @@ final class EngineController {
             executable: executable,
             arguments: EngineCommand.arguments(
                 source: source,
-                modelID: UserDefaults.standard.string(forKey: Self.modelIDDefaultsKey),
-                contextSize: UserDefaults.standard.integer(forKey: Self.contextSizeDefaultsKey)),
+                modelID: modelID, contextSize: contextSize),
             workingDirectory: source,
             stopGrace: Self.stopGrace, termGrace: Self.termGrace, killGrace: Self.killGrace)
         session.onEvent = { [weak self] event in self?.model.apply(event) }
         session.onExit = { [weak self] exit, directory in self?.handleExit(exit, directory) }
         model.didStart()
+        showCatalogNote()
         do {
             try session.start()
             self.session = session

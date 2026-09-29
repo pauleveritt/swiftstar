@@ -7,12 +7,17 @@ import Foundation
 public enum CatalogError: Error, Equatable, Sendable {
     case unsupportedSchema(Int)
     case malformed(String)
+    /// The command exited non-zero or could not be launched.
+    case failed(String)
+    case timedOut
 
     /// One line for the transcript note.
     public var reason: String {
         switch self {
         case .unsupportedSchema(let v): "unsupported schema_version \(v)"
         case .malformed(let m): "unreadable output (\(m))"
+        case .failed(let m): m
+        case .timedOut: "timed out"
         }
     }
 }

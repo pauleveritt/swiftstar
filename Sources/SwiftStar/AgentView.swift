@@ -6,8 +6,9 @@ struct AgentView: View {
     let controller: EngineController
     @State private var input = ""
     @FocusState private var inputFocused: Bool
-    @AppStorage("engineModelID") private var engineModelID = ""
-    @AppStorage("engineContextSize") private var engineContextSize = 0
+    @State private var askingModel = false
+    @State private var askingContext = false
+    @State private var entry = ""
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
     @Environment(\.transcriptFontSize) private var envTranscriptFontSize: CGFloat
 
@@ -25,10 +26,7 @@ struct AgentView: View {
         .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(transcriptFontSize)))
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                workspaceButton
-            }
-            ToolbarItem(placement: .automatic) {
-                modelStatus
+                menuCapsule
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -45,58 +43,127 @@ struct AgentView: View {
             }
         }
         .task { if controller.phase == .idle { controller.start() } }
-    }
-
-    /// Loaded model label plus, when Settings differ, the restart button.
-    /// One toolbar item, so nothing renders as a blank slot.
-    private var modelStatus: some View {
-        HStack(spacing: 8) {
-            modelLabel
-            if controller.restartNeeded(modelID: engineModelID, contextSize: engineContextSize) {
-                Button {
-                    Task { await controller.restart() }
-                } label: {
-                    Label(restartTitle, systemImage: "arrow.clockwise")
+        .task { await controller.loadCatalog() }
+        .alert("Other model", isPresented: $askingModel) {
+            TextField("Model id", text: $entry)
+            Button("Use") { controller.select(modelID: entry) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Type an engine model id, e.g. laguna-xs-2.1. A running session restarts.")
+        }
+        .alert("Custom context size", isPresented: $askingContext) {
+            TextField("Tokens", text: $entry)
+            Button("Use") {
+                if let n = Int(entry.trimmingCharacters(in: .whitespaces)), n > 0 {
+                    controller.select(contextSize: n)
                 }
-                .help("Settings changed the model or context size; restart the session to apply")
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Type a context size in tokens. A running session restarts.")
         }
     }
 
-    private var restartTitle: String {
-        let id = engineModelID.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Folder, model and context menus. One toolbar item, so nothing renders
+    /// as a blank slot. Choosing a different value restarts a running session;
+    /// while one starts or quits the menus are disabled.
+    private var menuCapsule: some View {
+        HStack(spacing: 4) {
+            folderMenu
+            modelMenu
+            contextMenu
+        }
+        .font(.system(size: envTranscriptFontSize))
+        .disabled(controller.phase == .starting || controller.phase == .quitting)
+    }
+
+    private func menuLabel(_ text: String, icon: String? = nil) -> some View {
+        HStack(spacing: 4) {
+            if let icon { Image(systemName: icon) }
+            Text(text)
+        }
+        // Keep the item at its natural width as the transcript font grows.
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    @ViewBuilder
+    private func choiceRow(
+        title: String, checked: Bool, disabledReason: String? = nil, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            let text = disabledReason.map { "\(title) — \($0)" } ?? title
+            if checked {
+                Label(text, systemImage: "checkmark")
+            } else {
+                Text(text)
+            }
+        }
+        .disabled(disabledReason != nil)
+    }
+
+    private var folderMenu: some View {
+        let current = controller.workspace?.path
+        return Menu {
+            ForEach(
+                RecentWorkspaces.items(
+                    controller.recentWorkspaces, current: current,
+                    exists: { FileManager.default.fileExists(atPath: $0) }),
+                id: \.value
+            ) { item in
+                choiceRow(title: item.title, checked: item.isChecked, disabledReason: item.disabledReason) {
+                    controller.select(workspace: URL(fileURLWithPath: item.value))
+                }
+            }
+            if !controller.recentWorkspaces.isEmpty { Divider() }
+            Button("Choose Folder…", action: pickWorkspace)
+        } label: {
+            menuLabel(controller.workspace.map(PathAbbreviation.leafName) ?? "Choose folder", icon: "folder")
+        }
+        .menuStyle(.borderlessButton)
+        .help("Workspace: its git repository is the engine's source. Choosing another restarts a running session.")
+    }
+
+    private var modelMenu: some View {
         let loaded = controller.transcript.session?.modelID
-        if !id.isEmpty, let loaded, id != loaded { return "Restart to use \(id)" }
-        if !id.isEmpty, loaded == nil, engineContextSize <= 0 { return "Restart to use \(id)" }
-        return "Restart with context \(engineContextSize.formatted(.number.grouping(.never)))"
-    }
-
-    /// The loaded model and context size; empty for an older engine that
-    /// sends no `session` event.
-    @ViewBuilder private var modelLabel: some View {
-        if let info = controller.transcript.session, info.modelID != nil || info.contextSize != nil {
-            let context = info.contextSize.map { " · \($0.formatted(.number.grouping(.never))) ctx" } ?? ""
-            Text((info.modelID ?? "model") + context)
-                .font(.system(size: envTranscriptFontSize))
-                .foregroundStyle(.secondary)
-                .help("Model and context size loaded in the running session")
-        }
-    }
-
-    private var workspaceButton: some View {
-        Button(action: pickWorkspace) {
-            HStack(spacing: 4) {
-                Image(systemName: "folder")
-                Text(controller.workspace.map(PathAbbreviation.leafName) ?? "Choose folder")
+        let items = ModelMenu.items(list: controller.catalog, settingsID: controller.modelID, loadedID: loaded)
+        let label = loaded ?? (controller.modelID.isEmpty ? "Engine default" : controller.modelID)
+        return Menu {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                choiceRow(title: item.title, checked: item.isChecked, disabledReason: item.disabledReason) {
+                    controller.select(modelID: item.value)
+                }
+                if index == 0 { Divider() }
             }
-            .font(.system(size: envTranscriptFontSize))
-            // Keep the toolbar item at its natural width as the transcript
-            // font grows, then add breathing room around the label.
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 8)
+            Divider()
+            Button("Other…") { entry = ""; askingModel = true }
+        } label: {
+            menuLabel(label)
         }
-        .buttonStyle(.borderless)
-        .help("Workspace: its git repository is the engine's source (applied at next start)")
+        .menuStyle(.borderlessButton)
+        .help("Model: choosing another restarts a running session")
+    }
+
+    private var contextMenu: some View {
+        let session = controller.transcript.session
+        let items = ContextMenu.items(
+            list: controller.catalog, modelID: session?.modelID ?? controller.modelID,
+            settingsContext: controller.contextSize, loaded: session?.contextSize)
+        let size = session?.contextSize ?? (controller.contextSize > 0 ? controller.contextSize : nil)
+        let label = size.map { "\($0.formatted(.number.grouping(.never))) ctx" } ?? "Default ctx"
+        return Menu {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                choiceRow(title: item.title, checked: item.isChecked, disabledReason: item.disabledReason) {
+                    controller.select(contextSize: item.value)
+                }
+                if index == 0 { Divider() }
+            }
+            Divider()
+            Button("Custom…") { entry = ""; askingContext = true }
+        } label: {
+            menuLabel(label)
+        }
+        .menuStyle(.borderlessButton)
+        .help("Context size: choosing another restarts a running session")
     }
 
     private func pickWorkspace() {
@@ -107,7 +174,7 @@ struct AgentView: View {
         panel.directoryURL = controller.workspace
         panel.message = "Choose a folder in the git repository the engine should work on"
         if panel.runModal() == .OK, let url = panel.url {
-            controller.workspace = url
+            controller.select(workspace: url)
         }
     }
 

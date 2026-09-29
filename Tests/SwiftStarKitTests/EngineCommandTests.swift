@@ -134,23 +134,4 @@ struct EngineCommandTests {
     @Test func whitespaceIDAndNonPositiveContextIgnored() {
         #expect(EngineCommand.arguments(source: src, modelID: "  ", contextSize: -1) == p28)
     }
-
-    private func info(_ m: String?, _ c: Int?) -> EngineSessionInfo {
-        EngineSessionInfo(id: "s", modelID: m, contextSize: c)
-    }
-
-    @Test func restartNeededOnlyWhileSessionRunsAndSettingsDiffer() {
-        let loaded = info("laguna-xs-2.1", 20000)
-        #expect(!EngineCommand.restartNeeded(session: nil, modelID: "x", contextSize: 1))
-        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: "", contextSize: 0))
-        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: " ", contextSize: -5))
-        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: "laguna-xs-2.1", contextSize: 20000))
-        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: " laguna-xs-2.1 ", contextSize: 0))
-        #expect(EngineCommand.restartNeeded(session: loaded, modelID: "qwen3.8-flash-next", contextSize: 0))
-        #expect(EngineCommand.restartNeeded(session: loaded, modelID: "", contextSize: 8192))
-        // Fields the session did not report are not compared.
-        #expect(!EngineCommand.restartNeeded(session: info(nil, nil), modelID: "m", contextSize: 8192))
-        #expect(EngineCommand.restartNeeded(session: info(nil, 8192), modelID: "m", contextSize: 4096))
-        #expect(!EngineCommand.restartNeeded(session: info(nil, 8192), modelID: "m", contextSize: 8192))
-    }
 }
