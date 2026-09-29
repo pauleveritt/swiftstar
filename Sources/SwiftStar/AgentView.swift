@@ -92,6 +92,9 @@ struct AgentView: View {
         }
         // Keep the item at its natural width as the transcript font grows.
         .fixedSize(horizontal: true, vertical: false)
+        // `.borderlessButton` menus draw no content inset of their own inside the
+        // glass capsule, so give the label the inset the icon buttons have.
+        .padding(.horizontal, 8)
     }
 
     @ViewBuilder
