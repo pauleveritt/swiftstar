@@ -203,4 +203,55 @@ struct EngineTranscriptPendingTests {
         t.apply(.memory(EngineMemory(allocatedBytes: 1, budgetBytes: 2, planGiB: nil)))
         #expect(t.isPending(rowAt: 0))
     }
+
+    @Test func queuedMarksPendingRow() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        #expect(!t.isQueued(rowAt: 0))
+        t.apply(.queued(count: 1))
+        #expect(t.isQueued(rowAt: 0))
+        #expect(t.isPending(rowAt: 0))
+    }
+
+    @Test func steeringClearsAllPendingAndNotes() {
+        var t = EngineTranscript()
+        t.appendUser("a")
+        t.appendUser("b")
+        t.apply(.queued(count: 2))
+        t.apply(.steering(applied: true, text: "a\n\nb"))
+        #expect(t.pendingUserCount == 0)
+        #expect(t.queuedUserRows.isEmpty)
+        #expect(t.rows.last == .system("Queued message delivered"))
+        t.apply(.steering(applied: false, text: nil))
+        #expect(t.rows.last == .system("Queued message not confirmed"))
+    }
+}
+
+struct EngineTranscriptSurfaceTests {
+    @Test func emptyAnswerShowsReason() {
+        var t = EngineTranscript()
+        t.apply(.answer(EngineAnswer(text: "", contextUsed: 1, contextSize: 2, durationMs: nil, reason: "ran out of tokens")))
+        #expect(t.rows.last == .error("No answer: ran out of tokens"))
+    }
+
+    @Test func emptyAnswerWithoutReasonHasFallback() {
+        var t = EngineTranscript()
+        t.apply(.answer(EngineAnswer(text: "", contextUsed: nil, contextSize: nil, durationMs: nil)))
+        #expect(t.rows.last == .error("No answer — the model stopped without answering"))
+    }
+
+    @Test func nonEmptyAnswerStaysAnAnswer() {
+        var t = EngineTranscript()
+        let a = EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil)
+        t.apply(.answer(a))
+        #expect(t.rows.last == .answer(a))
+    }
+
+    @Test func terminalShowsOutcome() {
+        var t = EngineTranscript()
+        t.apply(.turnEnded(outcome: "tool-limit"))
+        #expect(t.rows.last == .error("Turn ended: tool-limit"))
+        t.apply(.turnEnded(outcome: "answered"))
+        #expect(t.rows.last == .system("Turn ended: answered"))
+    }
 }

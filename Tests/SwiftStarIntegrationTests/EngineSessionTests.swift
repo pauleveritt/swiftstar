@@ -135,6 +135,16 @@ struct EngineSessionTests {
         #expect(rec.exits.count == 1)
     }
 
+    @Test func garbageAfterReadyIsNoticeNotFatal() async throws {
+        let (session, rec) = make(fixture: "garbage-after-ready")
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        #expect(rec.events.contains(.notice("Engine output: this is not json")))
+        #expect(!rec.has(isProtocolError))
+        session.quit()
+        #expect(await wait { rec.exit != nil })
+    }
+
     @Test func refusalBeforeReady() async throws {
         let (session, rec) = make(fixture: "tool-read", extra: ["FAKE_ENGINE_REFUSE": "1"])
         try session.start()

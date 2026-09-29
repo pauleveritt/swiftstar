@@ -113,9 +113,22 @@ public struct EngineTranscript: Equatable, Sendable {
                 $0.result = result
             }
         case .answer(let a):
-            rows.append(.answer(a))
+            if a.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                rows.append(.error(a.reason.map { "No answer: \($0)" }
+                    ?? "No answer — the model stopped without answering"))
+            } else {
+                rows.append(.answer(a))
+            }
         case .interrupted:
             rows.append(.system("Stopped."))
+        case .turnEnded(let outcome):
+            let text = "Turn ended: \(outcome)"
+            rows.append(outcome == "answered" ? .system(text) : .error(text))
+        case .queued:
+            markPendingQueued()
+        case .steering(let applied, _):
+            clearPending()
+            rows.append(.system(applied ? "Queued message delivered" : "Queued message not confirmed"))
         case .notice(let t):
             rows.append(.system(t))
         case .refused(let t), .error(let t):
