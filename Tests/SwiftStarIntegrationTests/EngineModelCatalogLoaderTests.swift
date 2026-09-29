@@ -22,7 +22,7 @@ struct EngineModelCatalogLoaderTests {
         let list = try await EngineModelCatalogLoader.load(
             executable: Self.fake, environment: env()).get()
         #expect(list.models.count == 5)
-        #expect(list.defaultModelID == "qwen3.8-flash-next")
+        #expect(list.defaultModelID == "laguna-xs-2.1")
     }
 
     @Test func loaderFallsBackOnFailure() async {

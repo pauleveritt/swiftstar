@@ -6,6 +6,7 @@ struct AgentView: View {
     let controller: EngineController
     @State private var input = ""
     @FocusState private var inputFocused: Bool
+    @AppStorage("appShellInspectorPresented") private var inspectorPresented = false
     @State private var askingModel = false
     @State private var askingContext = false
     @State private var entry = ""
@@ -25,9 +26,11 @@ struct AgentView: View {
         .navigationTitle("Agent")
         .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(transcriptFontSize)))
         .toolbar {
-            ToolbarItem(placement: .automatic) {
-                menuCapsule
-            }
+            ToolbarItem(placement: .automatic) { menuButton(folderMenu) }
+            ToolbarSpacer(.fixed, placement: .automatic)
+            ToolbarItem(placement: .automatic) { menuButton(modelMenu) }
+            ToolbarSpacer(.fixed, placement: .automatic)
+            ToolbarItem(placement: .automatic) { menuButton(contextMenu) }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     if controller.isActive {
@@ -40,6 +43,15 @@ struct AgentView: View {
                 }
                 .help(sessionActionHelp)
                 .disabled(controller.phase == .quitting)
+            }
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    inspectorPresented.toggle()
+                } label: {
+                    Label("Inspector", systemImage: "sidebar.trailing")
+                }
+                .help(inspectorPresented ? "Hide Inspector" : "Show Inspector")
             }
         }
         .task { if controller.phase == .idle { controller.start() } }
@@ -64,17 +76,13 @@ struct AgentView: View {
         }
     }
 
-    /// Folder, model and context menus. One toolbar item, so nothing renders
-    /// as a blank slot. Choosing a different value restarts a running session;
-    /// while one starts or quits the menus are disabled.
-    private var menuCapsule: some View {
-        HStack(spacing: 4) {
-            folderMenu
-            modelMenu
-            contextMenu
-        }
-        .font(.system(size: envTranscriptFontSize))
-        .disabled(controller.phase == .starting || controller.phase == .quitting)
+    /// Each menu is its own toolbar item (its own glass capsule); choosing a
+    /// different value restarts a running session, so all are disabled while
+    /// one starts or quits.
+    private func menuButton(_ menu: some View) -> some View {
+        menu
+            .font(.system(size: envTranscriptFontSize))
+            .disabled(controller.phase == .starting || controller.phase == .quitting)
     }
 
     private func menuLabel(_ text: String, icon: String? = nil) -> some View {

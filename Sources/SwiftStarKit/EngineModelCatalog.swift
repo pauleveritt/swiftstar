@@ -41,10 +41,11 @@ public struct EngineModelList: Decodable, Equatable, Sendable {
         public let fits: Bool?
         public let defaultContext: Int?
         public let measuredContexts: [MeasuredContext]
-        public let interactive: Bool
+        public let runsInTUI: Bool
 
         enum CodingKeys: String, CodingKey {
-            case id, family, path, downloadable, fits, interactive
+            case id, family, path, downloadable, fits
+            case runsInTUI = "runs_in_tui"
             case displayName = "display_name"
             case onThisMac = "on_this_mac"
             case defaultContext = "default_context"
@@ -61,7 +62,7 @@ public struct EngineModelList: Decodable, Equatable, Sendable {
             downloadable = try c.decodeIfPresent(Bool.self, forKey: .downloadable) ?? false
             fits = try c.decodeIfPresent(Bool.self, forKey: .fits)
             defaultContext = try c.decodeIfPresent(Int.self, forKey: .defaultContext)
-            interactive = try c.decodeIfPresent(Bool.self, forKey: .interactive) ?? true
+            runsInTUI = try c.decodeIfPresent(Bool.self, forKey: .runsInTUI) ?? true
             let pairs = try c.decodeIfPresent([[Double]].self, forKey: .measuredContexts) ?? []
             measuredContexts = pairs.compactMap {
                 $0.count == 2 ? MeasuredContext(context: Int($0[0]), planGiB: $0[1]) : nil
@@ -148,7 +149,7 @@ public enum ModelMenu {
         for m in list.models {
             let reason: String? =
                 if !m.onThisMac { "not on this Mac" }
-                else if !m.interactive { "not usable in the TUI" }
+                else if !m.runsInTUI { "not usable in the TUI" }
                 else if m.fits == false { "doesn't fit" }
                 else { nil }
             out.append(MenuChoice(

@@ -14,7 +14,7 @@ struct EngineModelCatalogTests {
 
     @Test func decodesSampleList() throws {
         let list = try Self.sample()
-        #expect(list.defaultModelID == "qwen3.8-flash-next")
+        #expect(list.defaultModelID == "laguna-xs-2.1")
         #expect(list.models.map(\.id) == [
             "deepseek-v4-flash", "laguna-xs-2.1", "laguna-s-2.1", "qwen3.8-flash-next", "mellum-2"])
         let laguna = list.models[1]
@@ -25,8 +25,20 @@ struct EngineModelCatalogTests {
         #expect(list.models[2].fits == nil)
     }
 
+    @Test func decodesRealEngineCapture() throws {
+        let url = Self.sampleURL.deletingLastPathComponent().appendingPathComponent("models-real.json")
+        let list = try EngineModelList.decode(Data(contentsOf: url)).get()
+        #expect(list.models.count == 4)
+        #expect(list.defaultModelID == "laguna-xs-2.1")
+        #expect(list.savedModelID == nil)
+        #expect(list.model(id: "laguna-xs-2.1")?.defaultContext == 65536)
+        let items = ModelMenu.items(list: list, settingsID: "", loadedID: nil)
+        #expect(items.first { $0.value == "qwen3.8-flash-next-q2" }?.disabledReason == "not on this Mac")
+        #expect(items.first { $0.value == "laguna-xs-2.1" }?.disabledReason == nil)
+    }
+
     @Test func ignoresUnknownKeys() throws {
-        let json = #"{"schema_version":1,"extra":true,"models":[{"id":"m","display_name":"M","family":"f","on_this_mac":true,"downloadable":false,"interactive":true,"measured_contexts":[],"zzz":1}]}"#
+        let json = #"{"schema_version":1,"extra":true,"models":[{"id":"m","display_name":"M","family":"f","on_this_mac":true,"downloadable":false,"runs_in_tui":true,"measured_contexts":[],"zzz":1}]}"#
         let list = try EngineModelList.decode(Data(json.utf8)).get()
         #expect(list.models.map(\.id) == ["m"])
         #expect(list.defaultModelID == nil)
@@ -43,7 +55,7 @@ struct EngineModelCatalogTests {
     @Test func modelMenuTicksSettingsChoice() throws {
         let list = try Self.sample()
         let items = ModelMenu.items(list: list, settingsID: "laguna-xs-2.1", loadedID: "qwen3.8-flash-next")
-        #expect(items.first?.title == "Engine default (qwen3.8-flash-next)")
+        #expect(items.first?.title == "Engine default (laguna-xs-2.1)")
         #expect(items.first?.value == "")
         #expect(items.first?.isChecked == false)
         #expect(items.filter(\.isChecked).map(\.value) == ["laguna-xs-2.1"])
@@ -79,7 +91,7 @@ struct EngineModelCatalogTests {
         let list = try Self.sample()
         let items = ContextMenu.items(
             list: list, modelID: "laguna-xs-2.1", settingsContext: 20000, loaded: 20000)
-        #expect(items.first?.title == "Engine default (20,000)")
+        #expect(items.first?.title == "Engine default (65,536)")
         #expect(items.first?.value == 0)
         let sizes = items.dropFirst().map(\.value)
         // Measured 4096, 20000, 65536 plus round sizes up to 2 x 65536.
@@ -94,7 +106,7 @@ struct EngineModelCatalogTests {
         #expect(qwen.first?.isChecked == true)
         // Empty model id resolves through the engine default.
         let dflt = ContextMenu.items(list: list, modelID: nil, settingsContext: 0, loaded: nil)
-        #expect(dflt.dropFirst().map(\.value) == qwen.dropFirst().map(\.value))
+        #expect(dflt.dropFirst().map(\.value) == [4096, 8192, 16384, 20000, 32768, 65536, 131072])
     }
 
     @Test func contextMenuFallbackRoundSizes() throws {

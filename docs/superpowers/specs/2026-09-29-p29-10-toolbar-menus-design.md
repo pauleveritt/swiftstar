@@ -55,9 +55,13 @@ Top level: `schema_version` (1), `gpu_budget_bytes` (int|null),
 `models` (array). Each model: `id`, `display_name`, `family`, `on_this_mac`
 (bool), `path` (string|null), `downloadable` (bool), `fits` (bool|null),
 `default_context` (int|null), `measured_contexts` (array of
-`[context, plan_gib]`), `interactive` (bool). Requested from ds4-engine on
+`[context, plan_gib]`), `runs_in_tui` (bool). Requested from ds4-engine on
 2026-09-29; SwiftStar ships against a recorded sample fixture and the
 fallback until the engine command lands.
+
+*Revision 2026-09-29:* the engine shipped the command (TUI.33) and chose
+`runs_in_tui` for the per-model TUI flag; this spec's earlier `interactive` is
+superseded.
 
 ## Testing
 
