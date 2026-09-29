@@ -1,7 +1,7 @@
 ---
 phase: P29
 cycle: P29.1-4-honest-session
-lifecycle: active
+lifecycle: closed
 ---
 
 # P29.1–P29.4 honest session implementation plan
@@ -169,3 +169,34 @@ stdin; SIGTERM after `termGrace`; SIGKILL after `killGrace`.
   event; `/resume`/`/model` `execv` second `ready`; `models --json`), P29.5
   notes the owed recapture; plan `## Result`, `lifecycle: closed`;
   `just lint-docs` green → commit.
+
+## Result
+
+Closed 2026-09-28. Subagent-driven: Sonnet implementers, per-task review
+(Opus for Task 3), Fable for the spec review and the final whole-branch
+review. Each task needed one fix round at most.
+
+- **Commits:** `b5e9eea` + `30a0975` (T1), `5818156` (T2), `4187b06` +
+  `f37017c` (T3), `0e7df5c` + `3debf37` (T4), `4b51199` (ROADMAP),
+  `a042805` (final-review fixes).
+- **Diverged:** pending user rows are index sets on an append-only
+  transcript; `.error`/`.refused` clear pending marks but never busy (a
+  mid-turn "queue full" keeps Stop); a `terminal` with outcome `answered` is a
+  system row, other outcomes error rows; mid-turn quit writes `stop` and `quit`
+  back to back instead of waiting for input (the relay takes quit before its
+  queue); the fake gained `FAKE_ENGINE_IGNORE_SIGTERM` and
+  `FAKE_ENGINE_QUEUE`; `EngineExit.launchFailure(path:reason:)` added;
+  `canSend` is true whenever running, so mid-turn prompts queue as steering;
+  our own SIGTERM that the engine turns into exit 130 reads "ended after the
+  quit timed out".
+- **Live (Task 5):** Qwen3.8 at context 60,000 from Settings — plan 79.79 GiB
+  (KV 1.91); idle app quit clean; `EngineSession` probe with Laguna XS: quit
+  mid-turn 0.5 s and during load 0.6 s, both exit 0, no orphan. GUI rendering
+  (Queued, disabled Stop, labels) not agent-verified — no screen access.
+- **Deferred minors:** the composer button shows Send (not Stop) while text is
+  in the field mid-turn — an Escape shortcut for Stop belongs to P29.7;
+  `quitIsIdempotent` cannot catch a removed quitting guard; loading text
+  outranks "Generating…"; view invalidation is coarse (one observed model);
+  a few untested parser corners (blank line after ready, terminal without
+  outcome, mentions attached + missing, whitespace answer). Fixture recapture
+  for the new events is owed (P29.5).
