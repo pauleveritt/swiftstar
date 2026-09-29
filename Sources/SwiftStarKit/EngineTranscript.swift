@@ -25,6 +25,9 @@ public enum TranscriptRow: Equatable, Sendable {
 }
 
 /// Pure fold of `EngineEvent`s into transcript rows and busy flags.
+///
+/// Invariant: `rows` is append-only (rows are never removed or reordered),
+/// which the index-based `pendingUserRows`/`queuedUserRows` rely on.
 public struct EngineTranscript: Equatable, Sendable {
     public private(set) var rows: [TranscriptRow] = []
     public private(set) var isBusy = false
@@ -35,14 +38,43 @@ public struct EngineTranscript: Equatable, Sendable {
     /// The loaded model and context size; set on `.session`, cleared on `.closed`.
     public private(set) var session: EngineSessionInfo?
 
+    /// Indices of user rows the engine has not yet started a turn for.
+    public private(set) var pendingUserRows: Set<Int> = []
+    /// Subset of pending rows the engine reported as queued.
+    public private(set) var queuedUserRows: Set<Int> = []
+
     public var canStop: Bool { isBusy }
+    public var pendingUserCount: Int { pendingUserRows.count }
+
+    public func isPending(rowAt index: Int) -> Bool { pendingUserRows.contains(index) }
+    public func isQueued(rowAt index: Int) -> Bool { queuedUserRows.contains(index) }
 
     public init() {}
 
     public mutating func appendUser(_ text: String) {
+        pendingUserRows.insert(rows.count)
         rows.append(.user(text))
-        isBusy = true
         isAwaitingInput = false
+    }
+
+    /// The process is gone: nothing is busy, loading or pending any more.
+    public mutating func end() {
+        isBusy = false
+        isGenerating = false
+        isAwaitingInput = false
+        loadingText = nil
+        session = nil
+        clearPending()
+    }
+
+    private mutating func clearPending() {
+        pendingUserRows = []
+        queuedUserRows = []
+    }
+
+    /// Marks every pending row as queued behind the running turn.
+    private mutating func markPendingQueued() {
+        queuedUserRows = pendingUserRows
     }
 
     public mutating func appendSystem(_ text: String) {
@@ -52,6 +84,7 @@ public struct EngineTranscript: Equatable, Sendable {
     public mutating func apply(_ event: EngineEvent) {
         switch event {
         case .prompt:
+            clearPending()
             isBusy = true
             isAwaitingInput = false
         case .generating(let b):
@@ -59,6 +92,7 @@ public struct EngineTranscript: Equatable, Sendable {
         case .loading(let text):
             loadingText = text
         case .awaitingInput:
+            clearPending()
             loadingText = nil
             isBusy = false
             isGenerating = false
@@ -79,16 +113,31 @@ public struct EngineTranscript: Equatable, Sendable {
                 $0.result = result
             }
         case .answer(let a):
-            rows.append(.answer(a))
+            if a.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                rows.append(.error(a.reason.map { "No answer: \($0)" }
+                    ?? "No answer — the model stopped without answering"))
+            } else {
+                rows.append(.answer(a))
+            }
         case .interrupted:
             rows.append(.system("Stopped."))
+        case .turnEnded(let outcome):
+            let text = "Turn ended: \(outcome)"
+            rows.append(outcome == "answered" ? .system(text) : .error(text))
+        case .queued:
+            markPendingQueued()
+        case .steering(let applied, _):
+            clearPending()
+            rows.append(.system(applied ? "Queued message delivered" : "Queued message not confirmed"))
         case .notice(let t):
             rows.append(.system(t))
         case .refused(let t), .error(let t):
+            clearPending()
             rows.append(.error(t))
         case .session(let info):
             session = info
         case .closed:
+            clearPending()
             session = nil
             loadingText = nil
             isBusy = false

@@ -29,8 +29,11 @@ public struct EngineAnswer: Equatable, Sendable {
     public let contextUsed: Int?
     public let contextSize: Int?
     public let durationMs: Double?
+    /// Why the engine gave no text (only `laguna-xs-chat` reports one).
+    public let reason: String?
 
-    public init(text: String, contextUsed: Int?, contextSize: Int?, durationMs: Double?) {
+    public init(text: String, contextUsed: Int?, contextSize: Int?, durationMs: Double?, reason: String? = nil) {
+        self.reason = reason
         self.text = text
         self.contextUsed = contextUsed
         self.contextSize = contextSize
@@ -94,7 +97,14 @@ public enum EngineEvent: Equatable, Sendable {
     case answer(EngineAnswer)
     case pause(PauseMetrics)
     case memory(EngineMemory)
-    case interrupted
+    /// Stop took effect; carries the context after the interrupt.
+    case interrupted(contextUsed: Int?, contextSize: Int?)
+    /// The engine ended the session's turn (`terminal`): followed by `close`.
+    case turnEnded(outcome: String)
+    /// A prompt was queued behind the running turn (`count` now pending).
+    case queued(count: Int)
+    /// A queued message was (not) confirmed delivered after a tool resume.
+    case steering(applied: Bool, text: String?)
     case notice(String)
     case refused(String)
     case awaitingInput

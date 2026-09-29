@@ -41,13 +41,6 @@ struct EngineWireParserTests {
         #expect(m.contains("protocol 2"))
     }
 
-    @Test func nonJSONIsProtocolError() {
-        var p = Self.ready()
-        guard case .protocolError = p.parse("garbage") else {
-            Issue.record("expected protocolError"); return
-        }
-    }
-
     @Test func unknownEventKindIsIgnored() {
         var p = Self.ready()
         #expect(p.parse(Self.event(#""kind":"flux_capacitor""#)) == .ignored)
@@ -80,7 +73,7 @@ struct EngineWireParserTests {
     }
 
     @Test func stopFixtureHasInterrupted() throws {
-        #expect(try Self.events(fromFixture: "stop.ndjson").contains(.interrupted))
+        #expect(try Self.events(fromFixture: "stop.ndjson").contains { if case .interrupted = $0 { true } else { false } })
     }
 
     @Test func errorFixtureHasError() throws {
@@ -138,9 +131,103 @@ struct EngineWireParserTests {
         #expect(t != "status_report")
     }
 
-    @Test func noticeWithoutTextFallsBackToKind() {
+    // Payload: operator.py:216 `emit("clear")` — no fields but the envelope.
+    @Test func clearRendersSentence() {
         var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"clear""#)) == .notice("clear"))
+        #expect(p.parse(Self.event(#""kind":"clear""#)) == .notice("Conversation cleared"))
+    }
+
+    // Payload: operator.py:384 `emit("terminal", outcome=, capture_path=, duration_ms=)`.
+    @Test func terminalDecodesOutcome() {
+        var p = Self.ready()
+        let line = Self.event(#""kind":"terminal","outcome":"tool-limit","capture_path":"/x/capture","duration_ms":1234.5"#)
+        #expect(p.parse(line) == .turnEnded(outcome: "tool-limit"))
+    }
+
+    // Payload: ndjson_process.py:126 `{"kind": "queued", "count": len(self.pending)}` (top level).
+    @Test func queuedTopLevelDecodes() {
+        var p = Self.ready()
+        #expect(p.parse(#"{"kind":"queued","count":2}"#) == .queued(count: 2))
+    }
+
+    // Payload: operator.py:283-289 `emit("steering_applied" | "steering_unconfirmed", text=...)`.
+    @Test func steeringDecodesBothKinds() {
+        var p = Self.ready()
+        #expect(p.parse(Self.event(#""kind":"steering_applied","text":"also do x""#))
+            == .steering(applied: true, text: "also do x"))
+        #expect(p.parse(Self.event(#""kind":"steering_unconfirmed","text":"also do x""#))
+            == .steering(applied: false, text: "also do x"))
+    }
+
+    // Payload: tui_cli.py:789-793 `observer.emit("mentions", attached=[...], missing=[...])`.
+    @Test func mentionsAttachedIsNoticeMissingIsRefusal() {
+        var p = Self.ready()
+        #expect(p.parse(Self.event(#""kind":"mentions","attached":["a.py","b.py"],"missing":[]"#))
+            == .notice("Attached: a.py, b.py"))
+        #expect(p.parse(Self.event(#""kind":"mentions","attached":[],"missing":["nope.py"]"#))
+            == .refused("Not found: nope.py"))
+        #expect(p.parse(Self.event(#""kind":"mentions","attached":[],"missing":[]"#)) == .ignored)
+    }
+
+    // Payloads: operator.py:181 `emit("compacting", focus=...)`; :185-190 `emit("compacted",
+    // text=, tokens=, duration_ms=)`; :199 `emit("compact_failed", reason=, tokens=, duration_ms=)`.
+    @Test func compactionEventsRender() {
+        var p = Self.ready()
+        #expect(p.parse(Self.event(#""kind":"compacting","focus":null"#)) == .notice("Compacting…"))
+        #expect(p.parse(Self.event(#""kind":"compacted","text":"a long summary","tokens":812,"duration_ms":90.0"#))
+            == .notice("Conversation compacted (812 tokens)"))
+        #expect(p.parse(Self.event(#""kind":"compact_failed","reason":"summary too long","tokens":9,"duration_ms":1.0"#))
+            == .refused("Not compacted: summary too long"))
+    }
+
+    // Payload: operator_telemetry.py:234 `{**event, "kind": "telemetry_error", "error": error}`.
+    @Test func telemetryErrorUsesErrorField() {
+        var p = Self.ready()
+        #expect(p.parse(Self.event(#""kind":"telemetry_error","error":"disk full""#))
+            == .notice("Telemetry error: disk full"))
+    }
+
+    // Payload: operator.py:312-322 `emit("answer", text=, **reason, ...)`; reason only for laguna-xs-chat.
+    @Test func answerKeepsOptionalReason() {
+        var p = Self.ready()
+        guard case .answer(let a) = p.parse(Self.event(#""kind":"answer","text":"","reason":"ran out of tokens","context_used":10,"context_size":100"#)) else {
+            Issue.record("expected answer"); return
+        }
+        #expect(a.reason == "ran out of tokens")
+        guard case .answer(let b) = p.parse(Self.event(#""kind":"answer","text":"hi""#)) else {
+            Issue.record("expected answer"); return
+        }
+        #expect(b.reason == nil)
+    }
+
+    // Payload: operator.py:294-300 `emit("interrupted", capture_path=, context_used=, context_size=, duration_ms=)`.
+    @Test func interruptedCarriesContext() {
+        var p = Self.ready()
+        let line = Self.event(#""kind":"interrupted","capture_path":"/c","context_used":512,"context_size":20000,"duration_ms":5.0"#)
+        #expect(p.parse(line) == .interrupted(contextUsed: 512, contextSize: 20000))
+    }
+
+    @Test func undecodableAfterReadyIsNotice() {
+        var p = Self.ready()
+        #expect(p.parse("garbage") == .notice("Engine output: garbage"))
+        #expect(p.parse(#"{"no":"kind"}"#) == .notice(#"Engine output: {"no":"kind"}"#))
+        guard case .notice(let n) = p.parse(String(repeating: "x", count: 500)) else {
+            Issue.record("expected notice"); return
+        }
+        #expect(n == "Engine output: " + String(repeating: "x", count: 200))
+        // The session continues: a later good line still decodes.
+        #expect(p.parse(#"{"kind":"input"}"#) == .awaitingInput)
+    }
+
+    @Test func undecodableBeforeReadyIsFatal() {
+        var p = EngineWireParser()
+        guard case .protocolError = p.parse("garbage") else {
+            Issue.record("expected protocolError"); return
+        }
+        var q = EngineWireParser()
+        guard case .protocolError = q.parse(#"{"no":"kind"}"#) else {
+            Issue.record("expected protocolError"); return
+        }
     }
 
     @Test func nativeEventsAreGenerating() {

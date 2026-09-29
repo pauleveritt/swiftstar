@@ -74,6 +74,36 @@ struct EngineCommandTests {
         #expect(exit.message == "refused to start: no git")
     }
 
+    @Test func signalExitReadsAsSignal() {
+        let exit = EngineExit.describe(code: 9, stderrTail: "", sawReady: true, reason: .signal)
+        #expect(exit.message == "killed by signal 9 (SIGKILL)")
+        #expect(EngineExit.describe(code: 77, stderrTail: "", sawReady: true, reason: .signal)
+            .message == "killed by signal 77")
+    }
+
+    @Test func ownSigtermReadsAsQuitTimeout() {
+        let exit = EngineExit.describe(
+            code: 15, stderrTail: "", sawReady: true, reason: .signal, terminated: true)
+        #expect(exit.message == "ended after the quit timed out")
+        #expect(EngineExit.describe(code: 15, stderrTail: "", sawReady: true, reason: .signal)
+            .message == "killed by signal 15 (SIGTERM)")
+    }
+
+    @Test func ownSigtermExit130ReadsAsQuitTimeout() {
+        // The real engine catches SIGTERM and exits 130 through a normal exit.
+        let exit = EngineExit.describe(
+            code: 130, stderrTail: "", sawReady: true, reason: .exit, terminated: true)
+        #expect(exit.message == "ended after the quit timed out")
+        #expect(EngineExit.describe(code: 130, stderrTail: "", sawReady: true, reason: .exit)
+            .message == "interrupted")
+    }
+
+    @Test func forcedExitReadsAsForced() {
+        let exit = EngineExit.describe(
+            code: 9, stderrTail: "", sawReady: true, reason: .signal, forced: true)
+        #expect(exit.message == "ended by force after the quit timed out")
+    }
+
     @Test func applyCommandUsesDirectoryName() {
         #expect(EngineCommand.applyCommand(sessionDirectory: URL(fileURLWithPath: "/x/sessions/20260928-101010-repo"))
                 == "ds4-dogfood apply 20260928-101010-repo")

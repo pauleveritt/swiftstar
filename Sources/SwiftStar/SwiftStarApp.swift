@@ -39,11 +39,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MarkdownText.runResourceSelfTestIfRequested()
     }
 
+    /// A terminate reply is owed and not yet sent.
+    private var terminationPending = false
+
     /// Quit waits for the engine to exit, so it is not orphaned to launchd.
+    /// While the engine is active (including mid-quit) this answers
+    /// `.terminateLater`, joins any quit in flight, and replies exactly once.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let engine, engine.isActive else { return .terminateNow }
+        guard !terminationPending else { return .terminateLater }
+        terminationPending = true
+        engine.beginTerminating()
         Task { @MainActor in
             await engine.quit()
+            terminationPending = false
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

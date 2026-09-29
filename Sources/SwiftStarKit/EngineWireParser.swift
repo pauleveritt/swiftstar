@@ -9,9 +9,9 @@ public struct EngineWireParser: Sendable {
     public mutating func parse(_ line: String) -> EngineEvent {
         guard let data = line.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        else { return .protocolError("not a JSON object: \(line.prefix(80))") }
+        else { return undecodable(line, "not a JSON object") }
         guard let kind = object["kind"] as? String else {
-            return .protocolError("line has no kind: \(line.prefix(80))")
+            return undecodable(line, "line has no kind")
         }
         if !sawReady {
             guard kind == "ready" else {
@@ -33,15 +33,25 @@ public struct EngineWireParser: Sendable {
             return .error(Self.text(object, kind: kind))
         case "close":
             return .closed(capturePath: nil)
+        case "queued":
+            return .queued(count: Self.int(object["count"]) ?? 1)
         case "event":
             guard let event = object["event"] as? [String: Any],
                   let eventKind = event["kind"] as? String
             else { return .ignored }
             return Self.decode(event, kind: eventKind)
         default:
-            // ready (again), diagnostic, queued, stopping, quitting, unknown.
+            // ready (again), diagnostic, stopping, quitting, unknown.
             return .ignored
         }
+    }
+
+    /// Only the handshake is fatal: before `ready` an undecodable line is a
+    /// protocol error; afterwards it is shown as a notice and the session goes on.
+    private func undecodable(_ line: String, _ why: String) -> EngineEvent {
+        if !sawReady { return .protocolError("\(why): \(line.prefix(80))") }
+        if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .ignored }
+        return .notice("Engine output: \(line.prefix(200))")
     }
 
     private static func decode(_ e: [String: Any], kind: String) -> EngineEvent {
@@ -72,7 +82,8 @@ public struct EngineWireParser: Sendable {
                 text: e["text"] as? String ?? "",
                 contextUsed: int(e["context_used"]),
                 contextSize: int(e["context_size"]),
-                durationMs: double(e["duration_ms"])))
+                durationMs: double(e["duration_ms"]),
+                reason: e["reason"] as? String))
         case "checkpoint":
             guard let snap = e["snapshot"] as? [String: Any],
                   let evalCount = int(snap["eval_count"])
@@ -90,7 +101,30 @@ public struct EngineWireParser: Sendable {
                 budgetBytes: int64(e["gpu_budget_bytes"]),
                 planGiB: double(plan?["total_gib"])))
         case "interrupted":
-            return .interrupted
+            return .interrupted(contextUsed: int(e["context_used"]), contextSize: int(e["context_size"]))
+        case "terminal":
+            return .turnEnded(outcome: e["outcome"] as? String ?? "unknown")
+        case "steering_applied", "steering_unconfirmed":
+            return .steering(applied: kind == "steering_applied", text: e["text"] as? String)
+        case "mentions":
+            let attached = e["attached"] as? [String] ?? []
+            let missing = e["missing"] as? [String] ?? []
+            if !missing.isEmpty {
+                let extra = attached.isEmpty ? "" : " (attached: \(attached.joined(separator: ", ")))"
+                return .refused("Not found: \(missing.joined(separator: ", "))\(extra)")
+            }
+            return attached.isEmpty ? .ignored : .notice("Attached: \(attached.joined(separator: ", "))")
+        case "compacting":
+            return .notice("Compacting…")
+        case "compacted":
+            let tokens = int(e["tokens"]).map { " (\($0) tokens)" } ?? ""
+            return .notice("Conversation compacted" + tokens)
+        case "compact_failed":
+            return .refused("Not compacted: " + text(e, kind: kind))
+        case "telemetry_error":
+            return .notice("Telemetry error: " + (e["error"] as? String ?? "unknown"))
+        case "clear":
+            return .notice("Conversation cleared")
         case "native_start":
             return .generating(true)
         case "native_end":
@@ -102,7 +136,7 @@ public struct EngineWireParser: Sendable {
             return .notice(path.map { "Exported to \($0)" } ?? "Exported")
         case "status_report":
             return .notice(statusLine(e))
-        case "help", "clear", "models":
+        case "help", "models":
             return .notice(text(e, kind: kind))
         case _ where kind.hasSuffix("_refused"):
             return .refused(text(e, kind: kind))

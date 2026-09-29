@@ -11,7 +11,7 @@ struct AgentView: View {
     @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
     @Environment(\.transcriptFontSize) private var envTranscriptFontSize: CGFloat
 
-    private var isRunning: Bool { controller.phase == .running }
+    private var composerState: EngineComposer { controller.composer }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,6 +41,7 @@ struct AgentView: View {
                     Label(sessionActionTitle, systemImage: sessionActionIcon)
                 }
                 .help(sessionActionHelp)
+                .disabled(controller.phase == .quitting)
             }
         }
         .task { if controller.phase == .idle { controller.start() } }
@@ -117,8 +118,8 @@ struct AgentView: View {
                     // Rows are keyed by offset: the transcript only appends
                     // rows (a tool card fills in place), so an offset is a
                     // stable identity for a row's whole lifetime.
-                    ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { _, row in
-                        rowView(row)
+                    ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { index, row in
+                        rowView(row, queued: controller.transcript.isPending(rowAt: index))
                     }
                 }
                 .padding()
@@ -142,10 +143,10 @@ struct AgentView: View {
     }
 
     @ViewBuilder
-    private func rowView(_ row: TranscriptRow) -> some View {
+    private func rowView(_ row: TranscriptRow, queued: Bool) -> some View {
         switch row {
         case .user(let text):
-            AgentPromptBubble(text: text)
+            AgentPromptBubble(text: text, queued: queued)
         case .thinking(let text):
             ThinkingDisclosure(text: text)
         case .narration(let text):
@@ -224,34 +225,35 @@ struct AgentView: View {
                         send()
                         return .handled
                     }
-                    .disabled(!isRunning)
+                    .disabled(!composerState.canType)
+                // Busy with text typed: the button sends (the engine queues it);
+                // busy with an empty field it stops.
+                let showsStop = composerState.canStop && trimmedInput.isEmpty
                 Button {
-                    if controller.transcript.canStop {
+                    if showsStop {
                         controller.stop()
                     } else {
                         send()
                     }
                 } label: {
-                    Image(systemName: controller.transcript.canStop ? "stop.circle.fill" : "arrow.up.circle.fill")
+                    Image(systemName: showsStop ? "stop.circle.fill" : "arrow.up.circle.fill")
                         .font(.system(size: 28))
-                        .symbolEffect(.variableColor.iterative, isActive: controller.transcript.canStop)
-                        .foregroundStyle(controller.transcript.canStop ? .red : .accentColor)
+                        .symbolEffect(.variableColor.iterative, isActive: showsStop)
+                        .foregroundStyle(showsStop ? .red : .accentColor)
                 }
                 .buttonStyle(.plain)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 // Icon-only, and the icon carries the whole meaning — the label
                 // has to move with the state or VoiceOver announces nothing.
-                .accessibilityLabel(controller.transcript.canStop ? "Stop generating" : "Send message")
-                .disabled(controller.transcript.canStop
-                    ? false
-                    : (!isRunning || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                .accessibilityLabel(showsStop ? "Stop generating" : "Send message")
+                .disabled(showsStop ? false : (!composerState.canSend || trimmedInput.isEmpty))
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .onChange(of: controller.transcript.isBusy) { _, busy in
-            if !busy { inputFocused = true }
+        .onChange(of: composerState.canStop) { _, stoppable in
+            if !stoppable { inputFocused = true }
         }
     }
 
@@ -275,9 +277,13 @@ struct AgentView: View {
         controller.isActive ? "End the current agent session" : "Start a new agent session"
     }
 
+    private var trimmedInput: String {
+        input.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func send() {
-        let message = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isRunning, !message.isEmpty else { return }
+        let message = trimmedInput
+        guard composerState.canSend, !message.isEmpty else { return }
         input = ""
         controller.send(message)
     }
@@ -302,7 +308,7 @@ struct AgentView: View {
                 ValueGaugeView(
                     fraction: Double(used) / Double(size),
                     text: nil, textFontSize: 0,
-                    trackColor: contextRingColor(ctxUsed: used),
+                    trackColor: Severity.ofContext(used: used, size: size).color,
                     diameter: 15)
                     .padding(.horizontal, 4)
                     .contentShape(Rectangle())
@@ -344,35 +350,24 @@ struct AgentView: View {
         }
     }
 
-    /// Rates and activity while the session is up, else the phase.
+    /// Rates and activity while the session is up, else the composer's
+    /// status label (which carries the exit message once it has ended).
     private var bottomStatusText: String {
-        switch controller.phase {
-        case .idle: return "No session"
-        case .starting: return "Starting engine…"
-        case .notFound: return "Engine not found"
-        case .ended(let exit): return "Ended (exit \(exit.code))"
-        case .running:
-            let t = controller.transcript
-            let activity = t.isGenerating ? "Generating…"
-                : t.isBusy ? "Working…"
-                : (t.loadingText.map { $0.isEmpty ? "Loading…" : $0 } ?? "Ready")
-            return "Prefill \(rateText(controller.metrics.prefillTPS)) tok/s · "
-                + "Generation \(rateText(controller.metrics.generationTPS)) tok/s · \(activity)"
-        }
+        guard controller.phase == .running else { return composerState.label }
+        let activity = composerState.label
+        return "Prefill \(rateText(controller.metrics.prefillTPS)) tok/s · "
+            + "Generation \(rateText(controller.metrics.generationTPS)) tok/s · \(activity)"
     }
 
     private func rateText(_ value: Double?) -> String {
         fixedWidth(value.map { String(format: "%.1f", $0) } ?? "—", width: 6)
     }
 
-    /// Absolute-token severity, not a fraction threshold: the window size
-    /// varies, so fraction-anchored colors would fire at the wrong usage.
-    private func contextRingColor(ctxUsed: Int) -> Color {
-        switch contextSeverity(ctxUsed: ctxUsed) {
-        case .healthy: return .green
-        case .warning: return .orange
-        case .critical: return .red
-        }
+    /// Right-aligns `text` in a field of `width` characters so a changing
+    /// value does not shift the text around it.
+    private func fixedWidth(_ text: String, width: Int) -> String {
+        if text.count >= width { return text }
+        return String(repeating: " ", count: width - text.count) + text
     }
 
     private func memoryDisplay(_ bytes: Int64) -> String {

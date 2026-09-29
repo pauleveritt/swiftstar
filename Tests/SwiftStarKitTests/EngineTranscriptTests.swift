@@ -95,6 +95,8 @@ struct EngineTranscriptTests {
         t.apply(.awaitingInput)
         #expect(!t.canStop)
         t.appendUser("hi")
+        #expect(!t.canStop)
+        t.apply(.prompt("hi"))
         #expect(t.canStop)
     }
 
@@ -113,5 +115,143 @@ struct EngineTranscriptTests {
         t.apply(.notice("h"))
         t.apply(.refused("r"))
         #expect(t.rows == [.system("h"), .error("r")])
+    }
+}
+
+struct EngineTranscriptPendingTests {
+    @Test func stopDisabledWhileQueued() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        #expect(!t.canStop)
+    }
+
+    @Test func busyStartsOnPromptEvent() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        t.apply(.prompt("x"))
+        #expect(t.canStop)
+        #expect(t.pendingUserCount == 0)
+    }
+
+    @Test func commandRowIsNotLeftPending() {
+        var t = EngineTranscript()
+        t.appendUser("/help")
+        t.apply(.notice("commands: ..."))
+        t.apply(.awaitingInput)
+        #expect(t.pendingUserCount == 0)
+        #expect(!t.isPending(rowAt: 0))
+    }
+
+    @Test func pendingClearsOnError() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        #expect(t.isPending(rowAt: 0))
+        t.apply(.error("queue full"))
+        #expect(t.pendingUserCount == 0)
+        #expect(!t.isBusy)
+    }
+
+    @Test func pendingSurvivesLoadingAndGenerating() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        t.apply(.loading("mapping"))
+        t.apply(.generating(true))
+        #expect(t.isPending(rowAt: 0))
+    }
+
+    @Test func endClearsEverything() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        t.apply(.prompt("x"))
+        t.appendUser("y")
+        t.end()
+        #expect(!t.isBusy && !t.isGenerating && !t.isAwaitingInput)
+        #expect(t.loadingText == nil && t.pendingUserCount == 0)
+    }
+
+    @Test func errorMidTurnKeepsStop() {
+        var t = EngineTranscript()
+        t.apply(.prompt("x"))
+        t.apply(.error("queue full"))
+        #expect(t.canStop)
+    }
+
+    @Test func closedAndRefusedClearPending() {
+        var a = EngineTranscript()
+        a.appendUser("x")
+        a.apply(.closed(capturePath: nil))
+        #expect(a.pendingUserCount == 0)
+        var b = EngineTranscript()
+        b.appendUser("x")
+        b.apply(.refused("no"))
+        #expect(b.pendingUserCount == 0)
+    }
+
+    @Test func promptClearsSeveralPending() {
+        var t = EngineTranscript()
+        t.appendUser("a")
+        t.appendUser("b")
+        #expect(t.pendingUserCount == 2)
+        t.apply(.prompt("a\n\nb"))
+        #expect(t.pendingUserCount == 0)
+    }
+
+    @Test func pauseAndMemoryLeavePending() {
+        var t = EngineTranscript()
+        t.appendUser("a")
+        t.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1, outputTokens: 1)))
+        t.apply(.memory(EngineMemory(allocatedBytes: 1, budgetBytes: 2, planGiB: nil)))
+        #expect(t.isPending(rowAt: 0))
+    }
+
+    @Test func queuedMarksPendingRow() {
+        var t = EngineTranscript()
+        t.appendUser("x")
+        #expect(!t.isQueued(rowAt: 0))
+        t.apply(.queued(count: 1))
+        #expect(t.isQueued(rowAt: 0))
+        #expect(t.isPending(rowAt: 0))
+    }
+
+    @Test func steeringClearsAllPendingAndNotes() {
+        var t = EngineTranscript()
+        t.appendUser("a")
+        t.appendUser("b")
+        t.apply(.queued(count: 2))
+        t.apply(.steering(applied: true, text: "a\n\nb"))
+        #expect(t.pendingUserCount == 0)
+        #expect(t.queuedUserRows.isEmpty)
+        #expect(t.rows.last == .system("Queued message delivered"))
+        t.apply(.steering(applied: false, text: nil))
+        #expect(t.rows.last == .system("Queued message not confirmed"))
+    }
+}
+
+struct EngineTranscriptSurfaceTests {
+    @Test func emptyAnswerShowsReason() {
+        var t = EngineTranscript()
+        t.apply(.answer(EngineAnswer(text: "", contextUsed: 1, contextSize: 2, durationMs: nil, reason: "ran out of tokens")))
+        #expect(t.rows.last == .error("No answer: ran out of tokens"))
+    }
+
+    @Test func emptyAnswerWithoutReasonHasFallback() {
+        var t = EngineTranscript()
+        t.apply(.answer(EngineAnswer(text: "", contextUsed: nil, contextSize: nil, durationMs: nil)))
+        #expect(t.rows.last == .error("No answer — the model stopped without answering"))
+    }
+
+    @Test func nonEmptyAnswerStaysAnAnswer() {
+        var t = EngineTranscript()
+        let a = EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil)
+        t.apply(.answer(a))
+        #expect(t.rows.last == .answer(a))
+    }
+
+    @Test func terminalShowsOutcome() {
+        var t = EngineTranscript()
+        t.apply(.turnEnded(outcome: "tool-limit"))
+        #expect(t.rows.last == .error("Turn ended: tool-limit"))
+        t.apply(.turnEnded(outcome: "answered"))
+        #expect(t.rows.last == .system("Turn ended: answered"))
     }
 }

@@ -32,6 +32,11 @@ public enum EngineMetricsReducer {
         case .answer(let a):
             state.contextUsed = a.contextUsed ?? state.contextUsed
             state.contextSize = a.contextSize ?? state.contextSize
+        case .session(let info):
+            state.contextSize = info.contextSize ?? state.contextSize
+        case .interrupted(let used, let size):
+            state.contextUsed = used ?? state.contextUsed
+            state.contextSize = size ?? state.contextSize
         case .memory(let m):
             state.gpuAllocatedBytes = m.allocatedBytes ?? state.gpuAllocatedBytes
             state.gpuBudgetBytes = m.budgetBytes ?? state.gpuBudgetBytes

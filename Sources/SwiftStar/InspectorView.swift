@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftStarKit
 
 struct InspectorView: View {
     let metricsModel: MetricsModel
@@ -14,7 +15,7 @@ struct InspectorView: View {
                             ValueGaugeView(
                                 fraction: Double(used) / Double(size),
                                 text: nil, textFontSize: 0,
-                                trackColor: color(contextSeverity(ctxUsed: used)),
+                                trackColor: Severity.ofContext(used: used, size: size).color,
                                 diameter: 30)
                         }
                         VStack(alignment: .leading, spacing: 10) {
@@ -43,14 +44,6 @@ struct InspectorView: View {
             .padding(16)
         }
         .frame(minWidth: 280, idealWidth: 320)
-    }
-
-    private func color(_ severity: Severity) -> Color {
-        switch severity {
-        case .healthy: .green
-        case .warning: .orange
-        case .critical: .red
-        }
     }
 
     private func rate(_ value: Double?) -> String {

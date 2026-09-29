@@ -8,23 +8,20 @@ import SwiftStarKit
 /// metrics folds. The logic lives in the tested Kit types.
 @Observable
 final class EngineController {
-    enum Phase: Equatable {
-        case idle
-        case starting
-        case running
-        case ended(EngineExit)
-        case notFound([String])
-    }
-
     static let workspaceDefaultsKey = "agentWorkspace"
     static let executableDefaultsKey = "engineExecutable"
     static let modelIDDefaultsKey = "engineModelID"
     static let contextSizeDefaultsKey = "engineContextSize"
 
-    private(set) var transcript = EngineTranscript()
-    private(set) var metrics = EngineMetricsState()
-    private(set) var phase: Phase = .idle
-    private(set) var sessionDirectory: URL?
+    /// Every session rule (phase, busy/stop/pending, labels) lives in the
+    /// model; the controller forwards to it and owns the process.
+    private(set) var model = EngineSessionModel()
+    var transcript: EngineTranscript { model.transcript }
+    var metrics: EngineMetricsState { model.metrics }
+    var phase: EngineSessionPhase { model.phase }
+    var composer: EngineComposer { model.composer }
+    var sessionDirectory: URL? { model.sessionDirectory }
+    var isActive: Bool { model.phase.isActive }
     var workspace: URL? {
         didSet {
             guard let workspace else { return }
@@ -34,6 +31,16 @@ final class EngineController {
 
     @ObservationIgnored private var session: EngineSession?
     @ObservationIgnored private var quitGeneration = 0
+    /// Set once app termination has begun: nothing may start an engine after.
+    @ObservationIgnored private var isTerminating = false
+    /// The safety bound fired for the current quit; later joiners return at once.
+    @ObservationIgnored private var quitBoundFired = false
+
+    private static let stopGrace: Duration = .seconds(10)
+    private static let termGrace: Duration = .seconds(5)
+    private static let killGrace: Duration = .seconds(10)
+    /// Only reached if even SIGKILL fails to end the engine.
+    private static let quitSafetyBound: Duration = stopGrace + termGrace + killGrace + .seconds(5)
     @ObservationIgnored private var quitWaiters: [CheckedContinuation<Void, Never>] = []
 
     init() {
@@ -54,24 +61,27 @@ final class EngineController {
     /// different model or context size than the one loaded. The view passes
     /// its `@AppStorage` values so SwiftUI tracks Settings edits.
     func restartNeeded(modelID: String?, contextSize: Int?) -> Bool {
-        phase == .running && EngineCommand.restartNeeded(
-            session: transcript.session, modelID: modelID, contextSize: contextSize)
+        model.phase == .running && EngineCommand.restartNeeded(
+            session: model.transcript.session, modelID: modelID, contextSize: contextSize)
     }
 
     /// Quits the running session, then starts a new one with current Settings.
     func restart() async {
+        guard model.phase != .quitting, !isTerminating else { return }
         await quit()
+        guard !isTerminating else { return }
         guard !isActive else {
-            transcript.appendSystem("Restart skipped: the engine has not exited yet. Try again in a moment.")
+            model.apply(.notice("Restart skipped: the engine has not exited yet. Try again in a moment."))
             return
         }
         start()
     }
 
-    var isActive: Bool { phase == .starting || phase == .running }
+    /// Called when the app is terminating; quit waiters are still released.
+    func beginTerminating() { isTerminating = true }
 
     func start() {
-        guard !isActive else { return }
+        guard !isActive, !isTerminating else { return }
         let settingsPath = UserDefaults.standard.string(forKey: Self.executableDefaultsKey)
         let resolution = EngineCommand.resolveExecutable(
             settingsPath: settingsPath,
@@ -83,15 +93,12 @@ final class EngineController {
         case .found(let path):
             executable = path
         case .notFound(let searched):
-            phase = .notFound(searched)
+            model.didNotFind(searched: searched)
             return
         }
 
         let folder = workspace ?? FileManager.default.homeDirectoryForCurrentUser
         let source = ProjectRoot.locate(anchor: folder) ?? folder
-        transcript = EngineTranscript()
-        metrics = EngineMetricsState()
-        sessionDirectory = nil
 
         let session = EngineSession(
             executable: executable,
@@ -99,55 +106,58 @@ final class EngineController {
                 source: source,
                 modelID: UserDefaults.standard.string(forKey: Self.modelIDDefaultsKey),
                 contextSize: UserDefaults.standard.integer(forKey: Self.contextSizeDefaultsKey)),
-            workingDirectory: source)
-        session.onEvent = { [weak self] event in self?.handle(event) }
+            workingDirectory: source,
+            stopGrace: Self.stopGrace, termGrace: Self.termGrace, killGrace: Self.killGrace)
+        session.onEvent = { [weak self] event in self?.model.apply(event) }
         session.onExit = { [weak self] exit, directory in self?.handleExit(exit, directory) }
+        model.didStart()
         do {
             try session.start()
             self.session = session
-            phase = .starting
         } catch {
-            // `describe` with no ready line reads as a start refusal.
-            let exit = EngineExit.describe(
-                code: -1, stderrTail: "could not launch \(executable): \(error.localizedDescription)",
-                sawReady: false)
-            transcript.appendSystem(exit.message)
-            phase = .ended(exit)
+            model.didFailToLaunch(EngineExit.launchFailure(
+                path: executable, reason: error.localizedDescription))
         }
     }
 
     func send(_ text: String) {
-        guard phase == .running, let session else { return }
-        transcript.appendUser(text)
+        guard let session, model.send(text) else { return }
         do {
             try session.send(prompt: text)
         } catch {
-            transcript.appendSystem("Could not send: \(error.localizedDescription)")
+            model.apply(.error("Could not send: \(error.localizedDescription)"))
         }
     }
 
     func stop() {
-        guard transcript.canStop, let session else { return }
+        guard model.composer.canStop, let session else { return }
         do {
             try session.stop()
         } catch {
-            transcript.appendSystem("Could not stop: \(error.localizedDescription)")
+            model.apply(.error("Could not stop: \(error.localizedDescription)"))
         }
     }
 
-    /// Asks the engine to quit and returns once it has exited, or after
-    /// `deadline` even if it has not, so app quit can never hang.
-    func quit(deadline: Duration = .seconds(10)) async {
+    /// Asks the engine to quit and returns once it has exited. A quit already
+    /// in flight is joined, not restarted. Returns after a safety bound even
+    /// if the engine has not exited, so app quit can never hang.
+    func quit() async {
         guard let session, session.isRunning else { return }
-        session.quit()
-        quitGeneration += 1
-        let generation = quitGeneration
-        Task { [weak self] in
-            try? await Task.sleep(for: deadline)
-            // A deadline releases only the quit it was started for.
-            guard let self, self.quitGeneration == generation else { return }
-            self.resumeQuitWaiters()
+        if model.phase != .quitting {
+            model.willQuit()
+            session.quit()
+            quitGeneration += 1
+            quitBoundFired = false
+            let generation = quitGeneration
+            Task { [weak self] in
+                try? await Task.sleep(for: Self.quitSafetyBound)
+                // The bound releases only the quit it was started for.
+                guard let self, self.quitGeneration == generation else { return }
+                self.quitBoundFired = true
+                self.resumeQuitWaiters()
+            }
         }
+        if quitBoundFired { return }
         await withCheckedContinuation { quitWaiters.append($0) }
     }
 
@@ -157,24 +167,9 @@ final class EngineController {
         for waiter in waiters { waiter.resume() }
     }
 
-    private func handle(_ event: EngineEvent) {
-        if case .ready = event { phase = .running }
-        if case .protocolError(let message) = event {
-            transcript.appendSystem("Protocol error: \(message)")
-        }
-        transcript.apply(event)
-        EngineMetricsReducer.reduce(&metrics, event)
-    }
-
     private func handleExit(_ exit: EngineExit, _ directory: URL?) {
         session = nil
-        sessionDirectory = directory
-        transcript.appendSystem(exit.message)
-        if let directory {
-            transcript.appendSystem(
-                "Session: \(directory.path)\nTo take its changes: \(EngineCommand.applyCommand(sessionDirectory: directory))")
-        }
-        phase = .ended(exit)
+        model.didExit(exit, directory: directory)
         quitGeneration += 1
         resumeQuitWaiters()
     }
