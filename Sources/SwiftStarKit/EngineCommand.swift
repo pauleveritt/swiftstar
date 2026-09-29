@@ -79,8 +79,12 @@ public struct EngineExit: Equatable, Sendable {
             // The engine catches our SIGTERM and exits 130; that is our doing.
             return EngineExit(code: code, message: "ended after the quit timed out")
         }
-        let tail = stderrTail.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lastLine = stderrTail.split(whereSeparator: \.isNewline)
+        // The session directory has its own row after the exit message.
+        let cleaned = stderrTail.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("Session artifacts:") }
+            .joined(separator: "\n")
+        let tail = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastLine = cleaned.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .last(where: { !$0.isEmpty }) ?? ""
         let message: String
@@ -92,7 +96,7 @@ public struct EngineExit: Equatable, Sendable {
         case _ where code == 2 || !sawReady:
             message = "refused to start: " + (lastLine.isEmpty ? "exit code \(code)" : lastLine)
         case 1:
-            message = "ended without a clean answer — see the session directory" + (tail.isEmpty ? "" : "\n\(tail)")
+            message = "Ended without a clean answer." + (tail.isEmpty ? "" : "\n\(tail)")
         default:
             message = "exited with code \(code)" + (tail.isEmpty ? "" : "\n\(tail)")
         }

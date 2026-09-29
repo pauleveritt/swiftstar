@@ -51,7 +51,7 @@ struct EngineCommandTests {
 
     @Test func exitOneIsNotClean() {
         let exit = EngineExit.describe(code: 1, stderrTail: "boom", sawReady: true)
-        #expect(exit.message.contains("without a clean answer"))
+        #expect(exit.message.contains("Ended without a clean answer"))
         #expect(exit.message.contains("boom"))
     }
 
@@ -133,5 +133,20 @@ struct EngineCommandTests {
 
     @Test func whitespaceIDAndNonPositiveContextIgnored() {
         #expect(EngineCommand.arguments(source: src, modelID: "  ", contextSize: -1) == p28)
+    }
+
+    @Test func sessionArtifactsLineIsStripped() {
+        let only = EngineExit.describe(
+            code: 1, stderrTail: "Session artifacts: /tmp/s/20260929-x\n", sawReady: true)
+        #expect(only.message == "Ended without a clean answer.")
+        let mixed = EngineExit.describe(
+            code: 1, stderrTail: "boom\nSession artifacts: /tmp/s/x\n", sawReady: true)
+        #expect(mixed.message == "Ended without a clean answer.\nboom")
+    }
+
+    @Test func refusalIgnoresSessionArtifactsLine() {
+        let exit = EngineExit.describe(
+            code: 2, stderrTail: "ds4-dogfood: error: bad\nSession artifacts: /tmp/s/x\n", sawReady: false)
+        #expect(exit.message == "refused to start: ds4-dogfood: error: bad")
     }
 }
