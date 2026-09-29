@@ -168,4 +168,39 @@ struct EngineTranscriptPendingTests {
         #expect(!t.isBusy && !t.isGenerating && !t.isAwaitingInput)
         #expect(t.loadingText == nil && t.pendingUserCount == 0)
     }
+
+    @Test func errorMidTurnKeepsStop() {
+        var t = EngineTranscript()
+        t.apply(.prompt("x"))
+        t.apply(.error("queue full"))
+        #expect(t.canStop)
+    }
+
+    @Test func closedAndRefusedClearPending() {
+        var a = EngineTranscript()
+        a.appendUser("x")
+        a.apply(.closed(capturePath: nil))
+        #expect(a.pendingUserCount == 0)
+        var b = EngineTranscript()
+        b.appendUser("x")
+        b.apply(.refused("no"))
+        #expect(b.pendingUserCount == 0)
+    }
+
+    @Test func promptClearsSeveralPending() {
+        var t = EngineTranscript()
+        t.appendUser("a")
+        t.appendUser("b")
+        #expect(t.pendingUserCount == 2)
+        t.apply(.prompt("a\n\nb"))
+        #expect(t.pendingUserCount == 0)
+    }
+
+    @Test func pauseAndMemoryLeavePending() {
+        var t = EngineTranscript()
+        t.appendUser("a")
+        t.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1, outputTokens: 1)))
+        t.apply(.memory(EngineMemory(allocatedBytes: 1, budgetBytes: 2, planGiB: nil)))
+        #expect(t.isPending(rowAt: 0))
+    }
 }

@@ -57,6 +57,7 @@ struct EngineSessionModelTests {
         let exit = EngineExit(code: 9, message: "exited with code 9")
         m.didExit(exit, directory: nil)
         #expect(!m.composer.canStop)
+        #expect(!m.transcript.isBusy)
         #expect(m.phase == .ended(exit))
         #expect(m.transcript.rows.last == .system("exited with code 9"))
     }
@@ -88,5 +89,15 @@ struct EngineSessionModelTests {
         var nf = EngineSessionModel()
         nf.didNotFind(searched: ["/x"])
         #expect(nf.composer.label == "ds4-dogfood not found")
+    }
+
+    @Test func failedLaunchEndsTranscript() {
+        var m = EngineSessionModel()
+        m.didStart()
+        let exit = EngineExit(code: -1, message: "refused to start: nope")
+        m.didFailToLaunch(exit)
+        #expect(m.phase == .ended(exit))
+        #expect(!m.transcript.isBusy)
+        #expect(m.transcript.loadingText == nil)
     }
 }

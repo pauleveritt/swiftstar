@@ -25,6 +25,9 @@ public enum TranscriptRow: Equatable, Sendable {
 }
 
 /// Pure fold of `EngineEvent`s into transcript rows and busy flags.
+///
+/// Invariant: `rows` is append-only (rows are never removed or reordered),
+/// which the index-based `pendingUserRows`/`queuedUserRows` rely on.
 public struct EngineTranscript: Equatable, Sendable {
     public private(set) var rows: [TranscriptRow] = []
     public private(set) var isBusy = false
@@ -117,7 +120,6 @@ public struct EngineTranscript: Equatable, Sendable {
             rows.append(.system(t))
         case .refused(let t), .error(let t):
             clearPending()
-            isBusy = false
             rows.append(.error(t))
         case .session(let info):
             session = info

@@ -78,6 +78,7 @@ public struct EngineSessionModel: Equatable, Sendable {
 
     /// The process could not be launched at all.
     public mutating func didFailToLaunch(_ exit: EngineExit) {
+        transcript.end()
         transcript.appendSystem(exit.message)
         phase = .ended(exit)
     }
