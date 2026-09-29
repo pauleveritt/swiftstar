@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "gpu_budget_bytes": 103079215104,
+  "saved_model_id": null,
+  "default_model_id": "qwen3.8-flash-next",
+  "models": [
+    {"id": "deepseek-v4-flash", "display_name": "DeepSeek V4 Flash", "family": "deepseek",
+     "on_this_mac": true, "path": "/Users/me/models/deepseek-v4-flash.gguf", "downloadable": false,
+     "fits": false, "default_context": 20000, "measured_contexts": [[20000, 91.55]], "interactive": true},
+    {"id": "laguna-xs-2.1", "display_name": "Laguna XS 2.1", "family": "laguna",
+     "on_this_mac": true, "path": "/Users/me/models/laguna-xs-2.1.gguf", "downloadable": false,
+     "fits": true, "default_context": 20000,
+     "measured_contexts": [[4096, 20.09], [20000, 23.67], [65536, 25.41]], "interactive": true},
+    {"id": "laguna-s-2.1", "display_name": "Laguna S 2.1", "family": "laguna",
+     "on_this_mac": false, "path": null, "downloadable": true,
+     "fits": null, "default_context": null, "measured_contexts": [], "interactive": true},
+    {"id": "qwen3.8-flash-next", "display_name": "Qwen3.8 Flash Next", "family": "qwen",
+     "on_this_mac": true, "path": "/Users/me/models/qwen3.8-flash-next.gguf", "downloadable": false,
+     "fits": true, "default_context": 20000, "measured_contexts": [[20000, 77.91]], "interactive": true,
+     "future_key": "ignored"},
+    {"id": "mellum-2", "display_name": "Mellum 2", "family": "mellum",
+     "on_this_mac": true, "path": "/Users/me/models/mellum-2.gguf", "downloadable": false,
+     "fits": true, "default_context": null, "measured_contexts": [], "interactive": false}
+  ]
+}
