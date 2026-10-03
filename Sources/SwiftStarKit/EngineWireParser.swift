@@ -74,7 +74,6 @@ public struct EngineWireParser: Sendable {
         case "tool_result":
             return .toolResult(EngineToolResult(
                 tool: tool(e),
-                resultKind: e["result_kind"] as? String ?? "",
                 preview: e["preview"] as? String ?? "",
                 truncated: e["truncated"] as? Bool ?? false))
         case "answer":
@@ -92,8 +91,7 @@ public struct EngineWireParser: Sendable {
                 prefillTokens: int(snap["prefill_tokens"]),
                 prefillMs: double(snap["sync_ms"]),
                 evalCount: evalCount,
-                evalMs: double(snap["eval_ms"]),
-                outputTokens: int(snap["output_tokens"])))
+                evalMs: double(snap["eval_ms"])))
         case "memory":
             let plan = e["engine_plan"] as? [String: Any]
             return .memory(EngineMemory(

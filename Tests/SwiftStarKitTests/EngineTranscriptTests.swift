@@ -46,7 +46,7 @@ struct EngineTranscriptTests {
 
     @Test func repeatedReadsGetOwnResults() {
         let tool = EngineTool(op: "read", path: "a")
-        let res = EngineToolResult(tool: tool, resultKind: "k", preview: "p", truncated: false)
+        let res = EngineToolResult(tool: tool, preview: "p", truncated: false)
         var t = EngineTranscript()
         for _ in 0..<2 {
             t.apply(.toolStart(tool))
@@ -64,7 +64,7 @@ struct EngineTranscriptTests {
         let tool = EngineTool(op: "read", path: "a")
         var t = EngineTranscript()
         t.apply(.toolEnd(tool, ok: true, durationMs: 1))
-        t.apply(.toolResult(EngineToolResult(tool: tool, resultKind: "k", preview: "p", truncated: false)))
+        t.apply(.toolResult(EngineToolResult(tool: tool, preview: "p", truncated: false)))
         #expect(cards(t).isEmpty)
         #expect(t.rows.isEmpty)
     }
@@ -210,7 +210,7 @@ struct EngineTranscriptPendingTests {
     @Test func pauseAndMemoryLeavePending() {
         var t = EngineTranscript()
         t.appendUser("a")
-        t.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1, outputTokens: 1)))
+        t.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1)))
         t.apply(.memory(EngineMemory(allocatedBytes: 1, budgetBytes: 2, planGiB: nil)))
         #expect(t.isPending(rowAt: 0))
     }

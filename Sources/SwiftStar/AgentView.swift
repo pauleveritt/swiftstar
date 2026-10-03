@@ -393,7 +393,6 @@ struct AgentView: View {
                 let tooltip = contextRingTooltip(used: used, size: size)
                 ValueGaugeView(
                     fraction: Double(used) / Double(size),
-                    text: nil, textFontSize: 0,
                     trackColor: Severity.ofContext(used: used, size: size).color,
                     diameter: 15)
                     .padding(.horizontal, 4)
@@ -418,7 +417,6 @@ struct AgentView: View {
             HStack(spacing: 4) {
                 ValueGaugeView(
                     fraction: min(Double(allocated) / Double(budget), 1.0),
-                    text: nil, textFontSize: 0,
                     trackColor: .green,
                     diameter: 15)
                 Text("\(memoryDisplay(allocated)) / \(memoryDisplay(budget))")
@@ -446,14 +444,7 @@ struct AgentView: View {
     }
 
     private func rateText(_ value: Double?) -> String {
-        fixedWidth(value.map { String(format: "%.1f", $0) } ?? "—", width: 6)
-    }
-
-    /// Right-aligns `text` in a field of `width` characters so a changing
-    /// value does not shift the text around it.
-    private func fixedWidth(_ text: String, width: Int) -> String {
-        if text.count >= width { return text }
-        return String(repeating: " ", count: width - text.count) + text
+        value.map { String(format: "%.1f", $0) } ?? "—"
     }
 
     private func memoryDisplay(_ bytes: Int64) -> String {

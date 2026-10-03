@@ -12,13 +12,11 @@ public struct EngineTool: Equatable, Sendable {
 
 public struct EngineToolResult: Equatable, Sendable {
     public let tool: EngineTool
-    public let resultKind: String
     public let preview: String
     public let truncated: Bool
 
-    public init(tool: EngineTool, resultKind: String, preview: String, truncated: Bool) {
+    public init(tool: EngineTool, preview: String, truncated: Bool) {
         self.tool = tool
-        self.resultKind = resultKind
         self.preview = preview
         self.truncated = truncated
     }
@@ -48,14 +46,12 @@ public struct PauseMetrics: Equatable, Sendable {
     public let prefillMs: Double?
     public let evalCount: Int
     public let evalMs: Double?
-    public let outputTokens: Int?
 
-    public init(prefillTokens: Int?, prefillMs: Double?, evalCount: Int, evalMs: Double?, outputTokens: Int?) {
+    public init(prefillTokens: Int?, prefillMs: Double?, evalCount: Int, evalMs: Double?) {
         self.prefillTokens = prefillTokens
         self.prefillMs = prefillMs
         self.evalCount = evalCount
         self.evalMs = evalMs
-        self.outputTokens = outputTokens
     }
 }
 

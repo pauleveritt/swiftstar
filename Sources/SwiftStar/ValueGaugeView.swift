@@ -14,12 +14,9 @@ extension Severity {
 
 /// 3/4-arc ring gauge (270° sweep, gap at the bottom, rounded caps),
 /// severity-colored — ported from the DS4 Control agent window's status bar.
-/// `text` nil = a bare ring for small status-bar indicators that rely on
-/// `.help()` for their label rather than baking it into the ring.
+/// A bare ring with no label; callers rely on `.help()` for that instead.
 struct ValueGaugeView: View {
     let fraction: Double  // 0.0 – 1.0
-    let text: String?
-    let textFontSize: CGFloat
     let trackColor: Color
     var diameter: CGFloat = 60
 
@@ -39,15 +36,6 @@ struct ValueGaugeView: View {
                 .stroke(trackColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(135))
                 .animation(.easeOut(duration: 0.4), value: clamped)
-
-            if let text {
-                Text(text)
-                    .font(.system(size: textFontSize, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .padding(.horizontal, lineWidth + 2)
-            }
         }
         .frame(width: diameter, height: diameter)
     }

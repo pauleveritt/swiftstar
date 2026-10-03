@@ -42,25 +42,4 @@ struct MarkdownPreprocessTests {
     @Test func unterminatedBlockStaysHidden() {
         #expect(MarkdownPreprocess.stripTaggedBlocks("<thinking>\nopen") == "")
     }
-
-    // MARK: fenced / language
-
-    @Test func fencedUsesMinimalFence() {
-        #expect(MarkdownPreprocess.fenced("let x = 1", language: "swift")
-            == "```swift\nlet x = 1\n```")
-    }
-
-    @Test func fencedOutgrowsInnerBacktickRuns() {
-        // A body containing ``` must not break out of a fixed 3-backtick fence.
-        let body = "a\n```\nb"
-        #expect(MarkdownPreprocess.fenced(body, language: "")
-            == "````\na\n```\nb\n````")
-    }
-
-    @Test func languageFromPathExtension() {
-        #expect(MarkdownPreprocess.language(forPath: "hello.c") == "c")
-        #expect(MarkdownPreprocess.language(forPath: "dir/a.b.swift") == "swift")
-        #expect(MarkdownPreprocess.language(forPath: "noext") == "")
-        #expect(MarkdownPreprocess.language(forPath: nil) == "")
-    }
 }

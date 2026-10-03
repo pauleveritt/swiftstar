@@ -183,23 +183,6 @@ struct EngineSessionTests {
         #expect(await wait { rec.exit != nil })
     }
 
-    @Test func interruptByteMidTurn() async throws {
-        let (session, rec) = make(fixture: "stop", pace: 30000)
-        try session.start()
-        #expect(await wait { rec.count(isAwaiting) == 1 })
-        try session.send(prompt: "read everything")
-        #expect(await wait { rec.has(isToolStart) })
-        try session.interrupt()
-        #expect(await wait { rec.has(isInterrupted) && rec.count(isAwaiting) == 2 })
-        // The contract is the order, not the absence of tool_end (incidental
-        // to this fixture's layout, not a claim about interrupt's behavior).
-        let interrupted = rec.events.firstIndex(where: isInterrupted)
-        let secondAwaiting = rec.events.indices.filter { isAwaiting(rec.events[$0]) }.last
-        #expect(interrupted != nil && interrupted! < secondAwaiting!)
-        session.quit()
-        #expect(await wait { rec.exit != nil })
-    }
-
     @Test func badHandshakeTerminates() async throws {
         let (session, rec) = make(fixture: "bad-handshake")
         try session.start()

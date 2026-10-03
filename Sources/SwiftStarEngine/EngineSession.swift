@@ -179,11 +179,6 @@ public final class EngineSession {
         try write(Self.command(["kind": "stop"]))
     }
 
-    /// Writes ETX (0x03), the terminal interrupt the engine also honours.
-    public func interrupt() throws {
-        try write(Data([0x03]))
-    }
-
     /// Ends the engine. In a turn: `stop` and `quit` back to back (the relay
     /// handles `quit` before its queue, so a queued prompt cannot start), then
     /// close stdin; SIGTERM after `stopGrace`. Idle: `quit`, close stdin,

@@ -79,29 +79,4 @@ public enum MarkdownPreprocess {
         return name.isEmpty ? nil : String(name)
     }
 
-    /// Wraps `body` in a fence strictly longer than the longest run of backticks
-    /// anywhere inside it (minimum 3, Markdown's own floor). A `write`/`edit` of
-    /// a Markdown file that itself contains a ` ``` ` fence must not be able to
-    /// break out of this wrapper.
-    public static func fenced(_ body: String, language: String) -> String {
-        var longestRun = 0
-        var current = 0
-        for ch in body {
-            if ch == "`" {
-                current += 1
-                longestRun = max(longestRun, current)
-            } else {
-                current = 0
-            }
-        }
-        let fence = String(repeating: "`", count: max(3, longestRun + 1))
-        return "\(fence)\(language)\n\(body)\n\(fence)"
-    }
-
-    /// `hello.c` → `c`; the extension after the last `.`.
-    public static func language(forPath path: String?) -> String {
-        guard let path, let dot = path.lastIndex(of: "."), dot < path.endIndex else { return "" }
-        let ext = path[path.index(after: dot)...]
-        return String(ext).trimmingCharacters(in: .whitespaces)
-    }
 }

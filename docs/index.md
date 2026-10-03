@@ -25,11 +25,3 @@ remediations
 glossary
 harvest/index
 ```
-
-```{toctree}
-:caption: Archive
-:maxdepth: 1
-:hidden:
-
-2026-08-26-old-ui-element-inventory
-```

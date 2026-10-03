@@ -5,7 +5,7 @@ struct EngineMetricsTests {
     @Test func pauseComputesRates() {
         var s = EngineMetricsState()
         EngineMetricsReducer.reduce(&s, .pause(PauseMetrics(
-            prefillTokens: 682, prefillMs: 827.3, evalCount: 8, evalMs: 61.2, outputTokens: nil)))
+            prefillTokens: 682, prefillMs: 827.3, evalCount: 8, evalMs: 61.2)))
         #expect(abs(s.prefillTPS! - 824) < 0.5)
         #expect(abs(s.generationTPS! - 130.7) < 0.5)
     }
@@ -14,7 +14,7 @@ struct EngineMetricsTests {
         for ms in [0.0, nil] {
             var s = EngineMetricsState()
             EngineMetricsReducer.reduce(&s, .pause(PauseMetrics(
-                prefillTokens: nil, prefillMs: nil, evalCount: 8, evalMs: ms, outputTokens: nil)))
+                prefillTokens: nil, prefillMs: nil, evalCount: 8, evalMs: ms)))
             #expect(s.generationTPS == nil)
         }
     }
@@ -45,11 +45,11 @@ struct EngineMetricsTests {
         // rate the UI already knew, not just fail to update it.
         var s = EngineMetricsState()
         EngineMetricsReducer.reduce(&s, .pause(PauseMetrics(
-            prefillTokens: 682, prefillMs: 827.3, evalCount: 8, evalMs: 61.2, outputTokens: nil)))
+            prefillTokens: 682, prefillMs: 827.3, evalCount: 8, evalMs: 61.2)))
         let (prefill, generation) = (s.prefillTPS, s.generationTPS)
         #expect(prefill != nil && generation != nil)
         EngineMetricsReducer.reduce(&s, .pause(PauseMetrics(
-            prefillTokens: nil, prefillMs: nil, evalCount: 0, evalMs: nil, outputTokens: nil)))
+            prefillTokens: nil, prefillMs: nil, evalCount: 0, evalMs: nil)))
         #expect(s.prefillTPS == prefill)
         #expect(s.generationTPS == generation)
     }

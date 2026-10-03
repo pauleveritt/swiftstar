@@ -2,10 +2,10 @@ import SwiftUI
 import SwiftStarKit
 
 struct InspectorView: View {
-    let metricsModel: MetricsModel
+    let engine: EngineController
 
     var body: some View {
-        let state = metricsModel.state
+        let state = engine.metrics
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -14,7 +14,6 @@ struct InspectorView: View {
                         if let used = state.contextUsed, let size = state.contextSize, size > 0 {
                             ValueGaugeView(
                                 fraction: Double(used) / Double(size),
-                                text: nil, textFontSize: 0,
                                 trackColor: Severity.ofContext(used: used, size: size).color,
                                 diameter: 30)
                         }
