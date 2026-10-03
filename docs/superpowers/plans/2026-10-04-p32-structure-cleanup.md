@@ -115,9 +115,10 @@ repeated full-suite runs, both tiers green, no stalls. Committed as
 `EngineSession.interrupt()`, `ValueGaugeView.text`/`textFontSize`,
 `MetricsModel`; no replacements.
 
-- [ ] **Step 1:** implement one symbol at a time (easiest to bisect if a
+- [x] **Step 1:** implement one symbol at a time (easiest to bisect if a
   deletion surfaces a hidden caller); `grep` confirms zero remaining
   references per symbol; full build + both test tiers green → commit.
+  Done: `eeb49fe`.
 
 ### Task 5: Rename `Agent*` views
 
@@ -133,9 +134,9 @@ repeated full-suite runs, both tiers green, no stalls. Committed as
 `PromptBubble`, `AgentToolCardView` → `ToolCardView`; `ThinkingDisclosure`
 (same file as `PromptBubble`) keeps its name.
 
-- [ ] **Step 1:** implement; `grep -rn "AgentView\|AgentPromptBubble\|AgentToolCardView"`
+- [x] **Step 1:** implement; `grep -rn "AgentView\|AgentPromptBubble\|AgentToolCardView"`
   returns nothing outside git history; full build + both test tiers green
-  → commit.
+  → commit. Done: `c1a2cb1`.
 
 ### Task 6: One `DefaultsKey` enum
 
