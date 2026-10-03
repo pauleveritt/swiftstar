@@ -14,7 +14,7 @@ A pointer, not a narrative — the detail lives in each phase's own row and its
 linked docs. Update this list when what's in flight changes; do not grow it
 into a second history of the phase table.
 
-- **In flight / next:** P29, making the front-end honest — P29.9 (model picker), P29.1–P29.4 (honest session) and P29.10 (toolbar menus) done 2026-09-28/29; P29.5 next (spec on branch `worktree-p29-5-fake-fidelity`). P28, the cut-over to ds4-engine, closed 2026-09-28 — see its row.
+- **In flight / next:** P29, making the front-end honest — P29.9 (model picker), P29.1–P29.4 (honest session) and P29.10 (toolbar menus) done 2026-09-28/29; P29.5 next (spec [`2026-09-28-p29-5-fake-fidelity-design.md`](docs/superpowers/specs/2026-09-28-p29-5-fake-fidelity-design.md)). P28, the cut-over to ds4-engine, closed 2026-09-28 — see its row.
 - **Closed with it:** the in-flight P24.4 cycle, P25 cycles 5–6, P18, the
   Mellum parking and the orchestrate-loop measurements all assumed machinery
   P28 removes; see the Backlog's "Closed or re-homed by P28".

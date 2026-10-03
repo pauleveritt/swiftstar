@@ -48,6 +48,10 @@ for the parent) and quotes the exact texts.
 Out of scope for the fake: the two-process shape (parent + presenter
 grandchild); it does not change what SwiftStar observes on the pipe.
 
+Kept as is: P29.10's `models --json` mode (`argv[1] == "models"`) and its
+`FAKE_ENGINE_MODELS*` variables, which the catalog loader tests rely on. The
+rules above apply to the `tui` mode only.
+
 ## 2. Tests that can fail (B2)
 
 Every test named by B2 either asserts a contract or is deleted:
@@ -55,11 +59,12 @@ Every test named by B2 either asserts a contract or is deleted:
 - `argumentsAreExact` stays — the argv is the engine's CLI contract — but is
   renamed `argvMatchesEngineCLI` and cites `docs/tui.md`'s option names.
 - `exitZeroEnded` becomes part of a table-driven `exitDescriptions` test over
-  every mapping (0, 1 + stderr tail, 2, 130 ours / not ours, signal, forced,
-  launch failure).
-- `fourAscendingSizes`, `defaultIsThirdSlotNextToLargest`,
-  `leafNameFallsBackToRootPath`: delete unless they pin a behaviour a view
-  depends on; if so, rewrite to assert that behaviour.
+  every mapping (0, 1 → "Ended without a clean answer." + stderr tail, 2,
+  130 ours / not ours, signal, forced, launch failure).
+- `fourAscendingSizes`, `defaultIsThirdSlotNextToLargest`: delete unless they
+  pin a behaviour a view depends on; if so, rewrite to assert that behaviour.
+- `leafNameFallsBackToRootPath` stays: P29.10's folder menu labels items with
+  `PathAbbreviation.leafName`.
 - `stopMidTurn`/`interruptByteMidTurn` assert the contract (`stopping`, then
   `interrupted`, then `input`; Stop disabled afterwards), not "no tool_end".
 - `badHandshakeTerminates` and `quitAfterTimeoutSendsSIGTERM` assert that the
