@@ -58,6 +58,7 @@ struct EngineSessionTests {
     private func isToolEnd(_ e: EngineEvent) -> Bool { if case .toolEnd = e { true } else { false } }
     private func isInterrupted(_ e: EngineEvent) -> Bool { if case .interrupted = e { true } else { false } }
     private func isProtocolError(_ e: EngineEvent) -> Bool { if case .protocolError = e { true } else { false } }
+    private func isQueued(_ e: EngineEvent) -> Bool { if case .queued = e { true } else { false } }
 
     @Test func fakeReceivesModelFlags() async throws {
         let argvLog = FileManager.default.temporaryDirectory
@@ -97,6 +98,70 @@ struct EngineSessionTests {
         #expect(rec.exit?.code == 0)
         #expect(session.isRunning == false)
         #expect(rec.exits.count == 1)
+    }
+
+    /// Not covered here, by design: a non-JSON or non-object stdin line
+    /// (relay texts "the line is not JSON" / "the line is not a JSON
+    /// object") has no `EngineSession` entry point that can send malformed
+    /// content — `send(prompt:)` always writes a well-formed `{"kind":
+    /// "prompt", ...}` object. Verified instead by reading the fake script
+    /// against the real relay source directly. Likewise, `{"kind":"quitting"}`
+    /// firing immediately on `quit` isn't independently assertable — the
+    /// wire parser still decodes it as `.ignored` — but its real consequence
+    /// (a mid-turn quit ending fast and in the right order) is exactly what
+    /// `quitMidTurnStopsFirst` and `quitWithQueuedPromptEndsPromptly` prove.
+
+    @Test func emptyPromptIsRefused() async throws {
+        let (session, rec) = make(fixture: "tool-read")
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        try session.send(prompt: "   ")
+        #expect(await wait { rec.events.contains(.error("a prompt needs a non-empty text")) })
+        session.quit()
+        #expect(await wait { rec.exit != nil })
+    }
+
+    @Test func stopWhileIdleIsRefused() async throws {
+        let (session, rec) = make(fixture: "tool-read")
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        try session.stop()
+        #expect(await wait { rec.events.contains(.error("no turn is running")) })
+        session.quit()
+        #expect(await wait { rec.exit != nil })
+    }
+
+    @Test func secondStopIsIdempotent() async throws {
+        let (session, rec) = make(fixture: "stop", pace: 30000)
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        try session.send(prompt: "read everything")
+        #expect(await wait { rec.has(isToolStart) })
+        try session.stop()
+        try session.stop()
+        #expect(await wait { rec.has(isInterrupted) })
+        // No second "stopping"-triggered error or duplicate interrupt.
+        #expect(rec.count(isInterrupted) == 1)
+        #expect(!rec.events.contains(.error("no turn is running")))
+        session.quit()
+        #expect(await wait { rec.exit != nil })
+    }
+
+    @Test func loadGapQueuesAndKeepsStopDisabled() async throws {
+        // A2: a prompt sent during the model-load gap is queued, not
+        // forwarded, and Stop stays disabled (no turn exists yet) until the
+        // gap elapses and the fixture's own `input` finally arrives.
+        let (session, rec) = make(fixture: "tool-read", extra: ["FAKE_ENGINE_LOAD_MS": "300"])
+        try session.start()
+        try session.send(prompt: "typed while loading")
+        #expect(await wait { rec.has(isQueued) })
+        #expect(!rec.has(isAwaiting), "input must not arrive before the gap elapses")
+        try? await Task.sleep(for: .milliseconds(100))
+        try session.stop()
+        #expect(await wait { rec.events.contains(.error("no turn is running")) })
+        #expect(await wait(1) { rec.count(isAwaiting) == 1 })
+        session.quit()
+        #expect(await wait { rec.exit != nil })
     }
 
     @Test func stopMidTurn() async throws {
@@ -250,8 +315,8 @@ struct EngineSessionTests {
             .appendingPathComponent("engine-session-\(UUID().uuidString).log")
         defer { try? FileManager.default.removeItem(at: log) }
         // Default graces: only a prompt quit (not a stopGrace wait) is fast enough.
-        let (session, rec) = make(
-            fixture: "tool-read", pace: 30000, extra: ["FAKE_ENGINE_QUEUE": "1"], log: log)
+        // Queueing is the fake's unconditional default now (P31).
+        let (session, rec) = make(fixture: "tool-read", pace: 30000, log: log)
         try session.start()
         #expect(await wait { rec.count(isAwaiting) == 1 })
         try session.send(prompt: "first")
@@ -322,20 +387,28 @@ struct EngineSessionTests {
         #expect(await wait { rec.exit != nil })
     }
 
-    @Test func sendWhileBusyIsForwarded() async throws {
-        let log = FileManager.default.temporaryDirectory
-            .appendingPathComponent("engine-session-\(UUID().uuidString).log")
-        defer { try? FileManager.default.removeItem(at: log) }
-        let (session, rec) = make(fixture: "tool-read", log: log)
+    @Test func sendWhileBusyIsQueued() async throws {
+        // A prompt sent mid-turn is acked with `queued`, not forwarded to the
+        // engine — the opposite of this test's old name and assertion.
+        // Delivery once the turn ends is the sibling of
+        // `quitWithQueuedPromptEndsPromptly`'s drop-on-quit case; not
+        // re-proven here (the fixture's own recorded `input` line still
+        // shows before a queued turn starts, a known simplification — the
+        // real relay suppresses it, P31 plan `## Result`).
+        let (session, rec) = make(fixture: "tool-read")
         try session.start()
         #expect(await wait { rec.count(isAwaiting) == 1 })
         try session.send(prompt: "first prompt")
         #expect(await wait { rec.has(isToolStart) })
         try session.send(prompt: "second prompt")
-        #expect(await wait {
-            let text = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
-            return text.contains("first prompt") && text.contains("second prompt")
-        })
+        #expect(await wait { rec.has(isQueued) })
+        // "Forwarded" would show as a wire-level `.prompt` event for the
+        // second text; queued means no such event until a turn actually
+        // starts for it, which this test does not let happen (it quits).
+        func isSecondPrompt(_ e: EngineEvent) -> Bool {
+            if case .prompt(let t) = e { t == "second prompt" } else { false }
+        }
+        #expect(!rec.has(isSecondPrompt))
         session.quit()
         #expect(await wait { rec.exit != nil })
     }

@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """Fake `ds4-dogfood tui --ndjson` for integration tests (stdlib only).
 
+`tui` mode follows ds4-engine's relay (`src/ds4_engine/ndjson_process.py`,
+`Relay`) by default: a prompt while busy is queued and acked
+(`{"kind":"queued","count":n}`); `stop` refuses with "no turn is running"
+unless a turn is active, and is idempotent; `quit` (or stdin EOF) emits
+`{"kind":"quitting"}` at once, drops any queued prompts, and actually closes
+at the next natural pause if a turn is running, or at once if idle; an empty
+prompt, a non-JSON line, or JSON that isn't an object are refused with the
+relay's own texts. `FAKE_ENGINE_LOAD_MS` (default 0) pauses after the
+fixture's own recorded "Loading model" status line, before the first
+`input`; prompts sent during the gap are queued like any other busy prompt.
+`FAKE_ENGINE_IGNORE_QUIT` makes quit and EOF no-ops (EOF then hangs) for the
+SIGKILL-escalation test.
+
 Env: FAKE_ENGINE_FIXTURE, FAKE_ENGINE_PACE_MS (300), FAKE_ENGINE_EXIT (0),
 FAKE_ENGINE_REFUSE, FAKE_ENGINE_IGNORE_QUIT, FAKE_ENGINE_IGNORE_SIGTERM (SIG_IGN),
-FAKE_ENGINE_QUEUE (prompts sent mid-turn queue; after a stop the queued turn
-starts unless a quit follows at once, like the relay), FAKE_ENGINE_LOG,
-FAKE_ENGINE_PIDFILE (written in every mode, including `models`),
-FAKE_ENGINE_ARGV_LOG (write argv, one per line, at start).
+FAKE_ENGINE_LOAD_MS (0), FAKE_ENGINE_LOG, FAKE_ENGINE_PIDFILE (written in
+every mode, including `models`), FAKE_ENGINE_ARGV_LOG (write argv, one per
+line, at start).
 `models --json` mode (argv[1] == "models"): prints the FAKE_ENGINE_MODELS file, or
 exits 2 with "boom" when FAKE_ENGINE_MODELS_FAIL=1, or with over 5 KiB of filler then
 "the real last line" when FAKE_ENGINE_MODELS_HUGE_STDERR=1, or with argparse's "invalid
@@ -74,13 +86,19 @@ if env.get("FAKE_ENGINE_REFUSE") == "1":
 pace = int(env.get("FAKE_ENGINE_PACE_MS", "300")) / 1000.0
 exit_code = int(env.get("FAKE_ENGINE_EXIT", "0"))
 ignore_quit = env.get("FAKE_ENGINE_IGNORE_QUIT") == "1"
-queue_mode = env.get("FAKE_ENGINE_QUEUE") == "1"
-queued = []
+load_ms = int(env.get("FAKE_ENGINE_LOAD_MS", "0"))
 log_path = env.get("FAKE_ENGINE_LOG")
 with open(env["FAKE_ENGINE_FIXTURE"]) as f:
     fixture = [ln.rstrip("\n") for ln in f if ln.strip()]
 
 inbox = queue.Queue()
+
+# Relay-like state (mirrors ds4_engine.ndjson_process.Relay).
+accepting = False
+quitting = False
+stop_requested = False
+turn_running = False
+pending = []
 
 
 def log(text):
@@ -95,10 +113,14 @@ def handle_line(raw):
         return
     log(text)
     try:
-        kind = json.loads(text).get("kind")
-    except Exception:
-        kind = None
-    inbox.put((kind or "?", text))
+        parsed = json.loads(text)
+    except ValueError:
+        inbox.put(("_not_json", None))
+        return
+    if not isinstance(parsed, dict):
+        inbox.put(("_not_object", None))
+        return
+    inbox.put((parsed.get("kind") or "?", text))
 
 
 def reader():
@@ -150,7 +172,6 @@ def is_tool_start(line):
 
 
 def finish():
-    emit('{"kind": "quitting"}')
     capture = env.get("FAKE_ENGINE_CAPTURE_PATH")
     if capture:
         emit(json.dumps({"kind": "event", "event": {"kind": "closed", "capture_path": capture}}))
@@ -168,6 +189,119 @@ def hang():
 idx = 0
 
 
+def start_turn(text, announce):
+    """Resumes the scripted replay; the fake does not interpret prompt text.
+    `announce` is true only for a previously-queued prompt finally starting,
+    which needs a synthetic `prompt` event SwiftStar did not already cause
+    locally (it sent it earlier, while busy, and only got `queued` back)."""
+    if announce:
+        emit(json.dumps({"kind": "event", "event": {"kind": "prompt", "text": text}}))
+    replay()
+
+
+def reach_pause(already_emitted_input=False):
+    """Called whenever the replay reaches a point ready for a new prompt:
+    after the handshake, after a turn ends, or after an interrupt. Ends the
+    session if quitting, delivers a queued prompt as the next turn if one
+    exists, else goes idle awaiting a prompt."""
+    global accepting, turn_running, stop_requested
+    # Drain anything already queued (SwiftStar's quit() writes `stop` and
+    # `quit` back to back; a double stop() can land two "stop"s together
+    # too) *before* resetting turn_running/stop_requested below, so a
+    # genuinely idempotent second `stop` still sees the turn it duplicates
+    # as running and is silently dropped, not refused as if no turn
+    # existed. A quit that arrived while an interrupt was still unwinding
+    # must not be missed in favor of delivering a queued prompt either.
+    # `handle()`'s own `if accepting: finish()` is a no-op here since
+    # accepting is still false mid-transition; it only records state
+    # (quitting, pending) for the checks below.
+    # A message SwiftStar wrote just before this pause (a second `stop`, or
+    # the `quit` half of quit()'s back-to-back stop+quit) may not have
+    # reached the reader thread yet even though nothing is in the queue this
+    # instant — observed as a genuine race (passes in isolation, flakes
+    # under the full suite's scheduling pressure), not a one-off flake.
+    # Drain whatever is already queued fast, then give one short grace
+    # window for a straggler before concluding nothing more is coming.
+    while True:
+        try:
+            drained_kind, drained_text = inbox.get_nowait()
+        except queue.Empty:
+            break
+        handle(drained_kind, drained_text)
+    try:
+        drained_kind, drained_text = inbox.get(timeout=0.05)
+        handle(drained_kind, drained_text)
+    except queue.Empty:
+        pass
+    stop_requested = False
+    turn_running = False
+    if quitting:
+        finish()
+        return
+    if pending:
+        text = pending.pop(0)
+        turn_running = True
+        start_turn(text, announce=True)
+        return
+    accepting = True
+    if not already_emitted_input:
+        emit('{"kind": "input"}')
+
+
+def handle(kind, text):
+    """The relay's `from_frontend`, applied to one already-parsed message.
+    Returns True if the caller's wait loop should stop waiting (a turn
+    started or the session is ending), False to keep waiting."""
+    global accepting, quitting, pending, turn_running, stop_requested
+    if kind == "_not_json":
+        emit('{"kind": "error", "text": "the line is not JSON"}')
+        return False
+    if kind == "_not_object":
+        emit('{"kind": "error", "text": "the line is not a JSON object"}')
+        return False
+    if kind in ("quit", "eof"):
+        if ignore_quit:
+            if kind == "eof":
+                hang()
+            return False
+        if quitting:
+            return False
+        quitting = True
+        pending = []
+        emit('{"kind": "quitting"}')
+        if accepting:
+            finish()
+        return True
+    if kind == "prompt":
+        prompt_text = (json.loads(text).get("text") if text else None) or ""
+        if not prompt_text.strip():
+            emit('{"kind": "error", "text": "a prompt needs a non-empty text"}')
+            return False
+        if quitting:
+            emit('{"kind": "error", "text": "the session is quitting"}')
+            return False
+        if accepting:
+            accepting = False
+            turn_running = True
+            start_turn(prompt_text, announce=False)
+            return True
+        pending.append(prompt_text)
+        emit(json.dumps({"kind": "queued", "count": len(pending)}))
+        return False
+    if kind == "stop":
+        if accepting or not turn_running:
+            emit('{"kind": "error", "text": "no turn is running"}')
+            return False
+        if stop_requested:
+            return False
+        stop_requested = True
+        emit('{"kind": "stopping"}')
+        interrupt()
+        return True
+    emit(json.dumps({"kind": "error", "text": "unknown kind '%s'; expected prompt, stop or quit" % kind}))
+    return False
+
+
 def interrupt():
     """Discard the fixture through the turn's next `input`, then fake the stop."""
     global idx
@@ -177,34 +311,28 @@ def interrupt():
         if is_kind(line, "input"):
             break
     emit('{"kind": "event", "event": {"kind": "interrupted"}}')
-    if queue_mode:
-        # The relay handles a quit before its queue: a quit that follows the
-        # stop at once ends the session; otherwise the queued prompt runs.
-        try:
-            kind, _ = inbox.get(timeout=0.2)
-        except queue.Empty:
-            kind = None
-        if kind in ("quit", "eof") and not ignore_quit:
-            finish()
-        if queued:
-            run_queued(queued.pop(0))
-            return
-    emit('{"kind": "input"}')
+    reach_pause()
 
 
-def run_queued(text):
-    """A queued turn: starts, then waits for a quit or stop like a busy turn."""
-    emit(json.dumps({"kind": "event", "event": {"kind": "prompt", "text": text}}))
+load_gap_done = False
+
+
+def load_gap():
+    """The fixture's own recorded `status` line (model loading) is followed
+    by a real gap before the engine is ready; a prompt sent during it is
+    queued like any other busy prompt, since `accepting` is still false."""
+    global load_gap_done
+    load_gap_done = True
+    deadline = time.monotonic() + load_ms / 1000.0
     while True:
-        try:
-            kind, _ = inbox.get(timeout=pace)
-        except queue.Empty:
-            continue
-        if kind in ("quit", "eof") and not ignore_quit:
-            finish()
-        if kind == "stop":
-            emit('{"kind": "input"}')
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
             return
+        try:
+            kind, text = inbox.get(timeout=remaining)
+        except queue.Empty:
+            return
+        handle(kind, text)
 
 
 def replay():
@@ -214,36 +342,25 @@ def replay():
         line = fixture[idx]
         idx += 1
         emit(line)
+        if not load_gap_done and is_kind(line, "status"):
+            load_gap()
         if is_kind(line, "input"):
+            reach_pause(already_emitted_input=True)
             return
         if is_tool_start(line):
-            try:
-                kind, text = inbox.get(timeout=pace)
-                while queue_mode and kind == "prompt":
-                    queued.append(json.loads(text).get("text", ""))
+            while True:
+                try:
                     kind, text = inbox.get(timeout=pace)
-            except queue.Empty:
-                continue
-            if kind == "stop":
-                interrupt()
-                return
-            if kind in ("quit", "eof") and not ignore_quit:
-                finish()
-            # prompt (or anything else) resumes the replay.
+                except queue.Empty:
+                    break
+                if handle(kind, text):
+                    return
+                # else: queued ack or refusal -- keep waiting at this pause
 
 
 threading.Thread(target=reader, daemon=True).start()
-replay()  # handshake through the first `input`
+replay()  # handshake through the first `input`; the fixture's own `status`
+# line triggers the load gap (see load_gap()) if FAKE_ENGINE_LOAD_MS is set.
 while True:
     kind, text = inbox.get()
-    if kind == "prompt":
-        replay()
-    elif kind == "stop":
-        emit('{"kind": "error", "text": "no turn is running"}')
-    elif kind in ("quit", "eof"):
-        if not ignore_quit:
-            finish()
-        if kind == "eof":
-            hang()
-    else:
-        emit(json.dumps({"kind": "error", "text": "unknown kind '%s'; expected prompt, stop or quit" % kind}))
+    handle(kind, text)
