@@ -1,7 +1,7 @@
 ---
 phase: P
 cycle: P32-structure-cleanup
-lifecycle: active
+lifecycle: closed
 ---
 
 # P32 structure and dead-code cleanup implementation plan
@@ -174,14 +174,46 @@ today's literals).
 
 **Interfaces:** none; doc only.
 
-- [ ] **Step 1:** implement; `just lint-docs` green → commit.
+- [x] **Step 1:** implement; `just lint-docs` green → commit. Done: `267429f`.
 
 ### Task 8: Close
 
-- [ ] **Step 1:** ROADMAP P32 row → "done"; `## Now` reflects Phase P fully
+- [x] **Step 1:** ROADMAP P32 row → "done"; `## Now` reflects Phase P fully
   closed and Phase SU beginning; plan `## Result`, `lifecycle: closed`;
   `just lint-docs` green; commit.
 
 ## Result
 
-_(filled at close)_
+All seven items landed, each its own commit, build and both test tiers
+green after every task (129 fast / 30 integration at close, down from 137/31
+at the start of the cycle for tests removed alongside their deleted symbols).
+
+1. **Stream plumbing** (`6be894c`) — `FileHandle.bytes.lines` was tried
+   first and reverted (a real ~10s stall under `swift test`); delegated to
+   a fresh agent (Fable) for root-cause diagnosis via thread-sampling, which
+   found `FileHandle.bytes` shares one process-wide blocking IO actor across
+   all pipes on Darwin, starving `EngineSession`'s two concurrent readers.
+   Fix: kept the `readabilityHandler`-fed `AsyncStream<Data>`, wrapped in a
+   new `ChunkBytes: AsyncSequence<UInt8>` so `.lines` still frames it without
+   touching `FileHandle.bytes`. `LineBuffer` deleted.
+2. **FastTierGuard** (`bd716e5`) — plugin and tool target replaced by one
+   grep line in the `test` Justfile recipe; confirmed it actually fails on
+   a violation before committing.
+3. **Rename `SwiftStarAppKit` → `SwiftStarEngine`** (`60276fa`, `8f92bac`).
+4. **Dead code** (`eeb49fe`) — all items from the spec's `## 4` deleted,
+   each confirmed zero remaining callers first.
+5. **Rename `Agent*` views** (`c1a2cb1`, completed in `0cfea90`) →
+   `SessionView`/`PromptBubble`/`ToolCardView`.
+6. **One `DefaultsKey` enum** (`0cfea90`) — failing test confirmed red
+   before implementing; replaces five static constants and three
+   duplicated `@AppStorage` literals, raw values unchanged.
+7. **SwiftMath** (`267429f`) — documented in `BRIEF.md` as inert transitive
+   weight from the pinned `MarkdownView` fork, not wired; also fixed a
+   stale `SwiftStarAppKit` mention in the same section.
+
+Two commits (`c1a2cb1`, `60276fa`) were each missing part of their intended
+diff because `git add` with a multi-path invocation silently stopped after
+an earlier pathspec didn't match a file (already renamed by `git mv`); the
+missing pieces were always present in the working tree (build and tests
+passed throughout) and were committed in a follow-up commit each time,
+called out honestly in the follow-up's message rather than amended away.
