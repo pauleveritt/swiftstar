@@ -47,8 +47,8 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftStarIntegrationTests",
-            dependencies: ["SwiftStarKit", "SwiftStarAppKit"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            dependencies: ["SwiftStarKit", "SwiftStarAppKit", "SwiftStar"],
+            swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
         ),
         .executableTarget(name: "FastTierGuardTool"),
         .plugin(
