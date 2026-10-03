@@ -235,3 +235,16 @@ public struct CatalogNoteGate: Sendable {
     /// True the first time `path` is claimed.
     public mutating func claim(path: String) -> Bool { noted.insert(path).inserted }
 }
+
+/// Identifies one load of the catalog: the engine path and, when known, its
+/// file's modification date. An engine upgraded in place (same path, new
+/// binary) changes `modifiedAt`, so it compares unequal to the prior key —
+/// unlike comparing the path alone, which would miss the upgrade.
+public struct CatalogCacheKey: Equatable, Sendable {
+    public let path: String
+    public let modifiedAt: Date?
+    public init(path: String, modifiedAt: Date?) {
+        self.path = path
+        self.modifiedAt = modifiedAt
+    }
+}

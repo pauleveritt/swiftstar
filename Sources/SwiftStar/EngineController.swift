@@ -39,7 +39,7 @@ final class EngineController {
     private(set) var catalog: EngineModelList?
     @ObservationIgnored private var catalogNote: String?
     @ObservationIgnored private var noteGate = CatalogNoteGate()
-    @ObservationIgnored private var catalogExecutable: String?
+    @ObservationIgnored private var catalogCacheKey: CatalogCacheKey?
     @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
 
     @ObservationIgnored private var session: EngineSession?
@@ -67,8 +67,8 @@ final class EngineController {
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, let path = self.resolveExecutablePath(), path != self.catalogExecutable
-                else { return }
+                guard let self, let path = self.resolveExecutablePath() else { return }
+                guard self.catalogCacheKey(forPath: path) != self.catalogCacheKey else { return }
                 Task { await self.loadCatalog() }
             }
         }
@@ -136,10 +136,19 @@ final class EngineController {
         return nil
     }
 
-    /// Loads the list once per engine path (a failed load is not retried until
-    /// the path changes).
+    /// `path`'s current cache key: its modification date travels with the
+    /// path, so an engine upgraded in place (same path, new binary) compares
+    /// unequal to a prior load and is refetched rather than served stale.
+    private func catalogCacheKey(forPath path: String) -> CatalogCacheKey {
+        let modifiedAt = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        return CatalogCacheKey(path: path, modifiedAt: modifiedAt)
+    }
+
+    /// Loads the list once per engine path and modification date (a failed
+    /// load is not retried until the path or the binary itself changes).
     func loadCatalogIfNeeded() async {
-        guard let path = resolveExecutablePath(), path != catalogExecutable else { return }
+        guard let path = resolveExecutablePath() else { return }
+        guard catalogCacheKey(forPath: path) != catalogCacheKey else { return }
         await loadCatalog()
     }
 
@@ -147,9 +156,10 @@ final class EngineController {
     /// the menus fall back and one transcript note says why.
     func loadCatalog() async {
         guard let path = resolveExecutablePath() else { return }
-        catalogExecutable = path
+        let key = catalogCacheKey(forPath: path)
+        catalogCacheKey = key
         let result = await EngineModelCatalogLoader.load(executable: path)
-        guard path == catalogExecutable else { return }
+        guard key == catalogCacheKey else { return }
         switch result {
         case .success(let list):
             catalog = list
@@ -162,7 +172,7 @@ final class EngineController {
     }
 
     private func showCatalogNote() {
-        guard let note = catalogNote, let path = catalogExecutable,
+        guard let note = catalogNote, let path = catalogCacheKey?.path,
               noteGate.claim(path: path) else { return }
         model.apply(.notice(note))
     }

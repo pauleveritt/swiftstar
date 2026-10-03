@@ -155,4 +155,23 @@ struct EngineModelCatalogTests {
         let other = gate.claim(path: "/b/ds4-dogfood")
         #expect(first && !again && other)
     }
+
+    @Test func cacheKeySamePathSameMtimeIsEqual() {
+        let date = Date(timeIntervalSince1970: 1000)
+        #expect(
+            CatalogCacheKey(path: "/a", modifiedAt: date)
+                == CatalogCacheKey(path: "/a", modifiedAt: date))
+    }
+
+    @Test func cacheKeyChangedMtimeInvalidates() {
+        #expect(
+            CatalogCacheKey(path: "/a", modifiedAt: Date(timeIntervalSince1970: 1000))
+                != CatalogCacheKey(path: "/a", modifiedAt: Date(timeIntervalSince1970: 2000)))
+    }
+
+    @Test func cacheKeyChangedPathInvalidates() {
+        #expect(
+            CatalogCacheKey(path: "/a", modifiedAt: nil)
+                != CatalogCacheKey(path: "/b", modifiedAt: nil))
+    }
 }
