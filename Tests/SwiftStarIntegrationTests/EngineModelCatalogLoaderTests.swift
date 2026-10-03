@@ -56,7 +56,7 @@ struct EngineModelCatalogLoaderTests {
             executable: Self.fake, environment: env(["FAKE_ENGINE_MODELS_UNKNOWN": "1"]))
         #expect(result == .failure(.commandMissing))
         if case .failure(let e) = result {
-            #expect(e.reason == "this ds4-dogfood has no `models` command (needs ds4-engine TUI.33 or later)")
+            #expect(e.reason == "this ds4-dogfood has no `models` command (needs ds4-engine TUI.35 or later)")
         }
     }
 }

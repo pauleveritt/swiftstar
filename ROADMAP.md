@@ -69,7 +69,7 @@ Source: [`2026-09-28-p28-deep-review.md`](docs/superpowers/research/2026-09-28-p
 7. **P29.7 SwiftUI modernisation.** Inject `EngineController` via `@Environment` and delete the `onChange` copy; composer's `TextField(axis: .vertical)` submits via `.onSubmit` instead of `.onKeyPress` (fixes A8); transcript with `.defaultScrollAnchor(.bottom)` and stable row ids; close-last-window quits plus `.restorationBehavior(.disabled)`; README "Build and run". Why: C9–C13, A8, A11 (`AgentView.swift:293-313`, `SwiftStarApp.swift:14`). Done when: owner GUI pass confirms Return submits, Option-Return newlines, and Cmd-W ends the engine.
 8. **P29.8 Later (own cycle, not scheduled).** Native Markdown renderer replacing the pinned `MarkdownView` fork (C14), delta metrics from consecutive `checkpoint`s with the cumulative rate labelled "session avg" (C15, B3), Liquid Glass affordances (C16), plus C17–C20 and A9/A10 (apply command kept across sessions, first-launch workspace). Done when: each is either its own plan or declined.
 9. **P29.9 Model picker: pass `--model-id`/`--context-size` to `ds4-dogfood tui`.** *Done (2026-09-28).* Settings has optional Model and Context size fields; the toolbar shows the loaded model and offers "Restart to use …" when Settings differ. Spec [`2026-09-28-p29-9-model-picker-design.md`](docs/superpowers/specs/2026-09-28-p29-9-model-picker-design.md). Live: `qwen3.8-flash-next` loaded from Settings alone; a bogus id is refused with the engine's reason. *Superseded by P29.10:* the Settings fields and "Restart to use …" are gone; the toolbar menus replace them.
-10. **P29.10 Toolbar menus.** *Done (2026-09-29).* Folder, model and context are separate toolbar menu buttons (the sidebar toggle moved to the far right). The model menu lists the engine's models from `ds4-dogfood models --json` (ds4-engine TUI.33), greying out models not on this Mac, too big, or not usable in the TUI; without the command it falls back and says why once. Choosing restarts the session; P29.9's Settings fields and Restart button are gone. Spec [`2026-09-29-p29-10-toolbar-menus-design.md`](docs/superpowers/specs/2026-09-29-p29-10-toolbar-menus-design.md).
+10. **P29.10 Toolbar menus.** *Done (2026-09-29).* Folder, model and context are separate toolbar menu buttons (the sidebar toggle moved to the far right). The model menu lists the engine's models from `ds4-dogfood models --json` (ds4-engine TUI.35 on `main`; the Backlog's "Engine requests" closures explain the schema reconciliation), greying out models not on this Mac, too big, or not usable in the TUI; without the command it falls back and says why once. Choosing restarts the session; P29.9's Settings fields and Restart button are gone. Spec [`2026-09-29-p29-10-toolbar-menus-design.md`](docs/superpowers/specs/2026-09-29-p29-10-toolbar-menus-design.md).
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
@@ -135,18 +135,24 @@ Things SwiftStar cannot show or do until ds4-engine changes. Raise them there.
   wire, so the front-end cannot show it (seen with Qwen3.8, 2026-09-28 and
   2026-09-29; research in ds4-engine
   `docs/superpowers/research/2026-09-28-qwen38-tool-calls.md`).
-- **A `run` call ends the whole session.** In the TUI a model's `run` is
-  `not-approved`, which ends the run (`terminal`, `close`, exit 1) rather than
-  the turn — one wrong tool choice costs the session (Qwen3.8, 2026-09-29).
-  The Qwen prompt fix (TUI.32) removes the trigger; the severity is separate.
 - **`/resume`, `/model`, `/rewind` re-exec in place.** They print to stdout
   and `execv` (same pid, a second `ready`); SwiftStar shows the printed lines
   as notices and ignores the second handshake, so it keeps the old session's
   model and state. Needs a wire message or a documented restart.
-- **A machine-readable model list** — *shipped as TUI.33*
-  (`ds4-dogfood models --json`, ds4-engine `feat/models-json`, not yet on
-  its `main`); SwiftStar's P29.10 menus read it. Close when it reaches
-  ds4-engine `main`.
+
+Closed, 2026-10-04 (caught up `../ds4-engine` to `main` at `409267a9`):
+- **A `run` call ends the whole session** — fixed by ds4-engine TUI.45
+  (`e592b0da`, citing SwiftStar #99 directly): under an interactive profile a
+  `run` call is now answered as an unknown tool and the turn goes on.
+- **A machine-readable model list** — shipped on ds4-engine `main` as TUI.35
+  (`e5823e81`), not TUI.33 as first captured from the unmerged
+  `feat/models-json` branch: the shipped shape sends no `schema_version`,
+  `default_model_id`, `saved_model_id`, `family`, `measured_contexts` or
+  `runs_in_tui`, and calls the context field `context` rather than
+  `default_context`. `EngineModelCatalog.swift`'s decoder now treats a missing
+  `schema_version` as 1 and falls back from `default_context` to `context`;
+  `fixtures/engine/models-real.json` is recaptured from `main`. See
+  `fixtures/engine/provenance.md`.
 
 ### Process and tooling
 

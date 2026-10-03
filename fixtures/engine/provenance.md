@@ -29,8 +29,19 @@ a model miss, not a wire change: re-record with another seed.
 ## `models-real.json` and `models.json`
 
 `models-real.json` is a verbatim capture of `ds4-dogfood models --json`
-(ds4-engine TUI.33, commit 4c432171, run on the owner's Mac, 2026-09-29); home
-paths were anonymised to `/Users/example/`. `models.json` is hand-written in
-the same shape (per-model flag `runs_in_tui`) to cover cases the real capture
-lacks: a model that doesn't fit, one not usable in the TUI, unknown keys.
-Re-capture `models-real.json` when the engine bumps `schema_version`.
+(ds4-engine `main` at `409267a9`, run on the owner's Mac, 2026-10-04); home
+paths were anonymised to `/Users/example/`. This replaces a 2026-09-29 capture
+from commit `4c432171` ("TUI.33"), a `feat/models-json` branch state that
+never reached `main` in that shape: the version that actually shipped (TUI.35,
+`e5823e81`) sends no `schema_version`, `default_model_id`, `saved_model_id`,
+`family`, `measured_contexts` or `runs_in_tui`, and names the per-model
+context field `context` rather than `default_context`. `EngineModelList`'s
+decoder treats a missing `schema_version` as 1 and reads `default_context`
+falling back to `context`; the other fields are already optional with
+graceful fallbacks (`ModelMenu`/`ContextMenu` degrade to an unlabeled "Engine
+default" without them). `models.json` is hand-written in the richer,
+forward-looking shape (per-model flag `runs_in_tui`, `family`,
+`measured_contexts`) to cover cases the real capture lacks and to exercise
+that shape if ds4-engine adds it later: a model that doesn't fit, one not
+usable in the TUI, unknown keys. Re-capture `models-real.json` if ds4-engine
+starts sending `schema_version` again, or bumps it.

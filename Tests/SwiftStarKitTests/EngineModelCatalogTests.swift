@@ -26,10 +26,13 @@ struct EngineModelCatalogTests {
     }
 
     @Test func decodesRealEngineCapture() throws {
+        // ds4-engine main (TUI.35) sends no `schema_version`, `default_model_id`
+        // or `saved_model_id`, and names the context field `context`; the
+        // decoder treats the first as version 1 and falls back for the second.
         let url = Self.sampleURL.deletingLastPathComponent().appendingPathComponent("models-real.json")
         let list = try EngineModelList.decode(Data(contentsOf: url)).get()
         #expect(list.models.count == 4)
-        #expect(list.defaultModelID == "laguna-xs-2.1")
+        #expect(list.defaultModelID == nil)
         #expect(list.savedModelID == nil)
         #expect(list.model(id: "laguna-xs-2.1")?.defaultContext == 65536)
         let items = ModelMenu.items(list: list, settingsID: "", loadedID: nil)
@@ -50,6 +53,12 @@ struct EngineModelCatalogTests {
         if case .failure(.malformed) = EngineModelList.decode(Data("nope".utf8)) {} else {
             Issue.record("garbage should be malformed")
         }
+    }
+
+    @Test func missingSchemaVersionDefaultsToOne() throws {
+        let json = #"{"models":[{"id":"m","context":4096}]}"#
+        let list = try EngineModelList.decode(Data(json.utf8)).get()
+        #expect(list.model(id: "m")?.defaultContext == 4096)
     }
 
     @Test func modelMenuTicksSettingsChoice() throws {

@@ -10,7 +10,7 @@ public enum CatalogError: Error, Equatable, Sendable {
     /// The command exited non-zero or could not be launched.
     case failed(String)
     case timedOut
-    /// An engine older than ds4-engine TUI.33: the subcommand does not exist.
+    /// An engine older than ds4-engine TUI.35: the subcommand does not exist.
     case commandMissing
 
     /// One line for the transcript note.
@@ -21,7 +21,7 @@ public enum CatalogError: Error, Equatable, Sendable {
         case .failed(let m): m
         case .timedOut: "timed out"
         case .commandMissing:
-            "this ds4-dogfood has no `models` command (needs ds4-engine TUI.33 or later)"
+            "this ds4-dogfood has no `models` command (needs ds4-engine TUI.35 or later)"
         }
     }
 }
@@ -48,7 +48,7 @@ public struct EngineModelList: Decodable, Equatable, Sendable {
         public let runsInTUI: Bool
 
         enum CodingKeys: String, CodingKey {
-            case id, family, path, downloadable, fits
+            case id, family, path, downloadable, fits, context
             case runsInTUI = "runs_in_tui"
             case displayName = "display_name"
             case onThisMac = "on_this_mac"
@@ -65,7 +65,10 @@ public struct EngineModelList: Decodable, Equatable, Sendable {
             path = try c.decodeIfPresent(String.self, forKey: .path)
             downloadable = try c.decodeIfPresent(Bool.self, forKey: .downloadable) ?? false
             fits = try c.decodeIfPresent(Bool.self, forKey: .fits)
+            // ds4-engine main (TUI.35) sends the model's context as `context`,
+            // not `default_context`; prefer the richer key, fall back to it.
             defaultContext = try c.decodeIfPresent(Int.self, forKey: .defaultContext)
+                ?? c.decodeIfPresent(Int.self, forKey: .context)
             runsInTUI = try c.decodeIfPresent(Bool.self, forKey: .runsInTUI) ?? true
             let pairs = try c.decodeIfPresent([[Double]].self, forKey: .measuredContexts) ?? []
             measuredContexts = pairs.compactMap {
@@ -91,6 +94,12 @@ public struct EngineModelList: Decodable, Equatable, Sendable {
     private struct Header: Decodable {
         let schemaVersion: Int
         enum CodingKeys: String, CodingKey { case schemaVersion = "schema_version" }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            // ds4-engine main (TUI.35) sends no `schema_version` at all yet;
+            // its absence means version 1, not a malformed payload.
+            schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        }
     }
 
     public static func decode(_ data: Data) -> Result<EngineModelList, CatalogError> {
