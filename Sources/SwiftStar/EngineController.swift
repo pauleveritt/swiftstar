@@ -8,12 +8,6 @@ import SwiftStarKit
 /// metrics folds. The logic lives in the tested Kit types.
 @Observable
 final class EngineController {
-    static let workspaceDefaultsKey = "agentWorkspace"
-    static let executableDefaultsKey = "engineExecutable"
-    static let modelIDDefaultsKey = "engineModelID"
-    static let contextSizeDefaultsKey = "engineContextSize"
-    static let recentWorkspacesDefaultsKey = "recentWorkspaces"
-
     /// Every session rule (phase, busy/stop/pending, labels) lives in the
     /// model; the controller forwards to it and owns the process.
     private(set) var model = EngineSessionModel()
@@ -26,7 +20,7 @@ final class EngineController {
     var workspace: URL? {
         didSet {
             guard let workspace else { return }
-            UserDefaults.standard.set(workspace.path, forKey: Self.workspaceDefaultsKey)
+            UserDefaults.standard.set(workspace.path, forKey: DefaultsKey.workspace.rawValue)
         }
     }
 
@@ -58,9 +52,9 @@ final class EngineController {
 
     init() {
         let defaults = UserDefaults.standard
-        modelID = defaults.string(forKey: Self.modelIDDefaultsKey) ?? ""
-        contextSize = defaults.integer(forKey: Self.contextSizeDefaultsKey)
-        recentWorkspaces = defaults.stringArray(forKey: Self.recentWorkspacesDefaultsKey) ?? []
+        modelID = defaults.string(forKey: DefaultsKey.modelID.rawValue) ?? ""
+        contextSize = defaults.integer(forKey: DefaultsKey.contextSize.rawValue)
+        recentWorkspaces = defaults.stringArray(forKey: DefaultsKey.recentWorkspaces.rawValue) ?? []
         workspace = Self.defaultWorkspace()
         // Reload the model list when Settings changes the engine path.
         defaultsObserver = NotificationCenter.default.addObserver(
@@ -76,7 +70,7 @@ final class EngineController {
 
     /// The last chosen folder, else the checkout the app runs from, else home.
     private static func defaultWorkspace() -> URL {
-        if let dir = UserDefaults.standard.string(forKey: workspaceDefaultsKey), !dir.isEmpty {
+        if let dir = UserDefaults.standard.string(forKey: DefaultsKey.workspace.rawValue), !dir.isEmpty {
             return URL(fileURLWithPath: dir)
         }
         let anchor = Bundle.main.executableURL?.deletingLastPathComponent()
@@ -95,7 +89,7 @@ final class EngineController {
         guard canChoose else { return }
         let list = RecentWorkspaces.updated(recentWorkspaces, adding: url.path)
         recentWorkspaces = list
-        UserDefaults.standard.set(list, forKey: Self.recentWorkspacesDefaultsKey)
+        UserDefaults.standard.set(list, forKey: DefaultsKey.recentWorkspaces.rawValue)
         guard url.standardizedFileURL.path != workspace?.standardizedFileURL.path else { return }
         workspace = url
         restartIfRunning()
@@ -106,7 +100,7 @@ final class EngineController {
         let id = id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard id != modelID else { return }
         modelID = id
-        UserDefaults.standard.set(id, forKey: Self.modelIDDefaultsKey)
+        UserDefaults.standard.set(id, forKey: DefaultsKey.modelID.rawValue)
         restartIfRunning()
     }
 
@@ -115,7 +109,7 @@ final class EngineController {
         let size = max(0, size)
         guard size != contextSize else { return }
         contextSize = size
-        UserDefaults.standard.set(size, forKey: Self.contextSizeDefaultsKey)
+        UserDefaults.standard.set(size, forKey: DefaultsKey.contextSize.rawValue)
         restartIfRunning()
     }
 
@@ -125,7 +119,7 @@ final class EngineController {
     }
 
     private func resolveExecutablePath() -> String? {
-        let settingsPath = UserDefaults.standard.string(forKey: Self.executableDefaultsKey)
+        let settingsPath = UserDefaults.standard.string(forKey: DefaultsKey.executable.rawValue)
         if case .found(let path) = EngineCommand.resolveExecutable(
             settingsPath: settingsPath,
             pathEnv: ProcessInfo.processInfo.environment["PATH"],
@@ -194,7 +188,7 @@ final class EngineController {
 
     func start() {
         guard !isActive, !isTerminating else { return }
-        let settingsPath = UserDefaults.standard.string(forKey: Self.executableDefaultsKey)
+        let settingsPath = UserDefaults.standard.string(forKey: DefaultsKey.executable.rawValue)
         let resolution = EngineCommand.resolveExecutable(
             settingsPath: settingsPath,
             pathEnv: ProcessInfo.processInfo.environment["PATH"],

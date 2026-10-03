@@ -2,15 +2,15 @@ import AppKit
 import SwiftUI
 import SwiftStarKit
 
-struct AgentView: View {
+struct SessionView: View {
     let controller: EngineController
     @State private var input = ""
     @FocusState private var inputFocused: Bool
-    @AppStorage("appShellInspectorPresented") private var inspectorPresented = false
+    @AppStorage(DefaultsKey.inspectorPresented.rawValue) private var inspectorPresented = false
     @State private var askingModel = false
     @State private var askingContext = false
     @State private var entry = ""
-    @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
+    @AppStorage(DefaultsKey.transcriptFontSize.rawValue) private var transcriptFontSize = TranscriptFontScale.defaultSize
     @Environment(\.transcriptFontSize) private var envTranscriptFontSize: CGFloat
 
     private var composerState: EngineComposer { controller.composer }
@@ -232,7 +232,7 @@ struct AgentView: View {
     private func rowView(_ row: TranscriptRow, queued: Bool) -> some View {
         switch row {
         case .user(let text):
-            AgentPromptBubble(text: text, queued: queued)
+            PromptBubble(text: text, queued: queued)
         case .thinking(let text):
             ThinkingDisclosure(text: text)
         case .narration(let text):
@@ -253,7 +253,7 @@ struct AgentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
-            AgentToolCardView(card: card, workspace: controller.workspace)
+            ToolCardView(card: card, workspace: controller.workspace)
         case .system(let text):
             Text(text)
                 .font(.system(size: envTranscriptFontSize))

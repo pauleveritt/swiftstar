@@ -2,8 +2,8 @@ import SwiftUI
 import SwiftStarKit
 
 struct SettingsView: View {
-    @AppStorage("engineExecutable") private var engineExecutable = ""
-    @AppStorage("transcriptFontSize") private var transcriptFontSize = TranscriptFontScale.defaultSize
+    @AppStorage(DefaultsKey.executable.rawValue) private var engineExecutable = ""
+    @AppStorage(DefaultsKey.transcriptFontSize.rawValue) private var transcriptFontSize = TranscriptFontScale.defaultSize
 
     var body: some View {
         Form {

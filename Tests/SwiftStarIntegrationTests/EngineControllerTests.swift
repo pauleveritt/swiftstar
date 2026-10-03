@@ -49,13 +49,13 @@ struct EngineControllerTests {
         try writeFakeEngine(to: tempPath, callLogPath: callLogPath)
 
         let defaults = UserDefaults.standard
-        let savedExecutable = defaults.string(forKey: EngineController.executableDefaultsKey)
-        defaults.set(tempPath, forKey: EngineController.executableDefaultsKey)
+        let savedExecutable = defaults.string(forKey: DefaultsKey.executable.rawValue)
+        defaults.set(tempPath, forKey: DefaultsKey.executable.rawValue)
         defer {
             if let savedExecutable {
-                defaults.set(savedExecutable, forKey: EngineController.executableDefaultsKey)
+                defaults.set(savedExecutable, forKey: DefaultsKey.executable.rawValue)
             } else {
-                defaults.removeObject(forKey: EngineController.executableDefaultsKey)
+                defaults.removeObject(forKey: DefaultsKey.executable.rawValue)
             }
         }
 
@@ -137,23 +137,23 @@ struct EngineControllerTests {
         try writeSessionFake(to: scriptPath, argvLogPath: argvLogPath)
 
         let defaults = UserDefaults.standard
-        let savedExecutable = defaults.string(forKey: EngineController.executableDefaultsKey)
-        let savedModelID = defaults.string(forKey: EngineController.modelIDDefaultsKey)
-        defaults.set(scriptPath, forKey: EngineController.executableDefaultsKey)
+        let savedExecutable = defaults.string(forKey: DefaultsKey.executable.rawValue)
+        let savedModelID = defaults.string(forKey: DefaultsKey.modelID.rawValue)
+        defaults.set(scriptPath, forKey: DefaultsKey.executable.rawValue)
         // A clean, known baseline: a prior run (or the real app, sharing this
         // same persistent domain) could otherwise leave "a-different-model"
         // already selected, silently no-op-ing this test's select() call.
-        defaults.removeObject(forKey: EngineController.modelIDDefaultsKey)
+        defaults.removeObject(forKey: DefaultsKey.modelID.rawValue)
         defer {
             if let savedExecutable {
-                defaults.set(savedExecutable, forKey: EngineController.executableDefaultsKey)
+                defaults.set(savedExecutable, forKey: DefaultsKey.executable.rawValue)
             } else {
-                defaults.removeObject(forKey: EngineController.executableDefaultsKey)
+                defaults.removeObject(forKey: DefaultsKey.executable.rawValue)
             }
             if let savedModelID {
-                defaults.set(savedModelID, forKey: EngineController.modelIDDefaultsKey)
+                defaults.set(savedModelID, forKey: DefaultsKey.modelID.rawValue)
             } else {
-                defaults.removeObject(forKey: EngineController.modelIDDefaultsKey)
+                defaults.removeObject(forKey: DefaultsKey.modelID.rawValue)
             }
         }
 

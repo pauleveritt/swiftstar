@@ -1,8 +1,9 @@
 import SwiftUI
+import SwiftStarKit
 
 struct MainView: View {
     let engine: EngineController
-    @AppStorage("appShellInspectorPresented") private var inspectorPresented = false
+    @AppStorage(DefaultsKey.inspectorPresented.rawValue) private var inspectorPresented = false
 
     var body: some View {
         SessionView(controller: engine)

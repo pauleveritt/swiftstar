@@ -5,7 +5,7 @@ import SwiftStarKit
 /// A tool card: icon + `op path` header, the result preview in monospace, and
 /// a facts line (state, duration, truncation). A card appears when the tool
 /// starts and fills in as its end and result events arrive.
-struct AgentToolCardView: View {
+struct ToolCardView: View {
     let card: EngineToolCard
     let workspace: URL?
     @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat

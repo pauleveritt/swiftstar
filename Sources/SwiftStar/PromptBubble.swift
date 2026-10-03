@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The user's echoed prompt — a right-aligned, accent-filled pill.
-struct AgentPromptBubble: View {
+struct PromptBubble: View {
     let text: String
     /// The engine has not started a turn for this prompt yet.
     var queued = false
