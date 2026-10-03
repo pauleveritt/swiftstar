@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import SwiftStarAppKit
+@testable import SwiftStarEngine
 import SwiftStarKit
 
 /// Drives `EngineSession` against `fixtures/engine/fake-ds4-dogfood`, a Python

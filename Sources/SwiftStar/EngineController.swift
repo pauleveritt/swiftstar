@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import SwiftStarAppKit
+import SwiftStarEngine
 import SwiftStarKit
 
 /// Thin app-side owner of one `EngineSession`: it resolves the executable,

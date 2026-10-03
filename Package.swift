@@ -24,7 +24,7 @@ let package = Package(
     targets: [
         .target(name: "SwiftStarKit", swiftSettings: [.swiftLanguageMode(.v6)]),
         .target(
-            name: "SwiftStarAppKit",
+            name: "SwiftStarEngine",
             dependencies: ["SwiftStarKit"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
@@ -32,7 +32,7 @@ let package = Package(
             name: "SwiftStar",
             dependencies: [
                 "SwiftStarKit",
-                "SwiftStarAppKit",
+                "SwiftStarEngine",
                 .product(name: "MarkdownView", package: "MarkdownView"),
                 .product(name: "MarkdownParser", package: "MarkdownView"),
             ],
@@ -46,7 +46,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftStarIntegrationTests",
-            dependencies: ["SwiftStarKit", "SwiftStarAppKit", "SwiftStar"],
+            dependencies: ["SwiftStarKit", "SwiftStarEngine", "SwiftStar"],
             swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
         ),
     ]

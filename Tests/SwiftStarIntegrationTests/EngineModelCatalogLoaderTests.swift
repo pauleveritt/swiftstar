@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import SwiftStarAppKit
+@testable import SwiftStarEngine
 import SwiftStarKit
 
 /// Drives `EngineModelCatalogLoader` against the fake engine's `models --json` mode.
