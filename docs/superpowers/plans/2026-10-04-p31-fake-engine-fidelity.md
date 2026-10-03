@@ -108,31 +108,63 @@ decodes `queued`, `stopping`, `status` generically.
 
 ### Task 2: B2 test rewrites
 
+**Re-audited against current code, not just the spec's 2026-09-28 wording**
+(the codebase moved a lot in P29.1–4/9/10 since the spec was written):
+`argumentsAreExact` and `exitZeroEnded` (`EngineCommandTests.swift`) and
+`fourAscendingSizes`/`defaultIsThirdSlotNextToLargest`
+(`TranscriptFontScaleTests.swift`) already assert real contracts today —
+`EngineCommandTests.swift` in particular already has a thorough set of
+individually-named tests covering every `EngineExit.describe` case the
+spec's proposed table would have (`exitTwoQuotesArgparse`, `exitOneIsNotClean`,
+`exit130Interrupted`, `unknownCodeShowsCode`, `signalExitReadsAsSignal`,
+`ownSigtermReadsAsQuitTimeout`, `ownSigtermExit130ReadsAsQuitTimeout`,
+`forcedExitReadsAsForced`, …) — separately-named failures are more debuggable
+than one parameterized table, so these four tests are left exactly as they
+are, no rename, matching the spec's own "or asserts a contract" branch.
+`leafNameFallsBackToRootPath` likewise stays untouched.
+
 **Files:**
-- Modify: `Tests/SwiftStarKitTests/EngineCommandTests.swift`
-  (`argumentsAreExact` → `argvMatchesEngineCLI`, citing `docs/tui.md`'s option
-  names; `exitZeroEnded` folded into a table-driven `exitDescriptions` test
-  over 0 / 1+stderr tail / 2 / 130 ours / 130 not ours / signal / forced /
-  launch failure)
-- Modify: `Tests/SwiftStarKitTests/TranscriptFontScaleTests.swift`
-  (`fourAscendingSizes`, `defaultIsThirdSlotNextToLargest` — delete unless a
-  view depends on the exact slot behavior; if so, rewrite naming that view)
-- Keep as is: `Tests/SwiftStarKitTests/PathAbbreviationTests.swift`'s
-  `leafNameFallsBackToRootPath` (P29.10's folder menu depends on it)
-- Modify: `Tests/SwiftStarIntegrationTests/EngineSessionTests.swift`
-  (`stopMidTurn`/`interruptByteMidTurn` assert `stopping` → `interrupted` →
-  `input` and Stop disabled after, not "no `tool_end`";
-  `badHandshakeTerminates`/`quitAfterTimeoutSendsSIGTERM` assert the process
-  is gone and the exit message's meaning, not `code == 130`; add
-  `exitOneReportsStderrTail` with `FAKE_ENGINE_EXIT=1`; add
-  `unmatchedToolEndIsIgnored`/`unmatchedToolResultIsIgnored`; add a metrics
-  nil-overwrite test per B2's list)
+- Modify: `Tests/SwiftStarIntegrationTests/EngineSessionTests.swift`:
+  - `stopMidTurn`/`interruptByteMidTurn` currently assert
+    `!rec.has(isToolEnd)` — incidental to how the `stop` fixture happens to be
+    laid out, not a contract about `stop` itself. Rewrite to assert the
+    `interrupted` → `awaitingInput` sequence and that `EngineComposer.canStop`
+    is `false` once `awaitingInput` arrives (`stopping` itself decodes as
+    `.ignored` today — confirmed in `EngineWireParser.swift:44` — so there is
+    nothing wire-level to assert about it beyond its presence not breaking
+    anything; `canStop` tracks `busy`, not `stopping`, per
+    `EngineComposer.swift:42`).
+  - `badHandshakeTerminates`/`quitAfterTimeoutSendsSIGTERM` currently assert
+    `rec.exit?.code == 130` as the primary check. Both scenarios exit 130 by
+    different paths (immediate self-terminate vs. SIGTERM-induced); switch
+    to asserting `rec.exit?.message` (`"ended after the quit timed out"` for
+    the SIGTERM case per `EngineCommand.swift:73`), which disambiguates them.
+  - `sendWhileBusyIsForwarded` → `sendWhileBusyIsQueued`: with queueing now
+    the default (Task 1), a second prompt mid-turn gets
+    `{"kind":"queued","count":1}` (already decoded,
+    `EngineWireParser.swift:36-37`), the row reads "Queued", and the text
+    arrives as the next turn's prompt — not forwarded into the log mid-turn.
+  - `quitWithQueuedPromptEndsPromptly`: drop `FAKE_ENGINE_QUEUE: "1"` from
+    `extra` (queueing is unconditional now); assertions otherwise unchanged —
+    it already tests exactly the contract this cycle makes universal: a
+    quit drops a queued prompt rather than delivering it.
+  - Add `exitOneReportsStderrTailAtProcessLevel` — `FAKE_ENGINE_EXIT=1` with
+    stderr content: `rec.exit?.message` contains both "Ended without a clean
+    answer." and the stderr tail, at the `EngineSession` level (the pure
+    `EngineExit.describe` version of this is already covered by
+    `exitOneIsNotClean`; this one proves the process-level wiring).
+  - Add `unmatchedToolEndIsIgnored`/`unmatchedToolResultIsIgnored` — a
+    `tool_end`/`tool_result` with no preceding `tool_start` for that id is
+    dropped, not crashed on or shown as a phantom card.
+  - Add a metrics nil-overwrite test — a `checkpoint` missing a field (e.g.
+    no `sync_ms`) does not clobber the previous pause's value for that field
+    with `nil`.
 
 **Interfaces:** none new; test names and assertions only.
 
-- [ ] **Step 1:** for each renamed/rewritten test, confirm it is red against
-  the pre-Task-1 fake (where applicable) or against the current production
-  code (for the metrics/unmatched-event additions), then green after.
+- [ ] **Step 1:** for each rewritten/renamed test, confirm it is red against
+  the pre-Task-1 fake (where applicable) or against current production code
+  (for the three new additions), then green after.
 - [ ] **Step 2:** both test tiers green → commit.
 
 ### Task 3: Docs (B3)
