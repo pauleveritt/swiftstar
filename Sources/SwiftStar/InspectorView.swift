@@ -28,8 +28,8 @@ struct InspectorView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Throughput").font(.headline)
-                    metricRow("Prefill", value: rate(state.prefillTPS))
-                    metricRow("Generation", value: rate(state.generationTPS))
+                    metricRow("Prefill avg", value: rate(state.prefillTPS))
+                    metricRow("Generation avg", value: rate(state.generationTPS))
                 }
                 .inspectorCard()
 

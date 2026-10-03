@@ -15,6 +15,7 @@ readable.
 | Term | Meaning | In code |
 |---|---|---|
 | **engine** | ds4-engine, a sibling project. It owns the model, memory plan, tools, candidate worktree, session capture and evals. SwiftStar spawns it and never links it. | `EngineCommand` (executable and argv), `EngineSession` (the child process). |
+| **agent** | The model acting in the engine session — the UI's word for it, not a SwiftStar component. | not a type; used in UI copy. |
 | **`ds4-dogfood`** | ds4-engine's command-line entry point. SwiftStar runs `ds4-dogfood tui --ndjson --source <root> --commit HEAD`. | `EngineCommand`. |
 | **seam** | The spawned-child-plus-wire boundary between the app and the engine. | `EngineSession`. |
 | **wire** | The byte stream on that seam: NDJSON on the engine's stdout, JSON commands on its stdin. | `EngineWireParser`. |
@@ -25,8 +26,8 @@ readable.
 | **apply** | `ds4-dogfood apply <id>`, run in a terminal, where `<id>` is the session directory's last path component. SwiftStar shows the command; it has no Apply button. | `EngineController`. |
 | **turn** | Prompt to `input`. The engine is busy for the whole turn, across native calls and tools. | `EngineTranscript`. |
 | **pause** | A `checkpoint` event: the engine stopped between native calls and reported a snapshot. The unit of metrics; there is no live throughput. | `PauseMetrics`, `EngineEvent.pause`. |
-| **prefill / generation tok/s** | `prefill_tokens / sync_ms` and `eval_count / eval_ms` from a pause's snapshot. A field the snapshot lacks yields no rate rather than zero. | `EngineMetricsReducer`. |
-| **context used** | Absolute tokens in context, from `answer`. Thresholds anchor on this, never on a fraction of the window. | `EngineMetricsReducer`. |
+| **prefill / generation tok/s** | `prefill_tokens / sync_ms` and `eval_count / eval_ms` from a pause's snapshot — both session-cumulative fields, so the computed rate is a running session average ("avg" in the UI), not the latest pause's instantaneous rate. A field the snapshot lacks yields no rate rather than zero, and never overwrites a rate already known. | `EngineMetricsReducer`. |
+| **context used** | Absolute tokens in context, from `answer` or `interrupted` (`session` sets only the window size, `context_size`). Thresholds anchor on this, never on a fraction of the window. | `EngineMetricsReducer`. |
 | **tool card** | The transcript's rendering of one tool call: `tool_start` (op, path), `tool_end` (status, duration), `tool_result` (kind, preview, truncated). | `EngineTranscript`, `AgentToolCardView`. |
 | **notice / refusal** | System row and error row for the engine's replies to slash commands (`help`, `status_report`, … and `apply_refused`, `resume_refused`, …). | `EngineEvent.notice`, `EngineEvent.refused`. |
 | **fixture** | Raw stdout of a real `ds4-dogfood tui --ndjson` run, committed under `fixtures/engine/` with a `provenance.md`. | `just capture SCENARIO`. |

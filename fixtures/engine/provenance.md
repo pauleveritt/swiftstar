@@ -9,7 +9,8 @@ as `EngineWireParser` reads it. Recorded by `Tools/record-engine-fixture.py`
   `--features bindings,engine`)
 - **Model:** `laguna-xs-2.1` (`~/models/Laguna-XS-2.1-Q4_K_M.gguf`),
   context 20,000, `--seed 7`
-- **Machine:** Apple M5 Max, 128 GiB, macOS 27.0
+- **Machine:** Apple M5 Max, 128 GiB, macOS 26 (Darwin 27.0, the kernel
+  version — not the marketing name)
 - **Source:** this repository at `HEAD` of branch
   `worktree-ds4-engine-subprocess` (P28)
 

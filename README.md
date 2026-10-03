@@ -30,12 +30,24 @@ terminal step. See [`ROADMAP.md`](ROADMAP.md) for current phase status.
 
 ## Requirements
 
-macOS 26 or later, Apple silicon, Swift 6. Install ds4-engine yourself
-(`uv tool install` of its wheel) and have model weights on disk, as
+macOS 26 or later, Apple silicon, Swift 6.2 (Xcode 26). Install ds4-engine
+yourself (`uv tool install` of its wheel) and have model weights on disk, as
 ds4-engine's own docs describe. SwiftStar finds `ds4-dogfood` from its
 Settings path, then `PATH`, then `~/.local/bin/ds4-dogfood`. The engine needs a
 git repository as its source; SwiftStar passes the git root of the workspace
 folder you choose.
+
+## Build and run
+
+```
+swift build
+just test             # fast tier
+just integration      # integration tier, against a fake engine
+just app              # build and launch the .app
+```
+
+If `ds4-dogfood` isn't on `PATH` or in `~/.local/bin`, set its full path in
+Settings before launching.
 
 ## Predecessors
 
