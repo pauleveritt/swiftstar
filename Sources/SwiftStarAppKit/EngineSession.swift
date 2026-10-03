@@ -41,8 +41,6 @@ public final class EngineSession {
     private var parser = EngineWireParser()
     private var sawReady = false
     private var failedProtocol = false
-    private var stdoutLines = LineBuffer()
-    private var stderrLines = LineBuffer()
     private var stderrTail = Data()
 
     private var exited = false
@@ -94,11 +92,6 @@ public final class EngineSession {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        // Handlers run off the main actor. Each feeds an AsyncStream (ordered,
-        // thread-safe); a main-actor task drains it, so chunks are processed
-        // in arrival order and EOF is delivered after the last chunk.
-        let outStream = Self.stream(from: stdoutPipe.fileHandleForReading)
-        let errStream = Self.stream(from: stderrPipe.fileHandleForReading)
         process.terminationHandler = { [weak self] p in
             let status = p.terminationStatus
             let reason = p.terminationReason
@@ -113,13 +106,60 @@ public final class EngineSession {
         try? stdoutPipe.fileHandleForWriting.close()
         try? stderrPipe.fileHandleForWriting.close()
 
+        // Each pipe gets its own non-blocking readabilityHandler-fed byte
+        // stream, framed into lines by Foundation's AsyncLineSequence (via
+        // ChunkBytes below). NOT FileHandle.bytes: on Darwin it funnels every
+        // pipe's reads through one shared, process-wide blocking IO actor, so
+        // two concurrent `.bytes` readers (stdout and stderr here) can starve
+        // each other — the quiet one's blocking read holds the actor while
+        // the busy one's data sits unread. Confirmed by thread-sampling a
+        // real stall and reproduced outside any test harness; see the P32
+        // Backlog entry and docs/superpowers/specs/2026-10-04-p32-structure-cleanup-design.md.
+        let outBytes = Self.byteStream(from: stdoutPipe.fileHandleForReading)
+        let errBytes = Self.byteStream(from: stderrPipe.fileHandleForReading)
         Task { @MainActor [weak self] in
-            for await data in outStream { self?.consumeStdout(data) }
+            for await line in outBytes.lines { self?.consumeStdoutLine(line) }
             self?.stdoutReachedEOF()
         }
         Task { @MainActor [weak self] in
-            for await data in errStream { self?.consumeStderr(data) }
+            for await line in errBytes.lines { self?.consumeStderrLine(line) }
             self?.stderrReachedEOF()
+        }
+    }
+
+    /// Bytes of a pipe as they arrive, via `readabilityHandler` (non-blocking,
+    /// independent per pipe) rather than `FileHandle.bytes` (see `start()`).
+    private static func byteStream(from handle: FileHandle) -> ChunkBytes {
+        let (stream, continuation) = AsyncStream<Data>.makeStream()
+        handle.readabilityHandler = { h in
+            let data = h.availableData
+            if data.isEmpty {
+                h.readabilityHandler = nil
+                try? h.close()
+                continuation.finish()
+            } else {
+                continuation.yield(data)
+            }
+        }
+        return ChunkBytes(chunks: stream)
+    }
+
+    /// Flattens a stream of `Data` chunks into a byte sequence, so Foundation's
+    /// `AsyncLineSequence` (`.lines`) can frame them without a hand-rolled buffer.
+    private struct ChunkBytes: AsyncSequence {
+        typealias Element = UInt8
+        let chunks: AsyncStream<Data>
+        func makeAsyncIterator() -> AsyncIterator { AsyncIterator(inner: chunks.makeAsyncIterator()) }
+        struct AsyncIterator: AsyncIteratorProtocol {
+            var inner: AsyncStream<Data>.AsyncIterator
+            var current: Data.Iterator?
+            mutating func next() async -> UInt8? {
+                while true {
+                    if let byte = current?.next() { return byte }
+                    guard let data = await inner.next() else { return nil }
+                    current = data.makeIterator()
+                }
+            }
         }
     }
 
@@ -184,21 +224,6 @@ public final class EngineSession {
 
     // MARK: - Private
 
-    private static func stream(from handle: FileHandle) -> AsyncStream<Data> {
-        let (stream, continuation) = AsyncStream<Data>.makeStream()
-        handle.readabilityHandler = { h in
-            let data = h.availableData
-            if data.isEmpty {
-                h.readabilityHandler = nil
-                try? h.close()
-                continuation.finish()
-            } else {
-                continuation.yield(data)
-            }
-        }
-        return stream
-    }
-
     private static func command(_ object: [String: String]) throws -> Data {
         guard var data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         else { throw EngineSessionError.encoding }
@@ -211,14 +236,11 @@ public final class EngineSession {
         try stdin.write(contentsOf: data)
     }
 
-    private func consumeStdout(_ data: Data) {
-        for lineData in stdoutLines.append(data) {
-            let line = String(decoding: lineData, as: UTF8.self)
-            // The parser treats a blank line as a protocol error; it is noise.
-            if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
-            if failedProtocol { continue }
-            handle(parser.parse(line))
-        }
+    private func consumeStdoutLine(_ line: String) {
+        // The parser treats a blank line as a protocol error; it is noise.
+        if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }
+        if failedProtocol { return }
+        handle(parser.parse(line))
     }
 
     private func handle(_ event: EngineEvent) {
@@ -247,14 +269,12 @@ public final class EngineSession {
         onEvent?(event)
     }
 
-    private func consumeStderr(_ data: Data) {
-        stderrTail.append(data)
+    private func consumeStderrLine(_ line: String) {
+        stderrTail.append(Data((line + "\n").utf8))
         if stderrTail.count > Self.stderrTailLimit {
             stderrTail = Data(stderrTail.suffix(Self.stderrTailLimit))
         }
-        for lineData in stderrLines.append(data) {
-            noteStderrLine(String(decoding: lineData, as: UTF8.self))
-        }
+        noteStderrLine(line)
     }
 
     private func noteStderrLine(_ line: String) {
@@ -274,13 +294,11 @@ public final class EngineSession {
     }
 
     private func stdoutReachedEOF() {
-        _ = stdoutLines.finish()
         stdoutDone = true
         finishIfComplete()
     }
 
     private func stderrReachedEOF() {
-        if let rest = stderrLines.finish() { noteStderrLine(String(decoding: rest, as: UTF8.self)) }
         stderrDone = true
         finishIfComplete()
     }
