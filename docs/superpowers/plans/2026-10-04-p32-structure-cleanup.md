@@ -63,9 +63,10 @@ repeated full-suite runs, both tiers green, no stalls. Committed as
 
 **Interfaces:** none.
 
-- [ ] **Step 1:** implement; confirm the grep line actually fails
+- [x] **Step 1:** implement; confirm the grep line actually fails
   (temporarily add a `Process(` literal to a Kit test file, run `just test`,
   watch it fail, remove the literal) → `just test` green → commit.
+  Done: `bd716e5`.
 
 ### Task 3: Rename `SwiftStarAppKit` → `SwiftStarEngine`
 
@@ -82,8 +83,8 @@ repeated full-suite runs, both tiers green, no stalls. Committed as
 
 **Interfaces:** none; pure rename.
 
-- [ ] **Step 1:** implement; `grep -rn "SwiftStarAppKit"` returns nothing;
-  full build + both test tiers green → commit.
+- [x] **Step 1:** implement; `grep -rn "SwiftStarAppKit"` returns nothing;
+  full build + both test tiers green → commit. Done: `60276fa`, `8f92bac`.
 
 ### Task 4: Dead code
 
