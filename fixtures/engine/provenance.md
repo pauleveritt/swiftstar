@@ -25,3 +25,12 @@ as `EngineWireParser` reads it. Recorded by `Tools/record-engine-fixture.py`
 `--ndjson` `protocol` or the telemetry `schema_version`, and check the
 "must contain" column by hand. A `tool-read` recording with no tool call is
 a model miss, not a wire change: re-record with another seed.
+
+## `models-real.json` and `models.json`
+
+`models-real.json` is a verbatim capture of `ds4-dogfood models --json`
+(ds4-engine TUI.33, commit 4c432171, run on the owner's Mac, 2026-09-29); home
+paths were anonymised to `/Users/example/`. `models.json` is hand-written in
+the same shape (per-model flag `runs_in_tui`) to cover cases the real capture
+lacks: a model that doesn't fit, one not usable in the TUI, unknown keys.
+Re-capture `models-real.json` when the engine bumps `schema_version`.

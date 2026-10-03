@@ -14,7 +14,7 @@ A pointer, not a narrative — the detail lives in each phase's own row and its
 linked docs. Update this list when what's in flight changes; do not grow it
 into a second history of the phase table.
 
-- **In flight / next:** P29, making the front-end honest — P29.9 (model picker) and P29.1–P29.4 (honest session) done 2026-09-28; P29.5 next (steps in `## P29 steps`). P28, the cut-over to ds4-engine, closed 2026-09-28 — see its row.
+- **In flight / next:** P29, making the front-end honest — P29.9 (model picker), P29.1–P29.4 (honest session) and P29.10 (toolbar menus) done 2026-09-28/29; P29.5 next (spec on branch `worktree-p29-5-fake-fidelity`). P28, the cut-over to ds4-engine, closed 2026-09-28 — see its row.
 - **Closed with it:** the in-flight P24.4 cycle, P25 cycles 5–6, P18, the
   Mellum parking and the orchestrate-loop measurements all assumed machinery
   P28 removes; see the Backlog's "Closed or re-homed by P28".
@@ -53,7 +53,7 @@ into a second history of the phase table.
 | P24 | Digested first-class tools | P9's deferred condensation-direction attack on prefill-tail cost (measured: one file re-read 31× = 37% of Σsuffix). Deterministic host-owned tools, in cycles: P24.1 windowed reads, P24.2 read-guard retirement, P24.3 run+digest tools, then P24.4 instrument reconciliation. `scout`, policy gating, and model-asks-human remain later ladder work. [Direction and re-scoping](docs/superpowers/research/2026-08-30-p24-direction-and-rescoping.md). | **(1) P24.1** — closed 2026-08-30; 799 tests; repeat rate 1.45→1.00. [Design](docs/superpowers/specs/2026-08-30-p24-1-window-honoring-reads-design.md), [measurement](docs/superpowers/research/2026-08-30-p24-1-window-honoring-after-measurement.md).<br>**(2) P24.2** — guard retired and `.pool` `readCache` removed; re-baselined. [Design](docs/superpowers/specs/2026-08-30-p24-2-read-guard-redecision-design.md).<br>**(3) P24.3 run+digest family** — landed on `main` 2026-08-30: host-owned `test`/`lint`, bounded `bash`, resolver, executor wiring, engine schemas, and tests. Golden recapture and paired-bill measurement remain outstanding.<br>**(4) P24.4** — next: reconcile the refusal-streak corrective and `toolCallBudget` timing between `swiftstar-agenttest` and the app. *Removed in P28.* |
 | P27 | One eval CLI | `swiftstar-eval`: one CLI that runs an ad-hoc prompt, a `/quick` or the orchestrator through the app's own spawn path and hands every result to the same analyzer — replacing `swiftstar-drive` and `swiftstar-analyze`, with `swiftstar-agenttest` deferred to a second cycle | **CLI shipped 2026-08-31; the measurement it was built for has NOT run.** [Design](docs/superpowers/specs/2026-08-30-eval-cli-design.md), plans [1a](docs/superpowers/plans/2026-08-30-eval-cli-1a-kit-types.md) / [1b](docs/superpowers/plans/2026-08-30-eval-cli-1b-cli-and-extraction.md) / [1c](docs/superpowers/plans/2026-08-30-eval-cli-1c-the-bill.md).<br>**(1) The guard** — arms resolve to a full `SpawnRecord`; a run is refused when they differ by anything undeclared, or when the declared variable did not actually differ. Interleaved, seed-matched, no headline ratio.<br>**(2) The extraction** — the turn loop moved out of the 66 KB SwiftUI `AgentController` into a headless `AgentSession`; two source-text tests retired for behavioral ones.<br>**(3) Engine divergence #19** — `--tools`, cross-family.<br>**(4) Not done:** plan 1c (the P24.3 bill) and cycle 2. *Removed in P28.* |
 | P28 | Cut over to ds4-engine | SwiftStar becomes a macOS front-end for one held `ds4-dogfood tui --ndjson` session — prompt, transcript, tool cards, per-pause metrics, stop, quit — and drops the forked C engine, host-run tools, pool, dispatch, model admission, SwiftStar-side captures and both eval CLIs | **complete (2026-09-28)** — hard cut-over; reopened `BRIEF.md` by owner direction. Spec [`2026-09-28-p28-ds4-engine-cutover-design.md`](docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md); plans [engine seam](docs/superpowers/plans/2026-09-28-p28-ds4-engine-cutover.md) and [app switch, removal, docs](docs/superpowers/plans/2026-09-28-p28-ds4-engine-cutover-app.md). No ds4 code, submodule or `ds4-agent` dialect remains; fast (68) and integration (11, fake `ds4-dogfood`) tiers green. Live, Laguna XS through `EngineSession`: `read` card with preview, answer, per-pause metrics, `/help` notice, Stop mid-turn, quit exit 0 with session dir and apply command; the built app spawns the exact argv and quits with no orphan (*idle only; quit mid-turn can orphan the engine, review A4 — P29.4*). GUI click-through not agent-verified (no screen access). |
-| P29 | Make the front-end honest | Fix what the [P28 deep review](docs/superpowers/research/2026-09-28-p28-deep-review.md) found: session state, context gauge and dropped wire events that say something false, a quit that can outlive the app, a fake engine the tests over-trust — then shed dead weight and adopt macOS 26 SwiftUI idioms. Steps below | **in progress (2026-09-28)** — P29.9 and P29.1–P29.4 done; P29.5–P29.8 open. From the review's ranked "do next"; steps in `## P29 steps`. |
+| P29 | Make the front-end honest | Fix what the [P28 deep review](docs/superpowers/research/2026-09-28-p28-deep-review.md) found: session state, context gauge and dropped wire events that say something false, a quit that can outlive the app, a fake engine the tests over-trust — then shed dead weight and adopt macOS 26 SwiftUI idioms. Steps below | **in progress (2026-09-28)** — P29.9, P29.1–P29.4 and P29.10 done; P29.5–P29.8 open. From the review's ranked "do next"; steps in `## P29 steps`. |
 
 ## P29 steps
 
@@ -69,6 +69,7 @@ Source: [`2026-09-28-p28-deep-review.md`](docs/superpowers/research/2026-09-28-p
 7. **P29.7 SwiftUI modernisation.** Inject `EngineController` via `@Environment` and delete the `onChange` copy; composer as `TextField(axis: .vertical)` + `.onSubmit` (fixes A8); transcript with `.defaultScrollAnchor(.bottom)` and stable row ids; close-last-window quits plus `.restorationBehavior(.disabled)`; README "Build and run". Why: C9–C13, A8, A11 (`AgentView.swift:178-185`, `SwiftStarApp.swift:14`). Done when: owner GUI pass confirms Return submits, Option-Return newlines, and Cmd-W ends the engine.
 8. **P29.8 Later (own cycle, not scheduled).** Native Markdown renderer replacing the pinned `MarkdownView` fork (C14), delta metrics from consecutive `checkpoint`s with the cumulative rate labelled "session avg" (C15, B3), Liquid Glass affordances (C16), plus C17–C20 and A9/A10 (apply command kept across sessions, first-launch workspace). Done when: each is either its own plan or declined.
 9. **P29.9 Model picker: pass `--model-id`/`--context-size` to `ds4-dogfood tui`.** *Done (2026-09-28).* Settings has optional Model and Context size fields; the toolbar shows the loaded model and offers "Restart to use …" when Settings differ. Spec [`2026-09-28-p29-9-model-picker-design.md`](docs/superpowers/specs/2026-09-28-p29-9-model-picker-design.md). Live: `qwen3.8-flash-next` loaded from Settings alone; a bogus id is refused with the engine's reason. A dropdown waits on the Backlog's `models --json` entry.
+10. **P29.10 Toolbar menus.** *Done (2026-09-29).* Folder, model and context are separate toolbar menu buttons (the sidebar toggle moved to the far right). The model menu lists the engine's models from `ds4-dogfood models --json` (ds4-engine TUI.33), greying out models not on this Mac, too big, or not usable in the TUI; without the command it falls back and says why once. Choosing restarts the session; P29.9's Settings fields and Restart button are gone. Spec [`2026-09-29-p29-10-toolbar-menus-design.md`](docs/superpowers/specs/2026-09-29-p29-10-toolbar-menus-design.md).
 
 Full done-when criteria live in each phase's own plan under
 `docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
@@ -97,10 +98,6 @@ group's order is not a priority order.
 
 ### Front-end
 
-- **A model dropdown.** P29.9 takes a typed model id. A menu of models that
-  fit needs ds4-engine to list them machine-readably — e.g.
-  `ds4-dogfood models --json` (id, name, on disk, fits, measured contexts).
-  *Reopens when ds4-engine ships that listing.*
 - **An Apply button.** The engine records edits in the session's
   `candidate.diff`; SwiftStar shows the session directory and
   `ds4-dogfood apply <id>` and applying stays a terminal step (P28 decision 4).
@@ -127,15 +124,22 @@ group's order is not a priority order.
 Things SwiftStar cannot show or do until ds4-engine changes. Raise them there.
 
 - **Rejected tool calls emit no event.** A call the engine refuses before
-  running it (unknown tool, malformed) leaves no trace on the wire, so the
-  front-end cannot show it (seen with Qwen3.8, 2026-09-28; research in
-  ds4-engine `docs/superpowers/research/2026-09-28-qwen38-tool-calls.md`).
+  running it (unknown tool, malformed, path refused) leaves no trace on the
+  wire, so the front-end cannot show it (seen with Qwen3.8, 2026-09-28 and
+  2026-09-29; research in ds4-engine
+  `docs/superpowers/research/2026-09-28-qwen38-tool-calls.md`).
+- **A `run` call ends the whole session.** In the TUI a model's `run` is
+  `not-approved`, which ends the run (`terminal`, `close`, exit 1) rather than
+  the turn — one wrong tool choice costs the session (Qwen3.8, 2026-09-29).
+  The Qwen prompt fix (TUI.32) removes the trigger; the severity is separate.
 - **`/resume`, `/model`, `/rewind` re-exec in place.** They print to stdout
   and `execv` (same pid, a second `ready`); SwiftStar shows the printed lines
   as notices and ignores the second handshake, so it keeps the old session's
   model and state. Needs a wire message or a documented restart.
-- **A machine-readable model list** (`ds4-dogfood models --json`) for the
-  Front-end model dropdown.
+- **A machine-readable model list** — *shipped as TUI.33*
+  (`ds4-dogfood models --json`, ds4-engine `feat/models-json`, not yet on
+  its `main`); SwiftStar's P29.10 menus read it. Close when it reaches
+  ds4-engine `main`.
 
 ### Process and tooling
 

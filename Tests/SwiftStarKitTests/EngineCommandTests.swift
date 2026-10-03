@@ -51,7 +51,7 @@ struct EngineCommandTests {
 
     @Test func exitOneIsNotClean() {
         let exit = EngineExit.describe(code: 1, stderrTail: "boom", sawReady: true)
-        #expect(exit.message.contains("without a clean answer"))
+        #expect(exit.message.contains("Ended without a clean answer"))
         #expect(exit.message.contains("boom"))
     }
 
@@ -135,22 +135,18 @@ struct EngineCommandTests {
         #expect(EngineCommand.arguments(source: src, modelID: "  ", contextSize: -1) == p28)
     }
 
-    private func info(_ m: String?, _ c: Int?) -> EngineSessionInfo {
-        EngineSessionInfo(id: "s", modelID: m, contextSize: c)
+    @Test func sessionArtifactsLineIsStripped() {
+        let only = EngineExit.describe(
+            code: 1, stderrTail: "Session artifacts: /tmp/s/20260929-x\n", sawReady: true)
+        #expect(only.message == "Ended without a clean answer.")
+        let mixed = EngineExit.describe(
+            code: 1, stderrTail: "boom\nSession artifacts: /tmp/s/x\n", sawReady: true)
+        #expect(mixed.message == "Ended without a clean answer.\nboom")
     }
 
-    @Test func restartNeededOnlyWhileSessionRunsAndSettingsDiffer() {
-        let loaded = info("laguna-xs-2.1", 20000)
-        #expect(!EngineCommand.restartNeeded(session: nil, modelID: "x", contextSize: 1))
-        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: "", contextSize: 0))
-        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: " ", contextSize: -5))
-        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: "laguna-xs-2.1", contextSize: 20000))
-        #expect(!EngineCommand.restartNeeded(session: loaded, modelID: " laguna-xs-2.1 ", contextSize: 0))
-        #expect(EngineCommand.restartNeeded(session: loaded, modelID: "qwen3.8-flash-next", contextSize: 0))
-        #expect(EngineCommand.restartNeeded(session: loaded, modelID: "", contextSize: 8192))
-        // Fields the session did not report are not compared.
-        #expect(!EngineCommand.restartNeeded(session: info(nil, nil), modelID: "m", contextSize: 8192))
-        #expect(EngineCommand.restartNeeded(session: info(nil, 8192), modelID: "m", contextSize: 4096))
-        #expect(!EngineCommand.restartNeeded(session: info(nil, 8192), modelID: "m", contextSize: 8192))
+    @Test func refusalIgnoresSessionArtifactsLine() {
+        let exit = EngineExit.describe(
+            code: 2, stderrTail: "ds4-dogfood: error: bad\nSession artifacts: /tmp/s/x\n", sawReady: false)
+        #expect(exit.message == "refused to start: ds4-dogfood: error: bad")
     }
 }
