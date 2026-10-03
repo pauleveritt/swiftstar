@@ -5,7 +5,7 @@ struct MainView: View {
     @AppStorage("appShellInspectorPresented") private var inspectorPresented = false
 
     var body: some View {
-        AgentView(controller: engine)
+        SessionView(controller: engine)
             .inspector(isPresented: $inspectorPresented) {
                 InspectorView(engine: engine)
             }
