@@ -37,16 +37,21 @@ precisely because "no behavior change" is easy to get wrong silently.
 
 ---
 
-### Task 1: Stream plumbing — ABANDONED, see spec `## 1`
+### Task 1: Stream plumbing — DONE, see spec `## 1`
 
-Rewrote `EngineSession.swift` to `FileHandle.bytes.lines`; built clean,
-passed in two isolated standalone experiments, then stalled ~10 real seconds
-under `swift test` with zero lines delivered before flooding the entire
-conversation through in under 10ms. Confirmed with wall-clock-timestamped
-diagnostics. Reverted via `git checkout --` (the change was never committed);
-confirmed byte-for-byte back to the committed version; both test tiers green
-immediately after. Moved to the Backlog as "needs investigation before
-adopting" rather than left as an open plan step to retry blind.
+First attempt rewrote `EngineSession.swift` to `FileHandle.bytes.lines`;
+built clean, passed in two isolated standalone experiments, then stalled
+~10 real seconds under `swift test` with zero lines delivered before
+flooding the entire conversation through in under 10ms. Reverted via
+`git checkout --`. Delegated root-cause diagnosis to a fresh agent (Fable),
+which found via thread-sampling that `FileHandle.bytes` shares one
+process-wide blocking IO actor across all pipes on Darwin, starving
+`EngineSession`'s two concurrent `.bytes.lines` readers. Applied the fix:
+keep the `readabilityHandler`-fed `AsyncStream<Data>`, wrap it in a new
+private `ChunkBytes: AsyncSequence<UInt8>`, call `.lines` on that. Deleted
+`LineBuffer.swift` and its test (no remaining callers). Verified via 5
+repeated full-suite runs, both tiers green, no stalls. Committed as
+`6be894c`.
 
 ### Task 2: FastTierGuard → one grep line
 

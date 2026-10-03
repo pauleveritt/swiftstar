@@ -14,38 +14,41 @@ no behavior change, no live engine needed. Each is re-verified against
 current code below — two of the original seven sub-claims had already been
 resolved by later work and are dropped from scope.
 
-## 1. Stream plumbing — attempted, reverted, dropped from this cycle's scope
+## 1. Stream plumbing — resolved: `ChunkBytes` wrapper, not `FileHandle.bytes`
 
-`EngineSession.swift`'s `stream(from:)` (lines 187-200) still uses
+`EngineSession.swift`'s `stream(from:)` (lines 187-200) used
 `FileHandle.readabilityHandler` + `AsyncStream` + a hand-rolled
 `LineBuffer` (`Sources/SwiftStarKit/LineBuffer.swift`) to frame stdout/stderr
-into lines. `FileHandle.bytes.lines` (`AsyncLineSequence`) is unused anywhere
-in the repo.
+into lines.
 
-**Tried the replacement, found a real regression, reverted (2026-10-04).**
-Rewriting to `FileHandle.bytes.lines` built cleanly and passed in two
-isolated standalone experiments (a trivial subprocess, and the real fake
-engine driven directly without `EngineSession`) — but under `swift test`
-specifically, the rewritten `EngineSession` stalled for a reproducible ~10
-real seconds with *zero* lines delivered, then delivered the entire
-conversation (ready through close) in under 10ms. Confirmed with
-wall-clock-timestamped diagnostics, not guessed from symptoms. The ~10s
-figure lining up with the test harness's own wait-timeout total looked like
-a coincidence worth distrusting, not a cause — the standalone experiments
-used no such timeout and still completed in milliseconds, which rules out
-`FileHandle.bytes.lines` itself and points at something specific to how
-`swift test`'s executor services the dispatch/run-loop machinery
-`AsyncBytes` depends on. Root cause not fully diagnosed within this cycle's
-budget. Reverted to the original `readabilityHandler`/`AsyncStream`/
-`LineBuffer` implementation (confirmed byte-for-byte back to the committed
-version); both test tiers green again immediately. **Moved to Backlog** as
-"needs investigation before adopting," not retried blind in a future cycle.
+**First attempt, reverted (2026-10-04).** Rewriting to
+`FileHandle.bytes.lines` built cleanly and passed in two isolated standalone
+experiments (a trivial subprocess, and the real fake engine driven directly
+without `EngineSession`) — but under `swift test` specifically, the
+rewritten `EngineSession` stalled for a reproducible ~10 real seconds with
+*zero* lines delivered, then delivered the entire conversation (ready
+through close) in under 10ms. Confirmed with wall-clock-timestamped
+diagnostics, not guessed from symptoms. Reverted to the original
+`readabilityHandler`/`AsyncStream`/`LineBuffer` implementation; both test
+tiers green again immediately.
 
-(Original plan, not carried out: replace the stream/buffer pair with
-`FileHandle.bytes.lines`, one `Task` per pipe reading lines directly, and
-delete `LineBuffer` once nothing called it. Flagged up front as the one item
-with real regression risk in this cycle — that flag turned out to be
-warranted.)
+**Root cause found, fix applied (2026-10-04).** Delegated to a fresh agent
+(Fable) for independent diagnosis via thread-sampling. `FileHandle.bytes`
+funnels every pipe's reads through one shared, process-wide blocking `read()`
+IO actor on Darwin (`com.apple.Foundation.AsyncBytesIOActorQueue`) —
+`EngineSession`'s two concurrent `.bytes.lines` readers (stdout busy,
+stderr silent-until-exit) starve each other, because the silent reader's
+blocking read holds the shared actor while the busy one's data sits unread.
+Reproduced outside any test harness too, so this would have broken
+production, not just `swift test`.
+
+Fix keeps the `readabilityHandler`-fed `AsyncStream<Data>` (proven safe,
+never the actual problem) and wraps it in a small private
+`ChunkBytes: AsyncSequence<UInt8>`, then calls `.lines` on *that* — gets
+Foundation's `AsyncLineSequence` framing without ever touching
+`FileHandle.bytes`. `LineBuffer.swift` and its test are deleted; no
+hand-rolled line-buffering code remains. Verified via 5 repeated full-suite
+runs (both tiers), no stalls, timing matches pre-regression baseline.
 
 ## 2. FastTierGuard
 
