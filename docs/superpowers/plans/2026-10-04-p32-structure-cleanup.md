@@ -156,12 +156,13 @@ repeated full-suite runs, both tiers green, no stalls. Committed as
 `inspectorPresented`, `transcriptFontSize` (raw values unchanged from
 today's literals).
 
-- [ ] **Step 1: failing test:** `defaultsKeyRawValuesMatchToday` — each
+- [x] **Step 1: failing test:** `defaultsKeyRawValuesMatchToday` — each
   case's `rawValue` equals the literal it replaces (pins against an
   accidental rename that would orphan existing users' saved settings).
-- [ ] **Step 2:** red → implement → `grep` confirms no bare key string
+  Confirmed red (cannot find `DefaultsKey` in scope) before implementing.
+- [x] **Step 2:** red → implement → `grep` confirms no bare key string
   literal remains for any case; full build + both test tiers green →
-  commit.
+  commit. Done: `0cfea90`.
 
 ### Task 7: SwiftMath — document, no code change
 
