@@ -42,19 +42,12 @@ let package = Package(
         .testTarget(
             name: "SwiftStarKitTests",
             dependencies: ["SwiftStarKit"],
-            swiftSettings: [.swiftLanguageMode(.v6)],
-            plugins: ["FastTierGuard"]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
             name: "SwiftStarIntegrationTests",
             dependencies: ["SwiftStarKit", "SwiftStarAppKit", "SwiftStar"],
             swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
-        ),
-        .executableTarget(name: "FastTierGuardTool"),
-        .plugin(
-            name: "FastTierGuard",
-            capability: .buildTool(),
-            dependencies: [.target(name: "FastTierGuardTool")]
         ),
     ]
 )

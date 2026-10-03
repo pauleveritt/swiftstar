@@ -109,6 +109,7 @@ install-hooks:
 # Fast tier: SwiftStarKit against fixtures. No model, no network, no subprocess
 # (enforced by the FastTierGuard build-tool plugin on SwiftStarKitTests).
 test:
+    ! grep -rn 'Process(\|URLSession\|NWConnection\|posix_spawn\|Darwin\.\|socket(' Tests/SwiftStarKitTests
     swift test
 
 # Integration tier: real processes and files against fake engine binaries
