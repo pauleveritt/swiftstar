@@ -1,7 +1,7 @@
 ---
 phase: P
 cycle: P31-fake-engine-fidelity
-lifecycle: active
+lifecycle: closed
 ---
 
 # P31 fake-engine fidelity implementation plan
@@ -83,7 +83,7 @@ fixture recapture (spec section 3) is **out of scope** — Backlog, GPU-gated.
 **Interfaces:** no Swift-side signature changes — `EngineWireParser` already
 decodes `queued`, `stopping`, `status` generically.
 
-- [ ] **Step 1: failing tests** (`Tests/SwiftStarIntegrationTests/EngineSessionTests.swift`
+- [x] **Step 1: failing tests** (`Tests/SwiftStarIntegrationTests/EngineSessionTests.swift`
   unless noted):
   - `sendWhileBusyIsQueued` (replaces `sendWhileBusyIsForwarded`) — a second
     prompt during a `tool_start` pause gets `{"kind":"queued","count":1}`,
@@ -103,7 +103,7 @@ decodes `queued`, `stopping`, `status` generically.
   - `loadGapQueuesAndKeepsStopDisabled` (A2) — with `FAKE_ENGINE_LOAD_MS` set,
     a prompt sent before the gap elapses is queued (not forwarded), and
     `EngineComposer`'s stop stays disabled until `input` finally arrives.
-- [ ] **Step 2:** red → implement → `swift test` and
+- [x] **Step 2:** red → implement → `swift test` and
   `SWIFTSTAR_INTEGRATION=1 swift test` (twice) green → commit.
 
 ### Task 2: B2 test rewrites
@@ -162,10 +162,10 @@ are, no rename, matching the spec's own "or asserts a contract" branch.
 
 **Interfaces:** none new; test names and assertions only.
 
-- [ ] **Step 1:** for each rewritten/renamed test, confirm it is red against
+- [x] **Step 1:** for each rewritten/renamed test, confirm it is red against
   the pre-Task-1 fake (where applicable) or against current production code
   (for the three new additions), then green after.
-- [ ] **Step 2:** both test tiers green → commit.
+- [x] **Step 2:** both test tiers green → commit.
 
 ### Task 3: Docs (B3)
 
@@ -188,14 +188,73 @@ are, no rename, matching the spec's own "or asserts a contract" branch.
 
 **Interfaces:** none; docs and two UI label strings only.
 
-- [ ] **Step 1:** implement; `just lint-docs`, `just docs`, `swift build`
+- [x] **Step 1:** implement; `just lint-docs`, `just docs`, `swift build`
   green → commit.
 
 ### Task 4: Close
 
-- [ ] **Step 1:** ROADMAP P31 row → "done"; plan `## Result`,
+- [x] **Step 1:** ROADMAP P31 row → "done"; plan `## Result`,
   `lifecycle: closed`; `just lint-docs` green; commit.
 
 ## Result
 
-_(filled at close)_
+Closed 2026-10-04. All three tasks landed; two genuine races and one
+real, previously-untested metrics bug found by testing rather than
+inspection.
+
+- **Commits:** `845c9be` (Task 1), `3534eaf` (Task 2), `d66ad84` (Task 3).
+- **Task 1 — the fake's `tui` mode rewritten as a Relay-like state machine**
+  (`accepting`/`quitting`/`stop_requested`/`pending`), read directly against
+  `../ds4-engine`'s `src/ds4_engine/ndjson_process.py`. Queueing is
+  unconditional now (`FAKE_ENGINE_QUEUE` removed); stop and quit refuse and
+  idempotency-check with the relay's exact texts; the load gap pauses after
+  the fixture's own recorded "Loading model" status line (every committed
+  fixture already has it — the first design draft wrongly planned a
+  synthetic one, caught before implementing it).
+  - Two real races, both found by running the suite repeatedly, not by
+    reasoning alone: (1) the original tool_start pause didn't loop, so a
+    queued ack fell through to blind replay instead of waiting for a real
+    decision; (2) a second message sent back-to-back with the first
+    (`stop()`+`stop()`, or `quit()`'s `stop()`+`quit()`) can race the reader
+    thread — `reach_pause()` now drains the inbox and gives one 50ms grace
+    window, with `turn_running`/`stop_requested` reset *after* the drain so a
+    genuinely idempotent second `stop` still sees the turn it duplicates.
+    Confirmed stable across 5 full-suite runs after each fix.
+  - Scoped down from the spec: non-JSON-line refusal and quit's immediate
+    `"quitting"` emission aren't testable through `EngineSession`'s public
+    API (no raw-write entry point; `"quitting"` still decodes as `.ignored`)
+    — documented inline rather than silently dropped. Steering mid-turn
+    delivery stays out of scope per the plan's own Decision 4 (needs the
+    section-3 recapture).
+- **Task 2 — re-audited against current code before touching anything,
+  not just the spec's 2026-09-28 wording.** `argumentsAreExact`,
+  `exitZeroEnded`, `fourAscendingSizes`, `defaultIsThirdSlotNextToLargest`
+  and `leafNameFallsBackToRootPath` already asserted real contracts —
+  left untouched. Rewrote `stopMidTurn`/`interruptByteMidTurn` (dropped the
+  incidental "no tool_end" check, kept the real interrupted-before-awaiting
+  ordering), `badHandshakeTerminates`/`quitAfterTimeoutSendsSIGTERM`
+  (message, not bare code 130 — printed the actual values before writing the
+  assertions rather than guessing), and `sendWhileBusyIsForwarded` →
+  `sendWhileBusyIsQueued`. Added `exitOneReportsStderrTailAtProcessLevel`
+  (needed `FAKE_ENGINE_EXIT_STDERR`, a small fixture addition),
+  `unmatchedToolEndAndResultAreIgnored` (already-correct behavior, new
+  coverage), and `pauseMissingFieldsKeepThePriorRate` — which **failed
+  against production code**: `EngineMetricsReducer`'s `.pause` case
+  unconditionally overwrote `prefillTPS`/`generationTPS`, unlike every other
+  case, which falls back to the prior value on a missing field. A checkpoint
+  omitting prefill/eval fields was blanking a rate the UI already knew.
+  Fixed with the same `?? state.x` pattern; confirmed red before, green
+  after.
+- **Task 3 — confirmed the session-cumulative claim** against
+  `../ds4-engine`'s `json_events.py` (it deltas the same fields for its own
+  terminal display) rather than trusting the spec's prose; labeled both UI
+  sites "avg" and said so in `BRIEF.md`. README got Swift 6.2/Xcode 26 and a
+  Build and run section. `glossary.md` gained an "agent" term and a
+  corrected "context used" row — the first draft claimed `status_report` and
+  `session` as sources too, which `EngineMetricsReducer` doesn't support;
+  caught by reading the reducer directly instead of the ROADMAP's paraphrase.
+  `provenance.md`'s "macOS 27.0" was the Darwin kernel version mislabeled.
+- **Out of scope, as planned:** the real-engine fixture recapture (spec
+  section 3) — Backlog, GPU-gated.
+- Both test tiers green throughout: 137 fast, 31 integration (up from 132
+  and 26 at P30's close). `just lint-docs` and `just docs` green.
