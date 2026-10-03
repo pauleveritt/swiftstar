@@ -97,6 +97,13 @@ sub-table) while still giving each cycle a distinct, linkable status instead
 of one run-on paragraph. The cell-length caps above still apply to the whole
 cell — a cycle whose item is still too long owes the same verdict-doc move.
 
+**Phase `P` (`P0`–`P32`) is closed to new entries, 2026-10-04.** New
+initiatives open a named phase instead (a short mnemonic, e.g. `SU` for
+SwiftUI), with cycles numbered `<Name>.1`, `<Name>.2`, … — matching
+ds4-engine's convention for `QW`, `LS`, `TC`, `RUN` and friends: a phase
+with few, substantial cycles gets one row per cycle; `P0`–`P32` keep their
+historical numbering and are not retroactively renamed into this scheme.
+
 **`## Now` is a pointer, not a narrative.** It names what is currently in
 flight, what is parked and why (one line each), and links to the phase row
 or Backlog entry that carries the actual detail. It must never re-narrate a
