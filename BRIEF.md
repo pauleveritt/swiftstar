@@ -151,13 +151,21 @@ SwiftStar.app ──spawn──▶ ds4-dogfood tui --ndjson --source <root> --co
   `EngineEvent`, `EngineTranscript`, `EngineMetricsReducer`, `EngineCommand`
   (executable resolution and argv). Functions of their inputs, tested in
   milliseconds.
-- **`SwiftStarAppKit`** — `Process` and pipes but no SwiftUI: `EngineSession`.
+- **`SwiftStarEngine`** — `Process` and pipes but no SwiftUI: `EngineSession`.
   Testable in the integration tier.
 - **`SwiftStar`** — the app. Scenes, `EngineController`, the views. Thin,
   because the decisions live in Kit.
 
 **The rule that keeps the split honest: if a test wants to assert on source
 text, the thing it is testing is in the wrong target.**
+
+**SwiftMath is accepted, inert weight, not a dependency choice.** It arrives
+transitively via the pinned `MarkdownView` fork (`Package.resolved`), not as a
+direct `Package.swift` dependency. `MarkdownPreprocess.deLaTeXed` strips all
+LaTeX delimiters and maps common commands to plain text/Unicode before
+`MarkdownText.swift` hands text to the renderer, so by the time anything
+reaches `MarkdownView`'s math path there is no LaTeX left for SwiftMath to
+detect — by design (owner decision, 2026-10-04), not an oversight to fix.
 
 ## The engine
 
