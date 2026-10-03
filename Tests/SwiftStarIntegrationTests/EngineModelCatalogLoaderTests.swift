@@ -51,6 +51,16 @@ struct EngineModelCatalogLoaderTests {
         #expect(Date().timeIntervalSince(started) < 2.5)
     }
 
+    @Test func loaderReportsStderrTailBeyond4KiB() async {
+        let result = await EngineModelCatalogLoader.load(
+            executable: Self.fake, environment: env(["FAKE_ENGINE_MODELS_HUGE_STDERR": "1"]))
+        guard case .failure(.failed(let message)) = result else {
+            Issue.record("expected .failed, got \(result)")
+            return
+        }
+        #expect(message.hasSuffix("the real last line"))
+    }
+
     @Test func loaderReportsMissingCommand() async {
         let result = await EngineModelCatalogLoader.load(
             executable: Self.fake, environment: env(["FAKE_ENGINE_MODELS_UNKNOWN": "1"]))

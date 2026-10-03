@@ -80,6 +80,8 @@ public enum EngineModelCatalogLoader {
         if done.wait(timeout: .now() + seconds + 2) == .timedOut {
             timedOut.set()
             try? handle.close()
+            try? errHandle.close()
+            process.waitUntilExit()
             return .failure(.timedOut)
         }
         process.waitUntilExit()
@@ -88,7 +90,7 @@ public enum EngineModelCatalogLoader {
         if timedOut.isSet { return .failure(.timedOut) }
         guard process.terminationStatus == 0 else {
             _ = errDone.wait(timeout: .now() + 1)
-            let text = String(decoding: errBox.value.prefix(4096), as: UTF8.self)
+            let text = String(decoding: errBox.value.suffix(4096), as: UTF8.self)
             if process.terminationStatus == 2,
                text.contains("invalid choice") || text.contains("unknown command") {
                 return .failure(.commandMissing)

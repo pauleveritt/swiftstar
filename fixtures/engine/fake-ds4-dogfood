@@ -4,11 +4,14 @@
 Env: FAKE_ENGINE_FIXTURE, FAKE_ENGINE_PACE_MS (300), FAKE_ENGINE_EXIT (0),
 FAKE_ENGINE_REFUSE, FAKE_ENGINE_IGNORE_QUIT, FAKE_ENGINE_IGNORE_SIGTERM (SIG_IGN),
 FAKE_ENGINE_QUEUE (prompts sent mid-turn queue; after a stop the queued turn
-starts unless a quit follows at once, like the relay), FAKE_ENGINE_LOG, FAKE_ENGINE_PIDFILE,
+starts unless a quit follows at once, like the relay), FAKE_ENGINE_LOG,
+FAKE_ENGINE_PIDFILE (written in every mode, including `models`),
 FAKE_ENGINE_ARGV_LOG (write argv, one per line, at start).
 `models --json` mode (argv[1] == "models"): prints the FAKE_ENGINE_MODELS file, or
-exits 2 with "boom" when FAKE_ENGINE_MODELS_FAIL=1, or with argparse's "invalid choice"
-message when FAKE_ENGINE_MODELS_UNKNOWN=1 (or no file is set, like an older engine); FAKE_ENGINE_MODELS_SLEEP_MS delays first.
+exits 2 with "boom" when FAKE_ENGINE_MODELS_FAIL=1, or with over 5 KiB of filler then
+"the real last line" when FAKE_ENGINE_MODELS_HUGE_STDERR=1, or with argparse's "invalid
+choice" message when FAKE_ENGINE_MODELS_UNKNOWN=1 (or no file is set, like an older
+engine); FAKE_ENGINE_MODELS_SLEEP_MS delays first.
 Replays the fixture up to and including each `input` line, pausing after every
 `tool_start` until a stdin line arrives or the pace elapses.
 """
@@ -36,10 +39,19 @@ if env.get("FAKE_ENGINE_ARGV_LOG"):
     with open(env["FAKE_ENGINE_ARGV_LOG"], "w") as f:
         f.write("".join(a + "\n" for a in sys.argv[1:]))
 
+if env.get("FAKE_ENGINE_PIDFILE"):
+    with open(env["FAKE_ENGINE_PIDFILE"], "w") as f:
+        f.write(str(os.getpid()))
+
 if sys.argv[1:2] == ["models"]:
     time.sleep(int(env.get("FAKE_ENGINE_MODELS_SLEEP_MS", "0")) / 1000.0)
     if env.get("FAKE_ENGINE_MODELS_FAIL") == "1":
         sys.stderr.write("ds4-dogfood: error: boom\n")
+        sys.stderr.flush()
+        sys.exit(2)
+    if env.get("FAKE_ENGINE_MODELS_HUGE_STDERR") == "1":
+        sys.stderr.write("x" * 5000 + "\n")
+        sys.stderr.write("the real last line\n")
         sys.stderr.flush()
         sys.exit(2)
     if env.get("FAKE_ENGINE_MODELS_UNKNOWN") == "1" or not env.get("FAKE_ENGINE_MODELS"):
@@ -69,10 +81,6 @@ with open(env["FAKE_ENGINE_FIXTURE"]) as f:
     fixture = [ln.rstrip("\n") for ln in f if ln.strip()]
 
 inbox = queue.Queue()
-
-if env.get("FAKE_ENGINE_PIDFILE"):
-    with open(env["FAKE_ENGINE_PIDFILE"], "w") as f:
-        f.write(str(os.getpid()))
 
 
 def log(text):
