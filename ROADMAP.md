@@ -167,6 +167,18 @@ Closed, 2026-10-04 (caught up `../ds4-engine` to `main` at `409267a9`):
 
 ### Process and tooling
 
+- **`FileHandle.bytes.lines` stalls ~10s under `swift test` before flooding
+  everything through at once (P32, 2026-10-04).** Tried replacing
+  `EngineSession`'s `readabilityHandler`/`AsyncStream`/`LineBuffer` stream
+  plumbing with it; built clean and passed in two isolated standalone
+  scripts, but under the actual test harness it withheld every line for a
+  reproducible ~10 real seconds (wall-clock-timestamped, not guessed) before
+  delivering the whole conversation in under 10ms — something specific to how
+  `swift test`'s executor services the dispatch/run-loop machinery
+  `AsyncBytes` depends on, not `FileHandle.bytes.lines` itself (the
+  standalone scripts had no such delay). Reverted; root cause undiagnosed.
+  *Reopens with a plan to actually diagnose the `swift test` interaction
+  first — the next attempt should not just retry the same swap.*
 - **Real-engine fixture recapture, owed from P29.3, split out of P31.** Record
   `terminal`, `mentions`, `steering_*`, `telemetry_error`, `compact*` and
   `clear` from the real `ds4-dogfood tui --ndjson` (their current tests use

@@ -14,17 +14,38 @@ no behavior change, no live engine needed. Each is re-verified against
 current code below — two of the original seven sub-claims had already been
 resolved by later work and are dropped from scope.
 
-## 1. Stream plumbing
+## 1. Stream plumbing — attempted, reverted, dropped from this cycle's scope
 
 `EngineSession.swift`'s `stream(from:)` (lines 187-200) still uses
 `FileHandle.readabilityHandler` + `AsyncStream` + a hand-rolled
 `LineBuffer` (`Sources/SwiftStarKit/LineBuffer.swift`) to frame stdout/stderr
 into lines. `FileHandle.bytes.lines` (`AsyncLineSequence`) is unused anywhere
-in the repo. Replace the stream/buffer pair with `FileHandle.bytes.lines`,
-one `Task` per pipe reading lines directly; delete `LineBuffer` once nothing
-calls it. This is the one item with real regression risk (process I/O
-timing) — the existing 31 integration tests are the safety net; add none
-new, since this is a pure refactor of already-tested behavior.
+in the repo.
+
+**Tried the replacement, found a real regression, reverted (2026-10-04).**
+Rewriting to `FileHandle.bytes.lines` built cleanly and passed in two
+isolated standalone experiments (a trivial subprocess, and the real fake
+engine driven directly without `EngineSession`) — but under `swift test`
+specifically, the rewritten `EngineSession` stalled for a reproducible ~10
+real seconds with *zero* lines delivered, then delivered the entire
+conversation (ready through close) in under 10ms. Confirmed with
+wall-clock-timestamped diagnostics, not guessed from symptoms. The ~10s
+figure lining up with the test harness's own wait-timeout total looked like
+a coincidence worth distrusting, not a cause — the standalone experiments
+used no such timeout and still completed in milliseconds, which rules out
+`FileHandle.bytes.lines` itself and points at something specific to how
+`swift test`'s executor services the dispatch/run-loop machinery
+`AsyncBytes` depends on. Root cause not fully diagnosed within this cycle's
+budget. Reverted to the original `readabilityHandler`/`AsyncStream`/
+`LineBuffer` implementation (confirmed byte-for-byte back to the committed
+version); both test tiers green again immediately. **Moved to Backlog** as
+"needs investigation before adopting," not retried blind in a future cycle.
+
+(Original plan, not carried out: replace the stream/buffer pair with
+`FileHandle.bytes.lines`, one `Task` per pipe reading lines directly, and
+delete `LineBuffer` once nothing called it. Flagged up front as the one item
+with real regression risk in this cycle — that flag turned out to be
+warranted.)
 
 ## 2. FastTierGuard
 

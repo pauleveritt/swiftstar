@@ -37,20 +37,16 @@ precisely because "no behavior change" is easy to get wrong silently.
 
 ---
 
-### Task 1: Stream plumbing
+### Task 1: Stream plumbing — ABANDONED, see spec `## 1`
 
-**Files:**
-- Modify: `Sources/SwiftStarAppKit/EngineSession.swift` (replace
-  `stream(from:)`/`AsyncStream`/`LineBuffer`-fed loops with
-  `FileHandle.bytes.lines`, one `Task` per pipe)
-- Delete: `Sources/SwiftStarKit/LineBuffer.swift`,
-  `Tests/SwiftStarKitTests/LineBufferTests.swift` (if it exists — check)
-
-**Interfaces:** none change; `EngineSession`'s public API is unaffected.
-
-- [ ] **Step 1:** implement; `swift build`, `just test`, `just integration`
-  (twice, for flake-checking given this touches process I/O timing) green
-  → commit.
+Rewrote `EngineSession.swift` to `FileHandle.bytes.lines`; built clean,
+passed in two isolated standalone experiments, then stalled ~10 real seconds
+under `swift test` with zero lines delivered before flooding the entire
+conversation through in under 10ms. Confirmed with wall-clock-timestamped
+diagnostics. Reverted via `git checkout --` (the change was never committed);
+confirmed byte-for-byte back to the committed version; both test tiers green
+immediately after. Moved to the Backlog as "needs investigation before
+adopting" rather than left as an open plan step to retry blind.
 
 ### Task 2: FastTierGuard → one grep line
 
