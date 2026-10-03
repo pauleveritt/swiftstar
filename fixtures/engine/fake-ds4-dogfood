@@ -15,6 +15,7 @@ fixture's own recorded "Loading model" status line, before the first
 SIGKILL-escalation test.
 
 Env: FAKE_ENGINE_FIXTURE, FAKE_ENGINE_PACE_MS (300), FAKE_ENGINE_EXIT (0),
+FAKE_ENGINE_EXIT_STDERR (extra stderr line written just before exit),
 FAKE_ENGINE_REFUSE, FAKE_ENGINE_IGNORE_QUIT, FAKE_ENGINE_IGNORE_SIGTERM (SIG_IGN),
 FAKE_ENGINE_LOAD_MS (0), FAKE_ENGINE_LOG, FAKE_ENGINE_PIDFILE (written in
 every mode, including `models`), FAKE_ENGINE_ARGV_LOG (write argv, one per
@@ -176,6 +177,8 @@ def finish():
     if capture:
         emit(json.dumps({"kind": "event", "event": {"kind": "closed", "capture_path": capture}}))
     emit('{"kind": "close"}')
+    if env.get("FAKE_ENGINE_EXIT_STDERR"):
+        sys.stderr.write(env["FAKE_ENGINE_EXIT_STDERR"] + "\n")
     sys.stderr.write("Session artifacts: /tmp/fake-session\n")
     sys.stderr.flush()
     sys.exit(exit_code)

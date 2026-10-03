@@ -38,6 +38,22 @@ struct EngineMetricsTests {
         #expect(s.contextUsed == nil)
     }
 
+    @Test func pauseMissingFieldsKeepThePriorRate() {
+        // Every other reduce case falls back to the prior value on a missing
+        // field (contextUsed, contextSize, gpu*); .pause did not, so a
+        // checkpoint that happens to omit prefill/eval fields would blank a
+        // rate the UI already knew, not just fail to update it.
+        var s = EngineMetricsState()
+        EngineMetricsReducer.reduce(&s, .pause(PauseMetrics(
+            prefillTokens: 682, prefillMs: 827.3, evalCount: 8, evalMs: 61.2, outputTokens: nil)))
+        let (prefill, generation) = (s.prefillTPS, s.generationTPS)
+        #expect(prefill != nil && generation != nil)
+        EngineMetricsReducer.reduce(&s, .pause(PauseMetrics(
+            prefillTokens: nil, prefillMs: nil, evalCount: 0, evalMs: nil, outputTokens: nil)))
+        #expect(s.prefillTPS == prefill)
+        #expect(s.generationTPS == generation)
+    }
+
     @Test func interruptedUpdatesContext() {
         var s = EngineMetricsState(contextUsed: 10, contextSize: 100)
         EngineMetricsReducer.reduce(&s, .interrupted(contextUsed: 512, contextSize: 20000))

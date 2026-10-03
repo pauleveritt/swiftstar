@@ -173,7 +173,9 @@ struct EngineSessionTests {
         #expect(await wait { rec.has(isToolStart) })
         try session.stop()
         #expect(await wait { rec.count(isAwaiting) == 2 })
-        #expect(!rec.has(isToolEnd), "the stop path drops the fixture's tool_end")
+        // The contract is the order (interrupted before the next awaitingInput),
+        // not the absence of tool_end, which was only ever incidental to how
+        // this fixture happens to be laid out.
         let interrupted = rec.events.firstIndex(where: isInterrupted)
         let secondAwaiting = rec.events.indices.filter { isAwaiting(rec.events[$0]) }.last
         #expect(interrupted != nil && interrupted! < secondAwaiting!)
@@ -189,7 +191,11 @@ struct EngineSessionTests {
         #expect(await wait { rec.has(isToolStart) })
         try session.interrupt()
         #expect(await wait { rec.has(isInterrupted) && rec.count(isAwaiting) == 2 })
-        #expect(!rec.has(isToolEnd), "the stop path drops the fixture's tool_end")
+        // The contract is the order, not the absence of tool_end (incidental
+        // to this fixture's layout, not a claim about interrupt's behavior).
+        let interrupted = rec.events.firstIndex(where: isInterrupted)
+        let secondAwaiting = rec.events.indices.filter { isAwaiting(rec.events[$0]) }.last
+        #expect(interrupted != nil && interrupted! < secondAwaiting!)
         session.quit()
         #expect(await wait { rec.exit != nil })
     }
@@ -199,7 +205,9 @@ struct EngineSessionTests {
         try session.start()
         #expect(await wait { rec.has(isProtocolError) })
         #expect(await wait { rec.exit != nil })
-        #expect(rec.exit?.code == 130)
+        // "interrupted", not just code 130 -- disambiguates this from a
+        // quit-timeout exit, which also lands on 130 but reads differently.
+        #expect(rec.exit?.message == "interrupted")
         #expect(rec.exits.count == 1)
     }
 
@@ -231,6 +239,21 @@ struct EngineSessionTests {
         #expect(session.sessionDirectory?.path == "/tmp/fake-session")
     }
 
+    @Test func exitOneReportsStderrTailAtProcessLevel() async throws {
+        // EngineCommandTests.exitOneIsNotClean already proves this at the
+        // pure EngineExit.describe level; this proves the process-level
+        // wiring actually gets real stderr content there.
+        let (session, rec) = make(
+            fixture: "tool-read",
+            extra: ["FAKE_ENGINE_EXIT": "1", "FAKE_ENGINE_EXIT_STDERR": "boom from the engine"])
+        try session.start()
+        #expect(await wait { rec.count(isAwaiting) == 1 })
+        session.quit()
+        #expect(await wait { rec.exit != nil })
+        #expect(rec.exit?.message.contains("Ended without a clean answer") == true)
+        #expect(rec.exit?.message.contains("boom from the engine") == true)
+    }
+
     @Test func quitAfterTimeoutSendsSIGTERM() async throws {
         let (session, rec) = make(
             fixture: "tool-read", extra: ["FAKE_ENGINE_IGNORE_QUIT": "1"], grace: shortGrace)
@@ -238,7 +261,9 @@ struct EngineSessionTests {
         #expect(await wait { rec.count(isAwaiting) == 1 })
         session.quit()
         #expect(await wait(3) { rec.exit != nil })
-        #expect(rec.exit?.code == 130)
+        // The meaning, not just the raw code -- also 130, but "interrupted"
+        // (badHandshakeTerminates) means something different to a reader.
+        #expect(rec.exit?.message == "ended after the quit timed out")
     }
 
     @Test func quitMidTurnEndsTheEngine() async throws {

@@ -27,8 +27,8 @@ public enum EngineMetricsReducer {
     public static func reduce(_ state: inout EngineMetricsState, _ event: EngineEvent) {
         switch event {
         case .pause(let p):
-            state.prefillTPS = rate(p.prefillTokens, p.prefillMs)
-            state.generationTPS = rate(p.evalCount, p.evalMs)
+            state.prefillTPS = rate(p.prefillTokens, p.prefillMs) ?? state.prefillTPS
+            state.generationTPS = rate(p.evalCount, p.evalMs) ?? state.generationTPS
         case .answer(let a):
             state.contextUsed = a.contextUsed ?? state.contextUsed
             state.contextSize = a.contextSize ?? state.contextSize

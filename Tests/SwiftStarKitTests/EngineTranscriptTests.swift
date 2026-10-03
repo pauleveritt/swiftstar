@@ -58,6 +58,17 @@ struct EngineTranscriptTests {
         #expect(cs.allSatisfy { $0.ok == true && $0.result == res })
     }
 
+    @Test func unmatchedToolEndAndResultAreIgnored() {
+        // A toolEnd/toolResult with no preceding toolStart for that tool
+        // (op+path) is dropped, not crashed on or shown as a phantom card.
+        let tool = EngineTool(op: "read", path: "a")
+        var t = EngineTranscript()
+        t.apply(.toolEnd(tool, ok: true, durationMs: 1))
+        t.apply(.toolResult(EngineToolResult(tool: tool, resultKind: "k", preview: "p", truncated: false)))
+        #expect(cards(t).isEmpty)
+        #expect(t.rows.isEmpty)
+    }
+
     @Test func promptEventDoesNotDuplicateUserRow() {
         var t = EngineTranscript()
         t.appendUser("x")
