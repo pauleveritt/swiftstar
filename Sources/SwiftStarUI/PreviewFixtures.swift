@@ -12,6 +12,10 @@ extension EngineController {
     /// call, metrics populated, awaiting the next prompt.
     static var previewRunning: EngineController {
         var model = EngineSessionModel()
+        // `.ready` only moves a `.starting` session to `.running`. Left
+        // `.idle`, SessionView's auto-start `.task` calls `start()` inside
+        // the preview and this fixture's state is lost.
+        model.didStart()
         model.apply(.ready)
         model.apply(.session(EngineSessionInfo(id: "preview", modelID: "laguna-xs-2.1", contextSize: 8192)))
         model.apply(.prompt("Summarize SessionView.swift"))
