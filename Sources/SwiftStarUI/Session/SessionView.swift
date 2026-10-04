@@ -17,11 +17,11 @@ struct SessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            transcriptView
+            TranscriptView(transcript: controller.transcript, workspace: controller.workspace)
             Divider()
             composer
             Divider()
-            bottomStatusBar
+            StatusBarView(phase: controller.phase, composerLabel: composerState.label, metrics: controller.metrics)
         }
         .navigationTitle("Agent")
         .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(transcriptFontSize)))
@@ -198,61 +198,6 @@ struct SessionView: View {
         }
     }
 
-    private var transcriptView: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                // Rows are keyed by offset: the transcript only appends
-                // rows (a tool card fills in place), so an offset is a
-                // stable identity for a row's whole lifetime.
-                ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { index, row in
-                    rowView(row, queued: controller.transcript.isPending(rowAt: index))
-                }
-            }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .defaultScrollAnchor(.bottom)
-    }
-
-    @ViewBuilder
-    private func rowView(_ row: TranscriptRow, queued: Bool) -> some View {
-        switch row {
-        case .user(let text):
-            PromptBubble(text: text, queued: queued)
-        case .thinking(let text):
-            ThinkingDisclosure(text: text)
-        case .narration(let text):
-            MarkdownText(text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        case .answer(let answer):
-            VStack(alignment: .leading, spacing: 4) {
-                MarkdownText(answer.text)
-                if let line = answer.summary {
-                    // Engine telemetry, styled small and secondary so it never
-                    // reads as part of the answer.
-                    Text(line)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .textSelection(.enabled)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        case .tool(let card):
-            ToolCardView(card: card, workspace: controller.workspace)
-        case .system(let text):
-            Text(text)
-                .font(.system(size: envTranscriptFontSize))
-                .foregroundStyle(.tertiary)
-                .textSelection(.enabled)
-        case .error(let text):
-            Text(text)
-                .font(.system(size: envTranscriptFontSize))
-                .foregroundStyle(.red)
-                .textSelection(.enabled)
-        }
-    }
-
     private var composer: some View {
         VStack(spacing: 4) {
             if let notice = noticeText {
@@ -340,75 +285,6 @@ struct SessionView: View {
         guard composerState.canSend, !message.isEmpty else { return }
         input = ""
         controller.send(message)
-    }
-
-    /// Bottom readout bar: left = fixed-width prefill/generation rates and the
-    /// phase, right = memory and the context-fill ring.
-    private var bottomStatusBar: some View {
-        HStack(spacing: 8) {
-            Text(bottomStatusText)
-                .font(.system(size: envTranscriptFontSize))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .animation(.default, value: bottomStatusText)
-            Spacer(minLength: 12)
-            memoryStatusWidget
-            if let used = controller.metrics.contextUsed,
-               let size = controller.metrics.contextSize, size > 0 {
-                let tooltip = MetricsFormatting.contextTooltip(used: used, size: size)
-                ValueGaugeView(
-                    fraction: Double(used) / Double(size),
-                    trackColor: Severity.ofContext(used: used, size: size).color,
-                    diameter: 15)
-                    .padding(.horizontal, 4)
-                    .contentShape(Rectangle())
-                    .help(tooltip)
-                    .accessibilityElement()
-                    .accessibilityLabel("Context window")
-                    .accessibilityValue(tooltip)
-                    .nativeTooltip(tooltip)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.trailing, 6)
-        .padding(.vertical, 6)
-    }
-
-    @ViewBuilder
-    private var memoryStatusWidget: some View {
-        if let allocated = controller.metrics.gpuAllocatedBytes,
-           let budget = controller.metrics.gpuBudgetBytes, budget > 0 {
-            let tooltip = "GPU memory: \(MetricsFormatting.bytes(allocated)) allocated of \(MetricsFormatting.bytes(budget)) budget."
-            HStack(spacing: 4) {
-                ValueGaugeView(
-                    fraction: min(Double(allocated) / Double(budget), 1.0),
-                    trackColor: .green,
-                    diameter: 15)
-                Text("\(MetricsFormatting.bytes(allocated)) / \(MetricsFormatting.bytes(budget))")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            .padding(.horizontal, 4)
-            .contentShape(Rectangle())
-            .help(tooltip)
-            .accessibilityElement()
-            .accessibilityLabel("GPU memory")
-            .accessibilityValue(tooltip)
-            .nativeTooltip(tooltip)
-        }
-    }
-
-    /// Rates and activity while the session is up, else the composer's
-    /// status label (which carries the exit message once it has ended).
-    private var bottomStatusText: String {
-        guard controller.phase == .running else { return composerState.label }
-        let activity = composerState.label
-        return "Prefill avg \(MetricsFormatting.rate(controller.metrics.prefillTPS)) · "
-            + "Generation avg \(MetricsFormatting.rate(controller.metrics.generationTPS)) · \(activity)"
     }
 }
 

@@ -188,7 +188,7 @@ their own environment. That is the font-size fix for these rows (spec §3.2).
   it.
 - Both tiers green.
 
-- [ ] **Step 1:** implement, render and look, commit.
+- [x] **Step 1:** implement, render and look, commit.
 
 ---
 
