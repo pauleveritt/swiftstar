@@ -7,7 +7,7 @@ import SwiftStarKit
 /// picks the source repository, and feeds engine events to the transcript and
 /// metrics folds. The logic lives in the tested Kit types.
 @Observable
-final class EngineController {
+public final class EngineController {
     /// Every session rule (phase, busy/stop/pending, labels) lives in the
     /// model; the controller forwards to it and owns the process.
     private(set) var model = EngineSessionModel()
@@ -16,7 +16,7 @@ final class EngineController {
     var phase: EngineSessionPhase { model.phase }
     var composer: EngineComposer { model.composer }
     var sessionDirectory: URL? { model.sessionDirectory }
-    var isActive: Bool { model.phase.isActive }
+    public var isActive: Bool { model.phase.isActive }
     var workspace: URL? {
         didSet {
             guard let workspace else { return }
@@ -50,7 +50,7 @@ final class EngineController {
     private static let quitSafetyBound: Duration = stopGrace + termGrace + killGrace + .seconds(5)
     @ObservationIgnored private var quitWaiters: [CheckedContinuation<Void, Never>] = []
 
-    init() {
+    public init() {
         let defaults = UserDefaults.standard
         modelID = defaults.string(forKey: DefaultsKey.modelID.rawValue) ?? ""
         contextSize = defaults.integer(forKey: DefaultsKey.contextSize.rawValue)
@@ -195,7 +195,7 @@ final class EngineController {
     }
 
     /// Called when the app is terminating; quit waiters are still released.
-    func beginTerminating() { isTerminating = true }
+    public func beginTerminating() { isTerminating = true }
 
     func start() {
         guard !isActive, !isTerminating else { return }
@@ -258,7 +258,7 @@ final class EngineController {
     /// Asks the engine to quit and returns once it has exited. A quit already
     /// in flight is joined, not restarted. Returns after a safety bound even
     /// if the engine has not exited, so app quit can never hang.
-    func quit() async {
+    public func quit() async {
         guard let session, session.isRunning else { return }
         if model.phase != .quitting {
             model.willQuit()

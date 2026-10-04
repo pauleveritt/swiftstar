@@ -1,11 +1,13 @@
 import SwiftUI
 import SwiftStarKit
 
-struct SettingsView: View {
+public struct SettingsView: View {
     @AppStorage(DefaultsKey.executable.rawValue) private var engineExecutable = ""
     @AppStorage(DefaultsKey.transcriptFontSize.rawValue) private var transcriptFontSize = TranscriptFontScale.defaultSize
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         Form {
             Section("Engine") {
                 TextField("ds4-dogfood path", text: $engineExecutable, prompt: Text("Search PATH and ~/.local/bin"))

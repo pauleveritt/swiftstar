@@ -28,13 +28,24 @@ let package = Package(
             dependencies: ["SwiftStarKit"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
-        .executableTarget(
-            name: "SwiftStar",
+        // The views live in a library target, not the executable: Xcode cannot
+        // preview inside an executable target of a bare package (it needs the
+        // Xcode-only ENABLE_DEBUG_DYLIB setting).
+        .target(
+            name: "SwiftStarUI",
             dependencies: [
                 "SwiftStarKit",
                 "SwiftStarEngine",
                 .product(name: "MarkdownView", package: "MarkdownView"),
                 .product(name: "MarkdownParser", package: "MarkdownView"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
+        ),
+        .executableTarget(
+            name: "SwiftStar",
+            dependencies: [
+                "SwiftStarKit",
+                "SwiftStarUI",
             ],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
@@ -46,7 +57,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftStarIntegrationTests",
-            dependencies: ["SwiftStarKit", "SwiftStarEngine", "SwiftStar"],
+            dependencies: ["SwiftStarKit", "SwiftStarEngine", "SwiftStarUI"],
             swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
         ),
     ]

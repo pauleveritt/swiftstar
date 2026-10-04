@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import SwiftStarKit
+import SwiftStarUI
 
 @main
 struct SwiftStarApp: App {

@@ -23,13 +23,13 @@ import SwiftStarKit
 /// assistant bubbles and the thinking disclosure. Streaming is safe too: the
 /// transcript coalesces deltas in place, so this view re-renders on each
 /// mutation (no separate streaming variant needed).
-struct MarkdownText: View {
+public struct MarkdownText: View {
     let source: String
     @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     init(_ source: String) { self.source = source }
 
-    var body: some View {
+    public var body: some View {
         // `.default` theme: its colors are `NSColor.labelColor` / system dynamic
         // colors, so it tracks light/dark automatically. The body font is
         // aligned to the environment's transcript size, so the Settings slider
@@ -52,7 +52,7 @@ extension MarkdownText {
     /// must not silently exit the app at launch). Run the packaged binary as
     /// `DS4_SELFTEST_MARKDOWN=1 SwiftStar --markdown-selftest`. (Provenance:
     /// agent-mode `MarkdownText.swift`.)
-    @MainActor static func runResourceSelfTestIfRequested() {
+    @MainActor public static func runResourceSelfTestIfRequested() {
         guard ProcessInfo.processInfo.environment["DS4_SELFTEST_MARKDOWN"] == "1",
             CommandLine.arguments.contains("--markdown-selftest")
         else { return }

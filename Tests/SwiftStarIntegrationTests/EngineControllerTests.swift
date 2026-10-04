@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import SwiftStar
+@testable import SwiftStarUI
 import SwiftStarKit
 
 /// Drives `EngineController` directly (first coverage it has ever had — it
