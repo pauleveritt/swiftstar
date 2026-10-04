@@ -62,3 +62,8 @@ private extension View {
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
     }
 }
+
+#Preview {
+    InspectorView()
+        .environment(EngineController.previewRunning)
+}

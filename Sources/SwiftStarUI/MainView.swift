@@ -14,3 +14,8 @@ public struct MainView: View {
             .frame(minWidth: 800, minHeight: 560)
     }
 }
+
+#Preview {
+    MainView()
+        .environment(EngineController.previewRunning)
+}

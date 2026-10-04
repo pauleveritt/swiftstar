@@ -446,3 +446,8 @@ private extension View {
         modifier(NativeTooltipModifier(text: text))
     }
 }
+
+#Preview {
+    SessionView()
+        .environment(EngineController.previewRunning)
+}
