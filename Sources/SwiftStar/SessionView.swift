@@ -55,6 +55,7 @@ struct SessionView: View {
             }
         }
         .task { if controller.phase == .idle { controller.start() } }
+        .task { inputFocused = true }
         .task { await controller.loadCatalogIfNeeded() }
         .alert("Other model", isPresented: $askingModel) {
             TextField("Model id", text: $entry)
@@ -303,14 +304,7 @@ struct SessionView: View {
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
                     )
-                    .onKeyPress(keys: [.return], phases: .down) { press in
-                        if press.modifiers.contains(.shift) {
-                            input += "\n"
-                            return .handled
-                        }
-                        send()
-                        return .handled
-                    }
+                    .onSubmit { send() }
                     .disabled(!composerState.canType)
                 // Busy with text typed: the button sends (the engine queues it);
                 // busy with an empty field it stops.
