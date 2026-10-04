@@ -227,7 +227,7 @@ struct SessionView: View {
         case .answer(let answer):
             VStack(alignment: .leading, spacing: 4) {
                 MarkdownText(answer.text)
-                if let line = Self.answerSummary(answer) {
+                if let line = answer.summary {
                     // Engine telemetry, styled small and secondary so it never
                     // reads as part of the answer.
                     Text(line)
@@ -251,17 +251,6 @@ struct SessionView: View {
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
         }
-    }
-
-    private static func answerSummary(_ answer: EngineAnswer) -> String? {
-        var parts: [String] = []
-        if let ms = answer.durationMs, ms.isFinite, ms >= 0 {
-            parts.append(String(format: "%.1fs", ms / 1000))
-        }
-        if let used = answer.contextUsed, let size = answer.contextSize {
-            parts.append("ctx \(used.formatted()) / \(size.formatted())")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var composer: some View {

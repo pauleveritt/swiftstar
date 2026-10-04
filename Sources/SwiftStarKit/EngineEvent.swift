@@ -37,6 +37,19 @@ public struct EngineAnswer: Equatable, Sendable {
         self.contextSize = contextSize
         self.durationMs = durationMs
     }
+
+    /// The small telemetry line shown under an answer: duration and/or
+    /// context usage, joined, or nil if neither is present.
+    public var summary: String? {
+        var parts: [String] = []
+        if let ms = durationMs, ms.isFinite, ms >= 0 {
+            parts.append(String(format: "%.1fs", ms / 1000))
+        }
+        if let contextUsed, let contextSize {
+            parts.append("ctx \(contextUsed.formatted()) / \(contextSize.formatted())")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 }
 
 /// Per-pause measurements from a `checkpoint` snapshot; every field but

@@ -258,6 +258,16 @@ struct EngineTranscriptSurfaceTests {
         #expect(t.rows.last == .answer(a))
     }
 
+    @Test func summaryJoinsDurationAndContext() {
+        let a = EngineAnswer(text: "hi", contextUsed: 420, contextSize: 8192, durationMs: 1234)
+        #expect(a.summary == "1.2s · ctx 420 / 8,192")
+    }
+
+    @Test func summaryIsNilWithNoFields() {
+        let a = EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil)
+        #expect(a.summary == nil)
+    }
+
     @Test func terminalShowsOutcome() {
         var t = EngineTranscript()
         t.apply(.turnEnded(outcome: "tool-limit"))
