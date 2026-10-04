@@ -1,7 +1,7 @@
 ---
 phase: SU
 cycle: SU.2
-lifecycle: active
+lifecycle: closed
 ---
 
 # SU.2 testable view logic implementation plan
@@ -61,16 +61,16 @@ public enum MetricsFormatting {
 }
 ```
 
-- [ ] **Step 1:** `rateFormatsOneDecimalWithUnit` — `rate(12.34) ==
+- [x] **Step 1:** `rateFormatsOneDecimalWithUnit` — `rate(12.34) ==
   "12.3 tok/s"`; `rateIsEmDashForNil` — `rate(nil) == "—"`.
-- [ ] **Step 2:** `bytesFormatsByteCount` — `bytes(1_048_576)` matches
+- [x] **Step 2:** `bytesFormatsByteCount` — `bytes(1_048_576)` matches
   `Int64(1_048_576).formatted(.byteCount(style: .memory))`;
   `bytesIsEmDashForNil` — `bytes(nil) == "—"`.
-- [ ] **Step 3:** `contextTooltipMatchesTodaysWording` — `contextTooltip(used:
+- [x] **Step 3:** `contextTooltipMatchesTodaysWording` — `contextTooltip(used:
   512, size: 2048)` equals the exact string `SessionView.contextRingTooltip`
   produces today for the same inputs (25% used).
-- [ ] **Step 4:** implement `MetricsFormatting`; update both call sites;
-  `swift build` clean; both test tiers green → commit.
+- [x] **Step 4:** implement `MetricsFormatting`; update both call sites;
+  `swift build` clean; both test tiers green → commit. Done: `2a805a1`.
 
 ### Task 2: `EngineAnswer.summary`
 
@@ -84,12 +84,12 @@ public enum MetricsFormatting {
 
 **Interfaces (produces):** `EngineAnswer.summary: String?`.
 
-- [ ] **Step 1:** `summaryJoinsDurationAndContext` — an `EngineAnswer` with
+- [x] **Step 1:** `summaryJoinsDurationAndContext` — an `EngineAnswer` with
   both `durationMs` and `contextUsed`/`contextSize` set produces
-  `"1.2s · ctx 420 / 8192"` (today's exact join); `summaryIsNilWithNoFields`
+  `"1.2s · ctx 420 / 8,192"` (today's exact join, with grouping); `summaryIsNilWithNoFields`
   — all three nil → `summary == nil`.
-- [ ] **Step 2:** implement; update the call site; `swift build` clean;
-  both test tiers green → commit.
+- [x] **Step 2:** implement; update the call site; `swift build` clean;
+  both test tiers green → commit. Done: `f5ba94c`.
 
 ### Task 3: `EngineToolCard.headerText` / `.metadataLine` / `.icon`
 
@@ -107,20 +107,49 @@ public enum MetricsFormatting {
 **Interfaces (produces):** `EngineToolCard.headerText: String`,
 `.metadataLine: String`, `.icon: String`.
 
-- [ ] **Step 1:** `headerTextIncludesPathWhenPresent` /
+- [x] **Step 1:** `headerTextIncludesPathWhenPresent` /
   `headerTextIsOpAloneWithNoPath` (today's exact two branches);
-  `metadataLineJoinsStateAndDuration` (`running`/`succeeded`/`failed` ×
-  with/without a finite non-negative duration, today's exact `" · "` join
-  and the `<10s`/`≥10s` decimal-place split); `iconMatchesEachKnownOp` (one
-  assertion per case in today's switch, plus the `default` fallback).
-- [ ] **Step 2:** implement; update the call sites; `swift build` clean;
-  both test tiers green → commit.
+  `metadataLineRunningHasNoDuration` / `metadataLineSucceededUnderTenSecondsUsesOneDecimal`
+  / `metadataLineFailedAtOrOverTenSecondsUsesNoDecimal` /
+  `metadataLineIgnoresNegativeOrNonFiniteDuration` (today's exact `" · "`
+  join and the `<10s`/`≥10s` decimal-place split); `iconMatchesEachKnownOp`
+  (one assertion per case in today's switch, plus the `default` fallback).
+- [x] **Step 2:** implement; update the call sites; `swift build` clean;
+  both test tiers green → commit. Done: `6923a5c`.
 
 ### Task 4: Close
 
-- [ ] **Step 1:** ROADMAP SU.2 row → "done"; `## Now` updated; plan
+- [x] **Step 1:** ROADMAP SU.2 row → "done"; `## Now` updated; plan
   `## Result`, `lifecycle: closed`; `just lint-docs` green; commit.
 
 ## Result
 
-_(filled at close)_
+All three code tasks landed, each its own commit, build and both test
+tiers green after every task. Test count grew from 129 fast / 30
+integration (at SU.1's close) to 143 fast / 30 integration — 14 new tests,
+all pinning behavior that existed before this cycle and was previously
+untestable from the fast tier.
+
+1. **`MetricsFormatting`** (`2a805a1`) — consolidates `InspectorView.rate`/
+   `bytes` and `SessionView.rateText`/`memoryDisplay` (near-duplicate,
+   both untested) plus `SessionView.contextRingTooltip` (untested, no
+   duplicate) into `rate`/`bytes`/`contextTooltip`. Output confirmed
+   identical, including `bottomStatusText`'s `" tok/s"` placement.
+2. **`EngineAnswer.summary`** (`f5ba94c`) — moves `SessionView.answerSummary`
+   onto the type it was already a pure function of.
+3. **`EngineToolCard.headerText`/`.metadataLine`/`.icon`** (`6923a5c`) —
+   moves four `ToolCardView` statics (already pulled out of instance
+   context, just never crossed into `SwiftStarKit`) onto `EngineToolCard`.
+   `icon` drops its `for op:` parameter.
+
+Line counts dropped as expected: `SessionView.swift` 473 → 448,
+`ToolCardView.swift` 114 → 77, `InspectorView.swift` 72 → 64.
+
+The ROADMAP row's other two halves were resolved without code in the spec
+(`## 0`): the test-framework claim confirmed (15 files, all Swift Testing);
+the feature-based reorg explicitly declined as premature for an 11-file,
+1,268-line view target — revisit if that target grows substantially.
+
+Live-checked the built `.app` after each code task: launches and stays
+running with no crash (no live engine available in this environment to
+exercise the changed rendering paths with real data).
