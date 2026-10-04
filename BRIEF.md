@@ -93,7 +93,7 @@ What binds this project now:
    against ds4-engine's own `json_events.py`, which deltas them for its own
    terminal display), so SwiftStar's rate is a running session average, not
    the most recent pause's instantaneous rate; the status bar and inspector
-   label it "avg" accordingly. (Per-pause deltas are SU.5, not yet brainstormed.)
+   label it "avg" accordingly. (Per-pause deltas are SU.6, not yet brainstormed.)
 3. **Three limits travel with the finding when it is quoted.** Compaction was
    never observed at the everyday ctx 150,000 setting across two real attempts
    — only at 32,768. The captures were taken on an idle machine with no organic
