@@ -145,7 +145,7 @@ SwiftStar.app ──spawn──▶ ds4-dogfood tui --ndjson --source <root> --co
   without a clean answer (with the stderr tail) or failed; 2 the engine refused
   to start; 130 interrupted. The full mapping is in the spec's revisions.
 
-**Targets.** Three, and the split is what makes the suite fast:
+**Targets.** Four, and the split is what makes the suite fast:
 
 - **`SwiftStarKit`** — no SwiftUI, no IOKit, no `Process`. `EngineWireParser`,
   `EngineEvent`, `EngineTranscript`, `EngineMetricsReducer`, `EngineCommand`
@@ -153,7 +153,10 @@ SwiftStar.app ──spawn──▶ ds4-dogfood tui --ndjson --source <root> --co
   milliseconds.
 - **`SwiftStarEngine`** — `Process` and pipes but no SwiftUI: `EngineSession`.
   Testable in the integration tier.
-- **`SwiftStar`** — the app. Scenes, `EngineController`, the views. Thin,
+- **`SwiftStarUI`** — library: `EngineController`, the views, preview fixtures.
+  A library and a product so Xcode can preview it: executable targets of a bare
+  package can't be previewed, and Xcode makes schemes only per product.
+- **`SwiftStar`** — the app: `@main`, `AppDelegate`, the icon resource. Thin,
   because the decisions live in Kit.
 
 **The rule that keeps the split honest: if a test wants to assert on source

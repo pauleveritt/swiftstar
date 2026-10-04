@@ -35,8 +35,9 @@ public final class EngineController {
     @ObservationIgnored private var noteGate = CatalogNoteGate()
     @ObservationIgnored private var catalogCacheKey: CatalogCacheKey?
     @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
-    /// Set only by `init(model:)`: fixtures never run the engine for its model list.
-    @ObservationIgnored private var skipsCatalogLoad = false
+    /// Set only by `init(model:)`: fixture controllers neither load the catalog
+    /// nor start an engine, so a preview never spawns `ds4-dogfood`.
+    @ObservationIgnored private var isFixture = false
 
     @ObservationIgnored private var session: EngineSession?
     @ObservationIgnored private var quitGeneration = 0
@@ -79,7 +80,7 @@ public final class EngineController {
         modelID = ""
         contextSize = 0
         recentWorkspaces = []
-        skipsCatalogLoad = true
+        isFixture = true
     }
 
     /// The last chosen folder, else the checkout the app runs from, else home.
@@ -155,7 +156,7 @@ public final class EngineController {
     /// Loads the list once per engine path and modification date (a failed
     /// load is not retried until the path or the binary itself changes).
     func loadCatalogIfNeeded() async {
-        guard !skipsCatalogLoad else { return }
+        guard !isFixture else { return }
         guard let path = resolveExecutablePath() else { return }
         guard catalogCacheKey(forPath: path) != catalogCacheKey else { return }
         await loadCatalog()
@@ -202,7 +203,7 @@ public final class EngineController {
     public func beginTerminating() { isTerminating = true }
 
     func start() {
-        guard !isActive, !isTerminating else { return }
+        guard !isFixture, !isActive, !isTerminating else { return }
         let settingsPath = UserDefaults.standard.string(forKey: DefaultsKey.executable.rawValue)
         let resolution = EngineCommand.resolveExecutable(
             settingsPath: settingsPath,

@@ -4,8 +4,8 @@ import Testing
 import SwiftStarKit
 
 /// Drives `EngineController` directly (first coverage it has ever had — it
-/// lives in the app target, which neither test target depended on before
-/// P30). Mutates `UserDefaults.standard` (the real, persistent domain — there
+/// lives in the `SwiftStarUI` library target, which neither test target
+/// depended on before P30). Mutates `UserDefaults.standard` (the real, persistent domain — there
 /// is no isolated suite here), so kept serialized and every touched key is
 /// saved, reset to a known value before use, and restored afterward.
 @MainActor

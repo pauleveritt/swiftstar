@@ -1,6 +1,6 @@
 import SwiftStarKit
 
-/// Fixture states for `#Preview`s, shared across views that need a
+/// Fixture states for SwiftUI previews, shared across views that need a
 /// representative `EngineController` or `EngineToolCard` without spawning
 /// a real engine process.
 extension EngineController {
@@ -20,7 +20,7 @@ extension EngineController {
         model.apply(.session(EngineSessionInfo(id: "preview", modelID: "laguna-xs-2.1", contextSize: 8192)))
         _ = model.send("Summarize SessionView.swift")
         model.apply(.prompt("Summarize SessionView.swift"))
-        let tool = EngineTool(op: "read", path: "Sources/SwiftStar/SessionView.swift")
+        let tool = EngineTool(op: "read", path: "Sources/SwiftStarUI/SessionView.swift")
         model.apply(.toolStart(tool))
         model.apply(.toolEnd(tool, ok: true, durationMs: 420))
         model.apply(.toolResult(EngineToolResult(
@@ -38,15 +38,15 @@ extension EngineController {
 
 extension EngineToolCard {
     static var previewRunning: EngineToolCard {
-        EngineToolCard(tool: EngineTool(op: "read", path: "Sources/SwiftStar/SessionView.swift"))
+        EngineToolCard(tool: EngineTool(op: "read", path: "Sources/SwiftStarUI/SessionView.swift"))
     }
 
     static var previewSucceeded: EngineToolCard {
         EngineToolCard(
-            tool: EngineTool(op: "read", path: "Sources/SwiftStar/SessionView.swift"),
+            tool: EngineTool(op: "read", path: "Sources/SwiftStarUI/SessionView.swift"),
             ok: true, durationMs: 420,
             result: EngineToolResult(
-                tool: EngineTool(op: "read", path: "Sources/SwiftStar/SessionView.swift"),
+                tool: EngineTool(op: "read", path: "Sources/SwiftStarUI/SessionView.swift"),
                 preview: "struct SessionView: View {\n    @Environment(EngineController.self) private var controller",
                 truncated: true))
     }

@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "SwiftStarKit", targets: ["SwiftStarKit"]),
+        // Exists so Xcode generates a SwiftStarUI scheme for previews (no other consumer).
         .library(name: "SwiftStarUI", targets: ["SwiftStarUI"]),
         .executable(name: "SwiftStar", targets: ["SwiftStar"]),
     ],
@@ -44,10 +45,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "SwiftStar",
-            dependencies: [
-                "SwiftStarKit",
-                "SwiftStarUI",
-            ],
+            dependencies: ["SwiftStarUI"],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
         ),
