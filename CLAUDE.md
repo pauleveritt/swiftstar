@@ -23,3 +23,11 @@ concluding work that closes a phase or feature cycle) in this repository,
 
 This is a standing rule, not a suggestion the human partner has to repeat
 each time — see `docs/sdd.md`'s "Standing rules" section.
+
+## UI work
+
+A change to anything under `Sources/SwiftStarUI/` is not done until every
+`#Preview` it touches has been rendered with Xcode's `RenderPreview` tool and
+the image looked at, and both test tiers (`just test`, `just integration`) are
+green. The project skill `ui-loop` (`.claude/skills/ui-loop/SKILL.md`) has the
+scheme, paths, fixture rules and known limits; load it before UI work.

@@ -260,7 +260,7 @@ so in `## Result`.
   `SwiftStarUI` and names the skill.
 - `just lint-docs` green.
 
-- [ ] **Step 1:** write, verify, commit.
+- [x] **Step 1:** write, verify, commit.
 
 ---
 
