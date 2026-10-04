@@ -12,7 +12,8 @@ struct SwiftStarApp: App {
         // engine loading the same multi-GB model, two processes contending for
         // the GPU. One engine, one window.
         Window("SwiftStar", id: "main") {
-            MainView(engine: engine)
+            MainView()
+                .environment(engine)
                 .onAppear { appDelegate.engine = engine }
         }
         .commands {

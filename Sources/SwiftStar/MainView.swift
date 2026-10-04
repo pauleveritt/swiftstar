@@ -2,13 +2,12 @@ import SwiftUI
 import SwiftStarKit
 
 struct MainView: View {
-    let engine: EngineController
     @AppStorage(DefaultsKey.inspectorPresented.rawValue) private var inspectorPresented = false
 
     var body: some View {
-        SessionView(controller: engine)
+        SessionView()
             .inspector(isPresented: $inspectorPresented) {
-                InspectorView(engine: engine)
+                InspectorView()
             }
             .frame(minWidth: 800, minHeight: 560)
     }

@@ -3,7 +3,7 @@ import SwiftUI
 import SwiftStarKit
 
 struct SessionView: View {
-    let controller: EngineController
+    @Environment(EngineController.self) private var controller
     @State private var input = ""
     @FocusState private var inputFocused: Bool
     @AppStorage(DefaultsKey.inspectorPresented.rawValue) private var inspectorPresented = false

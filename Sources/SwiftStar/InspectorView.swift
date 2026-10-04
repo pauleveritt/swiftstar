@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftStarKit
 
 struct InspectorView: View {
-    let engine: EngineController
+    @Environment(EngineController.self) private var engine
 
     var body: some View {
         let state = engine.metrics
