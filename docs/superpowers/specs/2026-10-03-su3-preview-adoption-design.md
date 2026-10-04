@@ -108,3 +108,24 @@ later decision. No source logic changes; this cycle is additive only
    block of its own.
 3. Every `#Preview` renders without a runtime crash or an empty/blank
    canvas, confirmed via the `RenderPreview` MCP tool, one view at a time.
+
+## Amendment, 2026-10-04: views move to a `SwiftStarUI` library target
+
+The first `RenderPreview` attempt (`SessionView`) failed. Xcode reports that
+previewing in an executable target needs `ENABLE_DEBUG_DYLIB = YES` "or break
+out your preview code into a separate framework". That setting is Xcode-only:
+a bare SwiftPM package has no project editor to set it in, and `Package.swift`
+cannot express it (`.define`/`unsafeFlags` don't work). Apple's answer on the
+Developer Forums (thread 812649) says the same and recommends the split. The
+Xcode 27 release notes don't change this.
+
+Decision: every view, `EngineController` and `PreviewFixtures` move to a new
+`SwiftStarUI` library target. The `SwiftStar` executable keeps only
+`SwiftStarApp.swift` (`@main` + `AppDelegate`) and `Resources/` (the icon
+`Tools/make-app.sh` copies by path). Rejected: wrapping the package in an
+`.xcodeproj` just to flip one setting, because it adds a second build
+description to keep in sync with `Package.swift`.
+
+Success criterion 2 now reads `Sources/SwiftStarUI/` in place of
+`Sources/SwiftStar/`. Still additive only, apart from the move and the
+`public` modifiers the app shell needs.

@@ -16,6 +16,15 @@ spawning a real process. No test-tier change; previews are verified by
 rendering (`RenderPreview` MCP tool), not `#Test`.
 
 **Spec:** `docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md`
+(see its 2026-10-04 amendment: views move to a `SwiftStarUI` library target).
+
+**Amended 2026-10-04.** Task 2's first `RenderPreview` failed: previewing an
+*executable* target requires the Xcode-only `ENABLE_DEBUG_DYLIB` build
+setting, which a bare SwiftPM package has no way to set (no project editor,
+nothing in `Package.swift`; Apple's forum answer, thread 812649, confirms it
+and recommends moving views to a library target). New Task 2 does that split;
+the old Tasks 2–5 are now 3–6, with paths moved from `Sources/SwiftStar/` to
+`Sources/SwiftStarUI/`.
 
 ## Global constraints
 
@@ -25,6 +34,10 @@ rendering (`RenderPreview` MCP tool), not `#Test`.
 - Commit with the attribution line `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
 
 ## Review focus
+
+0. **The split is a pure move plus access control** — no logic change, and
+   `Tools/make-app.sh` output still launches and passes the markdown
+   resource self-test → Task 2.
 
 1. **Fixture transcripts must go through `EngineSessionModel.apply`**, the
    same fold a real session uses — not a hand-built `EngineTranscript` that
@@ -58,14 +71,47 @@ extension EngineToolCard {
 }
 ```
 
-- [ ] **Step 1:** implement; `swift build` clean; both test tiers green
-  (no test-tier surface added, this is a build-correctness check) → commit.
+- [x] **Step 1:** implement; `swift build` clean; both test tiers green
+  (no test-tier surface added, this is a build-correctness check) → commit
+  (`92dfc59`).
 
-### Task 2: `SessionView`, `MainView`, `InspectorView` previews
+### Task 2: Split views into a `SwiftStarUI` library target
 
 **Files:**
-- Modify: `Sources/SwiftStar/SessionView.swift`, `Sources/SwiftStar/MainView.swift`,
-  `Sources/SwiftStar/InspectorView.swift` (one `#Preview` each, using
+- Modify: `Package.swift:31` (new `.target(name: "SwiftStarUI")` with the
+  executable's current dependencies and `swiftSettings`; `SwiftStar` keeps
+  `resources: [.process("Resources")]` and depends only on `SwiftStarKit` +
+  `SwiftStarUI`), `Package.swift:49` (integration tests depend on
+  `SwiftStarUI` instead of `SwiftStar`)
+- Move (`git mv`): every file in `Sources/SwiftStar/` except
+  `SwiftStarApp.swift` and `Resources/` → `Sources/SwiftStarUI/`
+- Modify: `Sources/SwiftStarUI/EngineController.swift:10` (`public` class,
+  `init()`, `isActive`, `beginTerminating()`, `quit()`),
+  `MainView.swift`, `SettingsView.swift` (`public` type + `init` + `body`),
+  `MarkdownText.swift` (`public` `runResourceSelfTestIfRequested()`)
+- Modify: `Sources/SwiftStar/SwiftStarApp.swift` (`import SwiftStarUI`)
+- Modify: `Tests/SwiftStarIntegrationTests/EngineControllerTests.swift:3`
+  (`@testable import SwiftStarUI`)
+
+**Interfaces (produces):** module `SwiftStarUI`; `public` only what
+`SwiftStarApp.swift` touches (listed above), everything else stays internal.
+
+**Proves it:** `RenderPreview` on `SessionView`'s `#Preview` returns an image,
+not the `ENABLE_DEBUG_DYLIB` error; `just app` then
+`DS4_SELFTEST_MARKDOWN=1 .build/SwiftStar.app/Contents/MacOS/SwiftStar
+--markdown-selftest` prints `DS4_SELFTEST_MARKDOWN: OK`.
+
+- [ ] **Step 1:** commit the move alone. `git mv` keeps the three
+  uncommitted Task 3 `#Preview` blocks (`SessionView`, `MainView`,
+  `InspectorView`) unstaged, and they ride along to the new paths.
+  `swift build`, `just test`, `just integration` green; the `RenderPreview`
+  check above uses the in-tree `SessionView` block → commit.
+
+### Task 3: `SessionView`, `MainView`, `InspectorView` previews
+
+**Files:**
+- Modify: `Sources/SwiftStarUI/SessionView.swift`, `Sources/SwiftStarUI/MainView.swift`,
+  `Sources/SwiftStarUI/InspectorView.swift` (one `#Preview` each, using
   `EngineController.previewRunning` via `.environment(...)`)
 
 **Interfaces:** none.
@@ -73,13 +119,13 @@ extension EngineToolCard {
 - [ ] **Step 1:** implement; `swift build` clean; each preview confirmed
   rendering (not blank, no crash) via `RenderPreview` → commit.
 
-### Task 3: `SettingsView`, `PromptBubble`/`ThinkingDisclosure`, `ValueGaugeView` previews
+### Task 4: `SettingsView`, `PromptBubble`/`ThinkingDisclosure`, `ValueGaugeView` previews
 
 **Files:**
-- Modify: `Sources/SwiftStar/SettingsView.swift` (one `#Preview`)
-- Modify: `Sources/SwiftStar/PromptBubble.swift` (two `#Preview`s for
+- Modify: `Sources/SwiftStarUI/SettingsView.swift` (one `#Preview`)
+- Modify: `Sources/SwiftStarUI/PromptBubble.swift` (two `#Preview`s for
   `PromptBubble` — plain and `queued: true` — one for `ThinkingDisclosure`)
-- Modify: `Sources/SwiftStar/ValueGaugeView.swift` (three `#Preview`s, one
+- Modify: `Sources/SwiftStarUI/ValueGaugeView.swift` (three `#Preview`s, one
   per `Severity` case)
 
 **Interfaces:** none.
@@ -87,13 +133,13 @@ extension EngineToolCard {
 - [ ] **Step 1:** implement; `swift build` clean; each preview confirmed
   rendering via `RenderPreview` → commit.
 
-### Task 4: `ToolCardView`, `MarkdownText` previews
+### Task 5: `ToolCardView`, `MarkdownText` previews
 
 **Files:**
-- Modify: `Sources/SwiftStar/ToolCardView.swift` (three `#Preview`s —
+- Modify: `Sources/SwiftStarUI/ToolCardView.swift` (three `#Preview`s —
   `running`/`succeeded`/`failed`, using `EngineToolCard.previewRunning`/
   `.previewSucceeded`/`.previewFailed`)
-- Modify: `Sources/SwiftStar/MarkdownText.swift` (one `#Preview` with a
+- Modify: `Sources/SwiftStarUI/MarkdownText.swift` (one `#Preview` with a
   short sample mixing a heading, code block, and inline emphasis)
 
 **Interfaces:** none.
@@ -101,7 +147,7 @@ extension EngineToolCard {
 - [ ] **Step 1:** implement; `swift build` clean; each preview confirmed
   rendering via `RenderPreview` → commit.
 
-### Task 5: Close
+### Task 6: Close
 
 - [ ] **Step 1:** ROADMAP SU.3 row → "done"; `## Now` updated; plan
   `## Result`, `lifecycle: closed`; `just lint-docs` green; commit.
