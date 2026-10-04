@@ -35,6 +35,8 @@ public final class EngineController {
     @ObservationIgnored private var noteGate = CatalogNoteGate()
     @ObservationIgnored private var catalogCacheKey: CatalogCacheKey?
     @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
+    /// Set only by `init(model:)`: fixtures never run the engine for its model list.
+    @ObservationIgnored private var skipsCatalogLoad = false
 
     @ObservationIgnored private var session: EngineSession?
     @ObservationIgnored private var quitGeneration = 0
@@ -77,6 +79,7 @@ public final class EngineController {
         modelID = ""
         contextSize = 0
         recentWorkspaces = []
+        skipsCatalogLoad = true
     }
 
     /// The last chosen folder, else the checkout the app runs from, else home.
@@ -152,6 +155,7 @@ public final class EngineController {
     /// Loads the list once per engine path and modification date (a failed
     /// load is not retried until the path or the binary itself changes).
     func loadCatalogIfNeeded() async {
+        guard !skipsCatalogLoad else { return }
         guard let path = resolveExecutablePath() else { return }
         guard catalogCacheKey(forPath: path) != catalogCacheKey else { return }
         await loadCatalog()

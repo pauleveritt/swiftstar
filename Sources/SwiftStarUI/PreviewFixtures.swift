@@ -18,6 +18,7 @@ extension EngineController {
         model.didStart()
         model.apply(.ready)
         model.apply(.session(EngineSessionInfo(id: "preview", modelID: "laguna-xs-2.1", contextSize: 8192)))
+        _ = model.send("Summarize SessionView.swift")
         model.apply(.prompt("Summarize SessionView.swift"))
         let tool = EngineTool(op: "read", path: "Sources/SwiftStar/SessionView.swift")
         model.apply(.toolStart(tool))
