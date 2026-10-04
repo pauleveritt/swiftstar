@@ -75,3 +75,21 @@ struct ToolCardView: View {
     }
 
 }
+
+#Preview("Running") {
+    ToolCardView(card: .previewRunning, workspace: nil)
+        .padding()
+        .frame(width: 420)
+}
+
+#Preview("Succeeded") {
+    ToolCardView(card: .previewSucceeded, workspace: nil)
+        .padding()
+        .frame(width: 420)
+}
+
+#Preview("Failed") {
+    ToolCardView(card: .previewFailed, workspace: nil)
+        .padding()
+        .frame(width: 420)
+}

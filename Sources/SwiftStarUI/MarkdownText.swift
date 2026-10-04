@@ -141,3 +141,18 @@ private struct MarkdownNSText: NSViewRepresentable {
         var measuredHeight: CGFloat = 0
     }
 }
+
+#Preview {
+    MarkdownText("""
+    # Heading
+
+    Some *emphasis*, **strong text** and `inline code`.
+
+    ```swift
+    let greeting = "Hello, SwiftStar"
+    print(greeting)
+    ```
+    """)
+    .padding()
+    .frame(width: 420)
+}
