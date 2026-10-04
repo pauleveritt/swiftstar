@@ -63,6 +63,29 @@ testing.
 - To look at many renders at once, tile them into one image (a small AppKit
   script works; there is no ImageMagick here).
 
+## Xcode's tools from terminal Claude Code
+
+Xcode's agent gets the tools as `xcode-tools` automatically. Terminal Claude
+Code gets them through the bridge, registered once per clone:
+
+1. In Xcode: Settings > Intelligence > Model Context Protocol, turn on
+   "Allow external agents to use Xcode tools", and open this package in Xcode.
+2. In a terminal, from the repo: `claude mcp add --transport stdio xcode -- xcrun mcpbridge`
+   (local scope: private to you, this project). `claude mcp list` should show
+   `xcode` connected. Its tools are named `mcp__xcode__…`.
+3. Xcode asks to approve the agent on first connection; choose Always Allow or
+   24 hours. `xcrun mcp-server status` shows current grants and expiries.
+
+Two traps, both checked 2026-10-04:
+
+- **Don't commit a project `.mcp.json` for the bridge.** Xcode's agent honours
+  it and then sees every Xcode tool twice (`xcode` and `xcode-tools`).
+- **Xcode's agent can't run `claude mcp …` for you as-is.** Its shell inherits
+  `CLAUDE_CONFIG_DIR` pointing at Xcode's own agent config, so the command
+  would change the wrong config. Use `env -u CLAUDE_CONFIG_DIR claude …`. Even
+  then terminal Claude may report "Not logged in" from that shell; run
+  terminal checks in your own terminal.
+
 ## Tests
 
 - `just test`: fast tier. `just integration`: also runs the 30 integration

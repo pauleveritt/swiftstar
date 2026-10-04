@@ -288,7 +288,7 @@ claude mcp add --transport stdio xcode -- xcrun mcpbridge
   appear once or twice, then delete the file. Record the result in the
   skill and in `## Result`.
 
-- [ ] **Step 1:** owner registers the bridge, then verify, record and commit.
+- [x] **Step 1:** owner registers the bridge, then verify, record and commit.
 
 ---
 
