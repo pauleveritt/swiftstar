@@ -68,6 +68,17 @@ final class EngineController {
         }
     }
 
+    /// Preview/test fixture construction: starts from a given model state,
+    /// skipping `init()`'s `UserDefaults` reads and the live catalog-reload
+    /// observer (previews don't restart a session).
+    init(model: EngineSessionModel) {
+        self.model = model
+        workspace = nil
+        modelID = ""
+        contextSize = 0
+        recentWorkspaces = []
+    }
+
     /// The last chosen folder, else the checkout the app runs from, else home.
     private static func defaultWorkspace() -> URL {
         if let dir = UserDefaults.standard.string(forKey: DefaultsKey.workspace.rawValue), !dir.isEmpty {
