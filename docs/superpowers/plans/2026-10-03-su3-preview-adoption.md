@@ -1,7 +1,7 @@
 ---
 phase: SU
 cycle: SU.3
-lifecycle: active
+lifecycle: closed
 ---
 
 # SU.3 Preview adoption implementation plan
@@ -164,9 +164,39 @@ preview crashes `XCPreviewAgent`: a Swift cast failure in SwiftUI's
 
 ### Task 6: Close
 
-- [ ] **Step 1:** ROADMAP SU.3 row → "done"; `## Now` updated; plan
+- [x] **Step 1:** ROADMAP SU.3 row → "done"; `## Now` updated; plan
   `## Result`, `lifecycle: closed`; `just lint-docs` green; commit.
 
 ## Result
 
-_(filled at close)_
+All five build tasks landed; `swift build`, `just test` (143) and
+`just integration` (30) green after every task; every preview confirmed
+rendering through Xcode's `RenderPreview` MCP, driven over `xcrun
+mcpbridge` with the `SwiftStarUI` scheme active.
+
+1. **Task 1** (`92dfc59`): `EngineController(model:)` and `PreviewFixtures.swift`.
+2. **Task 2** (`42f9707`, `0e0de4a`): added mid-cycle (amendment `6ed38a6`).
+   An executable target of a bare package can't be previewed (Xcode-only
+   `ENABLE_DEBUG_DYLIB`), so every view, `EngineController` and the fixtures
+   moved to a `SwiftStarUI` library target. It also needed a library
+   product: Xcode generates package schemes per product only.
+3. **Task 3** (`40d598a`, `78739be`, `2e6dc6a`): `SessionView`'s preview
+   crash was the fixture, not the view. `previewRunning` never left `.idle`,
+   so the auto-start wiped it; fixed with `didStart()`. Fixture also gains
+   the user row via `send`, as a real turn does.
+4. **Tasks 4–5** (`1ff466b`, `48757dd`): the remaining previews; 14 blocks
+   across the 8 views in all.
+5. **Final review fixes** (`47207d0`): fixture controllers neither load the
+   catalog nor start the engine (`isFixture` guard), so no preview spawns
+   `ds4-dogfood`; `BRIEF.md` targets updated to four; stale fixture path;
+   the fixture doc comment reworded so success criterion 2's grep is exact.
+
+**Diverged from "additive only":** the target split and `public` modifiers
+(per the spec amendment), and the `isFixture` guards in
+`loadCatalogIfNeeded()` and `start()`, which are production-code logic.
+They're inert in the real app because only `init(model:)` sets the flag.
+
+**Descoped:** `ThinkingDisclosure` previews collapsed only (expanded state
+is private `@State`). The memory widget's debug-only crash shape, a test
+pinning `start()`'s fixture guard, and the gauge snapshot flake went to the
+ROADMAP Backlog ("SU.3's deferred items").
