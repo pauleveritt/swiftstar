@@ -78,7 +78,9 @@ extension EngineToolCard {
 ### Task 2: Split views into a `SwiftStarUI` library target
 
 **Files:**
-- Modify: `Package.swift:31` (new `.target(name: "SwiftStarUI")` with the
+- Modify: `Package.swift:10` (`.library(name: "SwiftStarUI")` product —
+  Xcode makes package schemes per product, and previews need the
+  `SwiftStarUI` scheme active), `Package.swift:31` (new `.target(name: "SwiftStarUI")` with the
   executable's current dependencies and `swiftSettings`; `SwiftStar` keeps
   `resources: [.process("Resources")]` and depends only on `SwiftStarKit` +
   `SwiftStarUI`), `Package.swift:49` (integration tests depend on
@@ -101,11 +103,13 @@ not the `ENABLE_DEBUG_DYLIB` error; `just app` then
 `DS4_SELFTEST_MARKDOWN=1 .build/SwiftStar.app/Contents/MacOS/SwiftStar
 --markdown-selftest` prints `DS4_SELFTEST_MARKDOWN: OK`.
 
-- [ ] **Step 1:** commit the move alone. `git mv` keeps the three
+- [x] **Step 1:** commit the move alone. `git mv` keeps the three
   uncommitted Task 3 `#Preview` blocks (`SessionView`, `MainView`,
   `InspectorView`) unstaged, and they ride along to the new paths.
   `swift build`, `just test`, `just integration` green; the `RenderPreview`
-  check above uses the in-tree `SessionView` block → commit.
+  check above uses the in-tree `SessionView` block → commit (`42f9707`,
+  `0e0de4a`). Proof ran on `InspectorView`: `SessionView` gets past the dylib
+  error but crashes the preview agent (see Task 3).
 
 ### Task 3: `SessionView`, `MainView`, `InspectorView` previews
 
@@ -115,6 +119,11 @@ not the `ENABLE_DEBUG_DYLIB` error; `just app` then
   `EngineController.previewRunning` via `.environment(...)`)
 
 **Interfaces:** none.
+
+**Known at start:** with the `SwiftStarUI` scheme active, `SessionView`'s
+preview crashes `XCPreviewAgent`: a Swift cast failure in SwiftUI's
+`DebugReplaceableViewStorage` around `HStack<ValueGaugeView, Text>` +
+`NativeTooltipModifier`. `InspectorView`'s preview renders.
 
 - [ ] **Step 1:** implement; `swift build` clean; each preview confirmed
   rendering (not blank, no crash) via `RenderPreview` → commit.
