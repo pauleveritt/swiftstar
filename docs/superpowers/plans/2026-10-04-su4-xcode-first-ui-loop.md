@@ -1,7 +1,7 @@
 ---
 phase: SU
 cycle: SU.4
-lifecycle: active
+lifecycle: closed
 ---
 
 # SU.4 Xcode-first UI loop implementation plan
@@ -307,4 +307,63 @@ claude mcp add --transport stdio xcode -- xcrun mcpbridge
 - `just lint-docs` green. Then offer the finish options: merge to `main`,
   open a PR, or keep the branch.
 
-- [ ] **Step 1:** review, close, verify, commit.
+- [x] **Step 1:** review, close, verify, commit.
+
+## Result
+
+Closed 2026-10-04 on branch `su4-xcode-first-ui-loop`.
+
+**Commits:** spec `e814143`, plan `807d4a3`, Task 1 `1077bdf`, Task 2
+`de037c4`, Task 3 `dfdd0cc`, Task 4 `11d8fb1`, Task 5 `70c3b80`, Task 6
+`950949e`, Task 7 `945fedf`, close (this commit). Fast tier 143 and
+integration tier 30 green after every task.
+
+**What shipped:** `Package.swift:1-20` (shared settings);
+`Sources/SwiftStarUI/` in eight feature folders; `Session/` holds
+`SessionView` (64 lines, from 453), `SessionToolbar`, `TranscriptView`,
+`TranscriptRowView`, `ComposerView`, `StatusBarView`, `MemoryStatusView`;
+`PreviewSupport/PreviewTraits.swift`; the `CLAUDE.md` "UI work" section;
+`.claude/skills/ui-loop/SKILL.md`.
+
+**What diverged:**
+- Task 1: the new settings surfaced two real diagnostics, both fixed in
+  source. `EngineSession`'s `ChunkBytes` iterator now calls
+  `next(isolation: #isolation)`. `MetricsFormattingTests` was missing
+  `import Foundation`.
+- Task 4: `RenderPreview` snapshots the first frame only, so it can't flip
+  the GPU toggle. Timed flips and run-loop flips both read "0 of 6". The
+  check moved to the owner's live canvas.
+- Task 5: the input-focus `.task` moved into `ComposerView` with the focus
+  state, so `SessionView` keeps two tasks, not three. The font modifier now
+  sits after `.toolbar`. A probe showed toolbar menus ignore `.font` (30 pt
+  rendered unchanged), so the toolbar half of the font bug can't be fixed
+  through font size. The before-image was taken after Task 4, so it
+  contrasts only the toolbar.
+- Task 7: the bridge was already registered for terminal Claude Code. A
+  throwaway project `.mcp.json` made Xcode's agent list `xcode` and
+  `xcode-tools` side by side, so none is committed. A terminal render could
+  not run from Xcode's shell: it inherits Xcode's `CLAUDE_CONFIG_DIR`, and
+  terminal Claude reports "Not logged in" there.
+- Task 8: `/code-review` at medium found nothing.
+
+**Descoped or owed:**
+- Owner, live canvas: open `StatusBarView`'s "GPU toggle" preview and see
+  "6 of 6" with no crash.
+- Owner, terminal: run `claude -p` asking for `RenderPreview` on
+  `swiftstar/Sources/SwiftStarUI/Session/SessionView.swift`.
+- Owner, live app: the session button and menus update when the phase
+  changes. They now read the controller inside `SessionToolbar`
+  (`ToolbarContent`), which a first-frame snapshot can't exercise.
+
+**D1 verdict: it held up.** Xcode's agent ran spec, plan, eight tasks,
+review and close without superpowers, from `docs/sdd.md` and `CLAUDE.md`
+alone. Friction came from the tools, not the process:
+- the shell's permission hook timed out several times;
+- `RenderPreview` sees only the first frame;
+- snapshot filenames carry a narrow no-break space;
+- there was no image-tiling tool, so a scratch AppKit script stood in.
+
+Project skills load in a fresh session, and the `ui-loop` skill also appeared
+in this running session after a delay. Recommendation: SU.5 runs the same
+way, in Xcode.
+
