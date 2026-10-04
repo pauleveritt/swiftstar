@@ -1,7 +1,7 @@
 ---
 phase: SU
 cycle: SU.1
-lifecycle: active
+lifecycle: closed
 ---
 
 # SU.1 SwiftUI modernisation implementation plan
@@ -53,9 +53,11 @@ drives window-close or keyboard modifier behavior).
 **Interfaces:** none; same type (`EngineController`), environment injection
 instead of initializer parameters. `ToolCardView` is unchanged (see spec `## 1`).
 
-- [ ] **Step 1:** implement; `swift build` clean; both test tiers green
+- [x] **Step 1:** implement; `swift build` clean; both test tiers green
   (no integration test touches SwiftUI views directly — this is a build
-  correctness check, not new test coverage) → commit.
+  correctness check, not new test coverage) → commit. Done: `84ba4a2`.
+  Live-launched the built `.app`: starts and quits cleanly, confirming the
+  environment resolves at runtime.
 
 ### Task 2: Composer — `.onSubmit`, Option-Return, launch focus
 
@@ -67,16 +69,15 @@ instead of initializer parameters. `ToolCardView` is unchanged (see spec `## 1`)
 
 **Interfaces:** none.
 
-- [ ] **Step 1: live check, before implementing.** Build and run the
-  `.app` (`just app`) against today's `.onKeyPress`-based composer swapped
-  for a throwaway `TextField(axis: .vertical)` + `.onSubmit`, or directly
-  against the real change once made: confirm plain Return submits and
-  Option-Return inserts a newline at the caret (not the end), both on first
-  launch (composer already focused) and mid-conversation. If Option-Return
-  does not insert at the caret, stop and report back — do not substitute a
-  different modifier key without checking in.
-- [ ] **Step 2:** implement; `swift build` clean; both test tiers green;
-  re-run the Step 1 live check against the real change → commit.
+- [x] **Step 1: live check, before implementing.** The real composer
+  disables while idle/not-found in this environment (no `ds4-dogfood`, no
+  GPU here), so verified in a standalone scratch harness instead: plain
+  Return submits, Option-Return inserts `\n` at the caret. Confirmed by the
+  owner, screenshot reviewed.
+- [x] **Step 2:** implement; `swift build` clean; both test tiers green;
+  re-ran the Step 1 live check against the real `.onSubmit` code (same
+  scratch harness, since the real composer still can't type without an
+  engine here) → commit. Done: `5093ae9`.
 
 ### Task 3: Transcript — `.defaultScrollAnchor(.bottom)`
 
@@ -88,10 +89,12 @@ instead of initializer parameters. `ToolCardView` is unchanged (see spec `## 1`)
 
 **Interfaces:** none. Row ids stay `\.offset` (already stable — spec `## 3`).
 
-- [ ] **Step 1:** implement; `swift build` clean; both test tiers green;
-  live check (`just app`): the transcript stays pinned to the bottom as new
-  rows append and as a tool card fills in place (no visible jump or lag
-  versus the old behavior) → commit.
+- [x] **Step 1:** implement; `swift build` clean; both test tiers green;
+  live check: no live engine here to grow the real transcript, so verified
+  in a standalone scratch harness (`ScrollView`/`LazyVStack`/`ForEach` +
+  `.defaultScrollAnchor(.bottom)`, same append-only shape) — new rows
+  appear already scrolled into view with no manual scrolling, confirmed by
+  the owner across several additions → commit. Done: `dad78fe`.
 
 ### Task 4: Window lifecycle — close quits, restoration disabled
 
@@ -103,18 +106,52 @@ instead of initializer parameters. `ToolCardView` is unchanged (see spec `## 1`)
 **Interfaces:** none; `applicationShouldTerminate` (already handles the
 engine-quit wait) is unchanged and now also reached via this path.
 
-- [ ] **Step 1:** implement; `swift build` clean; both test tiers green;
-  live check (`just app`): close the window via its close button while
-  idle — the app quits, `ps aux | grep -i ds4-dogfood` shows nothing; repeat
-  mid-turn — the engine quits cleanly (same stdout/exit handling
-  `EngineSessionTests`'s `quitMidTurnEndsTheEngine` pins) before the app
-  exits → commit.
+- [x] **Step 1:** implement; `swift build` clean; both test tiers green;
+  live check (`just app`): closing the window via its close button while
+  idle ends the process (confirmed via `ps aux`, gone after the close) →
+  commit. Done: `de0e15b`. **Not verified:** the mid-turn case (no
+  `ds4-dogfood`/GPU in this environment to start a real turn) — `quit()`'s
+  existing mid-turn handling is exercised by `EngineSessionTests`, but this
+  specific window-close trigger calling into it was only checked idle.
 
 ### Task 5: Close
 
-- [ ] **Step 1:** ROADMAP SU.1 row → "done"; `## Now` updated; plan
+- [x] **Step 1:** ROADMAP SU.1 row → "done"; `## Now` updated; plan
   `## Result`, `lifecycle: closed`; `just lint-docs` green; commit.
 
 ## Result
 
-_(filled at close)_
+All four items landed, each its own commit, build and both test tiers
+green after every task (129 fast / 30 integration throughout — no test
+count change, since this cycle touches `SwiftStar` only, which the fast/
+integration tiers don't exercise directly).
+
+1. **`@Environment` injection** (`84ba4a2`) — `SwiftStarApp` keeps the one
+   `@State`; `MainView`/`SessionView`/`InspectorView` read
+   `@Environment(EngineController.self)`. The "manual `onChange` copy"
+   this item was originally paired with (`MetricsModel`'s sync) was already
+   deleted in P32 Task 4; nothing left to remove.
+2. **Composer `.onSubmit`** (`5093ae9`) — drops the hand-rolled
+   `.onKeyPress` that caused A8 (newline always at the end, not the caret).
+   Adds a launch-time focus task.
+3. **Transcript `.defaultScrollAnchor(.bottom)`** (`dad78fe`) — drops the
+   `ScrollViewReader`/`onChange`/`Transaction` dance. Row ids stay
+   `\.offset`: confirmed stable by reading `EngineTranscript.swift` (rows
+   are append-only), contrary to the original deep review's "give it a
+   UUID" suggestion.
+4. **Window lifecycle** (`de0e15b`) — `applicationShouldTerminateAfterLastWindowClosed`
+   returns `true`, reusing the existing `applicationShouldTerminate`
+   engine-quit-wait path rather than duplicating it; `.restorationBehavior(.disabled)`
+   added.
+
+**Live verification, with an honest gap.** This environment has no
+`ds4-dogfood`/GPU, so the real composer stays disabled
+(`EngineComposer.canType == false` while idle/not-found) and the real
+transcript never grows. Items 2 and 3 were verified in standalone scratch
+harnesses isolating just the SwiftUI behavior in question (not committed —
+built in `/tmp`, deleted after use); the owner confirmed both by eye,
+including a screenshot for item 2. Item 4 was verified against the real
+built `.app`, idle only — closing the window ended the process, confirmed
+via `ps aux`. The mid-turn case for item 4 is **not** live-verified;
+moved to the ROADMAP Backlog ("Process and tooling") to reopen when the
+GPU is free.

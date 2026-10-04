@@ -14,7 +14,7 @@ A pointer, not a narrative — the detail lives in each phase's own row and its
 linked docs. Update this list when what's in flight changes; do not grow it
 into a second history of the phase table.
 
-- **In flight / next:** Phase P is closed — P29, P30, P31 and P32 all done 2026-10-04. Phase SU (SwiftUI) under way: SU.1 in progress (spec and plan written 2026-10-03). SU.5's UI-tweaks list is still being brainstormed. P28, the cut-over to ds4-engine, closed 2026-09-28 — see its row.
+- **In flight / next:** Phase P is closed — P29, P30, P31 and P32 all done 2026-10-04. Phase SU (SwiftUI) under way: SU.1 done 2026-10-03; SU.2 next. SU.5's UI-tweaks list is still being brainstormed. P28, the cut-over to ds4-engine, closed 2026-09-28 — see its row.
 - **Closed with it:** the in-flight P24.4 cycle, P25 cycles 5–6, P18, the
   Mellum parking and the orchestrate-loop measurements all assumed machinery
   P28 removes; see the Backlog's "Closed or re-homed by P28".
@@ -60,7 +60,7 @@ into a second history of the phase table.
 
 Phase `P` runs P0–P32 and is closed to new entries as of 2026-10-04; `P0`–`P29` keep their historical numbering, unrenamed. New initiatives open a named phase instead, cycles numbered `<Name>.1`, `<Name>.2`, … — matching ds4-engine's `QW`/`LS`/`TC`/`RUN` convention. First: **SU** (SwiftUI).
 
-| SU.1 | SwiftUI modernisation (was P29.7) | Inject `EngineController` via `@Environment`, delete the manual `onChange` copy; composer's `.onSubmit` instead of `.onKeyPress`; transcript `.defaultScrollAnchor(.bottom)` with stable row ids; close-last-window quits plus `.restorationBehavior(.disabled)` | in progress — spec and plan written, re-verified against current code (the `onChange` copy was already deleted in P32; stable row ids already true, no UUID needed). Spec: [`2026-10-03-su1-swiftui-modernisation-design.md`](docs/superpowers/specs/2026-10-03-su1-swiftui-modernisation-design.md); plan: [`2026-10-03-su1-swiftui-modernisation.md`](docs/superpowers/plans/2026-10-03-su1-swiftui-modernisation.md). |
+| SU.1 | SwiftUI modernisation (was P29.7) | Inject `EngineController` via `@Environment`, delete the manual `onChange` copy; composer's `.onSubmit` instead of `.onKeyPress`; transcript `.defaultScrollAnchor(.bottom)` with stable row ids; close-last-window quits plus `.restorationBehavior(.disabled)` | **done (2026-10-03)** — all four items landed. `EngineController` injected via `@Environment` (the `onChange` copy was already gone, deleted in P32). Composer's `.onSubmit` replaces `.onKeyPress` (fixes A8); Option-Return now inserts at the caret, not the end — live-verified via a scratch harness (no `ds4-dogfood`/GPU in this environment to drive the real composer), owner-confirmed. Transcript's `.defaultScrollAnchor(.bottom)` replaces the `ScrollViewReader`/`onChange` dance; row ids stay `\.offset` (already stable, re-verified against `EngineTranscript`). Window close now quits (`applicationShouldTerminateAfterLastWindowClosed`), `.restorationBehavior(.disabled)` added — live-verified idle only, not mid-turn (same GPU-less constraint). Spec: [`2026-10-03-su1-swiftui-modernisation-design.md`](docs/superpowers/specs/2026-10-03-su1-swiftui-modernisation-design.md); plan: [`2026-10-03-su1-swiftui-modernisation.md`](docs/superpowers/plans/2026-10-03-su1-swiftui-modernisation.md). |
 | SU.2 | A modern testing strategy | Not a framework change — all 14 test files already use Swift Testing, no XCTest. Extract more view-adjacent logic into plain, testable types, continuing the `EngineSessionModel`/`EngineComposer` pattern, and consider a feature-based reorg so views stay thin enough that Previews cover what tests can't | planned |
 | SU.3 | Preview adoption | `#Preview` on all 8 existing views (`SessionView`, `MainView`, `SettingsView`, `InspectorView`, `PromptBubble`, `ToolCardView`, `MarkdownText`, `ValueGaugeView`) — none exist today — with fixture-backed states | planned |
 | SU.4 | The Claude/Xcode preview workflow | Use the already-available `RenderPreview` MCP tool to verify UI changes before claiming them done, the same way a browser check is required for web UI work; write it up as a house rule | planned |
@@ -167,6 +167,12 @@ Closed, 2026-10-04 (caught up `../ds4-engine` to `main` at `409267a9`):
 
 ### Process and tooling
 
+- **SU.1's window-close-quits live check only covered idle, not mid-turn
+  (2026-10-03).** No `ds4-dogfood`/GPU in this environment to start a real
+  turn; closing the window while idle was confirmed to end the process via
+  `ps aux`. The underlying `quit()` mid-turn path is unit-tested
+  (`EngineSessionTests`), just not confirmed live through this specific
+  trigger. *Reopens when the GPU is free for a live run.*
 - **Real-engine fixture recapture, owed from P29.3, split out of P31.** Record
   `terminal`, `mentions`, `steering_*`, `telemetry_error`, `compact*` and
   `clear` from the real `ds4-dogfood tui --ndjson` (their current tests use
