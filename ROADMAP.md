@@ -14,7 +14,7 @@ A pointer, not a narrative — the detail lives in each phase's own row and its
 linked docs. Update this list when what's in flight changes; do not grow it
 into a second history of the phase table.
 
-- **In flight / next:** Phase P is closed — P29, P30, P31 and P32 all done 2026-10-04. Phase SU (SwiftUI) begins at SU.1; SU.5's UI-tweaks list is still being brainstormed. P28, the cut-over to ds4-engine, closed 2026-09-28 — see its row.
+- **In flight / next:** Phase P is closed — P29, P30, P31 and P32 all done 2026-10-04. Phase SU (SwiftUI) under way: SU.1 in progress (spec and plan written 2026-10-03). SU.5's UI-tweaks list is still being brainstormed. P28, the cut-over to ds4-engine, closed 2026-09-28 — see its row.
 - **Closed with it:** the in-flight P24.4 cycle, P25 cycles 5–6, P18, the
   Mellum parking and the orchestrate-loop measurements all assumed machinery
   P28 removes; see the Backlog's "Closed or re-homed by P28".
@@ -60,7 +60,7 @@ into a second history of the phase table.
 
 Phase `P` runs P0–P32 and is closed to new entries as of 2026-10-04; `P0`–`P29` keep their historical numbering, unrenamed. New initiatives open a named phase instead, cycles numbered `<Name>.1`, `<Name>.2`, … — matching ds4-engine's `QW`/`LS`/`TC`/`RUN` convention. First: **SU** (SwiftUI).
 
-| SU.1 | SwiftUI modernisation (was P29.7) | Inject `EngineController` via `@Environment`, delete the manual `onChange` copy; composer's `.onSubmit` instead of `.onKeyPress`; transcript `.defaultScrollAnchor(.bottom)` with stable row ids; close-last-window quits plus `.restorationBehavior(.disabled)` | planned |
+| SU.1 | SwiftUI modernisation (was P29.7) | Inject `EngineController` via `@Environment`, delete the manual `onChange` copy; composer's `.onSubmit` instead of `.onKeyPress`; transcript `.defaultScrollAnchor(.bottom)` with stable row ids; close-last-window quits plus `.restorationBehavior(.disabled)` | in progress — spec and plan written, re-verified against current code (the `onChange` copy was already deleted in P32; stable row ids already true, no UUID needed). Spec: [`2026-10-03-su1-swiftui-modernisation-design.md`](docs/superpowers/specs/2026-10-03-su1-swiftui-modernisation-design.md); plan: [`2026-10-03-su1-swiftui-modernisation.md`](docs/superpowers/plans/2026-10-03-su1-swiftui-modernisation.md). |
 | SU.2 | A modern testing strategy | Not a framework change — all 14 test files already use Swift Testing, no XCTest. Extract more view-adjacent logic into plain, testable types, continuing the `EngineSessionModel`/`EngineComposer` pattern, and consider a feature-based reorg so views stay thin enough that Previews cover what tests can't | planned |
 | SU.3 | Preview adoption | `#Preview` on all 8 existing views (`SessionView`, `MainView`, `SettingsView`, `InspectorView`, `PromptBubble`, `ToolCardView`, `MarkdownText`, `ValueGaugeView`) — none exist today — with fixture-backed states | planned |
 | SU.4 | The Claude/Xcode preview workflow | Use the already-available `RenderPreview` MCP tool to verify UI changes before claiming them done, the same way a browser check is required for web UI work; write it up as a house rule | planned |
