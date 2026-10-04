@@ -369,7 +369,7 @@ struct SessionView: View {
             memoryStatusWidget
             if let used = controller.metrics.contextUsed,
                let size = controller.metrics.contextSize, size > 0 {
-                let tooltip = contextRingTooltip(used: used, size: size)
+                let tooltip = MetricsFormatting.contextTooltip(used: used, size: size)
                 ValueGaugeView(
                     fraction: Double(used) / Double(size),
                     trackColor: Severity.ofContext(used: used, size: size).color,
@@ -392,13 +392,13 @@ struct SessionView: View {
     private var memoryStatusWidget: some View {
         if let allocated = controller.metrics.gpuAllocatedBytes,
            let budget = controller.metrics.gpuBudgetBytes, budget > 0 {
-            let tooltip = "GPU memory: \(memoryDisplay(allocated)) allocated of \(memoryDisplay(budget)) budget."
+            let tooltip = "GPU memory: \(MetricsFormatting.bytes(allocated)) allocated of \(MetricsFormatting.bytes(budget)) budget."
             HStack(spacing: 4) {
                 ValueGaugeView(
                     fraction: min(Double(allocated) / Double(budget), 1.0),
                     trackColor: .green,
                     diameter: 15)
-                Text("\(memoryDisplay(allocated)) / \(memoryDisplay(budget))")
+                Text("\(MetricsFormatting.bytes(allocated)) / \(MetricsFormatting.bytes(budget))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -418,22 +418,8 @@ struct SessionView: View {
     private var bottomStatusText: String {
         guard controller.phase == .running else { return composerState.label }
         let activity = composerState.label
-        return "Prefill avg \(rateText(controller.metrics.prefillTPS)) tok/s · "
-            + "Generation avg \(rateText(controller.metrics.generationTPS)) tok/s · \(activity)"
-    }
-
-    private func rateText(_ value: Double?) -> String {
-        value.map { String(format: "%.1f", $0) } ?? "—"
-    }
-
-    private func memoryDisplay(_ bytes: Int64) -> String {
-        bytes.formatted(.byteCount(style: .memory))
-    }
-
-    private func contextRingTooltip(used: Int, size: Int) -> String {
-        let percent = Double(used) / Double(size) * 100
-        return String(format: "Context window: %@ of %@ tokens (%.0f%% used).",
-                      used.formatted(), size.formatted(), percent)
+        return "Prefill avg \(MetricsFormatting.rate(controller.metrics.prefillTPS)) · "
+            + "Generation avg \(MetricsFormatting.rate(controller.metrics.generationTPS)) · \(activity)"
     }
 }
 

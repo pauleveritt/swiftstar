@@ -27,15 +27,15 @@ struct InspectorView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Throughput").font(.headline)
-                    metricRow("Prefill avg", value: rate(state.prefillTPS))
-                    metricRow("Generation avg", value: rate(state.generationTPS))
+                    metricRow("Prefill avg", value: MetricsFormatting.rate(state.prefillTPS))
+                    metricRow("Generation avg", value: MetricsFormatting.rate(state.generationTPS))
                 }
                 .inspectorCard()
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("GPU memory").font(.headline)
-                    metricRow("Allocated", value: bytes(state.gpuAllocatedBytes))
-                    metricRow("Budget", value: bytes(state.gpuBudgetBytes))
+                    metricRow("Allocated", value: MetricsFormatting.bytes(state.gpuAllocatedBytes))
+                    metricRow("Budget", value: MetricsFormatting.bytes(state.gpuBudgetBytes))
                     metricRow("Plan", value: state.planGiB.map { String(format: "%.1f GiB", $0) } ?? "—")
                 }
                 .inspectorCard()
@@ -43,14 +43,6 @@ struct InspectorView: View {
             .padding(16)
         }
         .frame(minWidth: 280, idealWidth: 320)
-    }
-
-    private func rate(_ value: Double?) -> String {
-        value.map { String(format: "%.1f tok/s", $0) } ?? "—"
-    }
-
-    private func bytes(_ value: Int64?) -> String {
-        value.map { $0.formatted(.byteCount(style: .memory)) } ?? "—"
     }
 
     private func metricRow(_ title: String, value: String) -> some View {
