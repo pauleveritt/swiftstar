@@ -20,6 +20,7 @@ struct SwiftStarApp: App {
             ToolbarCommands()
         }
         .defaultSize(width: 900, height: 640)
+        .restorationBehavior(.disabled)
 
         Settings {
             SettingsView()
@@ -39,6 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (gated by env): fails loudly at launch, not on the first code block.
         MarkdownText.runResourceSelfTestIfRequested()
     }
+
+    /// One engine, one window (see `SwiftStarApp.body`): closing it should
+    /// end the app, not leave it running with no window and a menu bar.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     /// A terminate reply is owed and not yet sent.
     private var terminationPending = false
