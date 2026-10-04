@@ -51,3 +51,7 @@ public struct SettingsView: View {
         )
     }
 }
+
+#Preview {
+    SettingsView()
+}

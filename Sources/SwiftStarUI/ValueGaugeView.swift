@@ -40,3 +40,18 @@ struct ValueGaugeView: View {
         .frame(width: diameter, height: diameter)
     }
 }
+
+#Preview("Healthy") {
+    ValueGaugeView(fraction: 0.3, trackColor: Severity.healthy.color)
+        .padding()
+}
+
+#Preview("Warning") {
+    ValueGaugeView(fraction: 0.6, trackColor: Severity.warning.color)
+        .padding()
+}
+
+#Preview("Critical") {
+    ValueGaugeView(fraction: 0.9, trackColor: Severity.critical.color)
+        .padding()
+}

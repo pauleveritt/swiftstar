@@ -63,3 +63,21 @@ struct ThinkingDisclosure: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
+
+#Preview("PromptBubble") {
+    PromptBubble(text: "Summarize SessionView.swift")
+        .padding()
+        .frame(width: 420)
+}
+
+#Preview("PromptBubble queued") {
+    PromptBubble(text: "Summarize SessionView.swift", queued: true)
+        .padding()
+        .frame(width: 420)
+}
+
+#Preview("ThinkingDisclosure") {
+    ThinkingDisclosure(text: "The user wants a summary, so I should read the file first.")
+        .padding()
+        .frame(width: 420)
+}
