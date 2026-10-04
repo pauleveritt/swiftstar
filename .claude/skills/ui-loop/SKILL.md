@@ -75,6 +75,15 @@ Code gets them through the bridge, registered once per clone:
    `xcode` connected. Its tools are named `mcp__xcode__…`.
 3. Xcode asks to approve the agent on first connection; choose Always Allow or
    24 hours. `xcrun mcp-server status` shows current grants and expiries.
+4. A new terminal agent's first Xcode tool call fails with "This agent isn't
+   approved to use Xcode's tools yet. Call XcodeOpenWorkspace…". Call
+   `XcodeOpenWorkspace` on the repo first; that triggers the approval.
+5. **Check the scheme on every run.** The terminal agent can find a different
+   active scheme from the one Xcode's agent left (seen: `SwiftStar-Package`).
+   Switch to `SwiftStarUI` before `RenderPreview`.
+
+Verified 2026-10-04: terminal `claude -p` with `--allowedTools "mcp__xcode__*"`
+rendered `SessionView`'s "Running" preview with no errors.
 
 Two traps, both checked 2026-10-04:
 

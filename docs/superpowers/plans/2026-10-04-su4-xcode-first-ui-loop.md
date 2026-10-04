@@ -351,7 +351,10 @@ integration tier 30 green after every task.
   "6 of 6" with no crash. *Done 2026-10-04, after close: the owner ran it,
   and it worked.*
 - Owner, terminal: run `claude -p` asking for `RenderPreview` on
-  `swiftstar/Sources/SwiftStarUI/Session/SessionView.swift`.
+  `swiftstar/Sources/SwiftStarUI/Session/SessionView.swift`. *Done
+  2026-10-04, after close: it rendered "Running" with no errors. The
+  terminal agent first had to call `XcodeOpenWorkspace` to be approved, and
+  it found `SwiftStar-Package` active, so it switched to `SwiftStarUI`.*
 - Owner, live app: the session button and menus update when the phase
   changes. They now read the controller inside `SessionToolbar`
   (`ToolbarContent`), which a first-frame snapshot can't exercise.
