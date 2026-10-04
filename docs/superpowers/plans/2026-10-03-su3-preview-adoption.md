@@ -125,8 +125,14 @@ preview crashes `XCPreviewAgent`: a Swift cast failure in SwiftUI's
 `DebugReplaceableViewStorage` around `HStack<ValueGaugeView, Text>` +
 `NativeTooltipModifier`. `InspectorView`'s preview renders.
 
-- [ ] **Step 1:** implement; `swift build` clean; each preview confirmed
-  rendering (not blank, no crash) via `RenderPreview` → commit.
+- [x] **Step 1:** implement; `swift build` clean; each preview confirmed
+  rendering (not blank, no crash) via `RenderPreview` → commit (`40d598a`,
+  `78739be`, `2e6dc6a`). The crash was the fixture, not the view:
+  `previewRunning` never left `.idle`, so `SessionView`'s auto-start wiped
+  it; fixed with `didStart()`. Fixture controllers also skip the catalog
+  load (no `ds4-dogfood` spawn) and add the user row via `send`. Still open:
+  the memory widget's lone-`if` may hit the same crash in Xcode Debug runs
+  of the real app when GPU metrics disappear (view change, out of scope).
 
 ### Task 4: `SettingsView`, `PromptBubble`/`ThinkingDisclosure`, `ValueGaugeView` previews
 
