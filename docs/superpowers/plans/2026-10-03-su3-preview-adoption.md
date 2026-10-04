@@ -145,8 +145,8 @@ preview crashes `XCPreviewAgent`: a Swift cast failure in SwiftUI's
 
 **Interfaces:** none.
 
-- [ ] **Step 1:** implement; `swift build` clean; each preview confirmed
-  rendering via `RenderPreview` → commit.
+- [x] **Step 1:** implement; `swift build` clean; each preview confirmed
+  rendering via `RenderPreview` → commit (`1ff466b`).
 
 ### Task 5: `ToolCardView`, `MarkdownText` previews
 
@@ -159,8 +159,8 @@ preview crashes `XCPreviewAgent`: a Swift cast failure in SwiftUI's
 
 **Interfaces:** none.
 
-- [ ] **Step 1:** implement; `swift build` clean; each preview confirmed
-  rendering via `RenderPreview` → commit.
+- [x] **Step 1:** implement; `swift build` clean; each preview confirmed
+  rendering via `RenderPreview` → commit (`48757dd`).
 
 ### Task 6: Close
 
