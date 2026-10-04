@@ -348,7 +348,8 @@ integration tier 30 green after every task.
 
 **Descoped or owed:**
 - Owner, live canvas: open `StatusBarView`'s "GPU toggle" preview and see
-  "6 of 6" with no crash.
+  "6 of 6" with no crash. *Done 2026-10-04, after close: the owner ran it,
+  and it worked.*
 - Owner, terminal: run `claude -p` asking for `RenderPreview` on
   `swiftstar/Sources/SwiftStarUI/Session/SessionView.swift`.
 - Owner, live app: the session button and menus update when the phase
