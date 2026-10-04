@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "SwiftStarKit", targets: ["SwiftStarKit"]),
+        .library(name: "SwiftStarUI", targets: ["SwiftStarUI"]),
         .executable(name: "SwiftStar", targets: ["SwiftStar"]),
     ],
     dependencies: [
