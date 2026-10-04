@@ -26,7 +26,7 @@ struct ToolCardView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Text(Self.metadataLine(card))
+            Text(card.metadataLine)
                 .font(.caption2)
                 .foregroundStyle(card.ok == false ? Color(nsColor: .systemRed) : .secondary)
                 .monospacedDigit()
@@ -49,7 +49,7 @@ struct ToolCardView: View {
 
     @ViewBuilder
     private var headerView: some View {
-        let label = Label(Self.headerText(card), systemImage: Self.icon(for: card.tool.op))
+        let label = Label(card.headerText, systemImage: card.icon)
             .font(.system(size: transcriptFontSize, weight: .semibold))
             .foregroundStyle(.primary)
 
@@ -74,41 +74,4 @@ struct ToolCardView: View {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    static func headerText(_ card: EngineToolCard) -> String {
-        if let path = card.tool.path, !path.isEmpty {
-            return "\(card.tool.op) \(path)"
-        }
-        return card.tool.op
-    }
-
-    /// State and duration: `running`, or `succeeded`/`failed` with the time.
-    static func metadataLine(_ card: EngineToolCard) -> String {
-        var parts: [String] = []
-        switch card.ok {
-        case nil: parts.append("running")
-        case true?: parts.append("succeeded")
-        case false?: parts.append("failed")
-        }
-        if let ms = card.durationMs, ms.isFinite, ms >= 0 {
-            parts.append(duration(ms / 1000))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private static func duration(_ seconds: Double) -> String {
-        if seconds < 10 { return String(format: "%.1fs", seconds) }
-        return String(format: "%.0fs", seconds)
-    }
-
-    static func icon(for op: String) -> String {
-        switch op {
-        case "bash", "bash_status", "bash_stop": return "terminal"
-        case "write": return "doc.badge.plus"
-        case "edit": return "square.and.pencil"
-        case "ls": return "folder"
-        case "read", "more": return "doc.text.magnifyingglass"
-        case "grep": return "magnifyingglass"
-        default: return "wrench.and.screwdriver"
-        }
-    }
 }

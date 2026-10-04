@@ -12,6 +12,46 @@ public struct EngineToolCard: Equatable, Sendable {
         self.durationMs = durationMs
         self.result = result
     }
+
+    /// `op path`, or just `op` when the tool has no path.
+    public var headerText: String {
+        if let path = tool.path, !path.isEmpty {
+            return "\(tool.op) \(path)"
+        }
+        return tool.op
+    }
+
+    /// State and duration: `running`, or `succeeded`/`failed` with the time.
+    public var metadataLine: String {
+        var parts: [String] = []
+        switch ok {
+        case nil: parts.append("running")
+        case true?: parts.append("succeeded")
+        case false?: parts.append("failed")
+        }
+        if let ms = durationMs, ms.isFinite, ms >= 0 {
+            parts.append(Self.duration(ms / 1000))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func duration(_ seconds: Double) -> String {
+        if seconds < 10 { return String(format: "%.1fs", seconds) }
+        return String(format: "%.0fs", seconds)
+    }
+
+    /// SF Symbol name for the tool's op.
+    public var icon: String {
+        switch tool.op {
+        case "bash", "bash_status", "bash_stop": return "terminal"
+        case "write": return "doc.badge.plus"
+        case "edit": return "square.and.pencil"
+        case "ls": return "folder"
+        case "read", "more": return "doc.text.magnifyingglass"
+        case "grep": return "magnifyingglass"
+        default: return "wrench.and.screwdriver"
+        }
+    }
 }
 
 public enum TranscriptRow: Equatable, Sendable {

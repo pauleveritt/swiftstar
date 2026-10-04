@@ -276,3 +276,48 @@ struct EngineTranscriptSurfaceTests {
         #expect(t.rows.last == .system("Turn ended: answered"))
     }
 }
+
+struct EngineToolCardFormattingTests {
+    private func card(op: String, path: String? = nil, ok: Bool? = nil, durationMs: Double? = nil) -> EngineToolCard {
+        EngineToolCard(tool: EngineTool(op: op, path: path), ok: ok, durationMs: durationMs)
+    }
+
+    @Test func headerTextIncludesPathWhenPresent() {
+        #expect(card(op: "read", path: "a.swift").headerText == "read a.swift")
+    }
+
+    @Test func headerTextIsOpAloneWithNoPath() {
+        #expect(card(op: "bash", path: nil).headerText == "bash")
+        #expect(card(op: "bash", path: "").headerText == "bash")
+    }
+
+    @Test func metadataLineRunningHasNoDuration() {
+        #expect(card(op: "read").metadataLine == "running")
+    }
+
+    @Test func metadataLineSucceededUnderTenSecondsUsesOneDecimal() {
+        #expect(card(op: "read", ok: true, durationMs: 1234).metadataLine == "succeeded · 1.2s")
+    }
+
+    @Test func metadataLineFailedAtOrOverTenSecondsUsesNoDecimal() {
+        #expect(card(op: "read", ok: false, durationMs: 12_000).metadataLine == "failed · 12s")
+    }
+
+    @Test func metadataLineIgnoresNegativeOrNonFiniteDuration() {
+        #expect(card(op: "read", ok: true, durationMs: -1).metadataLine == "succeeded")
+        #expect(card(op: "read", ok: true, durationMs: .nan).metadataLine == "succeeded")
+    }
+
+    @Test func iconMatchesEachKnownOp() {
+        #expect(card(op: "bash").icon == "terminal")
+        #expect(card(op: "bash_status").icon == "terminal")
+        #expect(card(op: "bash_stop").icon == "terminal")
+        #expect(card(op: "write").icon == "doc.badge.plus")
+        #expect(card(op: "edit").icon == "square.and.pencil")
+        #expect(card(op: "ls").icon == "folder")
+        #expect(card(op: "read").icon == "doc.text.magnifyingglass")
+        #expect(card(op: "more").icon == "doc.text.magnifyingglass")
+        #expect(card(op: "grep").icon == "magnifyingglass")
+        #expect(card(op: "unknown-op").icon == "wrench.and.screwdriver")
+    }
+}
