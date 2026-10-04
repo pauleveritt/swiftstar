@@ -104,7 +104,7 @@ signature changes.
   (3), `MarkdownText` and `ValueGaugeView` (3).
 - `git log --follow` on one moved file shows its history.
 
-- [ ] **Step 1:** move, verify, commit.
+- [x] **Step 1:** move, verify, commit.
 
 ---
 
