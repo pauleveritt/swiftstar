@@ -239,7 +239,7 @@ so in `## Result`.
   100 lines.
 - Both tiers green.
 
-- [ ] **Step 1:** render the "Large font" before-image, implement, render
+- [x] **Step 1:** render the "Large font" before-image, implement, render
   and look, commit.
 
 ---

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftStarKit
 
 /// Fixture states for SwiftUI previews, shared across views that need a
@@ -77,5 +78,16 @@ extension EngineToolCard {
             result: EngineToolResult(
                 tool: EngineTool(op: "bash", path: nil),
                 preview: "command not found: swiift", truncated: false))
+    }
+}
+
+/// `UserDefaults` for previews that need a stored setting, kept out of the
+/// real app's defaults: apply with `.defaultAppStorage(...)`.
+enum PreviewDefaults {
+    /// The transcript font at its largest slot.
+    static var largeFont: UserDefaults {
+        let defaults = UserDefaults(suiteName: "SwiftStarPreview.largeFont") ?? .standard
+        defaults.set(TranscriptFontScale.sizes.last, forKey: DefaultsKey.transcriptFontSize.rawValue)
+        return defaults
     }
 }
