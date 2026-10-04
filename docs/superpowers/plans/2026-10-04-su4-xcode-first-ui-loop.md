@@ -70,7 +70,7 @@ and `SwiftStarIntegrationTests` only.
   then remove it.
 - `RenderPreview` on `SessionView` still renders.
 
-- [ ] **Step 1:** implement, verify as above, commit.
+- [x] **Step 1:** implement, verify as above, commit.
 
 ---
 

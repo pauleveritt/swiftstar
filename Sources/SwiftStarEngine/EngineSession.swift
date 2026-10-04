@@ -156,7 +156,9 @@ public final class EngineSession {
             mutating func next() async -> UInt8? {
                 while true {
                     if let byte = current?.next() { return byte }
-                    guard let data = await inner.next() else { return nil }
+                    // `next(isolation:)` keeps `inner` on the caller's actor;
+                    // plain `next()` would send it off (NonisolatedNonsendingByDefault).
+                    guard let data = await inner.next(isolation: #isolation) else { return nil }
                     current = data.makeIterator()
                 }
             }

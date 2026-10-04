@@ -1,6 +1,21 @@
 // swift-tools-version: 6.2
 import PackageDescription
 
+/// Settings every target this package defines shares (SU.4 spec, decisions D4
+/// and D5). Dependencies are not affected: warnings as errors applies to our
+/// own code only.
+let common: [SwiftSetting] = [
+    .swiftLanguageMode(.v6),
+    // Xcode's "Approachable Concurrency" pair, enabled by name in SwiftPM.
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+    .enableUpcomingFeature("MemberImportVisibility"),
+    .treatAllWarnings(as: .error),
+]
+
+/// UI, app and the tests that touch UI types run on the main actor by default.
+let mainActor: [SwiftSetting] = common + [.defaultIsolation(MainActor.self)]
+
 let package = Package(
     name: "SwiftStar",
     platforms: [.macOS(.v26)],
@@ -24,11 +39,11 @@ let package = Package(
             revision: "d83032f91844e5365f49a174d9940036790e434c"),
     ],
     targets: [
-        .target(name: "SwiftStarKit", swiftSettings: [.swiftLanguageMode(.v6)]),
+        .target(name: "SwiftStarKit", swiftSettings: common),
         .target(
             name: "SwiftStarEngine",
             dependencies: ["SwiftStarKit"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: common
         ),
         // The views live in a library target, not the executable: Xcode cannot
         // preview inside an executable target of a bare package (it needs the
@@ -41,23 +56,23 @@ let package = Package(
                 .product(name: "MarkdownView", package: "MarkdownView"),
                 .product(name: "MarkdownParser", package: "MarkdownView"),
             ],
-            swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
+            swiftSettings: mainActor
         ),
         .executableTarget(
             name: "SwiftStar",
             dependencies: ["SwiftStarUI"],
             resources: [.process("Resources")],
-            swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
+            swiftSettings: mainActor
         ),
         .testTarget(
             name: "SwiftStarKitTests",
             dependencies: ["SwiftStarKit"],
-            swiftSettings: [.swiftLanguageMode(.v6)]
+            swiftSettings: common
         ),
         .testTarget(
             name: "SwiftStarIntegrationTests",
             dependencies: ["SwiftStarKit", "SwiftStarEngine", "SwiftStarUI"],
-            swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
+            swiftSettings: mainActor
         ),
     ]
 )
