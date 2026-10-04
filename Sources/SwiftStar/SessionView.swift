@@ -199,34 +199,19 @@ struct SessionView: View {
     }
 
     private var transcriptView: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    // Rows are keyed by offset: the transcript only appends
-                    // rows (a tool card fills in place), so an offset is a
-                    // stable identity for a row's whole lifetime.
-                    ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { index, row in
-                        rowView(row, queued: controller.transcript.isPending(rowAt: index))
-                    }
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .onChange(of: controller.transcript.rows) { _, _ in
-                // Compare the whole array, not `.count`: a tool card fills in
-                // place, so the count alone would miss it.
-                let last = controller.transcript.rows.count - 1
-                guard last >= 0 else { return }
-                // Follow the latest row without animating; an animated scroll
-                // per mutation keeps interrupting the previous one.
-                var transaction = Transaction()
-                transaction.animation = nil
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    proxy.scrollTo(last, anchor: .bottom)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                // Rows are keyed by offset: the transcript only appends
+                // rows (a tool card fills in place), so an offset is a
+                // stable identity for a row's whole lifetime.
+                ForEach(Array(controller.transcript.rows.enumerated()), id: \.offset) { index, row in
+                    rowView(row, queued: controller.transcript.isPending(rowAt: index))
                 }
             }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .defaultScrollAnchor(.bottom)
     }
 
     @ViewBuilder
