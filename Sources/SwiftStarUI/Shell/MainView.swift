@@ -15,7 +15,6 @@ public struct MainView: View {
     }
 }
 
-#Preview {
+#Preview("Running", traits: .runningSession) {
     MainView()
-        .environment(EngineController.previewRunning)
 }

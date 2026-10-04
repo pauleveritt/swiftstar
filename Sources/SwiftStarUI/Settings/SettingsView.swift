@@ -52,6 +52,6 @@ public struct SettingsView: View {
     }
 }
 
-#Preview {
+#Preview("Settings") {
     SettingsView()
 }

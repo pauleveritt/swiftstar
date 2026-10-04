@@ -142,7 +142,7 @@ extension EngineMetricsState { static var previewRunning: EngineMetricsState { g
   the running session; `SessionView` gets an "Idle" preview too.
 - Both tiers green.
 
-- [ ] **Step 1:** implement, verify, commit.
+- [x] **Step 1:** implement, verify, commit.
 
 ---
 

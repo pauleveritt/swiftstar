@@ -142,7 +142,7 @@ private struct MarkdownNSText: NSViewRepresentable {
     }
 }
 
-#Preview {
+#Preview("Markdown") {
     MarkdownText("""
     # Heading
 

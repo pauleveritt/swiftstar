@@ -412,7 +412,10 @@ struct SessionView: View {
     }
 }
 
-#Preview {
+#Preview("Running", traits: .runningSession) {
     SessionView()
-        .environment(EngineController.previewRunning)
+}
+
+#Preview("Idle", traits: .idleSession) {
+    SessionView()
 }

@@ -63,7 +63,6 @@ private extension View {
     }
 }
 
-#Preview {
+#Preview("Running", traits: .runningSession) {
     InspectorView()
-        .environment(EngineController.previewRunning)
 }

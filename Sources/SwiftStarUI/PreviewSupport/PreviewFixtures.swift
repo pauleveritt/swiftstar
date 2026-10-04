@@ -11,6 +11,16 @@ extension EngineController {
     /// A running session, mid-conversation: one answered turn with a tool
     /// call, metrics populated, awaiting the next prompt.
     static var previewRunning: EngineController {
+        EngineController(model: runningModel(withGPU: true))
+    }
+
+    /// The running session without GPU metrics, as before the engine's first
+    /// `memory` event: the status bar shows no memory widget.
+    static var previewRunningNoGPU: EngineController {
+        EngineController(model: runningModel(withGPU: false))
+    }
+
+    private static func runningModel(withGPU: Bool) -> EngineSessionModel {
         var model = EngineSessionModel()
         // `.ready` only moves a `.starting` session to `.running`. Left
         // `.idle`, SessionView's auto-start `.task` calls `start()` inside
@@ -30,9 +40,18 @@ extension EngineController {
             text: "`SessionView` renders the transcript, composer, and status bar for one engine session.",
             contextUsed: 512, contextSize: 8192, durationMs: 1830)))
         model.apply(.pause(PauseMetrics(prefillTokens: 512, prefillMs: 210, evalCount: 64, evalMs: 980)))
-        model.apply(.memory(EngineMemory(allocatedBytes: 6_400_000_000, budgetBytes: 21_000_000_000, planGiB: 6.0)))
+        if withGPU {
+            model.apply(.memory(EngineMemory(allocatedBytes: 6_400_000_000, budgetBytes: 21_000_000_000, planGiB: 6.0)))
+        }
         model.apply(.awaitingInput)
-        return EngineController(model: model)
+        return model
+    }
+}
+
+extension EngineMetricsState {
+    /// The running fixture's metrics, for views that take metrics as a value.
+    static var previewRunning: EngineMetricsState {
+        EngineController.previewRunning.metrics
     }
 }
 
