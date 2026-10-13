@@ -218,6 +218,32 @@ struct EngineControllerTests {
         #expect(asked)
     }
 
+    // MARK: SU.6c, D2: the last session's apply command
+
+    @Test func lastSessionDirectoryOutlivesTheController() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .lastSessionDirectory: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        await controller.quit()
+        // The fake's exit names /tmp/fake-session ("Session artifacts:").
+        let next = EngineController()
+        #expect(next.lastSessionDirectory?.path == "/tmp/fake-session")
+        #expect(next.applyCommand == nil)  // that folder doesn't exist here
+    }
+
+    @Test func applyCommandNeedsAnExistingDirectory() throws {
+        let dir = tempPath("sessions") + "/20261013-000000-x"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let defaults = DefaultsScope([.lastSessionDirectory: dir])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        #expect(controller.applyCommand == "ds4-dogfood apply 20261013-000000-x")
+        try FileManager.default.removeItem(atPath: dir)
+        #expect(controller.applyCommand == nil)
+    }
+
     /// A started controller whose session is idle at its first `input`.
     private func running(_ f: FakeEngine, graces: EngineGraces = .standard) async -> EngineController {
         let controller = EngineController(graces: graces)

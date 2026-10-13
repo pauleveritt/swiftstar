@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import SwiftStarEngine
@@ -25,6 +26,28 @@ public final class EngineController {
             UserDefaults.standard.set(workspace.path, forKey: DefaultsKey.workspace.rawValue)
         }
     }
+
+    /// The most recent ended session's directory, kept across launches
+    /// (SU.6c, D2).
+    private(set) var lastSessionDirectory: URL?
+
+    /// `ds4-dogfood apply <id>` for the last session, while its directory
+    /// still exists.
+    var applyCommand: String? {
+        guard let dir = lastSessionDirectory, FileManager.default.fileExists(atPath: dir.path) else { return nil }
+        return EngineCommand.applyCommand(sessionDirectory: dir)
+    }
+
+    /// Copies the last session's apply command and says so in the transcript.
+    public func copyApplyCommand() {
+        guard let command = applyCommand else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        model.apply(.notice("Copied: \(command)"))
+    }
+
+    /// Whether a last session's apply command can be copied (the menu item).
+    public var canCopyApplyCommand: Bool { applyCommand != nil }
 
     /// `start()` found no usable workspace: the view opens the folder picker
     /// (SU.6c, D1). Reset by a folder choice or `folderPickerDismissed()`.
@@ -74,6 +97,8 @@ public final class EngineController {
         modelID = defaults.string(forKey: DefaultsKey.modelID.rawValue) ?? ""
         contextSize = defaults.integer(forKey: DefaultsKey.contextSize.rawValue)
         recentWorkspaces = defaults.stringArray(forKey: DefaultsKey.recentWorkspaces.rawValue) ?? []
+        lastSessionDirectory = defaults.string(forKey: DefaultsKey.lastSessionDirectory.rawValue)
+            .map { URL(fileURLWithPath: $0) }
         let choice = WorkspaceChoice.resolve(
             saved: defaults.string(forKey: DefaultsKey.workspace.rawValue),
             recents: recentWorkspaces, checkout: Self.checkout(), isUsable: WorkspaceChoice.isUsable)
@@ -427,6 +452,10 @@ public final class EngineController {
     private func handleExit(_ exit: EngineExit, _ directory: URL?) {
         session = nil
         pendingModelCommand = nil
+        if let directory {
+            lastSessionDirectory = directory
+            UserDefaults.standard.set(directory.path, forKey: DefaultsKey.lastSessionDirectory.rawValue)
+        }
         model.didExit(exit, directory: directory)
         quitGeneration += 1
         resumeQuitWaiters()

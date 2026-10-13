@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** the rest of SU.6 (6d is done), then SU.7.
+- **Next:** SU.7, or a last SU.6 part for its remaining punch list (6a–6d are done).
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -28,7 +28,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
 | SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
-| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | in progress: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md), [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md) and [6b](docs/superpowers/plans/2026-10-13-su6b-session-card.md) done 2026-10-13. Next: 6c (remembering) |
+| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6d, 6a, 6b and 6c done 2026-10-13: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md), [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md), [6b](docs/superpowers/plans/2026-10-13-su6b-session-card.md), [6c](docs/superpowers/plans/2026-10-13-su6c-remembering.md). The punch list below waits |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
 
 ### SU.6 punch list
@@ -43,9 +43,6 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
     the engine never sends
 - **Native look:** Liquid Glass affordances; `NativeTooltip` checked against
   plain `.help`.
-- **Remembering:** the apply command kept across sessions; a first-launch
-  workspace, and a saved workspace that no longer exists (seen 2026-10-13: it
-  pointed at a deleted worktree, so every start was refused).
 - **Left from SU.5a** (each plan's Result):
   - rate, duration, the status line and the ctx label ignore the locale; the
     inspector mixes GB and GiB
@@ -123,6 +120,10 @@ found by the [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-an
 
 ### Process
 
+- **Integration runs in two worktrees at once interfere.** Both use the test
+  runner's `UserDefaults` domain (seen in SU.6c, alongside `session-last`).
+  *Reopens if parallel runs become routine. The fix is a per-run defaults
+  suite, injected into `EngineController`.*
 - **SU.1's window-close-quits live check covered idle only, not mid-turn.**
   The `quit()` mid-turn path is unit-tested. *Reopens when the GPU is free
   for a live run.*

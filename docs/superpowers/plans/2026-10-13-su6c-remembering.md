@@ -176,4 +176,35 @@ Break check: drop the save in `handleExit`, and
 
 ## Result
 
-*Written at close.*
+**Commits:** `2945936`..this one, on `main`. Suites: 100 fast and 43
+integration, all passing, with no orphaned fakes.
+
+**Break checks:** each new test failed against one broken line, then
+passed once it was restored.
+- Without the existence check, `isUsableNeedsTheFolderItself` fails.
+- Starting in the home folder again fails `noWorkspaceDoesNotSpawn`.
+- Without the `didSet` save, `missingWorkspaceFallsBackToRecent` fails.
+- Without the save in `handleExit`,
+  `lastSessionDirectoryOutlivesTheController` fails.
+- Without the existence check on `applyCommand`,
+  `applyCommandNeedsAnExistingDirectory` fails.
+
+**Previews:** `SessionView`'s three previews and `ComposerView`'s "Ready"
+were rendered and are unchanged. Their fixture controllers skip `init()`.
+
+**Diverged:**
+- **The "skip the saved entry" filter was dropped.** Breaking it changed
+  nothing: the saved folder had already failed `isUsable`.
+- **There's no explicit save of a fallback in `init`.** `@Observable`
+  makes `workspace` a computed property, so its `didSet` runs in `init`.
+  The doc's premise that it doesn't was wrong.
+- **`DefaultsScope` now takes `Any?` values,** because the Recent list is
+  an array.
+- **`DefaultsKeyTests` pins the new key's raw value.**
+- **The menu's enabling flag is `canCopyApplyCommand`.**
+- **Not exercised live:** the Session menu and the picker that opens when
+  there's no folder. Both need a real app launch with windows.
+- **Interference between test runs:** the first full run failed while
+  another session ran integration tests in the `session-last` worktree.
+  Both share the test runner's `UserDefaults` domain. A re-run on its own
+  passed.
