@@ -231,7 +231,7 @@ struct EngineWireParserTests {
             == .notice("Telemetry error: disk full"))
     }
 
-    // Payload: operator.py:312-322 `emit("answer", text=, **reason, ...)`; reason only for laguna-xs-chat.
+    // Payload: operator.py:312-322 `emit("answer", text=, **reason, ...)`; reason for an empty answer (tools-closed, no-final-text).
     @Test func answerKeepsOptionalReason() {
         var p = Self.ready()
         guard case .answer(let a) = p.parse(Self.event(#""kind":"answer","text":"","reason":"ran out of tokens","context_used":10,"context_size":100"#)) else {
