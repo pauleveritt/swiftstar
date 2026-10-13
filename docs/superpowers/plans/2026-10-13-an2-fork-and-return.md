@@ -345,3 +345,45 @@ driver): passed every line of the revision's §3.4.**
   - the main `conversation.kv` existed before, during and after
 - This was at small context. At 42k a resume with state measured 4.5 s and
   `sync_ms` 393 (first attempt's Result).
+
+**Commits:** `9035d59` (Task 1), `add8da3`, `d477d47`, `cd13ac8`, `e1e3255`,
+and this close. Suites: 39 Python, 205 Kit, 51 integration. Each new test
+failed under a recorded break, 33 in all.
+
+**Diverged:**
+- **`Stage.analyzing` also carries the report,** so the card is appended
+  when the prompt is sent.
+- **An exit clears a forking or returning analysis only after the relaunch
+  has begun.** The controller quits the main session first, and that exit
+  had cleared the analysis (found by `analyzeForksThenSendsPrompt`; pinned
+  by `mainSessionExitKeepsForking`).
+- **The controller-level Done test was dropped.** No recorded fixture has a
+  resume followed by an answered turn. Done's rules are pinned in Kit, and
+  the return was checked live.
+- **Previews:**
+  - the composer tint moved to an overlay
+  - "Analyzing" in `TranscriptView` needs a 1,000 pt frame, because the
+    first frame of a bottom-anchored stack was blank
+  - `RenderPreview` returned the "Analyzing" snapshot for "Empty" (index 1)
+    twice
+- **`restartAfterQuitBoundIsSkippedButStartWorks` failed while other
+  processes ran** (the shared `UserDefaults`, plus an orphaned fake). It
+  passed 13 runs in a row once alone.
+
+**Task 6, live through `EngineController` on the 27B** (throwaway test,
+deleted), two rounds of Analyze → answer → follow-up → Done in one session:
+- the fork was up, with the prompt sent, in 2.9 and 3.2 s
+- **Done returned in 2.9 s both times**, rebuilt to the main's turns only
+  ("back at prompt 2", then "3")
+- the main `conversation.kv` survived, and the next prompt took 0.9 s
+- round 1's analysis named the failed `ls` (F1)
+
+Not done here: clicking through the built app, and `/last` in a new Claude
+Code session. Both are the owner's.
+
+**Findings for AN:**
+- **After a return, the report covers only the current directory.** Round
+  2's main session (`164144`) had resumed from `164101`, so its report had
+  no flags; the earlier `ls` was in `164101`. The report should follow
+  `resumed_from`.
+- **The report card's wide tables clip at narrow widths** (seen at 560 pt).

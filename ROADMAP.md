@@ -8,7 +8,7 @@
 ## Now
 
 - **Next:** SU.5b (test consolidation; plan not written), then SU.6 and SU.7.
-- **In flight:** [AN.2](#phase-an-analyze), fork and return (plan written).
+- **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed). AN.2 is done on branch `session-last`; the owner's app click-through is open.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -28,7 +28,7 @@ useful into ds4-engine. [Spec](docs/superpowers/specs/2026-10-13-an-session-anal
 | # | Cycle | Direction | Status |
 |---|---|---|---|
 | AN.1 | The report | `just last` and `/last`: the newest session's failed and useless steps, time, per-pause rates and raw signals, from the session directory with no model call | done 2026-10-13: [plan and Result](docs/superpowers/plans/2026-10-13-an1-session-report.md) |
-| AN.2 | Analyze and Done | Analyze on the last answer resumes the session as a fork, shows the report and asks about it there; Done resumes the original, so the main context returns as it was | plan written ([second attempt](docs/superpowers/plans/2026-10-13-an2-fork-and-return.md), spec revised); Task 1 is a live loop check. The `/rewind` attempt stopped at gate 1 ([Result](docs/superpowers/plans/2026-10-13-an2-analyze-and-done.md#result)) |
+| AN.2 | Analyze and Done | Analyze on the last answer resumes the session as a fork, shows the report and asks about it there; Done resumes the original, so the main context returns as it was | done 2026-10-13: live, fork 3 s and Done 2.9 s, twice. [Plan and Result](docs/superpowers/plans/2026-10-13-an2-fork-and-return.md); the `/rewind` attempt [stopped](docs/superpowers/plans/2026-10-13-an2-analyze-and-done.md#result) |
 | AN.3 | Remedies | Suggest and apply fixes from the flags, applied after Done in the main session | not brainstormed |
 | AN.4 | Into ds4-engine | `ds4-dogfood last [--session] [--json]` takes the script, tests and fixture; the app's `reportArgv` switches to it | opens on the owner's call, once the flag rules and summary rows stop changing |
 
