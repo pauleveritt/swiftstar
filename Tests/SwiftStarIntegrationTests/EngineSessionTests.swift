@@ -188,9 +188,9 @@ struct EngineSessionTests {
         try session.start()
         #expect(await wait { rec.has(isProtocolError) })
         #expect(await wait { rec.exit != nil })
-        // "interrupted", not just code 130 -- disambiguates this from a
-        // quit-timeout exit, which also lands on 130 but reads differently.
-        #expect(rec.exit?.message == "interrupted")
+        // SwiftStar ended it because of the protocol error (SIGTERM, code
+        // 130); the message says that, not "interrupted".
+        #expect(rec.exit?.message == "ended after a protocol error")
         #expect(rec.exits.count == 1)
     }
 

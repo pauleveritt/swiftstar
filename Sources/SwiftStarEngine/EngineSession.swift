@@ -316,7 +316,8 @@ public final class EngineSession {
         process = nil
         let exit = EngineExit.describe(
             code: exitStatus, stderrTail: String(decoding: stderrTail, as: UTF8.self), sawReady: sawReady,
-            reason: exitReason == .uncaughtSignal ? .signal : .exit, forced: forced, terminated: terminated)
+            reason: exitReason == .uncaughtSignal ? .signal : .exit, forced: forced, terminated: terminated,
+            afterProtocolError: failedProtocol)
         quitTask = nil
         onExit?(exit, sessionDirectory)
     }

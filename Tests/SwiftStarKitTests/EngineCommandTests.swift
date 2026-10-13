@@ -149,4 +149,16 @@ struct EngineCommandTests {
             code: 2, stderrTail: "ds4-dogfood: error: bad\nSession artifacts: /tmp/s/x\n", sawReady: false)
         #expect(exit.message == "refused to start: ds4-dogfood: error: bad")
     }
+
+    @Test func protocolErrorExitReadsAsSuch() {
+        let e = EngineExit.describe(code: 130, stderrTail: "", sawReady: false, afterProtocolError: true)
+        #expect(e.message == "ended after a protocol error")
+        let signalled = EngineExit.describe(
+            code: SIGTERM, stderrTail: "", sawReady: true, reason: .signal, afterProtocolError: true)
+        #expect(signalled.message == "ended after a protocol error")
+    }
+
+    @Test func plainInterruptStillInterrupted() {
+        #expect(EngineExit.describe(code: 130, stderrTail: "", sawReady: true).message == "interrupted")
+    }
 }
