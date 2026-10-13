@@ -19,7 +19,7 @@ struct SessionView: View {
             Divider()
             StatusBarView(phase: controller.phase, composerLabel: controller.composer.label, metrics: controller.metrics)
         }
-        .navigationTitle("Agent")
+        .navigationTitle(WindowTitle.text(workspace: controller.workspace))
         .toolbar {
             SessionToolbar(
                 askingModel: $askingModel, askingContext: $askingContext,

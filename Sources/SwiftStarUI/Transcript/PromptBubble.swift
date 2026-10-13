@@ -3,7 +3,7 @@ import SwiftUI
 /// The user's echoed prompt — a right-aligned, accent-filled pill.
 struct PromptBubble: View {
     let text: String
-    /// The engine has not started a turn for this prompt yet.
+    /// The engine reported this prompt as queued.
     var queued = false
     @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 

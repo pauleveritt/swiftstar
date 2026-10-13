@@ -23,7 +23,7 @@ struct ComposerView: View {
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Ask the agent…", text: $input, axis: .vertical)
+                TextField("Ask about this project…", text: $input, axis: .vertical)
                     .font(.system(size: transcriptFontSize))
                     .textFieldStyle(.plain)
                     .lineLimit(1...15)

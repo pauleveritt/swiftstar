@@ -4,7 +4,7 @@ import SwiftStarKit
 /// One transcript row, drawn according to its kind.
 struct TranscriptRowView: View {
     let row: TranscriptRow
-    /// The engine has not started a turn for this (user) row yet.
+    /// The engine reported this (user) row's prompt as queued.
     let queued: Bool
     /// Where the tool cards' relative paths resolve (Quick Look).
     let source: URL?

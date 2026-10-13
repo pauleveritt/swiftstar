@@ -14,7 +14,7 @@ struct TranscriptView: View {
                 // rows (a tool card fills in place), so an offset is a
                 // stable identity for a row's whole lifetime.
                 ForEach(Array(transcript.rows.enumerated()), id: \.offset) { index, row in
-                    TranscriptRowView(row: row, queued: transcript.isPending(rowAt: index), source: source)
+                    TranscriptRowView(row: row, queued: transcript.isQueued(rowAt: index), source: source)
                 }
             }
             .padding()
