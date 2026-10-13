@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** SU.6 (UI tweaks; not brainstormed), then SU.7.
+- **Next:** the rest of SU.6 (6d is done), then SU.7.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -28,13 +28,11 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
 | SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
-| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | not brainstormed |
+| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | in progress: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md) done 2026-10-13 (keep the Markdown fork; the self-test now covers Litext). Next: pick the next part |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
 
 ### SU.6 punch list
 
-- **Markdown:** a native renderer, or keep the pinned `MarkdownView` fork. A
-  native renderer drops 7 packages but needs a block renderer.
 - **Metrics:**
   - per-pause deltas, with the cumulative rate labelled "session avg"
   - a prefill rate that leaves out prefix-cache tokens
@@ -61,7 +59,6 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
   - the model-list loader sleeps 1 s on every timeout, and waits out the
     whole timeout when a grandchild holds its pipe
   - 4-space indented code isn't protected from de-LaTeXing
-  - the self-test covers Highlightr and SwiftMath, not Litext or MarkdownView
   - the recorder can pair a new `resumed.ndjson` with an old
     `relaunch-rewind.ndjson`, and leaves a `.tmp` on an exception
   - `clamp`'s doc comment sits on `slot(for:)`; two comments still describe
@@ -140,6 +137,10 @@ found by the [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-an
 - **A menu-bar extra** (2026-08-21). *Reopens only on a direct request.*
 - **A docs site, P14** (2026-10-13). Markdown in the repository is the
   reader surface.
+- **A native Markdown renderer** (2026-10-13, [SU.6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md)).
+  Every native option loses syntax colour, and a SwiftUI one also loses
+  selection across an answer. *Reopens if the fork breaks on a toolchain
+  bump, a crash traces to it, or a patch re-base is due.*
 
 ## History
 
