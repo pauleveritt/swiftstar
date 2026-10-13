@@ -4,7 +4,8 @@ import SwiftStarKit
 
 /// A tool card: icon + `op path` header, the result preview in monospace, and
 /// a facts line (state, duration, truncation). A card appears when the tool
-/// starts and fills in as its end and result events arrive.
+/// starts and fills in as its end and result events arrive. A call the engine
+/// declined is drawn greyed, with the engine's one line instead of a result.
 struct ToolCardView: View {
     let card: EngineToolCard
     let workspace: URL?
@@ -15,6 +16,13 @@ struct ToolCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             headerView
+            if let rejection = card.rejection {
+                Text(rejection.text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             if let result = card.result, !result.preview.isEmpty {
                 Text(result.preview)
                     .font(.system(.caption, design: .monospaced))
@@ -40,6 +48,7 @@ struct ToolCardView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
         )
+        .opacity(card.rejection == nil ? 1 : 0.7)
         .quickLookPreview($quickLookURL)
     }
 
@@ -51,9 +60,10 @@ struct ToolCardView: View {
     private var headerView: some View {
         let label = Label(card.headerText, systemImage: card.icon)
             .font(.system(size: transcriptFontSize, weight: .semibold))
-            .foregroundStyle(.primary)
+            .foregroundStyle(card.rejection == nil ? .primary : .secondary)
 
-        if Self.quickLookEligibleOps.contains(card.tool.op), let url = resolvedFileURL() {
+        if card.rejection == nil, Self.quickLookEligibleOps.contains(card.tool.op),
+           let url = resolvedFileURL() {
             Button {
                 quickLookURL = url
             } label: {
@@ -90,6 +100,12 @@ struct ToolCardView: View {
 
 #Preview("Failed") {
     ToolCardView(card: .previewFailed, workspace: nil)
+        .padding()
+        .frame(width: 420)
+}
+
+#Preview("Declined") {
+    ToolCardView(card: .previewDeclined, workspace: nil)
         .padding()
         .frame(width: 420)
 }

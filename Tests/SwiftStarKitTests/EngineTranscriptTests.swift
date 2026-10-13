@@ -282,6 +282,24 @@ struct EngineToolCardFormattingTests {
         EngineToolCard(tool: EngineTool(op: op, path: path), ok: ok, durationMs: durationMs)
     }
 
+    @Test func declinedCardText() {
+        var t = EngineTranscript()
+        t.apply(.toolRejected(EngineToolRejection(
+            name: "read", reason: "repeated-call", path: nil, text: "repeated call")))
+        guard case .tool(let c)? = t.rows.last else { Issue.record("no card"); return }
+        #expect(c.headerText == "read")
+        #expect(c.metadataLine == "declined · repeated")
+        #expect(c.icon == "xmark.circle")
+    }
+
+    @Test func declinedCardWithoutName() {
+        var t = EngineTranscript()
+        t.apply(.toolRejected(EngineToolRejection(name: "", reason: "malformed", path: nil, text: "bad call")))
+        guard case .tool(let c)? = t.rows.last else { Issue.record("no card"); return }
+        #expect(c.headerText == "a call")
+        #expect(c.metadataLine == "declined · malformed")
+    }
+
     @Test func headerTextIncludesPathWhenPresent() {
         #expect(card(op: "read", path: "a.swift").headerText == "read a.swift")
     }

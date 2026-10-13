@@ -76,6 +76,12 @@ public struct EngineWireParser: Sendable {
                 tool: tool(e),
                 preview: e["preview"] as? String ?? "",
                 truncated: e["truncated"] as? Bool ?? false))
+        case "tool_rejected":
+            return .toolRejected(EngineToolRejection(
+                name: e["name"] as? String ?? "",
+                reason: e["reason"] as? String ?? "",
+                path: e["path"] as? String,
+                text: text(e, kind: kind)))
         case "answer":
             return .answer(EngineAnswer(
                 text: e["text"] as? String ?? "",

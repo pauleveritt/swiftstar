@@ -71,6 +71,14 @@ extension EngineToolCard {
                 truncated: true))
     }
 
+    /// A call the engine declined: the loop guard's `repeated-call`.
+    static var previewDeclined: EngineToolCard {
+        let rejection = EngineToolRejection(
+            name: "read", reason: "repeated-call", path: "Package.swift",
+            text: "Tool error: the same read was called three times in a row")
+        return EngineToolCard(tool: EngineTool(op: "read", path: "Package.swift"), rejection: rejection)
+    }
+
     static var previewFailed: EngineToolCard {
         EngineToolCard(
             tool: EngineTool(op: "bash", path: nil),

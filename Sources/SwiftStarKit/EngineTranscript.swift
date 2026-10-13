@@ -5,24 +5,34 @@ public struct EngineToolCard: Equatable, Sendable {
     public var ok: Bool?
     public var durationMs: Double?
     public var result: EngineToolResult?
+    /// Set when the engine declined the call before running it.
+    public var rejection: EngineToolRejection?
 
-    public init(tool: EngineTool, ok: Bool? = nil, durationMs: Double? = nil, result: EngineToolResult? = nil) {
+    public init(
+        tool: EngineTool, ok: Bool? = nil, durationMs: Double? = nil,
+        result: EngineToolResult? = nil, rejection: EngineToolRejection? = nil
+    ) {
         self.tool = tool
         self.ok = ok
         self.durationMs = durationMs
         self.result = result
+        self.rejection = rejection
     }
 
-    /// `op path`, or just `op` when the tool has no path.
+    /// `op path`, or just `op` when the tool has no path; "a call" for a
+    /// declined call the engine stopped before its name.
     public var headerText: String {
+        let op = tool.op.isEmpty && rejection != nil ? "a call" : tool.op
         if let path = tool.path, !path.isEmpty {
-            return "\(tool.op) \(path)"
+            return "\(op) \(path)"
         }
-        return tool.op
+        return op
     }
 
-    /// State and duration: `running`, or `succeeded`/`failed` with the time.
+    /// State and duration: `running`, or `succeeded`/`failed` with the time;
+    /// `declined` with the reason for a call the engine refused.
     public var metadataLine: String {
+        if let rejection { return "declined · \(rejection.label)" }
         var parts: [String] = []
         switch ok {
         case nil: parts.append("running")
@@ -42,6 +52,7 @@ public struct EngineToolCard: Equatable, Sendable {
 
     /// SF Symbol name for the tool's op.
     public var icon: String {
+        if rejection != nil { return "xmark.circle" }
         switch tool.op {
         case "bash", "bash_status", "bash_stop": return "terminal"
         case "write": return "doc.badge.plus"
@@ -148,6 +159,8 @@ public struct EngineTranscript: Equatable, Sendable {
                 $0.ok = ok
                 $0.durationMs = ms
             }
+        case .toolRejected(let r):
+            rows.append(.tool(EngineToolCard(tool: EngineTool(op: r.name, path: r.path), rejection: r)))
         case .toolResult(let result):
             fillLastCard(matching: result.tool, missing: { $0.result == nil }) {
                 $0.result = result

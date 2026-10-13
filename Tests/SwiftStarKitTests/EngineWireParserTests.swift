@@ -25,6 +25,21 @@ struct EngineWireParserTests {
         #"{"kind":"event","event":{"# + body + "}}"
     }
 
+    @Test func toolRejectedFixtureDecodes() throws {
+        let rejections = try Self.events(fromFixture: "tool-rejected.ndjson").compactMap { e -> EngineToolRejection? in
+            if case .toolRejected(let r) = e { r } else { nil }
+        }
+        #expect(rejections == [EngineToolRejection(
+            name: "list_files", reason: "unknown-tool", path: nil,
+            text: "Tool error: unknown tool: list_files")])
+    }
+
+    @Test func refusedStillRefused() {
+        var p = Self.ready()
+        #expect(p.parse(Self.event(#""kind":"rewind_refused","reason":"no earlier prompt""#))
+            == .refused("no earlier prompt"))
+    }
+
     @Test func firstLineMustBeReady() {
         var p = EngineWireParser()
         guard case .protocolError(let m) = p.parse(#"{"kind":"input"}"#) else {

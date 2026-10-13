@@ -22,12 +22,39 @@ public struct EngineToolResult: Equatable, Sendable {
     }
 }
 
+/// A call the engine refused before running it (`tool_rejected`, TUI.36):
+/// the model is told and goes on, or (`not-approved`) the run ends.
+public struct EngineToolRejection: Equatable, Sendable {
+    public let name: String
+    public let reason: String
+    public let path: String?
+    public let text: String
+
+    public init(name: String, reason: String, path: String?, text: String) {
+        self.name = name
+        self.reason = reason
+        self.path = path
+        self.text = text
+    }
+
+    /// `reason` in a few words for the card; an unknown reason is shown as sent.
+    public var label: String {
+        switch reason {
+        case "repeated-call": "repeated"
+        case "call-cycle": "loop"
+        case "unknown-tool": "unknown tool"
+        case "path-refused": "path refused"
+        default: reason
+        }
+    }
+}
+
 public struct EngineAnswer: Equatable, Sendable {
     public let text: String
     public let contextUsed: Int?
     public let contextSize: Int?
     public let durationMs: Double?
-    /// Why the engine gave no text (only `laguna-xs-chat` reports one).
+    /// Why the engine gave no text (`tools-closed`, `no-final-text`, …).
     public let reason: String?
 
     public init(text: String, contextUsed: Int?, contextSize: Int?, durationMs: Double?, reason: String? = nil) {
@@ -103,6 +130,7 @@ public enum EngineEvent: Equatable, Sendable {
     case toolStart(EngineTool)
     case toolEnd(EngineTool, ok: Bool, durationMs: Double?)
     case toolResult(EngineToolResult)
+    case toolRejected(EngineToolRejection)
     case answer(EngineAnswer)
     case pause(PauseMetrics)
     case memory(EngineMemory)
