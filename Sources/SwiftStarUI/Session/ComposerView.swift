@@ -23,7 +23,8 @@ struct ComposerView: View {
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Ask the agent…", text: $input, axis: .vertical)
+                let analyzing = controller.analysis != nil
+                TextField(analyzing ? EngineAnalysis.composerPlaceholder : "Ask the agent…", text: $input, axis: .vertical)
                     .font(.system(size: transcriptFontSize))
                     .textFieldStyle(.plain)
                     .lineLimit(1...15)
@@ -31,6 +32,8 @@ struct ComposerView: View {
                     .padding(.vertical, 8)
                     .focused($inputFocused)
                     .background(Color(nsColor: .textBackgroundColor))
+                    // The analysis tint sits over the field's own background.
+                    .overlay(analyzing ? Color.accentColor.opacity(0.12).allowsHitTesting(false) : nil)
                     .clipShape(RoundedRectangle(cornerRadius: 20))
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
@@ -83,6 +86,13 @@ struct ComposerView: View {
 
 #Preview("Idle", traits: .idleSession) {
     ComposerView()
+        .frame(width: 600)
+}
+
+#Preview("Analyzing") {
+    // Its own controller, built fresh for this preview.
+    ComposerView()
+        .environment(EngineController(model: .previewAnalyzing))
         .frame(width: 600)
 }
 

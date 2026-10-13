@@ -167,11 +167,23 @@ struct EngineAnalysisTests {
         #expect(m.analysis == nil)
     }
 
+    /// The fork's process dies before `resumed`: the analysis ends.
     @Test func exitWhileForkingEndsAnalysis() {
         var m = idle()
-        m.didRelaunch(m.beginAnalysis(report: "R", source: Self.source)!)
-        m.didExit(EngineExit(code: 2, message: "refused"), directory: nil)
+        let fork = m.beginAnalysis(report: "R", source: Self.source)!
+        m.didExit(EngineExit(code: 0, message: "ended"), directory: nil)  // the main session quits
+        m.didRelaunch(fork)
+        m.didExit(EngineExit(code: 2, message: "refused"), directory: nil)  // the fork fails
         #expect(m.analysis == nil)
+    }
+
+    /// The controller quits the main session before starting the fork: that
+    /// exit must not end the analysis.
+    @Test func mainSessionExitKeepsForking() {
+        var m = idle()
+        _ = m.beginAnalysis(report: "R", source: Self.source)
+        m.didExit(EngineExit(code: 0, message: "ended"), directory: nil)
+        #expect(m.analysis != nil)
     }
 
     @Test func sendShownText() {

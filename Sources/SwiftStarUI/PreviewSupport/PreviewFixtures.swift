@@ -21,7 +21,7 @@ extension EngineController {
         EngineController(model: runningModel(withGPU: false))
     }
 
-    private static func runningModel(withGPU: Bool) -> EngineSessionModel {
+    static func runningModel(withGPU: Bool) -> EngineSessionModel {
         var model = EngineSessionModel()
         // `.ready` only moves a `.starting` session to `.running`. Left
         // `.idle`, SessionView's auto-start `.task` calls `start()` inside
@@ -40,7 +40,9 @@ extension EngineController {
         model.apply(.answer(EngineAnswer(
             text: "`SessionView` renders the transcript, composer, and status bar for one engine session.",
             contextUsed: 512, contextSize: 8192, durationMs: 1830)))
-        model.apply(.pause(PauseMetrics(prefillTokens: 512, prefillMs: 210, evalCount: 64, evalMs: 980)))
+        model.apply(.pause(PauseMetrics(
+            prefillTokens: 512, prefillMs: 210, evalCount: 64, evalMs: 980,
+            capturePath: "/state/sessions/20261013-123136-swiftstar/run-1.partial.json")))
         if withGPU {
             model.apply(.memory(EngineMemory(allocatedBytes: 6_400_000_000, budgetBytes: 21_000_000_000, planGiB: 6.0)))
         }
@@ -113,5 +115,52 @@ extension EngineTranscript {
                 rewoundTo: 1, filesChanged: 0, contextUsed: 1071),
             divider: "Rewound to prompt 1")
         return t
+    }
+
+    /// AN.1's report on `fixtures/sessions/20261013-123136-swiftstar`, trimmed.
+    static let previewReport = """
+        **last**: 20261013-123136-swiftstar, qwen3.8-flash-next, ctx 20,000, 3 m 7 s, answered
+
+        ### Flagged steps
+
+        | Prompt | Step | Did | Rule | Evidence |
+        |---|---|---|---|---|
+        | 1 | 17 | run | F1 | Tool error: unknown tool: run. There is no shell, so nothing can be run. |
+        | 3 | 36 | read Sources/SwiftStarKit/Severity.swift | U1 | already_shown |
+        | 3 | 37 | read Sources/SwiftStarKit/PathAbbreviation.swift | U1 | already_shown |
+
+        ### Summary
+
+        | Row | Value |
+        |---|---|
+        | Context and speed | ctx 1,021 → 7,300; prefill tok/s first / median / last 490 / 359 / 345 |
+        | Work | 4 prompts, 40 steps; tools: read 10, edit 4, ls 3, grep 2, run 1; rejected: run (unknown-tool) |
+        """
+}
+
+extension EngineSessionModel {
+    /// In an analysis's fork (AN.2): the main session's turn rebuilt, the
+    /// report card, the analysis prompt and its answer, at `input`.
+    static var previewAnalyzing: EngineSessionModel {
+        var model = EngineController.runningModel(withGPU: true)
+        guard let fork = model.beginAnalysis(
+            report: EngineTranscript.previewReport, source: URL(fileURLWithPath: "/repo")) else { return model }
+        model.didRelaunch(fork)
+        model.apply(.ready)
+        model.apply(.resumed(EngineResumed(
+            sessionID: "20261013-123136-swiftstar",
+            turns: [.init(prompt: "Summarize SessionView.swift",
+                          answer: "`SessionView` renders the transcript, composer, and status bar.", stopped: false)],
+            rewoundTo: nil, filesChanged: 0, contextUsed: 512)))
+        model.apply(.awaitingInput)
+        if let prompt = model.takeAnalysisPrompt() {
+            _ = model.send(prompt.text, shown: prompt.shown)
+            model.apply(.prompt(prompt.text))
+            model.apply(.answer(EngineAnswer(
+                text: "Step 17 called `run`, which doesn't exist: there is no shell. Steps 36–37 re-read files the engine had already shown. Remedy: name the available tools in the prompt, and check the list before calling.",
+                contextUsed: 1300, contextSize: 8192, durationMs: 2400)))
+            model.apply(.awaitingInput)
+        }
+        return model
     }
 }

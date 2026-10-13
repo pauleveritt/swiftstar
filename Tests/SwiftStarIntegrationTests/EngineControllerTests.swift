@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import SwiftStarUI
+import SwiftStarEngine
 import SwiftStarKit
 
 /// Drives `EngineController` directly. Mutates `UserDefaults.standard` (the
@@ -474,6 +475,58 @@ struct EngineControllerTests {
             // outlives the test run.
             await controller.quit()
             try? await Task.sleep(for: .seconds(3))
+        }
+    }
+
+    // MARK: AN.2, analyze and done
+
+    private func prompts(_ f: Fake) -> [String] {
+        ((try? String(contentsOfFile: f.inputs, encoding: .utf8)) ?? "")
+            .split(separator: "\n")
+            .compactMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
+            .compactMap { $0["text"] as? String }
+    }
+
+    /// Running, one prompt answered, so a checkpoint has named the directory.
+    private func answered(_ f: Fake) async -> EngineController {
+        let controller = await running(f)
+        controller.send("Read a file")
+        await poll(timeout: .seconds(10)) {
+            controller.transcript.isAwaitingInput && !controller.transcript.isBusy && controller.model.canAnalyze }
+        return controller
+    }
+
+    @Test func analyzeForksThenSendsPrompt() async throws {
+        let f = try fake()
+        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
+        await withDefaults(executable: f.script, modelID: nil) {
+            let controller = await answered(f)
+            #expect(controller.model.canAnalyze)
+            controller.reportLoader = { _ in .success("R-REPORT") }
+            await controller.analyze()
+            await poll(timeout: .seconds(15)) { prompts(f).contains { $0.contains("R-REPORT") } }
+            let spawns = argvLines(f.spawns)
+            #expect(spawns.count == 2)
+            #expect(spawns.last?.contains("--resume") == true)
+            #expect(controller.transcript.rows.contains(.report("R-REPORT")))
+            #expect(prompts(f).contains { $0.contains("R-REPORT") })
+            await controller.quit()
+        }
+    }
+
+    @Test func analyzeFailureDoesNotFork() async throws {
+        let f = try fake()
+        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
+        await withDefaults(executable: f.script, modelID: nil) {
+            let controller = await answered(f)
+            controller.reportLoader = { _ in .failure(SessionReportFailure(message: "boom")) }
+            await controller.analyze()
+            #expect(argvLines(f.spawns).count == 1)
+            #expect(controller.transcript.rows.contains {
+                if case .error(let s) = $0 { s.contains("boom") } else { false } })
+            #expect(controller.model.analysis == nil)
+            #expect(controller.composer.canSend)
+            await controller.quit()
         }
     }
 }

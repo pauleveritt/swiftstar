@@ -214,7 +214,15 @@ public struct EngineSessionModel: Equatable, Sendable {
     }
 
     public mutating func didExit(_ exit: EngineExit, directory: URL?) {
-        analysis = nil
+        // Forking and returning begin by quitting the running session; that
+        // exit comes before the relaunch starts and is expected. An exit
+        // after it (the new process failed) or while analyzing ends it.
+        switch analysis?.stage {
+        case .forking?, .returning?:
+            if pendingRelaunch != nil { analysis = nil }
+        default:
+            analysis = nil
+        }
         transcript.end()
         transcript.appendSystem(exit.message)
         if let directory {

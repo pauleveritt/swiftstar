@@ -15,7 +15,13 @@ public final class EngineController {
     var metrics: EngineMetricsState { model.metrics }
     var phase: EngineSessionPhase { model.phase }
     var composer: EngineComposer { model.composer }
+    var canAnalyze: Bool { model.canAnalyze }
+    var analysis: EngineAnalysis? { model.analysis }
     public var isActive: Bool { model.phase.isActive }
+    /// Makes the session report (AN.2); tests replace it.
+    @ObservationIgnored var reportLoader: (URL) async -> Result<String, SessionReportFailure> = {
+        await SessionReportLoader.load(sessionDirectory: $0)
+    }
     /// The git root the current or last session worked from (its `--source`),
     /// kept after the session ends so its tool cards still resolve.
     private(set) var source: URL?
@@ -327,6 +333,30 @@ public final class EngineController {
         case .refused: pendingModelCommand = nil
         default: break
         }
+        // The fork is at its first `input`: ask about the report, once.
+        if let prompt = model.takeAnalysisPrompt() {
+            send(prompt.text, shown: prompt.shown)
+        }
+    }
+
+    /// Analyze (AN.2): make the report from this session's directory, then
+    /// resume the session as a fork to talk about it there.
+    func analyze() async {
+        guard model.canAnalyze, let directory = model.sessionDirectory, let source else { return }
+        switch await reportLoader(directory) {
+        case .failure(let failure):
+            model.apply(.error("Analyze: \(failure.message)"))
+        case .success(let report):
+            guard let fork = model.beginAnalysis(report: report, source: source) else { return }
+            await relaunch(fork)
+        }
+    }
+
+    /// Done (AN.2): resume the main session; the engine sends the relaunch.
+    func doneAnalyzing() {
+        guard let command = model.analysisDoneCommand else { return }
+        model.markAnalysisReturning()
+        send(command)
     }
 
     /// The engine's TUI.34 contract: end this session, then start the
@@ -348,8 +378,8 @@ public final class EngineController {
         await start(relaunch: r)
     }
 
-    func send(_ text: String) {
-        guard let session, model.send(text) else { return }
+    func send(_ text: String, shown: String? = nil) {
+        guard let session, model.send(text, shown: shown) else { return }
         do {
             try session.send(prompt: text)
         } catch {

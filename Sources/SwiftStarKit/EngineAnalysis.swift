@@ -29,6 +29,8 @@ public struct EngineAnalysis: Equatable, Sendable {
     public static let forkingNotice = "Starting analysis…"
     public static let forkDivider = "Analysis — a copy of this session"
     public static let promptShown = "Analyze the session report above"
+    public static let banner = "Analyzing a copy — Done returns to the session as it was"
+    public static let composerPlaceholder = "Ask about the analysis…"
     public static let instruction = """
         Explain each flagged step: what the model was trying to do, and why it \
         failed or was wasted. Then propose remedies. Don't edit files.

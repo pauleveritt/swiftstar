@@ -13,7 +13,14 @@ struct SessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TranscriptView(transcript: controller.transcript, source: controller.source)
+            if controller.analysis != nil {
+                AnalysisBanner(done: controller.doneAnalyzing)
+                Divider()
+            }
+            TranscriptView(
+                transcript: controller.transcript, source: controller.source,
+                analyze: controller.canAnalyze ? { Task { await controller.analyze() } } : nil,
+                analysisFirstRow: controller.analysis?.firstRow)
             Divider()
             ComposerView()
             Divider()
@@ -60,6 +67,12 @@ struct SessionView: View {
 
 #Preview("Idle", traits: .idleSession) {
     SessionView()
+}
+
+#Preview("Analyzing") {
+    // Its own controller, built fresh for this preview.
+    SessionView()
+        .environment(EngineController(model: .previewAnalyzing))
 }
 
 #Preview("Large font", traits: .runningSession) {
