@@ -89,13 +89,19 @@ struct EngineControllerTests {
     /// defaults-change observer, which probes `models --json` on this same
     /// executable path — that invocation is deliberately not logged, so the
     /// log only ever reflects real session spawns.
-    private func writeSessionFake(to scriptPath: String, argvLogPath: String) throws {
+    /// `models` is what `models --json` prints; nil exits 2 as an engine
+    /// without the command does, so a start never waits out the loader's
+    /// timeout.
+    private func writeSessionFake(to scriptPath: String, argvLogPath: String, models: String? = nil) throws {
+        let modelsBranch = models.map { "sys.stdout.write(\(String(reflecting: $0))); sys.exit(0)" }
+            ?? "sys.exit(2)"
         let script = """
         #!/usr/bin/env python3
         import json, sys
-        if sys.argv[1:2] != ["models"]:
-            with open(\(String(reflecting: argvLogPath)), "a") as f:
-                f.write(json.dumps(sys.argv[1:]) + "\\n")
+        if sys.argv[1:2] == ["models"]:
+            \(modelsBranch)
+        with open(\(String(reflecting: argvLogPath)), "a") as f:
+            f.write(json.dumps(sys.argv[1:]) + "\\n")
         print(json.dumps({"kind": "ready", "protocol": 1}), flush=True)
         for line in sys.stdin:
             try:
@@ -159,7 +165,7 @@ struct EngineControllerTests {
 
         let controller = EngineController()
         controller.workspace = FileManager.default.temporaryDirectory
-        controller.start()
+        await controller.start()
         await poll { controller.phase == .running }
         #expect(controller.phase == .running)
         #expect(argvLines(argvLogPath).count == 1)
@@ -172,5 +178,63 @@ struct EngineControllerTests {
         #expect(spawns.count == 2)
         #expect(spawns.last?.contains("--model-id") == true)
         #expect(spawns.last?.last == "a-different-model")
+    }
+
+    private static let realModels = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("fixtures/engine/models-real.json")
+
+    /// Runs `body` with the executable and model id defaults set, restoring both.
+    private func withDefaults(executable: String, modelID: String?, _ body: () async -> Void) async {
+        let defaults = UserDefaults.standard
+        let saved = (defaults.string(forKey: DefaultsKey.executable.rawValue),
+                     defaults.string(forKey: DefaultsKey.modelID.rawValue))
+        defaults.set(executable, forKey: DefaultsKey.executable.rawValue)
+        if let modelID { defaults.set(modelID, forKey: DefaultsKey.modelID.rawValue) }
+        else { defaults.removeObject(forKey: DefaultsKey.modelID.rawValue) }
+        defer {
+            for (key, value) in [(DefaultsKey.executable, saved.0), (DefaultsKey.modelID, saved.1)] {
+                if let value { defaults.set(value, forKey: key.rawValue) }
+                else { defaults.removeObject(forKey: key.rawValue) }
+            }
+        }
+        await body()
+    }
+
+    private func tempPath(_ name: String) -> String {
+        FileManager.default.temporaryDirectory.appendingPathComponent("en1-\(name)-\(UUID().uuidString)").path
+    }
+
+    @Test func staleModelClearedBeforeSpawn() async throws {
+        let script = tempPath("session"), log = tempPath("argv")
+        defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
+        try writeSessionFake(to: script, argvLogPath: log,
+                             models: try String(contentsOf: Self.realModels, encoding: .utf8))
+        await withDefaults(executable: script, modelID: "laguna-xs-2.1") {
+            let controller = EngineController()
+            controller.workspace = FileManager.default.temporaryDirectory
+            await controller.start()
+            await poll { controller.phase == .running }
+            #expect(argvLines(log).first?.contains("--model-id") == false)
+            #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "")
+            #expect(controller.transcript.rows.contains(
+                .system("laguna-xs-2.1 is no longer offered; using the engine default")))
+            await controller.quit()
+        }
+    }
+
+    @Test func startProceedsWhenCatalogFails() async throws {
+        let script = tempPath("session"), log = tempPath("argv")
+        defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
+        try writeSessionFake(to: script, argvLogPath: log)
+        await withDefaults(executable: script, modelID: "laguna-xs-2.1") {
+            let controller = EngineController()
+            controller.workspace = FileManager.default.temporaryDirectory
+            await controller.start()
+            await poll { controller.phase == .running }
+            let argv = argvLines(log).first ?? []
+            #expect(argv.firstIndex(of: "--model-id").map { argv[$0 + 1] } == "laguna-xs-2.1")
+            await controller.quit()
+        }
     }
 }

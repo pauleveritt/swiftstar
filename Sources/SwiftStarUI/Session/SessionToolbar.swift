@@ -24,7 +24,7 @@ struct SessionToolbar: ToolbarContent {
                 if controller.isActive {
                     Task { await controller.quit() }
                 } else {
-                    controller.start()
+                    Task { await controller.start() }
                 }
             } label: {
                 Label(sessionActionTitle, systemImage: sessionActionIcon)

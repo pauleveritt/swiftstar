@@ -27,8 +27,12 @@ struct SessionView: View {
         }
         // Applied after the toolbar so its items, too, sit below this value.
         .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(transcriptFontSize)))
-        .task { if controller.phase == .idle { controller.start() } }
-        .task { await controller.loadCatalogIfNeeded() }
+        // One task: the start waits for the model list, so a saved model the
+        // engine dropped is cleared before the spawn (EN.1, D1).
+        .task {
+            if controller.phase == .idle { await controller.start() }
+            else { await controller.loadCatalogIfNeeded() }
+        }
         .alert("Other model", isPresented: $askingModel) {
             TextField("Model id", text: $entry)
             Button("Use") { controller.select(modelID: entry) }

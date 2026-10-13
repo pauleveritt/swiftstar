@@ -12,6 +12,32 @@ struct EngineModelCatalogTests {
         return try EngineModelList.decode(data).get()
     }
 
+    private static func real() throws -> EngineModelList {
+        let url = sampleURL.deletingLastPathComponent().appendingPathComponent("models-real.json")
+        return try EngineModelList.decode(Data(contentsOf: url)).get()
+    }
+
+    @Test func validatedKeepsOfferedId() throws {
+        let r = ModelMenu.validated(saved: "qwen3.8-27b", list: try Self.real())
+        #expect(r.modelID == "qwen3.8-27b" && r.notice == nil)
+    }
+
+    @Test func validatedClearsDroppedId() throws {
+        let r = ModelMenu.validated(saved: "laguna-xs-2.1", list: try Self.real())
+        #expect(r.modelID == "")
+        #expect(r.notice == "laguna-xs-2.1 is no longer offered; using the engine default")
+    }
+
+    @Test func validatedKeepsEmpty() throws {
+        let r = ModelMenu.validated(saved: "", list: try Self.real())
+        #expect(r.modelID == "" && r.notice == nil)
+    }
+
+    @Test func validatedKeepsIdWithoutList() {
+        let r = ModelMenu.validated(saved: "laguna-xs-2.1", list: nil)
+        #expect(r.modelID == "laguna-xs-2.1" && r.notice == nil)
+    }
+
     @Test func decodesSampleList() throws {
         let list = try Self.sample()
         #expect(list.defaultModelID == "laguna-xs-2.1")

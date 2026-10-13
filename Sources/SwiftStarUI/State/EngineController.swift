@@ -196,14 +196,28 @@ public final class EngineController {
             model.apply(.notice("Restart skipped: the engine has not exited yet. Try again in a moment."))
             return
         }
-        start()
+        await start()
     }
 
     /// Called when the app is terminating; quit waiters are still released.
     public func beginTerminating() { isTerminating = true }
 
-    func start() {
+    /// Starts a session. Without `override` it first loads the model list and
+    /// clears a saved model the engine no longer offers (EN.1, D1); with one
+    /// (a relaunch) the argv is used exactly as given.
+    func start(arguments override: [String]? = nil) async {
         guard !isFixture, !isActive, !isTerminating else { return }
+        var notice: String?
+        if override == nil {
+            await loadCatalogIfNeeded()
+            guard !isActive, !isTerminating else { return }
+            let checked = ModelMenu.validated(saved: modelID, list: catalog)
+            if checked.modelID != modelID {
+                modelID = checked.modelID
+                UserDefaults.standard.set(modelID, forKey: DefaultsKey.modelID.rawValue)
+            }
+            notice = checked.notice
+        }
         let settingsPath = UserDefaults.standard.string(forKey: DefaultsKey.executable.rawValue)
         let resolution = EngineCommand.resolveExecutable(
             settingsPath: settingsPath,
@@ -224,7 +238,7 @@ public final class EngineController {
 
         let session = EngineSession(
             executable: executable,
-            arguments: EngineCommand.arguments(
+            arguments: override ?? EngineCommand.arguments(
                 source: source,
                 modelID: modelID, contextSize: contextSize),
             workingDirectory: source,
@@ -232,6 +246,7 @@ public final class EngineController {
         session.onEvent = { [weak self] event in self?.model.apply(event) }
         session.onExit = { [weak self] exit, directory in self?.handleExit(exit, directory) }
         model.didStart()
+        if let notice { model.apply(.notice(notice)) }
         showCatalogNote()
         do {
             try session.start()

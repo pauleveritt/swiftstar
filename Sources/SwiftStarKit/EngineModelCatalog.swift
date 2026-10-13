@@ -141,6 +141,15 @@ private func grouped(_ n: Int) -> String {
 }
 
 public enum ModelMenu {
+    /// The model id to start with: a saved id the engine's list no longer
+    /// offers is cleared, with a notice saying so (as the engine does for its
+    /// own config.toml). Without a list the saved id is kept.
+    public static func validated(saved: String, list: EngineModelList?) -> (modelID: String, notice: String?) {
+        let id = trimmed(saved)
+        guard !id.isEmpty, let list, list.model(id: id) == nil else { return (id, nil) }
+        return ("", "\(id) is no longer offered; using the engine default")
+    }
+
     /// The first item ("Engine default", value "") is always present. `settingsID`
     /// is the Settings choice ("" = engine default); `loadedID` is shown only in
     /// the fallback so the running model is reachable when no list is known.
