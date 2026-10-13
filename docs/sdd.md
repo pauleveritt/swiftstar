@@ -1,131 +1,91 @@
 # How work happens here
 
-Spec-driven development, one phase at a time.
+Spec-driven development, one cycle at a time, with the paperwork sized to
+the change.
 
 ## The cycle
 
-1. **Brainstorm** the phase, treating `BRIEF.md` and the phase list as settled.
-   Brainstorm *within* a phase; do not reopen the architecture.
-2. **Spec** — a design document committed to
-   `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`.
-3. **Plan** — an implementation plan committed to
-   `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`, task by task, each task
-   naming the files it touches and the test that proves it.
+1. **Brainstorm** within a phase. `BRIEF.md` is settled; don't reopen the
+   architecture inside a cycle.
+2. **Write it down, sized to the change.**
+   - **A small cycle** changes under about 200 code lines and needs no
+     decision from the owner. It gets one doc,
+     `docs/superpowers/plans/YYYY-MM-DD-<cycle>.md`, with `## Decisions`,
+     `## Tasks` and `## Result`.
+   - **A larger or decision-bearing cycle** gets a spec the owner accepts,
+     `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`, and then a plan.
 
-   **Plans — local rule, overriding `superpowers:writing-plans`.** A plan
-   names per task: files touched (`path:line` for modifications), interfaces
-   produced (signatures only), and the test that proves it (test name + the
-   assertion, one line each). It does not paste bodies. That skill's "No
-   Placeholders" section requires full code blocks; it serves a stateless
-   subagent executor and is **not in force here** — a test name plus its
-   assertion is not a placeholder. Ceiling: under 400 lines, under 25%
-   fenced. Over either, split the phase. Plans written before this local rule
-   are retained in `docs/superpowers/plans/archive/` as legacy records; they
-   are not rewritten by automation. Current plans stay directly under
-   `docs/superpowers/plans/` and must carry the rule's metadata.
-4. **Execute** the plan, test-first.
-5. **Review**, then close the phase in `ROADMAP.md`.
+   **What a plan contains.** Per task: the files it touches (`path:line`
+   for changes), the interfaces it produces (signatures only), and the test
+   that proves it (the test's name and its assertion, one line each). It
+   doesn't paste bodies. This overrides `superpowers:writing-plans`' "No
+   Placeholders" rule: a test name plus its assertion is not a placeholder.
+   A plan stays under 400 lines; split the cycle if it won't.
+3. **Execute** test-first.
+4. **Close.** The plan gains `## Result`: its commits, what diverged and
+   what was descoped. The ROADMAP row shrinks to one line, and
+   `just lint-docs` passes. Fold all of that into the last task's commit.
+   There are no separate "Task N done" or "close" commits.
 
-   **Close the plan.** At phase close the plan gains a `## Result` section
-   (commits, what diverged, what descoped), and every fence over 15 lines is
-   replaced by a `path:line` reference to what shipped. "Kept as it was
-   written," below, governs the *decision* record (`specs/`, `research/`). A
-   plan is a build instruction; its history is in git.
-
-   **Closing a phase (or a branch that closes one) is not done until
-   `ROADMAP.md` is updated and `just lint-docs` is green.** Both are part of
-   the close, not optional follow-up — a phase whose row is stale, or whose
-   cell blew the cap, is not closed. This is a standing rule regardless of
-   which skill or workflow drives the finish (see "Standing rules" below).
-
-Research that informs a decision but is not itself a design goes in
-`docs/superpowers/research/`.
+**Research docs are optional.** An audit or investigation is an appendix to
+the spec it serves. It gets its own file in `docs/superpowers/research/`
+only when it spans cycles.
 
 ## What the record is for
 
-The trail is kept **as it was written**, including withdrawn framings and
-corrected numbers. A retraction is recorded next to what it retracts, not
-edited away. Both predecessor projects did this and both found it was the part
-that paid off later — a decision you can see being reversed is one you do not
-re-litigate from scratch.
+Decisions are kept as written. A retraction sits next to what it retracts,
+as a dated `## Revision` section or a "Corrected" note; it is not edited
+away. A decision you can see being reversed is one nobody re-litigates from
+scratch.
+
+The record lives in git, not all of it in the tree. `docs/history.md`
+names the tags that hold docs removed from the tree.
 
 ## Test tiers
 
-- **Fast** (`just test`) — `SwiftStarKit` against fixtures. No model, no
-  network, no subprocess, enforced by a tripwire that fails the build.
-- **Integration** — real processes and files against a fake `ds4-dogfood`
-  that replays committed `--ndjson` fixtures.
-- **Live** (`just capture SCENARIO`) — the real `ds4-dogfood tui --ndjson` and
-  real weights. Minutes to run, never in CI.
+- **Fast** (`just test`): `SwiftStarKit` against fixtures. No model, no
+  network, no subprocess. A grep in `just test` refuses `Process(`,
+  `URLSession` and friends in `Tests/SwiftStarKitTests`.
+- **Integration** (`just integration`): real processes and files, against
+  the fake `ds4-dogfood` that replays committed `--ndjson` fixtures.
+- **Live** (`just capture SCENARIO`): the real engine with real weights.
+  Takes minutes.
 
-## The phase table
+There is no CI. Every tier is run by hand.
 
-`ROADMAP.md`'s Status column is a status: state, date, key facts, links.
-Direction stays one sentence. A Direction cell exceeding 900 characters, or
-a Status cell exceeding 1,000, means a verdict doc is owed — move the
-narrative to `docs/superpowers/research/`, link it, and let the cell shrink
-back down. Applies at every update, not just at close: a cell growing
-mid-phase is the signal a verdict doc is owed *now*, not at the next
-milestone.
+## The ROADMAP
 
-These caps are calibrated against this project's own post-cleanup ROADMAP,
-not chosen in the abstract — the first version used a uniform 300-character
-cap on every cell, which nobody checked before writing it down: even P20's
-row, the cited example of "already short," failed it by roughly 7x. If
-`just lint-docs` starts failing pervasively again, recalibrate against real
-content before assuming every row regressed.
+- **`## Now` is a pointer.** One line each for what's next, what follows,
+  and what's blocked, linking the row or Backlog entry that holds the
+  detail. It never re-narrates a decision.
+- **One table per named phase,** one row per cycle.
+  - Direction is one sentence, at most 300 characters.
+  - Status is state, date and links, at most 400 characters. A cell that
+    wants more owes a doc it can link to.
+  - A closed row shrinks to one line with links; the narrative is the
+    plan's `## Result`.
+- **New initiatives open a named phase** with a short mnemonic, numbered
+  `<Name>.1`, `<Name>.2` and so on, matching ds4-engine's convention.
+  - `EN` is the engine contract: one cycle per ds4-engine landing that
+    SwiftStar catches up to.
+  - `SU` is SwiftUI.
+  - Phase `P` (P0–P32) is closed; see `docs/history.md`.
 
-Enforced mechanically by `just lint-docs`, checking phase-table cell length
-and current-scope plan metadata, fenced-code fraction, fence length, and line
-count. A written convention that nothing checks gets ignored under deadline
-pressure — this project has already proven that twice on two different rules
-(recorded in the pre-P28 `ROADMAP.md` Backlog, in git) — so the gate exists precisely because prose alone did
-not hold. The 2026-08-29 policy change deliberately left earlier plans
-untouched; this scope rule makes that decision explicit instead of printing
-historical debt as if it were a current-plan regression. The archive index
-explains the retained legacy records and points readers to current authority.
-
-Plans in the current lint scope carry YAML front matter with `phase`, `cycle`,
-and `lifecycle` (`active`, `closed`, or `superseded`). Closed and superseded
-plans must have `## Result`; active plans must not claim a result in advance.
-
-**A phase with more than one feature cycle (P12, P24, …) uses a numbered
-list inside the relevant cell(s)** — Phase, Direction, and/or Status — one
-item per cycle, each linking its own spec/plan/research docs and carrying its
-own one-line status. This keeps the phase as one table row (no nested
-sub-table) while still giving each cycle a distinct, linkable status instead
-of one run-on paragraph. The cell-length caps above still apply to the whole
-cell — a cycle whose item is still too long owes the same verdict-doc move.
-
-**Phase `P` (`P0`–`P32`) is closed to new entries, 2026-10-04.** New
-initiatives open a named phase instead (a short mnemonic, e.g. `SU` for
-SwiftUI), with cycles numbered `<Name>.1`, `<Name>.2`, … — matching
-ds4-engine's convention for `QW`, `LS`, `TC`, `RUN` and friends: a phase
-with few, substantial cycles gets one row per cycle; `P0`–`P32` keep their
-historical numbering and are not retroactively renamed into this scheme.
-
-**`## Now` is a pointer, not a narrative.** It names what is currently in
-flight, what is parked and why (one line each), and links to the phase row
-or Backlog entry that carries the actual detail. It must never re-narrate a
-decision that already has a home in the phase table or the Backlog — that is
-how it grew into a second, undated history of the project the first time.
-Update it when what's in flight changes; if an item needs more than a
-sentence, that sentence belongs in the phase row or Backlog entry it points
-to, not in `Now` itself.
+`just lint-docs` checks the cell caps and the plans' line limit. The
+pre-commit hook runs it once `just install-hooks` has been run, once per
+clone.
 
 ## Standing rules
 
-Every rule in `BRIEF.md`'s "Binding rules" applies to every phase. The two
+Every rule in `BRIEF.md`'s "Binding rules" applies to every cycle. The three
 easiest to forget:
 
-- **Every new test must be shown to fail** when the behavior it pins is broken.
-  Break it, watch it fail, restore it.
-- **Every ds4-engine protocol change owes a fixture recapture** against the
-  real `ds4-dogfood`. A parser can keep passing on stale fixtures while the
-  wire has moved.
-- **Finishing a branch that closes a phase or feature cycle updates
-  `ROADMAP.md` and passes `just lint-docs`, before the branch is considered
-  done** — merged, PR'd, or otherwise handed off. This is enforced two ways,
-  not left to memory: a git hook runs `just lint-docs` on commit, and the
-  project's `CLAUDE.md` states the same rule for the agent driving the finish.
-  A closed phase with a stale row is not closed.
+- **Every new test must be shown to fail** when the behavior it pins is
+  broken. Break it, watch it fail, restore it.
+- **Every ds4-engine change that reaches the wire owes a fixture
+  recapture.** That includes payload changes the relay forwards untouched:
+  an unchanged relay file is not an unchanged wire (the 2026-10-13 audit,
+  §1).
+- **Closing a cycle updates `ROADMAP.md` and passes `just lint-docs`** before
+  the work counts as done, whether merged, PR'd or handed off. This is the
+  one home of that rule; `CLAUDE.md` points here.

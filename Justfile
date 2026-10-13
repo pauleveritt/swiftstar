@@ -1,18 +1,13 @@
-# Enforce docs/sdd.md's size caps: ROADMAP phase-table Direction/Status
-# cells, and current plan docs directly under docs/superpowers/plans/. Archived
-# plans live below that directory and are retained unchanged.
-#
-# Splits table rows on a backtick-depth-aware pipe scan, not a naive
-# `IFS='|'` split -- a plain split mis-indexes every cell after a Direction
-# or Status cell containing an inline `` `foo | bar` `` code span or a
-# regex alternation like `P(A|B)`, silently checking the wrong substring
-# against the cap. Found by an independent review of this exact recipe.
+# Enforce docs/sdd.md's caps: ROADMAP cycle rows (Direction <= 300,
+# Status <= 400 characters) and plans under docs/superpowers/plans/ (under
+# 400 lines). Cells split on pipes outside backtick code spans, so a `a|b`
+# span doesn't shift the columns.
 lint-docs:
     #!/usr/bin/env bash
     set -euo pipefail
     fail=0
     awk '
-        /^\| P[0-9]/ {
+        /^\| [A-Z]+\.?[0-9]/ {
             n = split($0, chars, "")
             depth = 0; cell = 0; buf = ""
             delete cells
@@ -22,95 +17,50 @@ lint-docs:
                 if (c == "|" && depth == 0) { cells[cell] = buf; cell++; buf = ""; continue }
                 buf = buf c
             }
-            cells[cell] = buf
             d = cells[3]; s = cells[4]
-            if (length(d) > 900) {
-                printf "ROADMAP.md: Direction cell is %d chars (cap 900): %s...\n", length(d), substr(d, 1, 70)
+            if (length(d) > 300) {
+                printf "ROADMAP.md: Direction cell is %d chars (cap 300): %s...\n", length(d), substr(d, 1, 70)
                 bad = 1
             }
-            if (length(s) > 1000) {
-                printf "ROADMAP.md: Status cell is %d chars (cap 1000): %s...\n", length(s), substr(s, 1, 70)
+            if (length(s) > 400) {
+                printf "ROADMAP.md: Status cell is %d chars (cap 400): %s...\n", length(s), substr(s, 1, 70)
                 bad = 1
             }
         }
         END { exit bad }
     ' ROADMAP.md || fail=1
     for f in docs/superpowers/plans/*.md; do
-        lifecycle="$(awk -F': *' '$1 == "lifecycle" { print $2; exit }' "$f")"
-        if [ -z "$lifecycle" ]; then
-            echo "$f: missing lifecycle metadata (active, closed, or superseded)"
-            fail=1
-        elif [ "$lifecycle" != "active" ] && [ "$lifecycle" != "closed" ] && [ "$lifecycle" != "superseded" ]; then
-            echo "$f: invalid lifecycle metadata: $lifecycle"
-            fail=1
-        elif [ "$lifecycle" = "closed" ] || [ "$lifecycle" = "superseded" ]; then
-            if ! awk '/^## Result[[:space:]]*$/ { found=1 } END { exit !found }' "$f"; then
-                echo "$f: $lifecycle plan is missing a ## Result section"
-                fail=1
-            fi
-        fi
-
-        read -r lines fenced long_fences long_lines unbalanced <<< "$(awk '
-            { total++ }
-            /^```/ {
-                if (inside) {
-                    if (count > 15) { many++; many_lines += count }
-                    inside = 0; count = 0
-                } else { inside = 1; count = 0 }
-                next
-            }
-            inside { count++; fenced++ }
-            END {
-                if (inside) { unclosed=1; if (count > 15) { many++; many_lines += count } }
-                print total, fenced + 0, many + 0, many_lines + 0, unclosed + 0
-            }
-        ' "$f")"
-        if [ "$unbalanced" -ne 0 ]; then
-            echo "$f: unbalanced fenced code block"
-            fail=1
-        fi
-        if [ "$long_fences" -gt 0 ]; then
-            echo "$f: $long_fences fence(s) exceed 15 lines ($long_lines fenced lines)"
-            awk '
-                /^```/ {
-                    if (inside) {
-                        if (NR - start - 1 > 15) printf "  lines %d-%d\n", start, NR - 1
-                        inside = 0
-                    } else { inside = 1; start = NR }
-                }
-            ' "$f"
-            fail=1
-        fi
-        if [ "$lines" -ge 400 ] || [ $((fenced * 100)) -ge $((lines * 25)) ]; then
-            echo "$f: $lines lines, $((fenced * 100 / lines))% fenced (must be under 400 lines / 25% fenced)"
+        lines="$(wc -l < "$f" | tr -d ' ')"
+        if [ "$lines" -ge 400 ]; then
+            echo "$f: $lines lines (must be under 400; split the cycle)"
             fail=1
         fi
     done
     exit $fail
 
-# Point git at the tracked .githooks/ dir so pre-commit runs `lint-docs`
-# locally (docs/sdd.md, "Standing rules": closing a phase/branch owes a
-# green lint-docs, enforced mechanically, not left to memory). One-time
-# per clone; `git config` writes to this repo's untracked .git/config.
+# Point git at the tracked .githooks/ dir so pre-commit runs `lint-docs`.
+# Once per clone; `git config` writes to this repo's untracked .git/config.
 install-hooks:
     git config core.hooksPath .githooks
     @echo "pre-commit will now run 'just lint-docs' on every commit."
 
-# Fast tier: SwiftStarKit against fixtures. No model, no network, no subprocess
-# (enforced by the FastTierGuard build-tool plugin on SwiftStarKitTests).
+# Fast tier: SwiftStarKit against fixtures. No model, no network, no
+# subprocess; the grep below refuses them in Tests/SwiftStarKitTests.
 test:
     ! grep -rn 'Process(\|URLSession\|NWConnection\|posix_spawn\|Darwin\.\|socket(' Tests/SwiftStarKitTests
     swift test
 
-# Integration tier: real processes and files against fake engine binaries
-# generated from committed captures. Same suite, marked tests enabled.
+# Integration tier: real processes and files against the fake ds4-dogfood
+# (fixtures/engine/fake-ds4-dogfood), which replays committed fixtures. Same
+# suite, with the SWIFTSTAR_INTEGRATION-gated tests enabled.
 integration:
     SWIFTSTAR_INTEGRATION=1 swift test
 
 # Live tier: record one engine fixture (tool-read, stop or error) from the
 # real `ds4-dogfood tui --ndjson` into fixtures/engine/. Needs ds4-engine and
-# Laguna XS; never in CI. See fixtures/engine/provenance.md for the
-# re-record rule and what each fixture must contain.
+# real weights. BROKEN until EN.1: the recorder still passes the removed
+# laguna-xs-2.1 model. See fixtures/engine/provenance.md for the re-record
+# rule and what each fixture must contain.
 capture SCENARIO:
     Tools/record-engine-fixture.py "${DS4_DOGFOOD:-ds4-dogfood}" "$PWD" {{SCENARIO}} fixtures/engine/{{SCENARIO}}.ndjson
 

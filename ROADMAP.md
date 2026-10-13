@@ -1,315 +1,123 @@
 # Roadmap
 
-> **Planning surface, not the front door.** Where the current phase, deferred
-> candidates, and the backlog live. Not where a new reader should start — see
-> [`README.md`](README.md) for what this is, and [`BRIEF.md`](BRIEF.md) for
-> the settled design.
-
-*Phases group feature cycles. One direction at a time. Tangents go to the
-Backlog, not into the current phase.*
+> **Planning surface, not the front door.** What's in flight, what's next,
+> and the Backlog. Start with [`README.md`](README.md); the settled design is
+> [`BRIEF.md`](BRIEF.md), how work runs is [`docs/sdd.md`](docs/sdd.md), and
+> closed history is [`docs/history.md`](docs/history.md).
 
 ## Now
 
-A pointer, not a narrative — the detail lives in each phase's own row and its
-linked docs. Update this list when what's in flight changes; do not grow it
-into a second history of the phase table.
+- **Next: EN.1**, the catch-up to ds4-engine `5451cd7d`. It is not specced
+  yet. Until it lands, a stale saved model stops a session from starting;
+  pick a model from the toolbar menu to get past it.
+- **Then:** SU.5 (plan 5a code, then 5b tests), SU.6, SU.7.
+- **Blocked on the engine:** showing the edited copy of a file (the candidate
+  worktree), and more than one window.
 
-- **In flight / next:** Phase P is closed — P29, P30, P31 and P32 all done 2026-10-04. Phase SU (SwiftUI) under way: SU.1 and SU.2 done 2026-10-03; SU.3 and SU.4 (the Xcode-first UI loop) done 2026-10-04. SU.5 (cleanup and test modernisation) is accepted (2026-10-13) and ready for plan 5a — see its row; then SU.6 (UI tweaks) and SU.7 (project focus and switching), neither brainstormed yet. P28, the cut-over to ds4-engine, closed 2026-09-28 — see its row.
-- **Closed with it:** the in-flight P24.4 cycle, P25 cycles 5–6, P18, the
-  Mellum parking and the orchestrate-loop measurements all assumed machinery
-  P28 removes; see the Backlog's "Closed or re-homed by P28".
-- **Then, if wanted:** the Backlog's "Front-end" entries (Apply button,
-  session picker).
+## Phase EN: the engine contract
 
+One cycle per ds4-engine landing that SwiftStar catches up to.
 
-## Phases
-
-| # | Phase | Direction (one sentence) | Status |
+| # | Cycle | Direction | Status |
 |---|---|---|---|
-| P0 | Scaffolding | Repository, docs toolchain, brief, roadmap, harvest briefs | **complete** |
-| P1 | The fork, consolidated | One command builds `ds4-server` and `ds4-agent` from a pinned SHA on the shipped integration branch, with a ledger and a golden capture | complete (2026-08-22) *Removed in P28.* |
-| P2 | It launches and answers | A regular macOS app with a real icon, a window, and a `Settings` scene starts the server and streams one chat turn — with the fast tier, the tripwire, and fake engines generated from P1's captures | complete (2026-08-22) *Window and Settings kept; server, fakes, fixtures replaced in P28.* |
-| P3 | It can get its weights | Chunked parallel download with bitmap resume across restarts, and a launch that refuses infeasibly with an explanation a person can act on | complete (2026-08-22) *Removed in P28 (the engine admits memory).* |
-| P4 | It shows what the machine is doing | Metrics tab: memory, GPU, CPU, power — led by **absolute** `ctx_used` and prefill throughput, on fixed-width, jitter-proof readouts | complete (2026-08-22) *Kept as per-pause, wire-only metrics in P28; host sampling removed.* |
-| P5 | Capture is a program, not a lost file | `swiftstar-drive` committed, the capture format fixed, fixtures committed, the wire given a version handshake and timestamps | complete (2026-08-22) *Removed in P28.* |
-| P6 | Diagnostics that can't lie | A deterministic analyzer over captures, with the model only phrasing the findings | complete (2026-08-22) *Removed in P28.* |
-| P7 | Agent mode | Spawn `ds4-agent`, NDJSON transcript and capture-grade turn/tool outcomes, tool cards, workspace grant, shell toggle, interruptible turns | complete (2026-08-22) *Agent tab kept; `ds4-agent` wire replaced in P28.* |
-| P8 | Skills | The Superpowers bootstrap through `-sys`, prefilled once into `sysprompt.kv`, with progressive disclosure | complete (2026-08-22) *Removed in P28.* |
-| P9 | The tool-callback wire | SwiftStar answers tool calls over the same pipe — including a fake app side — and condenses tool results before they enter KV | complete (2026-08-22) *Removed in P28.* |
-| P10 | Isolation | Worktree-isolated dispatch: a handoff packet in, a candidate ref or a receipt out | complete (2026-08-22) *Removed in P28.* |
-| P11 | Subagent pool | Context-isolated subagents sharing one locked engine, ending at the plan's own measurement gate | complete (2026-08-23) *Removed in P28.* |
-| P12 | Reliable agency | One model, three roles, host-owned structure: a typed packet per phase, bounded tools, real validation, and recovery — measured by writes and a passing acceptance suite, not tool calls | **complete (2026-08-25)** — all three roles evidenced live at least once (decompose closed the same day via P12.5); every number is small-n, none a reliability figure. P12.8's live phase-boundary confirmation and P12.0/P12.7 remain open, non-blocking items *Removed in P28.* |
-| P13 | More models | Laguna XS 2.1 and/or Mellum 2.1 as first-class variants — **neither line has a shipping artifact yet**; deferred behind P12 so there is a harness that can actually evaluate a variant | complete (2026-08-25) — verdict: blocked on Mellum's tool-call **initiation** gate. **The broader "competence, not the harness" reading was overturned:** P15 found the action mode harness-addressable, and [P17](docs/superpowers/research/2026-08-26-p17-repair-limit-verdict.md) found the multi-file repair failure was *predominantly a harness defect* (a directive asserting "exactly one file is wrong" on every cell) — with it removed, repair depth stops predicting failure and Mellum edits 15/17. The residual limit is authoring from an implied contract (1/6), not repair depth. Corrected 2026-08-27. **Corrected again 2026-08-29:** the "repair depth stops predicting failure" reading is overturned by the overnight campaign's Block B analysis — see [`2026-08-29-block-b-negative-result-analysis.md`](docs/superpowers/research/2026-08-29-block-b-negative-result-analysis.md) and P26 *Removed in P28.* |
-| P14 | A docs site | Sphinx content and Pages publishing, once there is a reader who isn't the author | planned |
-| P15 | Host-controlled action mode | The model drafts as text (`#path` + fenced blocks), the host harvests, writes, and verifies — isolating "should I act" from content competence for Mellum-class models; exit is a verdict, not a product | complete (2026-08-25) — verdict: **harness-addressable**; repair 4/4 at 13/13, build 3/9 at 13/13 with 0 tool calls *Removed in P28.* |
-| P16 | Repair harness validity | Fix the four defects (round-discard, collection gate, packet budget, withheld phase brief) blocking any real measurement of Mellum's repair competence, driven by a validity-gated `/goal` loop | **demoted, not resumed** — superseded by P17's cheaper fixture-tier answer; `/goal` v1-v3 closed without meeting their goals, see [`goal-ledger.md`](docs/superpowers/research/goal-ledger.md) and [`goal-ledger-v3.md`](docs/superpowers/research/goal-ledger-v3.md) *Removed in P28.* |
-| P17 | Repair-limit fixture experiment | Pre-registered fixture-tier experiment answering whether Mellum's multi-file repair failure is a budget, framing, or depth limit; then a follow-on attempt to optimise the repair loop itself | **complete (2026-08-26)** — verdict: predominantly a harness defect (a false "exactly one file" directive), not the model; Mellum 15/17 on editing tasks; the follow-on optimisation attempt (`/goal` v5) retired without a resolvable result — see [`2026-08-26-p17-repair-limit-verdict.md`](docs/superpowers/research/2026-08-26-p17-repair-limit-verdict.md) and [`goal-ledger-v5.md`](docs/superpowers/research/superseded/goal-ledger-v5.md). **Corrected 2026-08-29:** the 15/17 rate does not replicate on new data — see [`2026-08-29-block-b-negative-result-analysis.md`](docs/superpowers/research/2026-08-29-block-b-negative-result-analysis.md) and P26 *Removed in P28.* |
-| P18 | `mellum-fixture` benchmark | A small, one-shot fixture benchmark for Mellum: one attempt, a flat 13-requirement oracle, frozen pre-registered manifest, no repair rounds, no self-modifying loop — separate from `swiftstar-agenttest` | **deferred to last (2026-08-27 decision)** — the benchmark runs after the model ladder and the remaining phases ship, validating the final state. **Job changed 2026-08-29:** P18 was scoped to *validate the final state* — implicitly to confirm a settled number. After the Block B overturn it is now the **arbiter of a contested one** (88% -> 68%, with a harness prompt fix landed mid-stream whose effect is unmeasured at real n). It also inherits an obligation nobody had written down: answering the depth question cleanly needs a **`depth-3-easy` fixture** (three files, three easy defects), because the existing `depth-3` uniquely contains the timezone trap, so the 95/63/44 profile is defect identity rather than file count — and no n fixes that. Mellum is INACTIVE until 2026-09-05, so this does not start before then. Design: [`2026-08-27-p18-mellum-fixture-design.md`](docs/superpowers/specs/2026-08-27-p18-mellum-fixture-design.md) *Removed in P28.* |
-| P19 | One surface | The Agent is the app: Chat retired (the `ds4-server`/SSE path, `EngineController`, the tab), the ported Agent UI (composer, workspace picker, status bar + rings, message rendering, tool cards), Settings (shell toggle, font-size slider), per-turn summary on bubbles | **landed 2026-08-26** — Chat retirement `f546671`; UI port `ebfc046`; Settings `5d7c1de`; turn summary `8b9710b`; stop-button fix `478d871`. See the [`agent-surface-port verification record`](docs/superpowers/research/2026-08-26-agent-surface-port-verification-record.md) and the [`old-ui element inventory`](docs/2026-08-26-old-ui-element-inventory.md). Reopened and **complete 2026-08-27**: **P19.0** (consulted answer styling, stable-row-ID decision) and **P19.1** (the app shell) — a Tahoe-forward `NavigationSplitView` shell with a real customizable toolbar, collapsible sidebar, Settings moves (pool size, session capture, smart/dumb default, workspace default), one toolbar model choice with the engine lifecycle hidden, a component/region design vocabulary, and the Swift 6 concurrency gates. See the [`P19.1 design`](docs/superpowers/specs/2026-08-27-p19-1-app-shell-design.md) *UI kept; engine wiring replaced in P28.* |
-| P20 | Delegation in one engine | Subagents without a second process: the app's agent spawns with `--subagent-pool N`; `/chat` (manual → pool-routed → answer surfaced); smart/dumb handoff-packet lever + dumb-mode dispatch refusal; restart-safe pool state | **Closed 2026-08-27** — live validation PASS (1 dispatch + 13/13, 695s, seed-dependent). [Closure verdict](docs/superpowers/research/2026-08-27-p20-closure-verdict.md); spec [2026-08-27-p20-orchestrate-loop-design.md](docs/superpowers/specs/2026-08-27-p20-orchestrate-loop-design.md).<br>**(1) `/orchestrate` coordination loop** (model-driven, one-shot-first per P17's no-repair-loop verdict) — `OrchestrateDirective.swift`, `orchestrate(task:writableFiles:)` replacing `orchestrateStub()`; needed engine divergence #12 (the `dispatch` schema).<br>**(2) Dispatch-preference bootstrap rule** — prefer dispatch once acceptance is machine-checkable; never for watched interactive sessions. [1809 findings](docs/superpowers/research/2026-08-27-1809-prefill-tail-findings.md).<br>**(3) Descoped:** small-ctx workers → P23; two-phase `/spike` → Backlog behind P24.<br>Commits: `00b5d80` `52257b8` `95ac5c3` `2011203` `53b7ee5` `3e07b54` `9efd050`. *Removed in P28.* |
-| P21 | Measurable sessions | Telemetry you can act on: live session capture (wire + trace + stderr per spawn under `captures/live/`), the telemetry analyses (heavy-session compaction, spike shell-on findings) | **landed 2026-08-26** — capture `96fcc49`/`4e7cb3a`. See the [`heavy-session findings`](docs/superpowers/research/2026-08-26-heavy-session-telemetry-findings.md) and the [`spike shell-on findings`](docs/superpowers/research/2026-08-26-spike-shell-on-findings.md). Forward: the **DumbImplementer eval** (design around Σsuffix — Σprompt double-counts, so Σcached/Σprompt is not a cache-hit rate), and **expose the wire's `power` field** (already emitted; the parser drops it) as the first step toward the power question. The kind assertions and the DialLogic re-anchor landed 2026-08-27 — the fixture already carries kinds (no recapture needed), and the anchors are re-anchored to the app's 50k (25k/37.5k; critical now reachable). Which P19–P21 ideas have live evidence: the [`2026-08-26 evidence report`](docs/superpowers/research/2026-08-26-evidence-report.md) *Removed in P28.* |
-| P22 | More models: Laguna XS + model switching | Laguna XS 2.1 as a first-class, choosable preset at parity with Laguna S — merge the unmerged `p13-laguna-xs-variant` branch (9 commits; its spec `2026-08-26-p13-laguna-xs-variant-design.md` lives on that branch), the completed live acceptance run, XS golden recapture — plus **model switching** (woven in): an "Apply this model" action that stops and re-spawns the agent with the new model, feasibility-/VariantGate-admitted *before* the stop (never kill a working session to switch to an infeasible model), transcript preserved, provenance per-spawn reflects the new model, pool re-spawns with it, switch refused mid-generation. XS is also the natural line for P20's small-ctx workers | **Closed.**<br>**(1) Laguna XS 2.1** — parity with Laguna S, merged 2026-08-27; live acceptance PASS, golden recapture. [Verdict](docs/superpowers/research/2026-08-27-p22-laguna-xs-acceptance-verdict.md), [recapture](docs/superpowers/research/2026-08-28-p22-xs-golden-recapture-verdict.md).<br>**(2) Model switching** ("Apply this model") — admission before stop; live-validated S→XS, an accidental XS→DeepSeek switch proved P25 Cycle 4b's admission denominator. [Verdict](docs/superpowers/research/2026-08-28-p22-model-switching-verdict.md) ([live](docs/superpowers/research/2026-08-28-p22-model-switching-live-validation.md)).<br>**(3) SSD streaming, Laguna line** — S resident at 20.53 GiB (~32.5 GiB saved); DFlash × SSD refused. [Verdict](docs/superpowers/research/2026-08-28-p22-ssd-across-the-line-verdict.md) ([live](docs/superpowers/research/2026-08-28-p22-ssd-across-the-line-live-validation.md)).<br>16 GB acceptance skipped by decision 2026-08-27, unconfirmed. *Gone: P28.* |
-| P23 | Wire-level control | Per-turn think on the agent wire (`reasoning_effort`-style) **plus per-worker context for pool workers** (the small-ctx/RLM lever, descoped from P20 2026-08-27 and merged here). The think leg buys correctness and responsiveness — it bounds the observed think-to-the-wall failure and delivers the "fast reply"; its wall-clock ceiling is ~9.3%, so it is **not** a throughput lever. The per-worker-context leg carries the measured speed (4.2x prefill ceiling; ~6.15 GB → ~1.5 GB scratch per worker). One engine patch, **fork-ledger row #14** (P22's SSD widening took #13), one golden recapture. Spec: [`2026-08-28-p23-wire-level-control-design.md`](docs/superpowers/specs/2026-08-28-p23-wire-level-control-design.md) | **Implemented and closed 2026-08-28.** Spec: [design](docs/superpowers/specs/2026-08-28-p23-wire-level-control-design.md); full record: [wire-control research](docs/superpowers/research/2026-08-28-p23-wire-control-research.md).<br>**(1) Per-turn think** — `/quick`, `think_override` cap, `TurnThinkPolicy`; `TurnOutcome.sampler` records the effort actually used.<br>**(2) Per-worker context** — clamped to `[4096, parent]`, `sysprompt-<ctx>.kv`; fork-ledger row #14; golden recapture (also fixed a real ctx-swap data race and a stale `planned_bytes` drift, both traced in the research doc).<br>**Descoped:** warm-prefix routing (D11, stays Backlog); the "toolless" half of `/quick` (busts the KV prefix). **Deferred:** spec test 9 (think-to-the-wall regression) — no local model reproduces visible thinking; see the [repro attempt](docs/superpowers/research/2026-08-28-p23-think-to-the-wall-repro-attempt.md). *Removed in P28.* |
-| P24 | Digested first-class tools | P9's deferred condensation-direction attack on prefill-tail cost (measured: one file re-read 31× = 37% of Σsuffix). Deterministic host-owned tools, in cycles: P24.1 windowed reads, P24.2 read-guard retirement, P24.3 run+digest tools, then P24.4 instrument reconciliation. `scout`, policy gating, and model-asks-human remain later ladder work. [Direction and re-scoping](docs/superpowers/research/2026-08-30-p24-direction-and-rescoping.md). | **(1) P24.1** — closed 2026-08-30; 799 tests; repeat rate 1.45→1.00. [Design](docs/superpowers/specs/2026-08-30-p24-1-window-honoring-reads-design.md), [measurement](docs/superpowers/research/2026-08-30-p24-1-window-honoring-after-measurement.md).<br>**(2) P24.2** — guard retired and `.pool` `readCache` removed; re-baselined. [Design](docs/superpowers/specs/2026-08-30-p24-2-read-guard-redecision-design.md).<br>**(3) P24.3 run+digest family** — landed on `main` 2026-08-30: host-owned `test`/`lint`, bounded `bash`, resolver, executor wiring, engine schemas, and tests. Golden recapture and paired-bill measurement remain outstanding.<br>**(4) P24.4** — next: reconcile the refusal-streak corrective and `toolCallBudget` timing between `swiftstar-agenttest` and the app. *Removed in P28.* |
-| P25 | More models: DeepSeek V4 Flash | The fourth rung of the app's own model ladder — [`docs/laptop-ai.md:34`](docs/laptop-ai.md) names it "the flagship," **the reference the others are measured against**, at the 128 GB tier (64 GB Laguna S, 32 GB Laguna XS, 16 GB Mellum all shipped by P22). Missing entirely today: no gguf on disk under the app's own search paths, no `Variant`, no ROADMAP mention before this row — found only by cross-referencing `docs/laptop-ai.md` against the predecessor `~/projects/ds4-control`, which ran it successfully (2026-08-27 research, recorded here per user request). See also the DS4 Control harvest doc, [`docs/harvest/ds4-control.md`](docs/harvest/ds4-control.md), whose opening line already named the predecessor's target as "a local DeepSeek V4 / Laguna S 2.1 engine" without DeepSeek ever being carried into SwiftStar's own model list. | **Closed 2026-08-28.** DeepSeek V4 Flash — 128 GB flagship rung — shipped as a first-class `Variant`. [Design](docs/superpowers/specs/2026-08-27-p25-deepseek-v4-flash-variant-design.md) (identity, engine support, the affine-model proof).<br>**(1) Scoping resolved:** the "faithful Metal-allocator port vs. linear approximation" fork was a false dichotomy — ds4-control's model is affine above the 4,096 prefill cap, so it feeds the existing three-anchor `MemoryBudget` shape unchanged.<br>**(2) Cycle 4b (2026-08-28) — the real blocker.** Not the budget: `VariantGate` checked free+inactive RAM instead of the Metal working-set ceiling. Fixed via `MetalWorkingSet`'s wired-limit-aware ceiling; `maxContext` corrected 524,288→450,000; 732 fast-tier + 9/9 live tests green. [Verdict](docs/superpowers/research/2026-08-28-p25-cycle-4b-verdict.md).<br>**Remaining, non-blocking:** Cycle 5 (live 91 GiB acceptance) skipped by decision 2026-08-27; Cycle 6 (SSD streaming) deferred. *Gone: P28.* |
-| P26 | Eval-system hygiene | Correct the stale, overturned "flat depth profile" claim everywhere it appears; commit the untracked overnight-campaign scripts, manifests, and results as the pre-registered evidence they are; freeze one merged results schema across the two Python campaign runners before the next cell runs; annotate uncalibrated LLM-judge acceptance claims as advisory pending calibration. Docs-and-git only — no engine, no Metal — so it runs concurrently with anything else in flight. Later, non-gating work (Swift-native `swiftstar-analyze findings`/`index`, the zero-Metal replay tier, a kill list, grader calibration, a second fixture app) is Backlog, not this phase | **Complete (2026-08-29).** Corrected same day after being marked partial in error. [Full closure verdict](docs/superpowers/research/2026-08-29-p26-closure-verdict.md) (the gate FAILED once — five arms ran without the schema freeze it required, one schema widened unaccounted-for — before being redone in `3dac58a`).<br>**(1)** Overturned flat-depth-profile claim corrected in all three places named.<br>**(2)** Campaign scripts/manifests/results committed as pre-registered evidence (`f61de85` + this branch).<br>**(3)** Cell-classification closure/append logic unified via a generalized `key_columns` list — not a literal one-schema merge, that was deliberately rejected.<br>**(4)** `DeepSeekGrader` claims marked advisory pending calibration — see [P22's acceptance verdict](docs/superpowers/research/2026-08-27-p22-laguna-xs-acceptance-verdict.md).<br>Gate cleared; Later work in [the audit doc](docs/superpowers/research/2026-08-29-eval-system-audit-and-later-work.md). *Gone: P28.* |
-| P27 | One eval CLI | `swiftstar-eval`: one CLI that runs an ad-hoc prompt, a `/quick` or the orchestrator through the app's own spawn path and hands every result to the same analyzer — replacing `swiftstar-drive` and `swiftstar-analyze`, with `swiftstar-agenttest` deferred to a second cycle | **CLI shipped 2026-08-31; the measurement it was built for has NOT run.** [Design](docs/superpowers/specs/2026-08-30-eval-cli-design.md), plans [1a](docs/superpowers/plans/2026-08-30-eval-cli-1a-kit-types.md) / [1b](docs/superpowers/plans/2026-08-30-eval-cli-1b-cli-and-extraction.md) / [1c](docs/superpowers/plans/2026-08-30-eval-cli-1c-the-bill.md).<br>**(1) The guard** — arms resolve to a full `SpawnRecord`; a run is refused when they differ by anything undeclared, or when the declared variable did not actually differ. Interleaved, seed-matched, no headline ratio.<br>**(2) The extraction** — the turn loop moved out of the 66 KB SwiftUI `AgentController` into a headless `AgentSession`; two source-text tests retired for behavioral ones.<br>**(3) Engine divergence #19** — `--tools`, cross-family.<br>**(4) Not done:** plan 1c (the P24.3 bill) and cycle 2. *Removed in P28.* |
-| P28 | Cut over to ds4-engine | SwiftStar becomes a macOS front-end for one held `ds4-dogfood tui --ndjson` session — prompt, transcript, tool cards, per-pause metrics, stop, quit — and drops the forked C engine, host-run tools, pool, dispatch, model admission, SwiftStar-side captures and both eval CLIs | **complete (2026-09-28)** — hard cut-over; reopened `BRIEF.md` by owner direction. Spec [`2026-09-28-p28-ds4-engine-cutover-design.md`](docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md); plans [engine seam](docs/superpowers/plans/2026-09-28-p28-ds4-engine-cutover.md) and [app switch, removal, docs](docs/superpowers/plans/2026-09-28-p28-ds4-engine-cutover-app.md). No ds4 code, submodule or `ds4-agent` dialect remains; fast (68) and integration (11, fake `ds4-dogfood`) tiers green. Live, Laguna XS through `EngineSession`: `read` card with preview, answer, per-pause metrics, `/help` notice, Stop mid-turn, quit exit 0 with session dir and apply command; the built app spawns the exact argv and quits with no orphan (*idle only; quit mid-turn can orphan the engine, review A4 — P29.4*). GUI click-through not agent-verified (no screen access). |
-| P29 | Make the front-end honest | Fix what the [P28 deep review](docs/superpowers/research/2026-09-28-p28-deep-review.md) found: session state, context gauge and dropped wire events that say something false, a quit that can outlive the app, a fake engine the tests over-trust. Steps below | **complete (2026-10-04)** — P29.1–P29.4, P29.9 and P29.10 done. P29.5–P29.8 carried forward rather than left open here: P29.5 to P31, P29.6 to P32, P29.7 to SU.1, P29.8 to SU.5 (see those rows). P30 is P29.10's own deferred minors (Backlog). From the review's ranked "do next"; steps in `## P29 steps`. |
-| P30 | P29.10's deferred minors | A test for a menu pick restarting the session mid-turn; the model catalog's once-per-engine-path load; the catalog loader's timeout-reap, pid-reuse and 4 KiB stderr-tail edges (Backlog). No live engine needed | **done (2026-10-04)** — stderr tail now reads `.suffix(4096)`; the catalog cache keys on path + modification date (`CatalogCacheKey`); `EngineController` gained its first test coverage (wired into `SwiftStarIntegrationTests`), including the mid-turn restart test. The pid-reuse window stayed out of scope. Plan: [`2026-10-04-p30-deferred-minors.md`](docs/superpowers/plans/2026-10-04-p30-deferred-minors.md). |
-| P31 | Fake-engine fidelity (was P29.5) | Make `fixtures/engine/fake-ds4-dogfood` match the relay: queue prompts during a pause, emit `stopping`, defer `quit`, refuse empty/non-JSON prompts, add a model-load gap; rewrite or drop the B2-listed tests; B3 doc fixes. The real-engine fixture recapture owed from P29.3 is **not** in scope here — Backlog, needs the GPU | **done (2026-10-04)** — the fake's `tui` mode is now a small relay-like state machine, read directly against `../ds4-engine`'s source; queueing is unconditional. Found and fixed a real bug along the way: `EngineMetricsReducer`'s `.pause` case clobbered prefill/generation rates with `nil` on a short snapshot, unlike every other case. 137 fast / 31 integration tests green. Plan: [`2026-10-04-p31-fake-engine-fidelity.md`](docs/superpowers/plans/2026-10-04-p31-fake-engine-fidelity.md). |
-| P32 | Structure and dead-code cleanup (was P29.6) | `FileHandle.bytes.lines` replacing `readabilityHandler`/`AsyncStream`/`LineBuffer`; drop the `FastTierGuard` plugin; rename `SwiftStarAppKit` to `SwiftStarEngine`; delete the B5 dead code; rename `Agent*` views; one `DefaultsKey` enum; the SwiftMath drop-or-wire call. No live engine needed | **done (2026-10-04)** — all seven items landed, each its own commit. Stream plumbing kept `readabilityHandler`/`AsyncStream` (a new `ChunkBytes: AsyncSequence<UInt8>` wrapper gets `.lines` framing without `FileHandle.bytes`, whose shared blocking IO actor a Fable-diagnosed investigation found starves concurrent readers) and dropped `LineBuffer`. `FastTierGuard` → one grep line. `SwiftStarAppKit` → `SwiftStarEngine`. B5 dead code deleted. `Agent*` views → `SessionView`/`PromptBubble`/`ToolCardView`. One `DefaultsKey` enum. SwiftMath documented as inert (BRIEF.md). 129 fast / 30 integration tests green throughout. Plan: [`2026-10-04-p32-structure-cleanup.md`](docs/superpowers/plans/2026-10-04-p32-structure-cleanup.md); root-cause detail in its spec `## 1`. |
+| EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | next, not specced. Scope: [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md). Done when a session starts with the stale setting still saved and both test tiers pass |
 
-Phase `P` runs P0–P32 and is closed to new entries as of 2026-10-04; `P0`–`P29` keep their historical numbering, unrenamed. New initiatives open a named phase instead, cycles numbered `<Name>.1`, `<Name>.2`, … — matching ds4-engine's `QW`/`LS`/`TC`/`RUN` convention. First: **SU** (SwiftUI).
+## Phase SU: SwiftUI
 
-| # | Phase | Direction (one sentence) | Status |
+| # | Cycle | Direction | Status |
 |---|---|---|---|
-| SU.1 | SwiftUI modernisation (was P29.7) | Inject `EngineController` via `@Environment`, delete the manual `onChange` copy; composer's `.onSubmit` instead of `.onKeyPress`; transcript `.defaultScrollAnchor(.bottom)` with stable row ids; close-last-window quits plus `.restorationBehavior(.disabled)` | **done (2026-10-03)** — all four items landed. `EngineController` injected via `@Environment` (the `onChange` copy was already gone, deleted in P32). Composer's `.onSubmit` replaces `.onKeyPress` (fixes A8); Option-Return now inserts at the caret, not the end — live-verified via a scratch harness (no `ds4-dogfood`/GPU in this environment to drive the real composer), owner-confirmed. Transcript's `.defaultScrollAnchor(.bottom)` replaces the `ScrollViewReader`/`onChange` dance; row ids stay `\.offset` (already stable, re-verified against `EngineTranscript`). Window close now quits (`applicationShouldTerminateAfterLastWindowClosed`), `.restorationBehavior(.disabled)` added — live-verified idle only, not mid-turn (same GPU-less constraint). Spec: [`2026-10-03-su1-swiftui-modernisation-design.md`](docs/superpowers/specs/2026-10-03-su1-swiftui-modernisation-design.md); plan: [`2026-10-03-su1-swiftui-modernisation.md`](docs/superpowers/plans/2026-10-03-su1-swiftui-modernisation.md). |
-| SU.2 | A modern testing strategy | Not a framework change — all 14 test files already use Swift Testing, no XCTest. Extract more view-adjacent logic into plain, testable types, continuing the `EngineSessionModel`/`EngineComposer` pattern, and consider a feature-based reorg so views stay thin enough that Previews cover what tests can't | **done (2026-10-03)** — framework claim confirmed (15 files, still all Swift Testing); feature-based reorg declined this cycle (11-file, 1,268-line view target too small to earn the cost yet). Three untested view-adjacent logic clusters moved to `SwiftStarKit`, each with pinning tests: `MetricsFormatting` (consolidates a near-duplicate `rate`/`bytes` pair plus a tooltip builder), `EngineAnswer.summary`, `EngineToolCard.headerText`/`.metadataLine`/`.icon` (four `ToolCardView` statics that already didn't need the view). 143 fast / 30 integration tests, up from 129/30. Spec: [`2026-10-03-su2-testable-view-logic-design.md`](docs/superpowers/specs/2026-10-03-su2-testable-view-logic-design.md); plan: [`2026-10-03-su2-testable-view-logic.md`](docs/superpowers/plans/2026-10-03-su2-testable-view-logic.md). |
-| SU.3 | Preview adoption | `#Preview` on all 8 existing views (`SessionView`, `MainView`, `SettingsView`, `InspectorView`, `PromptBubble`, `ToolCardView`, `MarkdownText`, `ValueGaugeView`) — none exist today — with fixture-backed states | **done (2026-10-04)** — 14 `#Preview` blocks across all 8 views, each confirmed rendering via Xcode's `RenderPreview` MCP (driven over `xcrun mcpbridge`). Mid-cycle structural change: previews can't run in an executable target of a bare package (Xcode-only `ENABLE_DEBUG_DYLIB`), so the views and `EngineController` moved to a new `SwiftStarUI` library target plus product (Xcode makes schemes per product; previews need that scheme active). Fixtures fold through `EngineSessionModel.apply`; fixture controllers (`init(model:)`) never load the catalog or start the engine, so a preview spawns no `ds4-dogfood`. Spec: [`2026-10-03-su3-preview-adoption-design.md`](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md); plan: [`2026-10-03-su3-preview-adoption.md`](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md). |
-| SU.4 | Xcode-first UI loop (absorbs the old SU.4, the Claude/Xcode preview workflow) | Make Xcode 27 with its Claude Agent the place UI work happens — edit a view, see its preview, keep tests green: `SwiftStarUI` laid out by feature (MV with `@Observable`, no view-model layer), `SessionView` split into previewable parts, shared `PreviewModifier` fixtures, Xcode's MCP tools wired for both Xcode's agent and terminal Claude Code, the project skills and `CLAUDE.md` guidance that loop needs, tighter build settings, and a `RenderPreview` check before any UI change is called done | **done (2026-10-04)**, driven end to end by Xcode's Claude Agent. Feature folders; `SessionView` 453 → 64 lines in six previewable parts; `PreviewModifier` traits; approachable-concurrency features, `MemberImportVisibility` and warnings as errors on all own targets; `CLAUDE.md` UI rule and `ui-loop` project skill (loads in a fresh Xcode session). Font size now reaches the status bar, rows and notice; toolbar menus ignore `.font`. Owner checks passed: the GPU-toggle preview in the live canvas, and a terminal Claude Code `RenderPreview`. 143 fast / 30 integration tests. Spec: [`2026-10-04-su4-xcode-first-ui-loop-design.md`](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md); plan: [`2026-10-04-su4-xcode-first-ui-loop.md`](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md). |
-| SU.5 | Cleanup and test modernisation | Inside the new loop, clear what the 2026-10-04 repo audit found: dead code and stale docs, its two suspected UI bugs (font-size environment scope, Quick Look path), `SessionView`'s untested view-embedded logic extracted and tested, current Swift Testing features adopted, and `ROADMAP.md` reorganised (lint the SU rows, move closed history out) | **accepted (2026-10-13)** — design spec [`2026-10-04-su5-cleanup-and-test-modernisation-design.md`](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md), all four decisions (D1–D4) accepted as recommended: split into plan **5a** (code and tests) then plan **5b** (docs, `ROADMAP.md` reorg); targeted Swift Testing adoption, no full sweep; Quick Look resolves against the checkout's copy via engine-reported `source` (the candidate-worktree gap is a new Backlog engine request); UI copy, unread catalog fields, the Python/Sphinx docs site and `#if DEBUG` gating all stay out of scope. Ready for plan 5a. |
-| SU.6 | UI tweaks (was SU.5) | A punch list absorbing P29.8's deferred items (native Markdown renderer, delta metrics, Liquid Glass affordances, apply-command persistence, first-launch workspace). *Not yet brainstormed — list to come.* | not yet brainstormed |
-| SU.7 | Project focus and switching | Focus the window on one project at a time while making it natural to jump between projects: the project as the window's identity (title, subtitle, colour or symbol), a sidebar of only that project's sessions in a `NavigationSplitView`, and fast, deliberate switching through a toolbar project switcher, a quick-switch shortcut and Open Recent, with multiple windows or native window tabs (`WindowGroup(for:)`) left until ds4-engine can hold more than one session | not yet brainstormed — options and a recommendation in [`2026-10-04-project-focus-options.md`](docs/superpowers/research/2026-10-04-project-focus-options.md). The per-project session list needs the same engine resume support as the Backlog's session picker; the multi-window step is gated on the engine. |
+| SU.1 | SwiftUI modernisation | `@Environment` controller, `.onSubmit` composer, `.defaultScrollAnchor` transcript, closing the last window quits | done 2026-10-03: [spec](docs/superpowers/specs/2026-10-03-su1-swiftui-modernisation-design.md), [plan](docs/superpowers/plans/2026-10-03-su1-swiftui-modernisation.md) |
+| SU.2 | Testable view logic | Move view-adjacent logic into Kit, with tests | done 2026-10-03: [spec](docs/superpowers/specs/2026-10-03-su2-testable-view-logic-design.md), [plan](docs/superpowers/plans/2026-10-03-su2-testable-view-logic.md) |
+| SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
+| SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
+| SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | spec accepted 2026-10-13 and revised the same day: [spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md), [audit §2–§3](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md). Plan 5a (code) after EN.1, then 5b (tests) |
+| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | not brainstormed |
+| SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
 
-## P29 steps
+### SU.6 punch list
 
-Source: [`2026-09-28-p28-deep-review.md`](docs/superpowers/research/2026-09-28-p28-deep-review.md)
-(finding ids A/B/C below refer to it). Ordered by its ranked "do next".
-
-1. **P29.1 Truthful session state.** *Done (2026-09-28).* Session state lives in Kit: `EngineSessionModel` (phase, transcript, metrics; applies events, exit and quit), `EngineSessionPhase` (with `quitting`, which counts as active), `EngineComposer` (can type / send / stop, label). Busy starts on the engine's `.prompt`, not on send; pending user rows read "Queued" and clear on the next `.prompt`, `.steering`, input, error or exit; exit clears everything; `EngineSessionError` is a `LocalizedError`. Fixes A1–A3. Tests include `busyClearsOnExit`, `stopDisabledWhileQueued`, `sendRefusedWhileQuitting`, `commandRowIsNotLeftPending`, `errorMidTurnKeepsStop`, `canSendWhileBusy`.
-2. **P29.2 Context gauge by fraction.** *Done (2026-09-28).* `Severity.ofContext(used:size:)` in Kit — warning at 50 %, critical at 75 % of the engine's window (integer thresholds); the app's absolute thresholds are gone; BRIEF binding rule 1 now says the display is fractional and findings stay absolute. Fixes A5 (`twentyThousandWindowReachesCritical`).
-3. **P29.3 Surface the dropped wire events.** *Done (2026-09-28).* Decoded and shown: `terminal` (outcome), empty answers (reason, else "the model stopped without answering"), `queued`, `steering_*`, `mentions` (attached / missing), `compacting` / `compacted` / `compact_failed`, `telemetry_error`, `clear` ("Conversation cleared"); metrics fold `session.context_size` and `interrupted.context_*`. After `ready`, an undecodable stdout line is a notice, not fatal (A7). Fixes A6, A7, A13. Payloads for the new events are hand-written from engine source — a fixture recapture is owed (P29.5).
-4. **P29.4 Quit that ends a turn.** *Done (2026-09-28).* `EngineSession.quit()` is idempotent: mid-turn it writes `stop` and `quit` back to back (the relay takes quit before its queue), then SIGTERM after a stop grace and SIGKILL after a kill grace; the app holds `.terminateLater` until the engine exits (safety bound = the three graces + 5 s), and no start or restart runs once termination begins. Exits read "ended after the quit timed out", "ended by force after the quit timed out", "killed by signal N (NAME)" or "could not launch <path>: <reason>" (A12). Fixes A4 (`quitMidTurnEndsTheEngine` reaches SIGKILL). Live: quit mid-turn and during load both ended in about 0.5 s, no orphan.
-5. **P29.5 Fake-engine fidelity and tests that can fail.** Make `fixtures/engine/fake-ds4-dogfood` queue prompts during a pause (`queued`), emit `stopping`, defer `quit` to the next `input`, refuse empty prompts and non-JSON as the relay does, and add a model-load gap after `ready`; drop or rewrite constant-echo tests; test `FAKE_ENGINE_EXIT` with the stderr tail. Why: B1, B2 (`EngineSessionTests.swift:187-203` proves bytes, not the queue contract). Done when: A2 is reproducible in the integration tier, and each B2-listed test either asserts a contract or is gone. Also B3 doc fixes (README Swift 6.2, glossary, provenance macOS 26). Also owed from P29.3: recapture fixtures containing `terminal`, `mentions`, `steering_*`, `telemetry_error`, `compact*` and `clear` (their tests use payloads written from engine source). *Continues as P31 (2026-10-04): the real-engine recapture needs the GPU and is split out to its own Backlog entry.*
-6. **P29.6 Stream and structure cleanup.** Replace `readabilityHandler` + `AsyncStream` + `LineBuffer` with `FileHandle.bytes.lines`; drop `FastTierGuard` (plugin and tool target) for one grep line in `just test`; rename `SwiftStarAppKit` to `SwiftStarEngine` (now including P29.10's `EngineModelCatalogLoader`); delete the B5 dead code (`PathAbbreviation.abbreviate`, `MarkdownPreprocess.fenced`/`language(forPath:)`, unread `EngineSessionInfo`/`outputTokens`/`resultKind`/`isAwaitingInput`/`interrupt()`, `ValueGaugeView.text`, `MetricsModel`, `fixedWidth`, `Tools/make-icon.swift`, `goal.md`, old-UI docs); rename `Agent*` views to `SessionView`/`PromptBubble`/`ToolCardView`; one `DefaultsKey` enum (covering `recentWorkspaces` and the `appShellInspectorPresented` key duplicated in `AgentView.swift` and `MainView.swift`); fix B6 stale comments; SwiftMath never renders (`deLaTeXed` strips math, `MarkdownText.swift:39-41`), so drop it or wire it. Why: C5–C8, B4–B7. Done when: build and both test tiers are green, `LineBuffer` and the plugin are gone, and no symbol in the B5 list is left without a caller. *Continues as P32 (2026-10-04).*
-7. **P29.7 SwiftUI modernisation.** Inject `EngineController` via `@Environment` and delete the `onChange` copy; composer's `TextField(axis: .vertical)` submits via `.onSubmit` instead of `.onKeyPress` (fixes A8); transcript with `.defaultScrollAnchor(.bottom)` and stable row ids; close-last-window quits plus `.restorationBehavior(.disabled)`; README "Build and run". Why: C9–C13, A8, A11 (`AgentView.swift:293-313`, `SwiftStarApp.swift:14`). Done when: owner GUI pass confirms Return submits, Option-Return newlines, and Cmd-W ends the engine. *Continues as SU.1 (2026-10-03).*
-8. **P29.8 Later (own cycle, not scheduled).** Native Markdown renderer replacing the pinned `MarkdownView` fork (C14), delta metrics from consecutive `checkpoint`s with the cumulative rate labelled "session avg" (C15, B3), Liquid Glass affordances (C16), plus C17–C20 and A9/A10 (apply command kept across sessions, first-launch workspace). Done when: each is either its own plan or declined. *Continues as SU.5 (2026-10-04), not yet brainstormed.*
-9. **P29.9 Model picker: pass `--model-id`/`--context-size` to `ds4-dogfood tui`.** *Done (2026-09-28).* Settings has optional Model and Context size fields; the toolbar shows the loaded model and offers "Restart to use …" when Settings differ. Spec [`2026-09-28-p29-9-model-picker-design.md`](docs/superpowers/specs/2026-09-28-p29-9-model-picker-design.md). Live: `qwen3.8-flash-next` loaded from Settings alone; a bogus id is refused with the engine's reason. *Superseded by P29.10:* the Settings fields and "Restart to use …" are gone; the toolbar menus replace them.
-10. **P29.10 Toolbar menus.** *Done (2026-09-29).* Folder, model and context are separate toolbar menu buttons (the sidebar toggle moved to the far right). The model menu lists the engine's models from `ds4-dogfood models --json` (ds4-engine TUI.35 on `main`; the Backlog's "Engine requests" closures explain the schema reconciliation), greying out models not on this Mac, too big, or not usable in the TUI; without the command it falls back and says why once. Choosing restarts the session; P29.9's Settings fields and Restart button are gone. Spec [`2026-09-29-p29-10-toolbar-menus-design.md`](docs/superpowers/specs/2026-09-29-p29-10-toolbar-menus-design.md).
-
-Full done-when criteria live in each phase's own plan under
-`docs/superpowers/plans/`, not restated here, to avoid drift between two copies.
-Each plan is written as its phase begins. P12's plan is written:
-[`2026-08-24-p12-reliable-agency.md`](docs/superpowers/plans/2026-08-24-p12-reliable-agency.md).
-P13's design and benchmark record:
-[`2026-08-25-p13-mellum-variant-design.md`](docs/superpowers/specs/2026-08-25-p13-mellum-variant-design.md),
-[`2026-08-25-p13-mellum-benchmark-record.md`](docs/superpowers/research/2026-08-25-p13-mellum-benchmark-record.md).
-P15's plan is archived at
-[`2026-08-25-host-controlled-action-mode.md`](docs/superpowers/plans/archive/2026-08-25-host-controlled-action-mode.md).
-
-### Dependencies worth knowing before planning
-
-P28 removed the machinery the earlier planning notes here described (the
-tool-callback wire, the pool, feasibility, the fork and its recapture rule).
-They survive in version control at the commit before P28 and, in evidence
-form, in `docs/superpowers/research/` and `docs/harvest/`. What still binds is
-in `BRIEF.md`: the `ready` handshake, absolute `ctx_used`, fixtures recorded
-from the real engine.
-
+- **Markdown:** a native renderer, or keep the pinned `MarkdownView` fork. A
+  native renderer drops 7 packages but needs a block renderer.
+- **Metrics:**
+  - per-pause deltas, with the cumulative rate labelled "session avg"
+  - a prefill rate that leaves out prefix-cache tokens
+- **Engine information worth showing:**
+  - DFlash and start-up timings: `session.dflash`, `prefix_cache`,
+    `candidate_ready`
+  - the engine's stderr start notices
+  - model sizes from `plan_gib` and `size_bytes`; drop the catalog fields
+    the engine never sends
+- **Copy:**
+  - "Queued" only for rows the engine confirmed
+  - the old "agent" wording ("Ask the agent…", the "Agent" title)
+- **Native look:** Liquid Glass affordances; `NativeTooltip` checked against
+  plain `.help`.
+- **Remembering:** the apply command kept across sessions; a first-launch
+  workspace.
 
 ## Backlog
 
-Deferred, each with the condition that reopens it. Grouped for scanning; a
-group's order is not a priority order.
+Deferred, each with the condition that reopens it.
 
 ### Front-end
 
-- **An Apply button.** The engine records edits in the session's
-  `candidate.diff`; SwiftStar shows the session directory and
-  `ds4-dogfood apply <id>` and applying stays a terminal step (P28 decision 4).
-  *Reopens if copying that command out of the window becomes the daily friction,
-  and ds4-engine exposes apply as a non-interactive machine-readable call.*
-- **A session picker (`--continue`/`--resume`).** One session per launch today.
-  *Reopens when a user wants yesterday's session back; needs ds4-engine's resume
-  path to be reachable over `--ndjson`, which it currently refuses.*
-- **Token streaming.** The protocol reports metrics per pause, not per token.
-  *Upstream-bound: reopens only if ds4-engine adds live throughput to the wire.*
-- **Packaging ds4-engine inside the `.app`.** The user installs it with
-  `uv tool install`; SwiftStar finds it. *Reopens when a reader who is not the
-  author needs to run the app without a terminal.*
-
-- **Shell toggle (was the Agent tab's, then Settings').** Now an engine
-  concern: shell and tool policy belong to ds4-engine. *Reopens only if
-  ds4-engine exposes a spawn-time tool-policy flag worth a Settings control.*
-- **A session browser.** Listing and searching past sessions, now over
-  ds4-engine's `~/.local/state/ds4-engine/sessions/` rather than
-  `~/.ds4/kvcache`. Same item as the session picker above.
-- **P29.10's deferred minors — pid-reuse window only.** P30 (2026-10-04)
-  resolved the rest: `EngineController` has test coverage including a
-  mid-turn restart test, the catalog cache keys on path + modification date
-  (an engine upgraded in place is no longer stuck on a stale load), and the
-  stderr tail reads the last 4 KiB, not the first. Left out of scope: the
-  catalog loader's small pid-reuse window before SIGKILL. *Reopens if seen
-  live.*
-
-- **SU.3's deferred items.** The memory widget once crashed the preview
-  agent in SwiftUI's debug `DebugReplaceableViewStorage` when GPU metrics went
-  from present to absent. SU.4 split it out (`MemoryStatusView`, still shown
-  by a conditional in `StatusBarView`) and added a "GPU toggle" preview that
-  flips the metrics six times when opened in the live canvas. The owner ran
-  it live on 2026-10-04: six flips plus manual toggling, no crash. An Xcode
-  Debug run of the app is still unverified. No test pins `start()` refusing a fixture controller
-  (`EngineController.previewIdle.start()` should leave `.idle`). The
-  `ValueGaugeView` blank-first-render flake was not seen in SU.4's renders.
-  *Reopens: the crash if a Debug run shows it; the test
-  whenever `EngineController` is next edited.*
+- **An Apply button.** Applying stays a terminal step:
+  `ds4-dogfood apply <id>`. *Reopens if copying that command becomes daily
+  friction and the engine offers a machine-readable apply.*
+- **An `@` file picker.** The engine's picker lives only in its Textual
+  presenter, and the wire has no file list. *Reopens when typing `@path` by
+  hand becomes the friction. It needs an app-side listing or the engine
+  request below.*
+- **Token streaming.** The engine's seam is the pause, never a per-token
+  callback. *Reopens only if ds4-engine changes that.*
+- **Packaging ds4-engine inside the `.app`.** Today the user installs it
+  with `uv tool install`. *Reopens when someone other than the author needs
+  to run the app without a terminal.*
+- **A shell toggle.** Tool policy is the engine's. *Reopens if ds4-engine
+  adds a spawn-time tool-policy flag worth a Settings control.*
+- **The catalog loader's pid-reuse window.** There is a small window before
+  SIGKILL in which the pid could be reused. *Reopens if seen live.*
+- **SU.3's leftovers.** An Xcode Debug run with the memory widget toggling
+  is still unverified. The missing fixture-controller `start()` test lands
+  in SU.5a. *Reopens: the crash, if a Debug run shows it.*
 
 ### Engine requests
 
-Things SwiftStar cannot show or do until ds4-engine changes. Raise them there.
+Things SwiftStar can't show or do until ds4-engine changes. Raise them
+there.
 
-- **Rejected tool calls emit no event.** A call the engine refuses before
-  running it (unknown tool, malformed, path refused) leaves no trace on the
-  wire, so the front-end cannot show it (seen with Qwen3.8, 2026-09-28 and
-  2026-09-29; research in ds4-engine
-  `docs/superpowers/research/2026-09-28-qwen38-tool-calls.md`).
-- **`/resume`, `/model`, `/rewind` re-exec in place.** They print to stdout
-  and `execv` (same pid, a second `ready`); SwiftStar shows the printed lines
-  as notices and ignores the second handshake, so it keeps the old session's
-  model and state. Needs a wire message or a documented restart.
-- **The `session` event doesn't report the candidate worktree.** It reports
-  `source` (the git root) only; the engine edits in its own worktree and
-  deletes it at session end. Quick Look (SU.5, D3) opens the checkout's copy
-  against `source`, not the edited file, until the engine reports the
-  worktree it's actually using.
+- **The `session` event doesn't report the candidate worktree.** So Quick
+  Look opens the checkout's copy, not the edited one.
+- **`models --json` sends no `default_model_id`.** So "Engine default"
+  can't name the model it means.
+- **Prefix-cache hits count as prefilled tokens.** This inflates the
+  per-pause prefill rate (`operator_telemetry.py:100-113`).
+- **A `files --json` command,** for the `@` picker above.
+- **Watch, not a request: the Satyrn rename.** `ds4-dogfood` and the
+  `~/.local/state/ds4-engine` paths may be renamed. SwiftStar would need to
+  change `EngineCommand.executableName`, and probing both names is the
+  likely fix.
 
-Closed, 2026-10-04 (caught up `../ds4-engine` to `main` at `409267a9`):
-- **A `run` call ends the whole session** — fixed by ds4-engine TUI.45
-  (`e592b0da`, citing SwiftStar #99 directly): under an interactive profile a
-  `run` call is now answered as an unknown tool and the turn goes on.
-- **A machine-readable model list** — shipped on ds4-engine `main` as TUI.35
-  (`e5823e81`), not TUI.33 as first captured from the unmerged
-  `feat/models-json` branch: the shipped shape sends no `schema_version`,
-  `default_model_id`, `saved_model_id`, `family`, `measured_contexts` or
-  `runs_in_tui`, and calls the context field `context` rather than
-  `default_context`. `EngineModelCatalog.swift`'s decoder now treats a missing
-  `schema_version` as 1 and falls back from `default_context` to `context`;
-  `fixtures/engine/models-real.json` is recaptured from `main`. See
-  `fixtures/engine/provenance.md`.
+Closed 2026-10-13: both were already answered upstream before 2026-10-04,
+found by the [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md).
+- **Rejected tool calls emit no event:** they do, as `tool_rejected`
+  (TUI.36).
+- **`/resume`, `/model` and `/rewind` re-exec in place:** under `--ndjson`
+  they are refused with a `relaunch` argv instead (TUI.34).
 
-Checked, 2026-10-13 (`../ds4-engine` reviewed to `main` at `5451cd7d`, +168
-commits since `409267a9`): the `--ndjson` relay (`ndjson_process.py`,
-`json_events.py`), `PROTOCOL`, and the `models --json` shape are all
-unchanged — nothing in this range touches the wire contract. The two open
-items above are still open. The model lineup changed substantially (`laguna-xs-2.1`,
-`laguna-s-2.1`, `deepseek-v4-flash` and `mellum-2` dropped from the registry;
-`qwen3.8-27b` is now default) — see the Process and tooling entry below.
-**Corrected the same day:** the relay files are unchanged, but the payloads
-they forward are not. A stale saved `--model-id` now stops a session from
-starting, `tool_rejected` and `relaunch` go unhandled, and both open items
-above were already answered upstream. See
-[`2026-10-13-engine-catch-up-and-repo-audit.md`](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md) §1.
+### Process
 
-### Process and tooling
-
-- **SU.1's window-close-quits live check only covered idle, not mid-turn
-  (2026-10-03).** No `ds4-dogfood`/GPU in this environment to start a real
-  turn; closing the window while idle was confirmed to end the process via
-  `ps aux`. The underlying `quit()` mid-turn path is unit-tested
-  (`EngineSessionTests`), just not confirmed live through this specific
-  trigger. *Reopens when the GPU is free for a live run.*
-- **Real-engine fixture recapture, owed from P29.3, split out of P31.** Record
-  `terminal`, `mentions`, `steering_*`, `telemetry_error`, `compact*` and
-  `clear` from the real `ds4-dogfood tui --ndjson` (their current tests use
-  payloads hand-written from engine source) via `just capture`. *Reopens when
-  the GPU is free for a live run against real weights.*
-- **Model fixtures document a dropped lineup.** `fixtures/engine/models-real.json`
-  and `provenance.md` still name `laguna-xs-2.1`, `laguna-s-2.1`,
-  `deepseek-v4-flash` and `mellum-2`, all removed from ds4-engine's registry
-  as of `main` `5451cd7d` (`qwen3.8-27b` is now default). The decode schema
-  is unchanged, so no test is wrong, but a reader can be misled by the
-  recapture's provenance. Separately, a SwiftStar settings `modelID` still
-  pointing at a dropped id now fails pre-`ready` (`tui_cli.py`'s
-  `parser.error("unknown --model-id")`, exit code 2); `EngineExit.describe`
-  already turns that into "refused to start: unknown --model-id" rather than
-  a crash. *Reopens for a `just capture` recapture when the GPU is free;
-  the stale-settings case is cosmetic unless seen live.*
-- **P6 has no verification record**, unlike P1–P5 and P7–P11. Not a defect in
-  the phase — its analyzer and fixtures were committed and tested (P28 later
-  removed them) — but the house convention is a record per closed phase, and
-  P6's absence was only noticed during the 2026-08-25 P12 audit. *Reopens as
-  cheap cleanup alongside another docs pass.*
-- **A standing guard against under-specified authored prompts.** Four
-  instances in one day on 2026-08-29 (P17's "exactly one file", a singular
-  emission follow-up, a directive silent on ordering, a missing
-  `projectContext`). Form is an open question — test, lint, or review step —
-  and picking wrong yields something that gets disabled in three months.
-- **Agent harness (Pi) tooling: lazy Context7 stays, Superpowers goes lazy.**
-  The dev harness runs both as Pi packages (`npm:@upstash/context7-pi`,
-  `git:github.com/obra/superpowers`). Context7 ships the right shape — two
-  native tools plus a progressive-disclosure skill, ~160 tokens of description
-  and nothing else until a library question matches. Superpowers is the
-  outlier: `.pi/extensions/superpowers.ts` force-injects a ~1.1k-token
-  bootstrap into the first run of every session and after each compaction,
-  heavy on 8–16K windows (11–22% peak overhead). *Reopens as: a small
-  Pi-harness work item — drop the bootstrap injection (a local extension, so it
-  survives package reconciles), trim the skill list via a settings `skills`
-  filter, optionally gate the rest with `disable-model-invocation` — validated
-  by re-measuring system-prompt and first-run token cost on small-context
-  models.* Source:
-  [`2026-08-27-pi-harness-context7-superpowers.md`](docs/superpowers/research/2026-08-27-pi-harness-context7-superpowers.md).
-
-### Closed or re-homed by P28
-
-The pre-P28 Backlog assumed a forked engine and host-side machinery. Each group
-is closed rather than annotated; the full entries survive in version control at
-the commit before P28 (`git log -- ROADMAP.md`). Where an idea is still worth
-having it belongs in ds4-engine's own backlog, not here.
-
-- **Agent architecture and process** — the repair loop and its evidence
-  coherence, harvest limits, `AGENTTEST_*` switches, specialized tool subagents,
-  the dispatch decision, house style, the orchestrate directive, "Swift body,
-  Python brain", the two-phase `/spike`. Closed: host tools,
-  dispatch, repair and the agent-test CLI are removed. Agent policy is
-  ds4-engine's.
-- **Mellum inactive until 2026-09-05** — closed. Which model runs is the
-  engine's choice; Mellum work, if it resumes, resumes there.
-- **Pool and context economy** — small-ctx workers, context-economy tooling,
-  `recall`, a compaction skeleton, RLM
-  sub-queries, multi-project residency, snapshot/rewind, compare-before-commit,
-  the admission scheduler, `.kv` replay fixtures, cross-session mining. Closed:
-  there is no pool and no `.kv` handling in this repository. Re-homed to
-  ds4-engine as engine features, unscheduled.
-- **Model and engine features** — generation-time stopping, an engine-side
-  memory-plan CLI, Laguna XS at 16 GB, `--null-model`, heterogeneous compute
-  routing, grammar-constrained tool calls, DFlash, energy-aware pacing, an
-  embedding spike. Closed here: all were engine changes carried by the fork.
-  Re-homed to ds4-engine.
-- **Evaluation and measurement** — test-tier reliability, the orchestrate 93%
-  generalization arms, the failure-population and data-integrity flags,
-  eval-system consolidation. Closed: `swiftstar-eval`, `swiftstar-agenttest`
-  and their data went with P28. Evaluation lives in ds4-engine (`evals/`,
-  `ds4-dogfood -p --json`).
-- **ANE watcher tier** (a librarian and an inspector over Monty) — closed as a
-  design note; it was a third tier beside the removed pool. It would re-enter as
-  a new proposal against ds4-engine's tool surface.
-- **Process and tooling** (closed part) — the duplicate golden fixtures, the
-  fork branch name, parked `main.swift` items (a)–(c), the golden `kind`
-  fixture, warm-started agent-test metrics. Closed: each named a removed file,
-  the fork or the agent-test CLI. The `ROADMAP.md` size entry and the
-  strict-docs-build failure are resolved (the Backlog is now short; the docs
-  build is green). The engine-independent items (P6's verification record, the
-  under-specified-prompts guard, Pi harness tooling) were kept in "Process and
-  tooling" above; the shell toggle and session browser moved to "Front-end".
-- **Retired earlier** — Chat as a separate surface (2026-08-26), phase-level
-  recovery, `RepairLoop` receipt exits, workspace isolation and the handoff
-  packet (P10): landed or retired, and their machinery removed.
-
+- **SU.1's window-close-quits live check covered idle only, not mid-turn.**
+  The `quit()` mid-turn path is unit-tested. *Reopens when the GPU is free
+  for a live run.*
 
 ### Declined
 
-- **A menu-bar extra.** Explicitly declined 2026-08-21. *Reopens only on a
-  direct request; the at-a-glance glance is the one thing it was good for.*
+- **A menu-bar extra** (2026-08-21). *Reopens only on a direct request.*
+- **A docs site, P14** (2026-10-13). Markdown in the repository is the
+  reader surface.
 
-## Prior work
+## History
 
-Completed phases P0-P15 are narrated in detail in [`docs/superpowers/research/prior-work-archive.md`](docs/superpowers/research/prior-work-archive.md); the phase table above and each phase's own verdict/closure doc carry the current status.
-
-## Workflow
-
-This repository runs on spec-driven development — see [`docs/sdd.md`](docs/sdd.md).
-Each phase gets a committed design spec, then an implementation plan, then code.
-The default test suite needs no model, no network, and no subprocess; process
-behavior lives in a marked integration tier; and anything needing real weights
-lives in a live tier that never runs in CI.
+Phase P (P0–P32), its steps and the Backlog it closed are in
+[`docs/history.md`](docs/history.md).
