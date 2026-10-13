@@ -116,6 +116,39 @@ public final class EngineController {
             kind: .resume, argv: EngineCommand.resumeArguments(id: c.id, source: root), reason: ""))
     }
 
+    // MARK: recent projects (SU.7b)
+
+    /// Every repository's sessions, for the Recent menus' labels; empty until
+    /// loaded, and kept as it was when a load fails.
+    private(set) var allSessions: [EngineSessionEntry] = []
+    /// Raised by each load; a result from an older one is dropped.
+    @ObservationIgnored private var recentProjectsGeneration = 0
+
+    /// The Recent folders, each with its project's newest conversation.
+    public var recentProjects: [RecentProject] {
+        RecentProjects.items(
+            recents: recentWorkspaces, entries: allSessions, current: workspace?.path,
+            exists: { FileManager.default.fileExists(atPath: $0) }, rootOf: { ProjectRoot.locate(anchor: $0) },
+            now: .now)
+    }
+
+    /// Loads every repository's sessions. A failure changes nothing and says
+    /// nothing: the menus just show no labels.
+    func reloadRecentProjects() async {
+        guard !isFixture, let path = resolveExecutablePath() else { return }
+        recentProjectsGeneration += 1
+        let generation = recentProjectsGeneration
+        let result = await SessionListLoader.loadAll(executable: path)
+        guard generation == recentProjectsGeneration, case .success(let entries) = result else { return }
+        allSessions = entries
+    }
+
+    /// File › Open Recent › Clear Menu. The current workspace stays.
+    public func clearRecents() {
+        recentWorkspaces = []
+        UserDefaults.standard.removeObject(forKey: DefaultsKey.recentWorkspaces.rawValue)
+    }
+
     /// Ends the current session and starts a fresh one with Settings.
     func newConversation() async {
         guard !isFixture else { return }
@@ -243,6 +276,7 @@ public final class EngineController {
         workspace = url
         conversations = []
         Task { await reloadConversations() }
+        Task { await reloadRecentProjects() }
         restartIfRunning()
     }
 
@@ -570,6 +604,7 @@ public final class EngineController {
                 + "`ds4-dogfood tui --resume \(id) --new-conversation`"))
         }
         Task { await reloadConversations() }
+        Task { await reloadRecentProjects() }
         quitGeneration += 1
         resumeQuitWaiters()
     }

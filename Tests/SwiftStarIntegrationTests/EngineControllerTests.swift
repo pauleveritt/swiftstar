@@ -436,6 +436,61 @@ struct EngineControllerTests {
         #expect(controller.transcript.rows.last == .system(hint))
     }
 
+    // MARK: SU.7b: recent projects
+
+    /// `sessions-all.json` with beta's source moved to `repo`, written to a
+    /// temporary file for `FAKE_ENGINE_SESSIONS`.
+    private func allSessionsFile(betaAt repo: String) throws -> String {
+        let text = try String(contentsOf: Fixtures.root.appendingPathComponent("sessions-all.json"), encoding: .utf8)
+        let path = tempPath("sessions-all") + ".json"
+        try text.replacingOccurrences(of: "/Users/example/projects/beta", with: repo)
+            .write(toFile: path, atomically: true, encoding: .utf8)
+        return path
+    }
+
+    @Test func recentProjectsFillFromAllSessions() async throws {
+        let repo = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        let sessions = try allSessionsFile(betaAt: repo)
+        defer { try? FileManager.default.removeItem(atPath: sessions) }
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_SESSIONS": sessions])
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: [repo]])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.reloadRecentProjects()
+        let row = controller.recentProjects.first { $0.path == repo }
+        #expect(row?.latest?.id == "20261013-110000-beta")
+    }
+
+    @Test func recentProjectsFailQuietly() async throws {
+        let repo = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: [repo]])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.reloadRecentProjects()
+        #expect(controller.recentProjects.map(\.path) == [repo])
+        #expect(controller.recentProjects.allSatisfy { $0.latestLabel == nil })
+        #expect(controller.transcript.rows.isEmpty)
+    }
+
+    @Test func clearRecentsEmptiesTheList() throws {
+        let repo = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        let defaults = DefaultsScope([.workspace: repo, .recentWorkspaces: [repo, "/elsewhere"]])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.clearRecents()
+        #expect(controller.recentWorkspaces.isEmpty)
+        #expect(UserDefaults.standard.object(forKey: DefaultsKey.recentWorkspaces.rawValue) == nil)
+        #expect(controller.workspace?.path == repo)
+    }
+
     /// A started controller whose session is idle at its first `input`.
     private func running(_ f: FakeEngine, graces: EngineGraces = .standard) async -> EngineController {
         let controller = EngineController(graces: graces)

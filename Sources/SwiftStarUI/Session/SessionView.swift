@@ -40,6 +40,9 @@ struct SessionView: View {
             if controller.phase == .idle { await controller.start() }
             else { await controller.loadCatalogIfNeeded() }
         }
+        // The Recent menus' labels (SU.7b); apart from the start, which
+        // shouldn't wait on them.
+        .task { await controller.reloadRecentProjects() }
         // No usable workspace (SU.6c, D1): ask for one, and start in it.
         // The modal panel runs on a later main-actor turn, not inside
         // SwiftUI's update of `.onChange` (final review).

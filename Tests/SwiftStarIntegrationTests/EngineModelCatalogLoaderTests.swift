@@ -110,6 +110,16 @@ struct SessionListLoaderTests {
         #expect(argv == ["sessions", "--json", "--source", "/r", "--limit", "50"])
     }
 
+    @Test func allSessionsLoaderPassesAll() async throws {
+        let log = tempPath("argv")
+        defer { try? FileManager.default.removeItem(atPath: log) }
+        _ = await SessionListLoader.loadAll(
+            executable: Self.fake,
+            environment: env(["FAKE_ENGINE_SESSIONS": Fixtures.path("sessions-all.json"), "FAKE_ENGINE_ARGV_LOG": log]))
+        let argv = try String(contentsOfFile: log, encoding: .utf8).split(separator: "\n").map(String.init)
+        #expect(argv == ["sessions", "--json", "--all", "--limit", "200"])
+    }
+
     @Test func sessionListLoaderReportsMissingCommand() async {
         let result = await SessionListLoader.load(
             executable: Self.fake, source: URL(fileURLWithPath: "/r"), environment: env([:]))
