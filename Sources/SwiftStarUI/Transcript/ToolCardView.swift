@@ -8,7 +8,8 @@ import SwiftStarKit
 /// declined is drawn greyed, with the engine's one line instead of a result.
 struct ToolCardView: View {
     let card: EngineToolCard
-    let workspace: URL?
+    /// Where a relative tool path resolves: the session's git root.
+    let source: URL?
     @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     @State private var quickLookURL: URL?
@@ -76,36 +77,34 @@ struct ToolCardView: View {
         }
     }
 
-    /// Resolves the tool's path against the workspace. nil if there is no
-    /// path, or the file does not exist.
+    /// The card's file under the source, if it exists on disk.
     private func resolvedFileURL() -> URL? {
-        guard let workspace, let path = card.tool.path, !path.isEmpty else { return nil }
-        let url = URL(fileURLWithPath: path, relativeTo: workspace)
+        guard let url = card.fileURL(source: source) else { return nil }
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
 }
 
 #Preview("Running") {
-    ToolCardView(card: .previewRunning, workspace: nil)
+    ToolCardView(card: .previewRunning, source: nil)
         .padding()
         .frame(width: 420)
 }
 
 #Preview("Succeeded") {
-    ToolCardView(card: .previewSucceeded, workspace: nil)
+    ToolCardView(card: .previewSucceeded, source: nil)
         .padding()
         .frame(width: 420)
 }
 
 #Preview("Failed") {
-    ToolCardView(card: .previewFailed, workspace: nil)
+    ToolCardView(card: .previewFailed, source: nil)
         .padding()
         .frame(width: 420)
 }
 
 #Preview("Declined") {
-    ToolCardView(card: .previewDeclined, workspace: nil)
+    ToolCardView(card: .previewDeclined, source: nil)
         .padding()
         .frame(width: 420)
 }

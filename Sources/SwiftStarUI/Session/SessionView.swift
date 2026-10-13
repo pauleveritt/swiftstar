@@ -13,7 +13,7 @@ struct SessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TranscriptView(transcript: controller.transcript, workspace: controller.workspace)
+            TranscriptView(transcript: controller.transcript, source: controller.source)
             Divider()
             ComposerView()
             Divider()

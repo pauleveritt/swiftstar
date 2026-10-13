@@ -6,7 +6,8 @@ struct TranscriptRowView: View {
     let row: TranscriptRow
     /// The engine has not started a turn for this (user) row yet.
     let queued: Bool
-    let workspace: URL?
+    /// Where the tool cards' relative paths resolve (Quick Look).
+    let source: URL?
     @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     var body: some View {
@@ -33,7 +34,7 @@ struct TranscriptRowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
-            ToolCardView(card: card, workspace: workspace)
+            ToolCardView(card: card, source: source)
         case .system(let text):
             Text(text)
                 .font(.system(size: transcriptFontSize))
@@ -60,13 +61,13 @@ struct TranscriptRowView: View {
 }
 
 #Preview("System") {
-    TranscriptRowView(row: .system("Conversation cleared"), queued: false, workspace: nil)
+    TranscriptRowView(row: .system("Conversation cleared"), queued: false, source: nil)
         .padding()
         .frame(width: 420, alignment: .leading)
 }
 
 #Preview("Error") {
-    TranscriptRowView(row: .error("ds4-dogfood exited with status 1"), queued: false, workspace: nil)
+    TranscriptRowView(row: .error("ds4-dogfood exited with status 1"), queued: false, source: nil)
         .padding()
         .frame(width: 420, alignment: .leading)
 }
@@ -76,7 +77,7 @@ struct TranscriptRowView: View {
         row: .answer(EngineAnswer(
             text: "`SessionView` renders the transcript, composer, and status bar for one engine session.",
             contextUsed: 512, contextSize: 8192, durationMs: 1830)),
-        queued: false, workspace: nil)
+        queued: false, source: nil)
         .padding()
         .frame(width: 420)
 }
@@ -84,7 +85,7 @@ struct TranscriptRowView: View {
 #Preview("Rebuilt after rewind") {
     VStack(alignment: .leading, spacing: 12) {
         ForEach(Array(EngineTranscript.previewRewound.rows.enumerated()), id: \.offset) { _, row in
-            TranscriptRowView(row: row, queued: false, workspace: nil)
+            TranscriptRowView(row: row, queued: false, source: nil)
         }
     }
     .padding()
@@ -94,7 +95,7 @@ struct TranscriptRowView: View {
 #Preview("Switched model") {
     TranscriptRowView(
         row: .divider("Switched to qwen3.8-flash-next: new conversation, files kept"),
-        queued: false, workspace: nil)
+        queued: false, source: nil)
         .padding()
         .frame(width: 420, alignment: .leading)
 }

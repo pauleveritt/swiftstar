@@ -393,4 +393,22 @@ struct EngineToolCardFormattingTests {
         #expect(card(op: "grep").icon == "magnifyingglass")
         #expect(card(op: "unknown-op").icon == "wrench.and.screwdriver")
     }
+
+    // MARK: SU.5a2 Task 2: Quick Look resolves against the source
+
+    @Test func fileURLResolvesAgainstSource() {
+        let c = EngineToolCard(tool: EngineTool(op: "read", path: "Sources/a.swift"))
+        #expect(c.fileURL(source: URL(fileURLWithPath: "/r"))?.path == "/r/Sources/a.swift")
+        #expect(c.fileURL(source: URL(fileURLWithPath: "/r/"))?.path == "/r/Sources/a.swift")
+    }
+
+    @Test func fileURLKeepsAbsolutePaths() {
+        let c = EngineToolCard(tool: EngineTool(op: "read", path: "/etc/hosts"))
+        #expect(c.fileURL(source: URL(fileURLWithPath: "/r"))?.path == "/etc/hosts")
+    }
+
+    @Test func fileURLNilWithoutPathOrSource() {
+        #expect(EngineToolCard(tool: EngineTool(op: "bash", path: nil)).fileURL(source: URL(fileURLWithPath: "/r")) == nil)
+        #expect(EngineToolCard(tool: EngineTool(op: "read", path: "a")).fileURL(source: nil) == nil)
+    }
 }

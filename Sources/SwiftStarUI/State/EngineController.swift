@@ -17,6 +17,9 @@ public final class EngineController {
     var composer: EngineComposer { model.composer }
     var sessionDirectory: URL? { model.sessionDirectory }
     public var isActive: Bool { model.phase.isActive }
+    /// The git root the current or last session worked from (its `--source`),
+    /// kept after the session ends so its tool cards still resolve.
+    private(set) var source: URL?
     var workspace: URL? {
         didSet {
             guard let workspace else { return }
@@ -282,6 +285,7 @@ public final class EngineController {
 
         let folder = workspace ?? FileManager.default.homeDirectoryForCurrentUser
         let source = ProjectRoot.locate(anchor: folder) ?? folder
+        self.source = source
 
         let session = EngineSession(
             executable: executable,
