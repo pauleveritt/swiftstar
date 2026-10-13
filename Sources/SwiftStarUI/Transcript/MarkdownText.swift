@@ -21,7 +21,7 @@ import SwiftStarKit
 
 /// Renders one complete markdown string: an answer, a narration or a thinking
 /// disclosure. Rows arrive whole (the engine reports per pause, not per token).
-public struct MarkdownText: View {
+struct MarkdownText: View {
     let source: String
     @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
@@ -40,25 +40,6 @@ public struct MarkdownText: View {
 }
 
 extension MarkdownText {
-    /// Debug-only smoke test for the SwiftPM resource-bundle load path — the
-    /// one that crashed the shipped DS4 .app when Highlightr's/SwiftMath's
-    /// bundles weren't resolvable (`Bundle.module` `fatalError`). Building a
-    /// code block + math forces Highlightr and SwiftMath to load their resource
-    /// bundles. Gated by the env var **and** an explicit `--markdown-selftest`
-    /// argument (never the env alone: an inherited env var from a user shell
-    /// must not silently exit the app at launch). Run the packaged binary as
-    /// `DS4_SELFTEST_MARKDOWN=1 SwiftStar --markdown-selftest`. (Provenance:
-    /// agent-mode `MarkdownText.swift`.)
-    @MainActor public static func runResourceSelfTestIfRequested() {
-        guard ProcessInfo.processInfo.environment["DS4_SELFTEST_MARKDOWN"] == "1",
-            CommandLine.arguments.contains("--markdown-selftest")
-        else { return }
-        _ = NSApplication.shared  // math rendering reads NSApp.effectiveAppearance; set NSApp first
-        let md = "```swift\nlet x = 1\n```\n\nInline math: $x^2 + 1$\n"
-        _ = MarkdownTextView.PreprocessedContent(parserResult: MarkdownParser().parse(md), theme: .default)
-        FileHandle.standardError.write(Data("DS4_SELFTEST_MARKDOWN: OK\n".utf8))
-        exit(0)
-    }
 }
 
 /// Renders one preprocessed markdown string through the library's raw AppKit
@@ -104,7 +85,7 @@ private struct MarkdownNSText: NSViewRepresentable {
             view.theme = Self.theme(for: fontSize)
         }
         let result = MarkdownParser().parse(markdown)
-        let content = MarkdownTextView.PreprocessedContent(parserResult: result, theme: Self.theme(for: fontSize))
+        let content = MarkdownTextView.PreprocessedContent(parserResult: result, theme: view.theme)
         view.setMarkdownManually(content)
         view.invalidateIntrinsicContentSize()
         context.coordinator.measuredWidth = -1  // content changed → next measure is real, not cached
@@ -131,7 +112,7 @@ private struct MarkdownNSText: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    @MainActor final class Coordinator {
+    final class Coordinator {
         var lastMarkdown = ""
         var lastFontSize: CGFloat = -1
         var measuredWidth: CGFloat = -1
@@ -152,4 +133,27 @@ private struct MarkdownNSText: NSViewRepresentable {
     """)
     .padding()
     .frame(width: 420)
+}
+
+/// The markdown renderer's resource-bundle smoke test, run by `Tools/make-app.sh`
+/// against the assembled app.
+public enum MarkdownSelfTest {
+    /// Debug-only smoke test for the SwiftPM resource-bundle load path — the
+    /// one that crashed the shipped DS4 .app when Highlightr's/SwiftMath's
+    /// bundles weren't resolvable (`Bundle.module` `fatalError`). Building a
+    /// code block + math forces Highlightr and SwiftMath to load their resource
+    /// bundles. Gated by the env var **and** an explicit `--markdown-selftest`
+    /// argument (never the env alone: an inherited env var from a user shell
+    /// must not silently exit the app at launch). Run the packaged binary as
+    /// `DS4_SELFTEST_MARKDOWN=1 SwiftStar --markdown-selftest`.
+    public static func runIfRequested() {
+        guard ProcessInfo.processInfo.environment["DS4_SELFTEST_MARKDOWN"] == "1",
+            CommandLine.arguments.contains("--markdown-selftest")
+        else { return }
+        _ = NSApplication.shared  // math rendering reads NSApp.effectiveAppearance; set NSApp first
+        let md = "```swift\nlet x = 1\n```\n\nInline math: $x^2 + 1$\n"
+        _ = MarkdownTextView.PreprocessedContent(parserResult: MarkdownParser().parse(md), theme: .default)
+        FileHandle.standardError.write(Data("DS4_SELFTEST_MARKDOWN: OK\n".utf8))
+        exit(0)
+    }
 }

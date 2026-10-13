@@ -7,8 +7,7 @@ struct ComposerView: View {
     @Environment(EngineController.self) private var controller
     @State private var input = ""
     @FocusState private var inputFocused: Bool
-    @AppStorage(DefaultsKey.transcriptFontSize.rawValue) private var transcriptFontSize = TranscriptFontScale.defaultSize
-    @Environment(\.transcriptFontSize) private var envTranscriptFontSize: CGFloat
+    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     private var composerState: EngineComposer { controller.composer }
 
@@ -17,7 +16,7 @@ struct ComposerView: View {
             if let notice = controller.phase.notFoundNotice {
                 HStack {
                     Text(notice)
-                        .font(.system(size: envTranscriptFontSize))
+                        .font(.system(size: transcriptFontSize))
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                     Spacer()
@@ -25,7 +24,7 @@ struct ComposerView: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Ask the agent…", text: $input, axis: .vertical)
-                    .font(.system(size: CGFloat(TranscriptFontScale.clamp(transcriptFontSize))))
+                    .font(.system(size: transcriptFontSize))
                     .textFieldStyle(.plain)
                     .lineLimit(1...15)
                     .padding(.horizontal, 12)

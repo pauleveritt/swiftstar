@@ -173,7 +173,7 @@ struct EngineControllerTests {
             #expect(argvLines(log).first?.contains("--model-id") == false)
             #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "")
             #expect(controller.transcript.rows.contains(
-                .system("laguna-xs-2.1 is no longer offered; using the engine default")))
+                .system("laguna-xs-2.1 isn't offered by the engine; using the engine default")))
             await controller.quit()
         }
     }

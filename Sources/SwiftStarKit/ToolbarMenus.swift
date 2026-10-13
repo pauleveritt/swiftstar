@@ -48,7 +48,7 @@ public enum ModelMenu {
     public static func validated(saved: String, list: EngineModelList?) -> (modelID: String, notice: String?) {
         let id = trimmed(saved)
         guard !id.isEmpty, let list, list.model(id: id) == nil else { return (id, nil) }
-        return ("", "\(id) is no longer offered; using the engine default")
+        return ("", "\(id) isn't offered by the engine; using the engine default")
     }
 
     /// The first item ("Engine default", value "") is always present. `settingsID`

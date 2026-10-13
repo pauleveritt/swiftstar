@@ -25,7 +25,7 @@ struct EngineModelCatalogTests {
     @Test func validatedClearsDroppedId() throws {
         let r = ModelMenu.validated(saved: "laguna-xs-2.1", list: try Self.real())
         #expect(r.modelID == "")
-        #expect(r.notice == "laguna-xs-2.1 is no longer offered; using the engine default")
+        #expect(r.notice == "laguna-xs-2.1 isn't offered by the engine; using the engine default")
     }
 
     @Test func validatedKeepsEmpty() throws {

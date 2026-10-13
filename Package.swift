@@ -61,7 +61,9 @@ let package = Package(
         .executableTarget(
             name: "SwiftStar",
             dependencies: ["SwiftStarUI"],
-            resources: [.process("Resources")],
+            // The icon is copied into the .app by Tools/make-app.sh, not
+            // bundled as a SwiftPM resource (it shipped twice).
+            exclude: ["Resources"],
             swiftSettings: mainActor
         ),
         .testTarget(

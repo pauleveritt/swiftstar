@@ -87,14 +87,14 @@ struct StatusBarView: View {
     }
     .padding()
     .frame(width: 700)
-    .onAppear {
-        // One flip per main run-loop turn, so each one is its own update.
-        func flip() {
-            guard flips < 6 else { return }
+    .task {
+        // On the main actor, a short pause apart, so each flip is its own
+        // update (the old DispatchQueue closures were nonisolated and touched
+        // this main-actor state: six warnings).
+        while flips < 6 {
+            try? await Task.sleep(for: .milliseconds(100))
             showsGPU.toggle()
             flips += 1
-            DispatchQueue.main.async { flip() }
         }
-        DispatchQueue.main.async { flip() }
     }
 }

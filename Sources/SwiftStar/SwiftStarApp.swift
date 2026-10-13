@@ -28,7 +28,6 @@ struct SwiftStarApp: App {
     }
 }
 
-@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set by the main window; the quit handler waits on it.
     var engine: EngineController?
@@ -38,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         // Resource-bundle smoke test for the markdown renderer's dependency
         // (gated by env): fails loudly at launch, not on the first code block.
-        MarkdownText.runResourceSelfTestIfRequested()
+        MarkdownSelfTest.runIfRequested()
     }
 
     /// One engine, one window (see `SwiftStarApp.body`): closing it should
@@ -56,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !terminationPending else { return .terminateLater }
         terminationPending = true
         engine.beginTerminating()
-        Task { @MainActor in
+        Task {
             await engine.quit()
             terminationPending = false
             NSApp.reply(toApplicationShouldTerminate: true)

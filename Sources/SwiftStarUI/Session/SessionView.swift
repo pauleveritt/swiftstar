@@ -38,7 +38,7 @@ struct SessionView: View {
             Button("Use") { controller.select(modelID: entry) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Type an engine model id, e.g. qwen3.8-27b. A running session restarts.")
+            Text("Type an engine model id, e.g. qwen3.8-27b. A running session switches with /model and keeps its files.")
         }
         .alert("Custom context size", isPresented: $askingContext) {
             TextField("Tokens", text: $entry)

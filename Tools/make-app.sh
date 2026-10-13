@@ -12,6 +12,13 @@ cp Sources/SwiftStar/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icn
 for bundle in .build/release/*.bundle; do
     [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
+# The markdown renderer's resource bundles must resolve inside the .app
+# (MarkdownSelfTest); a missing one would crash at the first code block.
+if ! DS4_SELFTEST_MARKDOWN=1 "$APP/Contents/MacOS/SwiftStar" --markdown-selftest 2>&1 \
+    | grep -q "DS4_SELFTEST_MARKDOWN: OK"; then
+    echo "make-app: markdown resource self-test failed" >&2
+    exit 1
+fi
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
