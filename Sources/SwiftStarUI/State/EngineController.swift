@@ -4,6 +4,13 @@ import Observation
 import SwiftStarEngine
 import SwiftStarKit
 
+/// A switch to another project, optionally resuming one of its
+/// conversations (SU.7b).
+public struct ProjectSwitch: Equatable, Sendable {
+    public let folder: URL
+    public let resuming: Conversation?
+}
+
 /// Thin app-side owner of one `EngineSession`: it resolves the executable,
 /// picks the source repository, and feeds engine events to the transcript and
 /// metrics folds. The logic lives in the tested Kit types.
@@ -265,11 +272,60 @@ public final class EngineController {
         !isTerminating && model.phase != .starting && model.phase != .quitting
     }
 
-    func select(workspace url: URL) {
+    /// Every project switch but the no-folder picker's comes here (SU.7b,
+    /// D3): mid-turn it waits for `confirmSwitch()`; otherwise it switches.
+    /// Ignored while a session starts or quits.
+    public func requestSwitch(to folder: URL, resuming conversation: Conversation? = nil) {
         guard canChoose else { return }
+        let request = ProjectSwitch(folder: folder, resuming: conversation)
+        if transcript.isBusy {
+            pendingSwitch = request
+        } else {
+            perform(request)
+        }
+    }
+
+    /// A switch asked for mid-turn, waiting for the alert's answer.
+    public private(set) var pendingSwitch: ProjectSwitch?
+
+    public func confirmSwitch() {
+        guard let request = pendingSwitch else { return }
+        pendingSwitch = nil
+        perform(request)
+    }
+
+    public func cancelSwitch() { pendingSwitch = nil }
+
+    /// A plain switch is `select(workspace:)`. One that resumes sets the
+    /// workspace without restarting, so the resume is the only spawn.
+    private func perform(_ request: ProjectSwitch) {
+        guard canChoose else { return }
+        guard let conversation = request.resuming else {
+            select(workspace: request.folder)
+            return
+        }
+        remember(request.folder)
+        wantsFolder = false
+        workspaceNote = nil
+        workspace = request.folder
+        conversations = []
+        Task {
+            await resume(conversation)
+            await reloadConversations()
+            await reloadRecentProjects()
+        }
+    }
+
+    /// Puts `url` first in the Recent list, and saves it.
+    private func remember(_ url: URL) {
         let list = RecentWorkspaces.updated(recentWorkspaces, adding: url.path)
         recentWorkspaces = list
         UserDefaults.standard.set(list, forKey: DefaultsKey.recentWorkspaces.rawValue)
+    }
+
+    func select(workspace url: URL) {
+        guard canChoose else { return }
+        remember(url)
         wantsFolder = false
         workspaceNote = nil
         guard url.standardizedFileURL.path != workspace?.standardizedFileURL.path else { return }

@@ -491,6 +491,173 @@ struct EngineControllerTests {
         #expect(controller.workspace?.path == repo)
     }
 
+    // MARK: SU.7b: one switch path
+
+    private func sourceArg(_ argv: [String]?) -> String? {
+        guard let argv, let i = argv.firstIndex(of: "--source"), i + 1 < argv.count else { return nil }
+        return argv[i + 1]
+    }
+
+    /// A hand-built conversation in the project being switched to.
+    private static let betaConversation = Conversation(
+        id: "20261013-110000-beta", title: "Add a menu", updated: nil, modelID: nil, resumable: true,
+        problems: [], sessionIDs: ["20261013-110000-beta", "20261013-100000-beta"])
+
+    @Test func switchWhenIdleDoesNotAsk() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let b = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: b) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        let bURL = URL(fileURLWithPath: b)
+        controller.requestSwitch(to: bURL)
+        #expect(controller.pendingSwitch == nil)
+        let restarted = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(restarted)
+        #expect(sourceArg(f.spawnArgv.last) == ProjectRoot.locate(anchor: bURL)?.path)
+        await controller.quit()
+    }
+
+    @Test func switchMidTurnAsksFirst() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let b = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: b) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        let before = controller.workspace
+        controller.send("Use the read tool on Package.swift")
+        let busy = await eventually { controller.transcript.isBusy }
+        #expect(busy)
+        controller.requestSwitch(to: URL(fileURLWithPath: b))
+        #expect(controller.pendingSwitch?.folder.path == b)
+        #expect(controller.workspace == before)
+        #expect(f.spawnArgv.count == 1)
+        await controller.quit()
+    }
+
+    @Test func confirmedSwitchRestartsInTheNewRoot() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let b = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: b) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.send("Use the read tool on Package.swift")
+        let busy = await eventually { controller.transcript.isBusy }
+        #expect(busy)
+        let bURL = URL(fileURLWithPath: b)
+        controller.requestSwitch(to: bURL)
+        controller.confirmSwitch()
+        #expect(controller.workspace?.path == b)
+        #expect(controller.pendingSwitch == nil)
+        let restarted = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(restarted)
+        #expect(sourceArg(f.spawnArgv.last) == ProjectRoot.locate(anchor: bURL)?.path)
+        await controller.quit()
+    }
+
+    @Test func cancelledSwitchChangesNothing() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let b = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: b) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        let before = controller.workspace
+        controller.send("Use the read tool on Package.swift")
+        let busy = await eventually { controller.transcript.isBusy }
+        #expect(busy)
+        controller.requestSwitch(to: URL(fileURLWithPath: b))
+        controller.cancelSwitch()
+        #expect(controller.pendingSwitch == nil)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(controller.workspace == before)
+        #expect(f.spawnArgv.count == 1)
+        await controller.quit()
+    }
+
+    @Test func confirmAfterTheTurnEndsStillSwitches() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let b = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: b) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.send("Use the read tool on Package.swift")
+        let busy = await eventually { controller.transcript.isBusy }
+        #expect(busy)
+        controller.requestSwitch(to: URL(fileURLWithPath: b))
+        let idle = await eventually(within: .seconds(10)) { !controller.transcript.isBusy }
+        #expect(idle)
+        controller.confirmSwitch()
+        #expect(controller.workspace?.path == b)
+        await controller.quit()
+    }
+
+    @Test func switchAndResumeSpawnsOnce() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let b = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: b) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        let bURL = URL(fileURLWithPath: b)
+        let c = Self.betaConversation
+        controller.requestSwitch(to: bURL, resuming: c)
+        let resumed = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(resumed)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(f.spawnArgv.count == 2)
+        let root = try #require(ProjectRoot.locate(anchor: bURL))
+        #expect(f.spawnArgv.last == EngineCommand.resumeArguments(id: c.id, source: root))
+        #expect(controller.workspace?.path == b)
+        await controller.quit()
+    }
+
+    @Test func switchIgnoredWhileStarting() async throws {
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_MODELS_SLEEP_MS": "500"])
+        defer { f.remove() }
+        let b = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: b) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        let before = controller.workspace
+        let starting = Task { await controller.start() }
+        let isStarting = await eventually { controller.phase == .starting }
+        #expect(isStarting)
+        controller.requestSwitch(to: URL(fileURLWithPath: b))
+        #expect(controller.workspace == before)
+        #expect(controller.pendingSwitch == nil)
+        await starting.value
+        await controller.quit()
+    }
+
+    @Test func switchToTheCurrentFolderDoesNothing() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        let here = try #require(controller.workspace)
+        controller.requestSwitch(to: here)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(f.spawnArgv.count == 1)
+        await controller.quit()
+    }
+
     /// A started controller whose session is idle at its first `input`.
     private func running(_ f: FakeEngine, graces: EngineGraces = .standard) async -> EngineController {
         let controller = EngineController(graces: graces)
