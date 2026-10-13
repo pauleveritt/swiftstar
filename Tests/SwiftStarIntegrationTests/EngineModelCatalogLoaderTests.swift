@@ -80,3 +80,39 @@ struct EngineModelCatalogLoaderTests {
         }
     }
 }
+
+/// SU.7a: `sessions --json` through the same runner as the model list.
+@Suite(.serialized, .integration, .tags(.integration), .timeLimit(.minutes(1)))
+struct SessionListLoaderTests {
+    private static let fake = Fixtures.path("fake-ds4-dogfood")
+
+    private func env(_ extra: [String: String]) -> [String: String] {
+        var e = ProcessInfo.processInfo.environment
+        e.removeValue(forKey: "FAKE_ENGINE_SESSIONS")
+        for (k, v) in extra { e[k] = v }
+        return e
+    }
+
+    @Test func sessionListLoaderReadsTheFake() async throws {
+        let entries = try await SessionListLoader.load(
+            executable: Self.fake, source: URL(fileURLWithPath: "/r"),
+            environment: env(["FAKE_ENGINE_SESSIONS": Fixtures.path("sessions.json")])).get()
+        #expect(entries.count == 12)
+    }
+
+    @Test func sessionListLoaderPassesSourceAndLimit() async throws {
+        let log = tempPath("argv")
+        defer { try? FileManager.default.removeItem(atPath: log) }
+        _ = await SessionListLoader.load(
+            executable: Self.fake, source: URL(fileURLWithPath: "/r"),
+            environment: env(["FAKE_ENGINE_SESSIONS": Fixtures.path("sessions.json"), "FAKE_ENGINE_ARGV_LOG": log]))
+        let argv = try String(contentsOfFile: log, encoding: .utf8).split(separator: "\n").map(String.init)
+        #expect(argv == ["sessions", "--json", "--source", "/r", "--limit", "50"])
+    }
+
+    @Test func sessionListLoaderReportsMissingCommand() async {
+        let result = await SessionListLoader.load(
+            executable: Self.fake, source: URL(fileURLWithPath: "/r"), environment: env([:]))
+        #expect(result == .failure(.commandMissing))
+    }
+}

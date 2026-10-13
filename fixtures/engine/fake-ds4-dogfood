@@ -27,6 +27,9 @@ exits 2 with "boom" when FAKE_ENGINE_MODELS_FAIL=1, or with over 5 KiB of filler
 "the real last line" when FAKE_ENGINE_MODELS_HUGE_STDERR=1, or with argparse's "invalid
 choice" message when FAKE_ENGINE_MODELS_UNKNOWN=1 (or no file is set, like an older
 engine); FAKE_ENGINE_MODELS_SLEEP_MS delays first.
+`sessions --json` mode (argv[1] == "sessions"): prints the FAKE_ENGINE_SESSIONS
+file after FAKE_ENGINE_SESSIONS_SLEEP_MS, or exits 2 with "invalid choice"
+when it is unset.
 Replays the fixture up to and including each `input` line, pausing after every
 `tool_start` until a stdin line arrives or the pace elapses.
 """
@@ -78,6 +81,19 @@ if sys.argv[1:2] == ["models"]:
         sys.stderr.flush()
         sys.exit(2)
     with open(env["FAKE_ENGINE_MODELS"]) as f:
+        sys.stdout.write(f.read())
+    sys.exit(0)
+
+if sys.argv[1:2] == ["sessions"]:
+    # SU.7a: prints the FAKE_ENGINE_SESSIONS file, after
+    # FAKE_ENGINE_SESSIONS_SLEEP_MS; unset, exits 2 like an engine without
+    # the command.
+    time.sleep(int(env.get("FAKE_ENGINE_SESSIONS_SLEEP_MS", "0")) / 1000.0)
+    if not env.get("FAKE_ENGINE_SESSIONS"):
+        sys.stderr.write("ds4-dogfood: error: argument command: invalid choice: 'sessions'\n")
+        sys.stderr.flush()
+        sys.exit(2)
+    with open(env["FAKE_ENGINE_SESSIONS"]) as f:
         sys.stdout.write(f.read())
     sys.exit(0)
 
