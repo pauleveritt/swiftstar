@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** SU.5b (test consolidation; plan not written), then SU.6 and SU.7.
+- **Next:** SU.5b (test consolidation; plan written), then SU.6 and SU.7.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -27,7 +27,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | SU.2 | Testable view logic | Move view-adjacent logic into Kit, with tests | done 2026-10-03: [spec](docs/superpowers/specs/2026-10-03-su2-testable-view-logic-design.md), [plan](docs/superpowers/plans/2026-10-03-su2-testable-view-logic.md) |
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
-| SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | 5a done 2026-10-13: [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), each with its Result. Next 5b (tests). [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
+| SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | 5a done 2026-10-13: [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), each with its Result. Next [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md) (tests), plan written. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
 | SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | not brainstormed |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
 
