@@ -44,9 +44,14 @@ install-hooks:
     git config core.hooksPath .githooks
     @echo "pre-commit will now run 'just lint-docs' on every commit."
 
+# The session report's tests (AN.1), against fixtures/sessions. -B keeps
+# __pycache__ out of the SwiftStarEngine target, where SwiftPM would warn.
+test-tools:
+    python3 -I -B -m unittest discover -s Tools/tests
+
 # Fast tier: SwiftStarKit against fixtures. No model, no network, no
 # subprocess; the grep below refuses them in Tests/SwiftStarKitTests.
-test:
+test: test-tools
     ! grep -rn 'Process(\|URLSession\|NWConnection\|posix_spawn\|Darwin\.\|socket(' Tests/SwiftStarKitTests
     swift test
 

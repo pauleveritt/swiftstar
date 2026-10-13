@@ -1,0 +1,19 @@
+{
+  "source": "/Users/pauleveritt/projects/pauleveritt/swiftstar",
+  "commit": "ee9ca0c1273eacf3323fca52901c14c62373a238",
+  "worktree_path": "/var/folders/m4/jc_jynrj6z10mk0t80pkj8l80000gn/T/ds4-candidate-kwx_zh5e/candidate",
+  "capture_path": "/Users/pauleveritt/.local/state/ds4-engine/sessions/20261013-123136-swiftstar/run-2032219913971169475-1791909283501.json",
+  "capture_status": "retained",
+  "diff_path": "/Users/pauleveritt/.local/state/ds4-engine/sessions/20261013-123136-swiftstar/candidate.diff",
+  "before": {
+    "head": "fb3db29dd9a14f7d049a3907dc7323b7b343e60f",
+    "status": []
+  },
+  "after": {
+    "head": "fb3db29dd9a14f7d049a3907dc7323b7b343e60f",
+    "status": []
+  },
+  "untouched": true,
+  "sha256_diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "sha256_capture": "e27fe1e67f5383af10546bd64d919d8ab33df43bd59c19c74b2442a6eb2017ae"
+}
