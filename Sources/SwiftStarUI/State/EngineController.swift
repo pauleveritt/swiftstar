@@ -9,6 +9,10 @@ import SwiftStarKit
 public struct ProjectSwitch: Equatable, Sendable {
     public let folder: URL
     public let resuming: Conversation?
+
+    public init(folder: URL, resuming: Conversation?) {
+        self.folder = folder; self.resuming = resuming
+    }
 }
 
 /// Thin app-side owner of one `EngineSession`: it resolves the executable,

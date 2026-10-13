@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** SU.7b (switching projects), or a last SU.6 part for its remaining punch list.
+- **Next:** the owner's live check of SU.7b's menus and alert, then a last SU.6 part for its remaining punch list.
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
@@ -50,7 +50,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
 | SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
 | SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6d, 6a, 6b and 6c done 2026-10-13: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md), [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md), [6b](docs/superpowers/plans/2026-10-13-su6b-session-card.md), [6c](docs/superpowers/plans/2026-10-13-su6c-remembering.md). The punch list below waits |
-| SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | 7a done 2026-10-13: a sidebar of this project's conversations; clicking one resumes it. [Spec](docs/superpowers/specs/2026-10-13-su7a-sessions-and-resume-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-su7a-sessions-and-resume.md). Next 7b (switching); more than one window (7c) waits on the engine |
+| SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | 7a and 7b done 2026-10-13: this project's conversations in a sidebar; switching asks first mid-turn; the Recent menus (toolbar, Open Recent, Dock) resume a project's newest conversation. Plans: [7a](docs/superpowers/plans/2026-10-13-su7a-sessions-and-resume.md), [7b](docs/superpowers/plans/2026-10-13-su7b-switching-projects.md). 7c (windows) waits on the engine |
 
 ### SU.6 punch list
 

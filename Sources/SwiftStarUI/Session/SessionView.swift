@@ -2,7 +2,8 @@ import SwiftUI
 import SwiftStarKit
 
 /// One engine session's window content: the parts in `Session/`, composed,
-/// plus the session's start-up tasks and the toolbar's two entry alerts.
+/// plus the session's start-up tasks, the toolbar's two entry alerts and the
+/// project-switch confirmation.
 struct SessionView: View {
     @Environment(EngineController.self) private var controller
     @AppStorage(DefaultsKey.inspectorPresented.rawValue) private var inspectorPresented = false
@@ -74,6 +75,17 @@ struct SessionView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Type a context size in tokens. A running session restarts.")
+        }
+        // A project switch asked for mid-turn (SU.7b, D3).
+        .alert(
+            "End the running turn and switch to \(controller.pendingSwitch?.folder.leafName ?? "another project")?",
+            isPresented: Binding(
+                get: { controller.pendingSwitch != nil }, set: { if !$0 { controller.cancelSwitch() } })
+        ) {
+            Button("Switch") { controller.confirmSwitch() }
+            Button("Cancel", role: .cancel) { controller.cancelSwitch() }
+        } message: {
+            if let title = controller.pendingSwitch?.resuming?.title { Text(title) }
         }
     }
 }

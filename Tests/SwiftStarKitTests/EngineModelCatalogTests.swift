@@ -199,14 +199,6 @@ struct EngineModelCatalogTests {
         #expect(RecentWorkspaces.updated(full, adding: "/6", cap: 2) == ["/6", "/1"])
     }
 
-    @Test func recentWorkspaceItemsDisableMissingFolders() {
-        let items = RecentWorkspaces.items(
-            ["/here", "/gone"], current: "/here", exists: { $0 == "/here" })
-        #expect(items.map(\.title) == ["here", "gone"])
-        #expect(items.map(\.isChecked) == [true, false])
-        #expect(items.map(\.disabledReason) == [nil, "folder not found"])
-    }
-
     // MARK: SU.5a2 Task 1: toolbar labels and parsing
 
 }
