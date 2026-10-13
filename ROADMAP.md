@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** SU.5b (test consolidation; plan written), then SU.6 and SU.7.
+- **Next:** SU.6 (UI tweaks; not brainstormed), then SU.7.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -27,7 +27,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | SU.2 | Testable view logic | Move view-adjacent logic into Kit, with tests | done 2026-10-03: [spec](docs/superpowers/specs/2026-10-03-su2-testable-view-logic-design.md), [plan](docs/superpowers/plans/2026-10-03-su2-testable-view-logic.md) |
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
-| SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | 5a done 2026-10-13: [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), each with its Result. Next [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md) (tests), plan written. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
+| SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
 | SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | not brainstormed |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
 
@@ -55,6 +55,17 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 - **Remembering:** the apply command kept across sessions; a first-launch
   workspace, and a saved workspace that no longer exists (seen 2026-10-13: it
   pointed at a deleted worktree, so every start was refused).
+- **Left from SU.5a** (each plan's Result):
+  - rate, duration, the status line and the ctx label ignore the locale; the
+    inspector mixes GB and GiB
+  - the model-list loader sleeps 1 s on every timeout, and waits out the
+    whole timeout when a grandchild holds its pipe
+  - 4-space indented code isn't protected from de-LaTeXing
+  - the self-test covers Highlightr and SwiftMath, not Litext or MarkdownView
+  - the recorder can pair a new `resumed.ndjson` with an old
+    `relaunch-rewind.ndjson`, and leaves a `.tmp` on an exception
+  - `clamp`'s doc comment sits on `slot(for:)`; two comments still describe
+    the toolbar font
 
 ## Backlog
 
@@ -78,9 +89,9 @@ Deferred, each with the condition that reopens it.
   adds a spawn-time tool-policy flag worth a Settings control.*
 - **The catalog loader's pid-reuse window.** There is a small window before
   SIGKILL in which the pid could be reused. *Reopens if seen live.*
-- **SU.3's leftovers.** An Xcode Debug run with the memory widget toggling
-  is still unverified. The missing fixture-controller `start()` test lands
-  in SU.5a. *Reopens: the crash, if a Debug run shows it.*
+- **SU.3's leftover.** An Xcode Debug run with the memory widget toggling
+  is still unverified (its `start()` test landed in SU.5a1). *Reopens: the
+  crash, if a Debug run shows it.*
 
 ### Engine requests
 
@@ -118,6 +129,11 @@ found by the [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-an
 - **SU.1's window-close-quits live check covered idle only, not mid-turn.**
   The `quit()` mid-turn path is unit-tested. *Reopens when the GPU is free
   for a live run.*
+
+- **Swift 6.4 closure identities in tests.** A closure inside `#expect(...)`
+  and a same-typed sibling in one enclosing closure can run each other's
+  body (SU.5b), so test bodies stay at function level. *Reopens when a
+  toolchain fixes it; worth a minimal report to swiftlang.*
 
 ### Declined
 

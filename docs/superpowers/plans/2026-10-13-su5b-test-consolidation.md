@@ -297,3 +297,53 @@ about 24 after.
   - SU.6's punch list gains the 5a deferred minors that aren't tests
   - the Backlog loses SU.3's leftover, since its test landed in 5a1
 - [ ] Run `just lint-docs`. Commit.
+
+## Result
+
+**Commits:** `f1dd031`..this close, on `main`. Suite: 91 fast, 39
+integration (from 185 and 45). The integration tier takes 13–19 s, down from
+about 29 s, and a full run leaves no `fake-ds4-dogfood` behind.
+
+| File | Before | After |
+|---|---|---|
+| `EngineCommandTests` | 26 | 4 |
+| `EngineWireParserTests` | 30 | 11 |
+| `EngineTranscriptTests` | 46 | 27 |
+| `EngineModelCatalogTests` | 23 | 15 |
+| `EngineSessionModelTests` | 16 | 10 |
+| `MarkdownPreprocessTests` | 10 | 2 |
+| `MetricsFormattingTests` | 10 | 5 |
+| `TranscriptFontScaleTests` | 8 | 3 |
+| `EngineMetricsTests`, `SeverityTests` | 7, 2 | 6, 1 |
+| `EngineSessionTests` | 24 | 17 |
+| `EngineControllerTests` | 15 | 17 |
+| `EngineModelCatalogLoaderTests` | 6 | 5 |
+
+The counts are `@Test` functions; a table counts once, whatever its rows.
+Every old name survives as a row label or a comment, checked per task
+against the task's base commit.
+
+**Dropped:**
+- Two transcript tests in Task 3: `stopDisabledWhileQueued` and
+  `busyStartsOnPromptEvent`.
+- The three `cacheKey*` tests and `bytesFormatsByteCount`, which compared
+  generated code with itself.
+- The owner's integration cuts: four fake-only tests and
+  `notRunningErrorIsReadable`.
+
+**Break checks:** one table per file, plus each new test, failed with one
+implementation line broken. Three checks found holes, now closed:
+- the longer-fence row never exercised the fence-length rule
+- the loader's timeout rows stayed green without the SIGKILL fallback
+- `relaunchIgnoredWhileTerminating` stayed green without its guard
+
+**Diverged:**
+- `withDefaults { }` became `DefaultsScope` plus `defer`. With Swift 6.4, a
+  closure inside `#expect(...)` and a sibling closure of the same type in
+  one enclosing closure can share an identity, so one body runs for the
+  other. This was probed, and is noted in `Support.swift`.
+- Task 1 introduced that closure form. Whether a Task 1–4 assertion was
+  actually skipped wasn't checked one by one.
+- `FakeEngine.remove()` SIGKILLs the `tui` processes it started, since
+  `EngineSession`'s deinit sends only SIGTERM.
+- Two quit-bound tests use a 1 s kill grace, down from 2–3 s.
