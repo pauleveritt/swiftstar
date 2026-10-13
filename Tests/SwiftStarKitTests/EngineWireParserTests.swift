@@ -13,6 +13,107 @@ struct EngineWireParserTests {
         #"{"kind":"event","event":{"# + body + "}}"
     }
 
+    // MARK: one line after `ready` → one exact event
+
+    struct LineCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let line: String
+        let expected: EngineEvent
+    }
+
+    private static func ev(_ body: String) -> String { #"{"kind":"event","event":{"# + body + "}}" }
+    private static let relaunchArgv = ["tui", "--resume", "/s", "--source", "/r", "--ndjson"]
+
+    // Payload sources: ds4-engine operator.py, tui_cli.py, ndjson_process.py,
+    // operator_telemetry.py (cited per row where the old tests cited them).
+    static let afterReadyCases: [LineCase] = [
+        .init(testDescription: "unknownEventKindIsIgnored", line: ev(#""kind":"flux_capacitor""#), expected: .ignored),
+        .init(testDescription: "unavailableSnapshotIsIgnored",
+              line: ev(#""kind":"checkpoint","snapshot":{"status":"unavailable"}"#), expected: .ignored),
+        .init(testDescription: "nullSnapshotFieldsAreNil",
+              line: ev(#""kind":"checkpoint","snapshot":{"eval_count":8,"sync_ms":null}"#),
+              expected: .pause(PauseMetrics(prefillTokens: nil, prefillMs: nil, evalCount: 8, evalMs: nil))),
+        .init(testDescription: "missingOptionalFieldsAreNil", line: ev(#""kind":"answer","text":"hi""#),
+              expected: .answer(EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil))),
+        .init(testDescription: "answerKeepsOptionalReason (operator.py:312-322)",
+              line: ev(#""kind":"answer","text":"","reason":"ran out of tokens","context_used":10,"context_size":100"#),
+              expected: .answer(EngineAnswer(text: "", contextUsed: 10, contextSize: 100, durationMs: nil,
+                                             reason: "ran out of tokens"))),
+        .init(testDescription: "refusalBecomesRefused", line: ev(#""kind":"apply_refused","reason":"no changes""#),
+              expected: .refused("no changes")),
+        .init(testDescription: "refusedStillRefused (rewind_refused without relaunch)",
+              line: ev(#""kind":"rewind_refused","reason":"no earlier prompt""#), expected: .refused("no earlier prompt")),
+        .init(testDescription: "model_refused with relaunch (EN.1 minor)",
+              line: ev(#""kind":"model_refused","reason":"switch","relaunch":["tui","--resume","/s","--source","/r","--ndjson"]"#),
+              expected: .relaunch(EngineRelaunch(kind: .model, argv: relaunchArgv, reason: "switch"))),
+        .init(testDescription: "resume_refused with relaunch (EN.1 minor)",
+              line: ev(#""kind":"resume_refused","reason":"resume","relaunch":["tui","--resume","/s","--source","/r","--ndjson"]"#),
+              expected: .relaunch(EngineRelaunch(kind: .resume, argv: relaunchArgv, reason: "resume"))),
+        .init(testDescription: "apply_refused with relaunch stays refused",
+              line: ev(#""kind":"apply_refused","reason":"no","relaunch":["tui","--ndjson"]"#), expected: .refused("no")),
+        .init(testDescription: "helpBecomesNotice", line: ev(#""kind":"help","lines":["/help","/status"]"#),
+              expected: .notice("/help\n/status")),
+        .init(testDescription: "exportedNamesThePath", line: ev(#""kind":"exported","path":"/s/export.md""#),
+              expected: .notice("Exported to /s/export.md")),
+        .init(testDescription: "clearRendersSentence (operator.py:216)", line: ev(#""kind":"clear""#),
+              expected: .notice("Conversation cleared")),
+        .init(testDescription: "terminalDecodesOutcome (operator.py:384)",
+              line: ev(#""kind":"terminal","outcome":"tool-limit","capture_path":"/x/capture","duration_ms":1234.5"#),
+              expected: .turnEnded(outcome: "tool-limit")),
+        .init(testDescription: "queuedTopLevelDecodes (ndjson_process.py:126)", line: #"{"kind":"queued","count":2}"#,
+              expected: .queued(count: 2)),
+        .init(testDescription: "steeringDecodesBothKinds (applied)",
+              line: ev(#""kind":"steering_applied","text":"also do x""#), expected: .steering(applied: true)),
+        .init(testDescription: "steeringDecodesBothKinds (unconfirmed)",
+              line: ev(#""kind":"steering_unconfirmed","text":"also do x""#), expected: .steering(applied: false)),
+        .init(testDescription: "mentions attached is a notice (tui_cli.py:789-793)",
+              line: ev(#""kind":"mentions","attached":["a.py","b.py"],"missing":[]"#), expected: .notice("Attached: a.py, b.py")),
+        .init(testDescription: "mentions missing is a refusal",
+              line: ev(#""kind":"mentions","attached":[],"missing":["nope.py"]"#), expected: .refused("Not found: nope.py")),
+        .init(testDescription: "mentions empty is ignored",
+              line: ev(#""kind":"mentions","attached":[],"missing":[]"#), expected: .ignored),
+        .init(testDescription: "compacting (operator.py:181)", line: ev(#""kind":"compacting","focus":null"#),
+              expected: .notice("Compacting…")),
+        .init(testDescription: "compacted (operator.py:185-190)",
+              line: ev(#""kind":"compacted","text":"a long summary","tokens":812,"duration_ms":90.0"#),
+              expected: .notice("Conversation compacted (812 tokens)")),
+        .init(testDescription: "compact_failed (operator.py:199)",
+              line: ev(#""kind":"compact_failed","reason":"summary too long","tokens":9,"duration_ms":1.0"#),
+              expected: .refused("Not compacted: summary too long")),
+        .init(testDescription: "telemetryErrorUsesErrorField (operator_telemetry.py:234)",
+              line: ev(#""kind":"telemetry_error","error":"disk full""#), expected: .notice("Telemetry error: disk full")),
+        .init(testDescription: "interruptedCarriesContext (operator.py:294-300)",
+              line: ev(#""kind":"interrupted","capture_path":"/c","context_used":512,"context_size":20000,"duration_ms":5.0"#),
+              expected: .interrupted(contextUsed: 512, contextSize: 20000)),
+        .init(testDescription: "nativeEventsAreGenerating (start)", line: ev(#""kind":"native_start""#),
+              expected: .generating(true)),
+        .init(testDescription: "nativeEventsAreGenerating (end)", line: ev(#""kind":"native_end""#),
+              expected: .generating(false)),
+    ]
+
+    @Test(arguments: afterReadyCases) func afterReady(_ c: LineCase) {
+        var p = Self.ready()
+        #expect(p.parse(c.line) == c.expected)
+    }
+
+    // MARK: the first line must be the handshake
+
+    static let beforeReadyCases: [LineCase] = [
+        .init(testDescription: "firstLineMustBeReady", line: #"{"kind":"input"}"#,
+              expected: .protocolError("expected ready first, got input")),
+        .init(testDescription: "protocolTwoIsRefused", line: #"{"kind":"ready","protocol":2}"#,
+              expected: .protocolError("unsupported engine protocol 2; expected protocol 1")),
+        .init(testDescription: "undecodableBeforeReadyIsFatal (not JSON)", line: "garbage",
+              expected: .protocolError("not a JSON object: garbage")),
+        .init(testDescription: "undecodableBeforeReadyIsFatal (no kind)", line: #"{"no":"kind"}"#,
+              expected: .protocolError(#"line has no kind: {"no":"kind"}"#)),
+    ]
+
+    @Test(arguments: beforeReadyCases) func beforeReady(_ c: LineCase) {
+        var p = EngineWireParser()
+        #expect(p.parse(c.line) == c.expected)
+    }
+
     @Test func toolRejectedFixtureDecodes() throws {
         let rejections = try Fixtures.events("tool-rejected.ndjson").compactMap { e -> EngineToolRejection? in
             if case .toolRejected(let r) = e { r } else { nil }
@@ -20,12 +121,6 @@ struct EngineWireParserTests {
         #expect(rejections == [EngineToolRejection(
             name: "list_files", reason: "unknown-tool", path: nil,
             text: "Tool error: unknown tool: list_files")])
-    }
-
-    @Test func refusedStillRefused() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"rewind_refused","reason":"no earlier prompt""#))
-            == .refused("no earlier prompt"))
     }
 
     @Test func rewindRefusedWithRelaunchDecodes() throws {
@@ -55,27 +150,6 @@ struct EngineWireParserTests {
             reason: "")
         #expect(r.modelID == "qwen3.8-flash-next")
         #expect(EngineRelaunch(kind: .rewind, argv: ["tui", "--ndjson"], reason: "").modelID == nil)
-    }
-
-    @Test func firstLineMustBeReady() {
-        var p = EngineWireParser()
-        guard case .protocolError(let m) = p.parse(#"{"kind":"input"}"#) else {
-            Issue.record("expected protocolError"); return
-        }
-        #expect(m.contains("input"))
-    }
-
-    @Test func protocolTwoIsRefused() {
-        var p = EngineWireParser()
-        guard case .protocolError(let m) = p.parse(#"{"kind":"ready","protocol":2}"#) else {
-            Issue.record("expected protocolError"); return
-        }
-        #expect(m.contains("protocol 2"))
-    }
-
-    @Test func unknownEventKindIsIgnored() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"flux_capacitor""#)) == .ignored)
     }
 
     @Test func toolReadFixtureDecodes() throws {
@@ -113,44 +187,6 @@ struct EngineWireParserTests {
         #expect(events.contains { if case .error(let m) = $0 { m.contains("bogus") } else { false } })
     }
 
-    @Test func unavailableSnapshotIsIgnored() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"checkpoint","snapshot":{"status":"unavailable"}"#)) == .ignored)
-    }
-
-    @Test func nullSnapshotFieldsAreNil() {
-        var p = Self.ready()
-        let e = p.parse(Self.event(#""kind":"checkpoint","snapshot":{"eval_count":8,"sync_ms":null}"#))
-        guard case .pause(let m) = e else { Issue.record("expected pause"); return }
-        #expect(m.evalCount == 8)
-        #expect(m.prefillMs == nil)
-        #expect(m.prefillTokens == nil)
-    }
-
-    @Test func missingOptionalFieldsAreNil() {
-        var p = Self.ready()
-        let e = p.parse(Self.event(#""kind":"answer","text":"hi""#))
-        #expect(e == .answer(EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil)))
-    }
-
-    @Test func refusalBecomesRefused() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"apply_refused","reason":"no changes""#)) == .refused("no changes"))
-    }
-
-    @Test func helpBecomesNotice() {
-        var p = Self.ready()
-        let e = p.parse(Self.event(#""kind":"help","lines":["/help","/status"]"#))
-        guard case .notice(let t) = e else { Issue.record("expected notice"); return }
-        #expect(!t.isEmpty)
-        #expect(t.contains("/status"))
-    }
-
-    @Test func exportedNamesThePath() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"exported","path":"/s/export.md""#)) == .notice("Exported to /s/export.md"))
-    }
-
     @Test func statusReportIsOneReadableLine() {
         var p = EngineWireParser(locale: Locale(identifier: "en_US"))
         _ = p.parse(#"{"kind":"ready","protocol":1}"#)
@@ -162,82 +198,6 @@ struct EngineWireParserTests {
         #expect(t.contains("1956 / 65536"))
         #expect(t.contains("10.0 GiB / 20.0 GiB"))
         #expect(t != "status_report")
-    }
-
-    // Payload: operator.py:216 `emit("clear")` — no fields but the envelope.
-    @Test func clearRendersSentence() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"clear""#)) == .notice("Conversation cleared"))
-    }
-
-    // Payload: operator.py:384 `emit("terminal", outcome=, capture_path=, duration_ms=)`.
-    @Test func terminalDecodesOutcome() {
-        var p = Self.ready()
-        let line = Self.event(#""kind":"terminal","outcome":"tool-limit","capture_path":"/x/capture","duration_ms":1234.5"#)
-        #expect(p.parse(line) == .turnEnded(outcome: "tool-limit"))
-    }
-
-    // Payload: ndjson_process.py:126 `{"kind": "queued", "count": len(self.pending)}` (top level).
-    @Test func queuedTopLevelDecodes() {
-        var p = Self.ready()
-        #expect(p.parse(#"{"kind":"queued","count":2}"#) == .queued(count: 2))
-    }
-
-    // Payload: operator.py:283-289 `emit("steering_applied" | "steering_unconfirmed", text=...)`.
-    @Test func steeringDecodesBothKinds() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"steering_applied","text":"also do x""#))
-            == .steering(applied: true))
-        #expect(p.parse(Self.event(#""kind":"steering_unconfirmed","text":"also do x""#))
-            == .steering(applied: false))
-    }
-
-    // Payload: tui_cli.py:789-793 `observer.emit("mentions", attached=[...], missing=[...])`.
-    @Test func mentionsAttachedIsNoticeMissingIsRefusal() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"mentions","attached":["a.py","b.py"],"missing":[]"#))
-            == .notice("Attached: a.py, b.py"))
-        #expect(p.parse(Self.event(#""kind":"mentions","attached":[],"missing":["nope.py"]"#))
-            == .refused("Not found: nope.py"))
-        #expect(p.parse(Self.event(#""kind":"mentions","attached":[],"missing":[]"#)) == .ignored)
-    }
-
-    // Payloads: operator.py:181 `emit("compacting", focus=...)`; :185-190 `emit("compacted",
-    // text=, tokens=, duration_ms=)`; :199 `emit("compact_failed", reason=, tokens=, duration_ms=)`.
-    @Test func compactionEventsRender() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"compacting","focus":null"#)) == .notice("Compacting…"))
-        #expect(p.parse(Self.event(#""kind":"compacted","text":"a long summary","tokens":812,"duration_ms":90.0"#))
-            == .notice("Conversation compacted (812 tokens)"))
-        #expect(p.parse(Self.event(#""kind":"compact_failed","reason":"summary too long","tokens":9,"duration_ms":1.0"#))
-            == .refused("Not compacted: summary too long"))
-    }
-
-    // Payload: operator_telemetry.py:234 `{**event, "kind": "telemetry_error", "error": error}`.
-    @Test func telemetryErrorUsesErrorField() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"telemetry_error","error":"disk full""#))
-            == .notice("Telemetry error: disk full"))
-    }
-
-    // Payload: operator.py:312-322 `emit("answer", text=, **reason, ...)`; reason for an empty answer (tools-closed, no-final-text).
-    @Test func answerKeepsOptionalReason() {
-        var p = Self.ready()
-        guard case .answer(let a) = p.parse(Self.event(#""kind":"answer","text":"","reason":"ran out of tokens","context_used":10,"context_size":100"#)) else {
-            Issue.record("expected answer"); return
-        }
-        #expect(a.reason == "ran out of tokens")
-        guard case .answer(let b) = p.parse(Self.event(#""kind":"answer","text":"hi""#)) else {
-            Issue.record("expected answer"); return
-        }
-        #expect(b.reason == nil)
-    }
-
-    // Payload: operator.py:294-300 `emit("interrupted", capture_path=, context_used=, context_size=, duration_ms=)`.
-    @Test func interruptedCarriesContext() {
-        var p = Self.ready()
-        let line = Self.event(#""kind":"interrupted","capture_path":"/c","context_used":512,"context_size":20000,"duration_ms":5.0"#)
-        #expect(p.parse(line) == .interrupted(contextUsed: 512, contextSize: 20000))
     }
 
     @Test func undecodableAfterReadyIsNotice() {
@@ -252,20 +212,4 @@ struct EngineWireParserTests {
         #expect(p.parse(#"{"kind":"input"}"#) == .awaitingInput)
     }
 
-    @Test func undecodableBeforeReadyIsFatal() {
-        var p = EngineWireParser()
-        guard case .protocolError = p.parse("garbage") else {
-            Issue.record("expected protocolError"); return
-        }
-        var q = EngineWireParser()
-        guard case .protocolError = q.parse(#"{"no":"kind"}"#) else {
-            Issue.record("expected protocolError"); return
-        }
-    }
-
-    @Test func nativeEventsAreGenerating() {
-        var p = Self.ready()
-        #expect(p.parse(Self.event(#""kind":"native_start""#)) == .generating(true))
-        #expect(p.parse(Self.event(#""kind":"native_end""#)) == .generating(false))
-    }
 }
