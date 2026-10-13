@@ -35,6 +35,13 @@ public enum EngineCommand {
         return .notFound(searched: candidates)
     }
 
+    /// Resuming a listed session (SU.7a): no `--commit`, which the engine
+    /// refuses on resume, and no model or context flags, so the conversation
+    /// keeps its own.
+    public static func resumeArguments(id: String, source: URL) -> [String] {
+        ["tui", "--ndjson", "--resume", id, "--source", source.path]
+    }
+
     /// The shell command that takes a finished session's changes.
     public static func applyCommand(sessionDirectory: URL) -> String {
         "\(executableName) apply \(sessionDirectory.lastPathComponent)"

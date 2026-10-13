@@ -175,6 +175,7 @@ struct EngineWireParserTests {
         }
         #expect(!pauses.isEmpty)
         #expect(pauses.allSatisfy { $0.evalCount > 0 })
+        #expect(pauses.first?.capturePath?.contains("/sessions/") == true)  // SU.7a
         // SU.6b: the 27B's DFlash decision and its prefix-cache miss.
         let dflash = events.compactMap { e -> EngineDFlash? in
             if case .session(let s) = e { return s.dflash } else { return nil }

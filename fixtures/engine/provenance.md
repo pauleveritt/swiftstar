@@ -66,3 +66,20 @@ that shape if ds4-engine adds it later: a model that doesn't fit, one not
 usable in the TUI, unknown keys. Re-capture `models-real.json` if ds4-engine
 starts sending `schema_version` again, or bumps it, or changes its model
 lineup.
+
+## `sessions.json` (SU.7a)
+
+`ds4-dogfood sessions --json --source . --limit 12`, run in this repository
+on 2026-10-13 against ds4-engine `5451cd7d`. It's the owner's real session
+list, pretty-printed, with home paths redacted to `/Users/example` and the
+`projects/<owner>/` segment dropped. It holds:
+- a chain of three (`123136` ← `122439` ← `122106`)
+- a chain of four whose newest two can't be resumed (`121809` ← … ←
+  `121116`)
+- five standalone sessions, none of which can be resumed (`problems` such
+  as "no capture" or "no receipt")
+
+That makes seven conversations from twelve entries.
+- empty `first_prompt`s
+
+Re-capture it if `sessions --json` changes its fields.

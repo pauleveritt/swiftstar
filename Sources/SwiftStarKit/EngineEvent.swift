@@ -153,12 +153,15 @@ public struct PauseMetrics: Equatable, Sendable {
     public let prefillMs: Double?
     public let evalCount: Int
     public let evalMs: Double?
+    /// The run's capture file, under the session's directory (SU.7a).
+    public let capturePath: String?
 
-    public init(prefillTokens: Int?, prefillMs: Double?, evalCount: Int, evalMs: Double?) {
+    public init(prefillTokens: Int?, prefillMs: Double?, evalCount: Int, evalMs: Double?, capturePath: String? = nil) {
         self.prefillTokens = prefillTokens
         self.prefillMs = prefillMs
         self.evalCount = evalCount
         self.evalMs = evalMs
+        self.capturePath = capturePath
     }
 }
 

@@ -121,6 +121,12 @@ struct EngineCommandTests {
         #expect(exit.message == c.message)
     }
 
+    // SU.7a: no --commit (the engine refuses it on resume), no model flags.
+    @Test func resumeArguments() {
+        #expect(EngineCommand.resumeArguments(id: "20261013-1-x", source: URL(fileURLWithPath: "/r"))
+                == ["tui", "--ndjson", "--resume", "20261013-1-x", "--source", "/r"])
+    }
+
     @Test func applyCommandUsesDirectoryName() {
         #expect(EngineCommand.applyCommand(sessionDirectory: URL(fileURLWithPath: "/x/sessions/20260928-101010-repo"))
                 == "ds4-dogfood apply 20260928-101010-repo")
