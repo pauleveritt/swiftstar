@@ -142,7 +142,9 @@ public enum MarkdownSelfTest {
     /// one that crashed the shipped DS4 .app when Highlightr's/SwiftMath's
     /// bundles weren't resolvable (`Bundle.module` `fatalError`). Building a
     /// code block + math forces Highlightr and SwiftMath to load their resource
-    /// bundles. Gated by the env var **and** an explicit `--markdown-selftest`
+    /// bundles; reading `LocalizedText.copy` loads Litext's, which otherwise
+    /// happens only at the transcript's first right-click (SU.6d). MarkdownView's
+    /// own bundle holds an unused strings file that no code reads. Gated by the env var **and** an explicit `--markdown-selftest`
     /// argument (never the env alone: an inherited env var from a user shell
     /// must not silently exit the app at launch). Run the packaged binary as
     /// `DS4_SELFTEST_MARKDOWN=1 SwiftStar --markdown-selftest`.
@@ -153,6 +155,7 @@ public enum MarkdownSelfTest {
         _ = NSApplication.shared  // math rendering reads NSApp.effectiveAppearance; set NSApp first
         let md = "```swift\nlet x = 1\n```\n\nInline math: $x^2 + 1$\n"
         _ = MarkdownTextView.PreprocessedContent(parserResult: MarkdownParser().parse(md), theme: .default)
+        _ = LocalizedText.copy  // Litext, re-exported by MarkdownView
         FileHandle.standardError.write(Data("DS4_SELFTEST_MARKDOWN: OK\n".utf8))
         exit(0)
     }

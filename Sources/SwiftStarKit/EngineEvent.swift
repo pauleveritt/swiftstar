@@ -153,8 +153,8 @@ public struct PauseMetrics: Equatable, Sendable {
     public let prefillMs: Double?
     public let evalCount: Int
     public let evalMs: Double?
-    /// The session's capture file (a `.partial.json` mid-session), whose
-    /// parent is the session directory (AN.2).
+    /// The run's capture file, under the session's directory (SU.7a); a
+    /// `.partial.json` mid-session, which AN.2 takes the directory from.
     public let capturePath: String?
 
     public init(prefillTokens: Int?, prefillMs: Double?, evalCount: Int, evalMs: Double?, capturePath: String? = nil) {
@@ -181,10 +181,47 @@ public struct EngineMemory: Equatable, Sendable {
 public struct EngineSessionInfo: Equatable, Sendable {
     public let modelID: String?
     public let contextSize: Int?
+    /// The engine's DFlash decision (`session.dflash`); nil when it sends none.
+    public let dflash: EngineDFlash?
 
-    public init(modelID: String?, contextSize: Int?) {
+    public init(modelID: String?, contextSize: Int?, dflash: EngineDFlash? = nil) {
         self.modelID = modelID
         self.contextSize = contextSize
+        self.dflash = dflash
+    }
+}
+
+/// DFlash on or off for this run, and why, in the engine's words
+/// (ds4-engine `dflash.py`, `Choice.event`).
+public struct EngineDFlash: Equatable, Sendable {
+    public let on: Bool
+    public let reason: String
+    /// The drafter model's path, when DFlash is on.
+    public let drafter: String?
+
+    public init(on: Bool, reason: String, drafter: String?) {
+        self.on = on
+        self.reason = reason
+        self.drafter = drafter
+    }
+}
+
+/// The prompt-prefix cache's outcome, sent whenever the engine fills the
+/// system prefix: the first prompt, and again after `/clear` or a compaction.
+/// A resumed conversation sends none. A hit's tokens are loaded, not
+/// prefilled.
+public struct EnginePrefixCache: Equatable, Sendable {
+    /// "hit", "miss", or another word from the engine.
+    public let outcome: String
+    public let tokens: Int?
+    public let loadMs: Double?
+    public let fillMs: Double?
+
+    public init(outcome: String, tokens: Int?, loadMs: Double?, fillMs: Double?) {
+        self.outcome = outcome
+        self.tokens = tokens
+        self.loadMs = loadMs
+        self.fillMs = fillMs
     }
 }
 
@@ -203,6 +240,7 @@ public enum EngineEvent: Equatable, Sendable {
     case answer(EngineAnswer)
     case pause(PauseMetrics)
     case memory(EngineMemory)
+    case prefixCache(EnginePrefixCache)
     /// Stop took effect; carries the context after the interrupt.
     case interrupted(contextUsed: Int?, contextSize: Int?)
     /// The engine ended the session's turn (`terminal`): followed by `close`.

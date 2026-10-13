@@ -4,12 +4,10 @@ import Testing
 import SwiftStarKit
 
 /// Drives `EngineModelCatalogLoader` against the fake engine's `models --json` mode.
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
+@Suite(.serialized, .integration, .tags(.integration), .timeLimit(.minutes(1)))
 struct EngineModelCatalogLoaderTests {
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    private static let fake = repoRoot.appendingPathComponent("fixtures/engine/fake-ds4-dogfood").path
-    private static let models = repoRoot.appendingPathComponent("fixtures/engine/models.json").path
+    private static let fake = Fixtures.path("fake-ds4-dogfood")
+    private static let models = Fixtures.path("models.json")
 
     private func env(_ extra: [String: String] = [:]) -> [String: String] {
         var e = ProcessInfo.processInfo.environment
@@ -33,22 +31,34 @@ struct EngineModelCatalogLoaderTests {
         if case .failure(.failed) = missing {} else { Issue.record("launch failure expected") }
     }
 
-    @Test func loaderFallsBackOnTimeout() async {
-        let started = Date()
-        let result = await EngineModelCatalogLoader.load(
-            executable: Self.fake, timeout: .milliseconds(500),
-            environment: env(["FAKE_ENGINE_MODELS_SLEEP_MS": "5000"]))
-        #expect(result == .failure(.timedOut))
-        #expect(Date().timeIntervalSince(started) < 3)
+    nonisolated struct TimeoutCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let env: [String: String]
+        /// Seconds the load may take in all, the 0.5 s timeout included.
+        let within: Double
     }
 
-    @Test func loaderTimesOutOnChildIgnoringSIGTERM() async {
+    nonisolated static let timeoutCases: [TimeoutCase] = [
+        .init(testDescription: "loaderFallsBackOnTimeout", env: ["FAKE_ENGINE_MODELS_SLEEP_MS": "5000"], within: 3),
+        .init(testDescription: "loaderTimesOutOnChildIgnoringSIGTERM",
+              env: ["FAKE_ENGINE_MODELS_SLEEP_MS": "8000", "FAKE_ENGINE_IGNORE_SIGTERM": "1"], within: 2.5),
+    ]
+
+    /// The load returns at its timeout either way; the child must also be
+    /// gone (SIGKILL for one that ignores SIGTERM), or it outlives the app.
+    @Test(arguments: timeoutCases) func loaderTimesOut(_ c: TimeoutCase) async throws {
+        let pidFile = tempPath("models-pid")
+        defer { try? FileManager.default.removeItem(atPath: pidFile) }
         let started = Date()
         let result = await EngineModelCatalogLoader.load(
             executable: Self.fake, timeout: .milliseconds(500),
-            environment: env(["FAKE_ENGINE_MODELS_SLEEP_MS": "8000", "FAKE_ENGINE_IGNORE_SIGTERM": "1"]))
+            environment: env(c.env.merging(["FAKE_ENGINE_PIDFILE": pidFile]) { a, _ in a }))
         #expect(result == .failure(.timedOut))
-        #expect(Date().timeIntervalSince(started) < 2.5)
+        #expect(Date().timeIntervalSince(started) < c.within)
+        let pid = try #require(Int32(String(contentsOfFile: pidFile, encoding: .utf8)))
+        let gone = await eventually(within: .seconds(2)) { kill(pid, 0) != 0 }
+        #expect(gone)
+        if !gone { kill(pid, SIGKILL) }
     }
 
     @Test func loaderReportsStderrTailBeyond4KiB() async {
@@ -68,5 +78,41 @@ struct EngineModelCatalogLoaderTests {
         if case .failure(let e) = result {
             #expect(e.reason == "this ds4-dogfood has no `models` command (needs ds4-engine TUI.35 or later)")
         }
+    }
+}
+
+/// SU.7a: `sessions --json` through the same runner as the model list.
+@Suite(.serialized, .integration, .tags(.integration), .timeLimit(.minutes(1)))
+struct SessionListLoaderTests {
+    private static let fake = Fixtures.path("fake-ds4-dogfood")
+
+    private func env(_ extra: [String: String]) -> [String: String] {
+        var e = ProcessInfo.processInfo.environment
+        e.removeValue(forKey: "FAKE_ENGINE_SESSIONS")
+        for (k, v) in extra { e[k] = v }
+        return e
+    }
+
+    @Test func sessionListLoaderReadsTheFake() async throws {
+        let entries = try await SessionListLoader.load(
+            executable: Self.fake, source: URL(fileURLWithPath: "/r"),
+            environment: env(["FAKE_ENGINE_SESSIONS": Fixtures.path("sessions.json")])).get()
+        #expect(entries.count == 12)
+    }
+
+    @Test func sessionListLoaderPassesSourceAndLimit() async throws {
+        let log = tempPath("argv")
+        defer { try? FileManager.default.removeItem(atPath: log) }
+        _ = await SessionListLoader.load(
+            executable: Self.fake, source: URL(fileURLWithPath: "/r"),
+            environment: env(["FAKE_ENGINE_SESSIONS": Fixtures.path("sessions.json"), "FAKE_ENGINE_ARGV_LOG": log]))
+        let argv = try String(contentsOfFile: log, encoding: .utf8).split(separator: "\n").map(String.init)
+        #expect(argv == ["sessions", "--json", "--source", "/r", "--limit", "50"])
+    }
+
+    @Test func sessionListLoaderReportsMissingCommand() async {
+        let result = await SessionListLoader.load(
+            executable: Self.fake, source: URL(fileURLWithPath: "/r"), environment: env([:]))
+        #expect(result == .failure(.commandMissing))
     }
 }

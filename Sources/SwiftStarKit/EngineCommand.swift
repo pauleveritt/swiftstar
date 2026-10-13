@@ -35,12 +35,11 @@ public enum EngineCommand {
         return .notFound(searched: candidates)
     }
 
-    /// Resumes `sessionDirectory` as a new session: an analysis fork (AN.2).
-    /// The shape of ds4-engine's `restart_argv` for a start with no extra
-    /// flags, as `arguments(source:)` makes (`tui_cli.py:412-416` at
-    /// `5451cd7d`); the model and context size are the resumed session's.
-    public static func forkArguments(sessionDirectory: URL, source: URL) -> [String] {
-        ["tui", "--resume", sessionDirectory.path, "--source", source.path, "--ndjson"]
+    /// Resuming a listed session (SU.7a): no `--commit`, which the engine
+    /// refuses on resume, and no model or context flags, so the conversation
+    /// keeps its own.
+    public static func resumeArguments(id: String, source: URL) -> [String] {
+        ["tui", "--ndjson", "--resume", id, "--source", source.path]
     }
 
     /// The session report (AN.1's `session_last.py`) for one session. At

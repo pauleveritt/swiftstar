@@ -3,47 +3,59 @@ import Testing
 @testable import SwiftStarKit
 
 struct EngineModelCatalogTests {
-    private static let sampleURL = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("fixtures/engine/models.json")
+    private static func sample() throws -> EngineModelList { try Fixtures.modelList("models.json") }
+    private static func real() throws -> EngineModelList { try Fixtures.modelList("models-real.json") }
 
-    private static func sample() throws -> EngineModelList {
-        let data = try Data(contentsOf: sampleURL)
-        return try EngineModelList.decode(data).get()
+    // Dropped in SU.5b: cacheKeySamePathSameMtimeIsEqual, cacheKeyChangedMtimeInvalidates and
+    // cacheKeyChangedPathInvalidates, which tested the compiler's synthesised `==`.
+
+    struct ValidatedCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let saved: String
+        let useList: Bool
+        let modelID: String
+        let notice: String?
     }
 
-    private static func real() throws -> EngineModelList {
-        let url = sampleURL.deletingLastPathComponent().appendingPathComponent("models-real.json")
-        return try EngineModelList.decode(Data(contentsOf: url)).get()
+    static let validatedCases: [ValidatedCase] = [
+        .init(testDescription: "validatedKeepsOfferedId", saved: "qwen3.8-27b", useList: true,
+              modelID: "qwen3.8-27b", notice: nil),
+        .init(testDescription: "validatedClearsDroppedId", saved: "laguna-xs-2.1", useList: true, modelID: "",
+              notice: "laguna-xs-2.1 isn't offered by the engine; using the engine default"),
+        .init(testDescription: "validatedKeepsEmpty", saved: "", useList: true, modelID: "", notice: nil),
+        .init(testDescription: "validatedKeepsIdWithoutList", saved: "laguna-xs-2.1", useList: false,
+              modelID: "laguna-xs-2.1", notice: nil),
+    ]
+
+    @Test(arguments: validatedCases) func validated(_ c: ValidatedCase) throws {
+        let r = ModelMenu.validated(saved: c.saved, list: c.useList ? try Self.real() : nil)
+        #expect(r.modelID == c.modelID)
+        #expect(r.notice == c.notice)
     }
 
-    @Test func validatedKeepsOfferedId() throws {
-        let r = ModelMenu.validated(saved: "qwen3.8-27b", list: try Self.real())
-        #expect(r.modelID == "qwen3.8-27b" && r.notice == nil)
+    @Test(arguments: [
+        (EngineSessionPhase.running, ModelMenuAction.sendModelCommand),
+        (.idle, .restart), (.starting, .restart), (.quitting, .restart), (.notFound([]), .restart),
+        (.ended(EngineExit(code: 0, message: "done")), .restart),
+    ]) func selectionActionPerPhase(_ phase: EngineSessionPhase, _ action: ModelMenuAction) {
+        #expect(ModelMenu.selectionAction(phase: phase) == action)
     }
 
-    @Test func validatedClearsDroppedId() throws {
-        let r = ModelMenu.validated(saved: "laguna-xs-2.1", list: try Self.real())
-        #expect(r.modelID == "")
-        #expect(r.notice == "laguna-xs-2.1 isn't offered by the engine; using the engine default")
+    @Test(arguments: [
+        (String?.none, "", "Engine default"), (nil, "x", "x"), ("a", "b", "a → b"), ("a", "a", "a"), ("a", "", "a"),
+    ]) func modelLabelLoadedToChosen(_ loaded: String?, _ chosen: String, _ label: String) {
+        #expect(ModelMenu.label(loaded: loaded, chosen: chosen) == label)
     }
 
-    @Test func validatedKeepsEmpty() throws {
-        let r = ModelMenu.validated(saved: "", list: try Self.real())
-        #expect(r.modelID == "" && r.notice == nil)
+    @Test(arguments: [
+        (Int?.none, 0, "Default ctx"), (nil, 8192, "8192 ctx"), (8192, 0, "8192 ctx"), (8192, 4096, "8192 → 4096 ctx"),
+    ]) func contextLabelLoadedToChosen(_ loaded: Int?, _ chosen: Int, _ label: String) {
+        #expect(ContextMenu.label(loaded: loaded, chosen: chosen) == label)
     }
 
-    @Test func validatedKeepsIdWithoutList() {
-        let r = ModelMenu.validated(saved: "laguna-xs-2.1", list: nil)
-        #expect(r.modelID == "laguna-xs-2.1" && r.notice == nil)
-    }
-
-    @Test func selectionActionPerPhase() {
-        #expect(ModelMenu.selectionAction(phase: .running) == .sendModelCommand)
-        for phase: EngineSessionPhase in [.idle, .starting, .quitting, .notFound([]),
-                                          .ended(EngineExit(code: 0, message: "done"))] {
-            #expect(ModelMenu.selectionAction(phase: phase) == .restart)
-        }
+    @Test(arguments: [(" 4096 ", Int?.some(4096)), ("0", nil), ("x", nil), ("", nil)])
+    func contextParseCustom(_ text: String, _ size: Int?) {
+        #expect(ContextMenu.parseCustom(text) == size)
     }
 
     @Test func decodesSampleList() throws {
@@ -63,8 +75,7 @@ struct EngineModelCatalogTests {
         // ds4-engine main (TUI.35) sends no `schema_version`, `default_model_id`
         // or `saved_model_id`, and names the context field `context`; the
         // decoder treats the first as version 1 and falls back for the second.
-        let url = Self.sampleURL.deletingLastPathComponent().appendingPathComponent("models-real.json")
-        let list = try EngineModelList.decode(Data(contentsOf: url)).get()
+        let list = try Self.real()
         #expect(list.models.count == 3)
         #expect(list.defaultModelID == nil)
         #expect(list.savedModelID == nil)
@@ -74,25 +85,38 @@ struct EngineModelCatalogTests {
         #expect(items.first { $0.value == "qwen3.8-27b" }?.disabledReason == nil)
     }
 
-    @Test func ignoresUnknownKeys() throws {
-        let json = #"{"schema_version":1,"extra":true,"models":[{"id":"m","display_name":"M","family":"f","on_this_mac":true,"downloadable":false,"runs_in_tui":true,"measured_contexts":[],"zzz":1}]}"#
-        let list = try EngineModelList.decode(Data(json.utf8)).get()
-        #expect(list.models.map(\.id) == ["m"])
-        #expect(list.defaultModelID == nil)
+    struct InlineCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let json: String
+        /// The decoded ids, or nil when decoding should fail.
+        var ids: [String]? = nil
+        var defaultContext: Int? = nil
+        var unsupported: Int? = nil
     }
 
-    @Test func wrongSchemaVersionFails() {
-        let result = EngineModelList.decode(Data(#"{"schema_version":2,"models":[]}"#.utf8))
-        #expect(result == .failure(.unsupportedSchema(2)))
-        if case .failure(.malformed) = EngineModelList.decode(Data("nope".utf8)) {} else {
-            Issue.record("garbage should be malformed")
+    static let inlineCases: [InlineCase] = [
+        .init(testDescription: "ignoresUnknownKeys",
+              json: #"{"schema_version":1,"extra":true,"models":[{"id":"m","display_name":"M","family":"f","on_this_mac":true,"downloadable":false,"runs_in_tui":true,"measured_contexts":[],"zzz":1}]}"#,
+              ids: ["m"]),
+        .init(testDescription: "missingSchemaVersionDefaultsToOne", json: #"{"models":[{"id":"m","context":4096}]}"#,
+              ids: ["m"], defaultContext: 4096),
+        .init(testDescription: "wrongSchemaVersionFails", json: #"{"schema_version":2,"models":[]}"#, unsupported: 2),
+        .init(testDescription: "wrongSchemaVersionFails (garbage is malformed)", json: "nope"),
+    ]
+
+    @Test(arguments: inlineCases) func decodesInline(_ c: InlineCase) throws {
+        switch EngineModelList.decode(Data(c.json.utf8)) {
+        case .success(let list):
+            #expect(list.models.map(\.id) == c.ids)
+            #expect(list.defaultModelID == nil)
+            if let context = c.defaultContext { #expect(list.model(id: "m")?.defaultContext == context) }
+        case .failure(.unsupportedSchema(let version)):
+            #expect(c.ids == nil && version == c.unsupported)
+        case .failure(.malformed):
+            #expect(c.ids == nil && c.unsupported == nil)
+        case .failure(let other):
+            Issue.record("unexpected \(other)")
         }
-    }
-
-    @Test func missingSchemaVersionDefaultsToOne() throws {
-        let json = #"{"models":[{"id":"m","context":4096}]}"#
-        let list = try EngineModelList.decode(Data(json.utf8)).get()
-        #expect(list.model(id: "m")?.defaultContext == 4096)
     }
 
     @Test func modelMenuTicksSettingsChoice() throws {
@@ -183,46 +207,6 @@ struct EngineModelCatalogTests {
         #expect(items.map(\.disabledReason) == [nil, "folder not found"])
     }
 
-    @Test func cacheKeySamePathSameMtimeIsEqual() {
-        let date = Date(timeIntervalSince1970: 1000)
-        #expect(
-            CatalogCacheKey(path: "/a", modifiedAt: date)
-                == CatalogCacheKey(path: "/a", modifiedAt: date))
-    }
-
-    @Test func cacheKeyChangedMtimeInvalidates() {
-        #expect(
-            CatalogCacheKey(path: "/a", modifiedAt: Date(timeIntervalSince1970: 1000))
-                != CatalogCacheKey(path: "/a", modifiedAt: Date(timeIntervalSince1970: 2000)))
-    }
-
-    @Test func cacheKeyChangedPathInvalidates() {
-        #expect(
-            CatalogCacheKey(path: "/a", modifiedAt: nil)
-                != CatalogCacheKey(path: "/b", modifiedAt: nil))
-    }
-
     // MARK: SU.5a2 Task 1: toolbar labels and parsing
 
-    @Test func modelLabelLoadedToChosen() {
-        #expect(ModelMenu.label(loaded: nil, chosen: "") == "Engine default")
-        #expect(ModelMenu.label(loaded: nil, chosen: "x") == "x")
-        #expect(ModelMenu.label(loaded: "a", chosen: "b") == "a → b")
-        #expect(ModelMenu.label(loaded: "a", chosen: "a") == "a")
-        #expect(ModelMenu.label(loaded: "a", chosen: "") == "a")
-    }
-
-    @Test func contextLabelLoadedToChosen() {
-        #expect(ContextMenu.label(loaded: nil, chosen: 0) == "Default ctx")
-        #expect(ContextMenu.label(loaded: nil, chosen: 8192) == "8192 ctx")
-        #expect(ContextMenu.label(loaded: 8192, chosen: 0) == "8192 ctx")
-        #expect(ContextMenu.label(loaded: 8192, chosen: 4096) == "8192 → 4096 ctx")
-    }
-
-    @Test func contextParseCustom() {
-        #expect(ContextMenu.parseCustom(" 4096 ") == 4096)
-        #expect(ContextMenu.parseCustom("0") == nil)
-        #expect(ContextMenu.parseCustom("x") == nil)
-        #expect(ContextMenu.parseCustom("") == nil)
-    }
 }

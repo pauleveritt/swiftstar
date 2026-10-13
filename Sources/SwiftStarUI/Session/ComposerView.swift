@@ -24,7 +24,7 @@ struct ComposerView: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 let analyzing = controller.analysis != nil
-                TextField(analyzing ? EngineAnalysis.composerPlaceholder : "Ask the agent…", text: $input, axis: .vertical)
+                TextField(analyzing ? EngineAnalysis.composerPlaceholder : "Ask about this project…", text: $input, axis: .vertical)
                     .font(.system(size: transcriptFontSize))
                     .textFieldStyle(.plain)
                     .lineLimit(1...15)

@@ -14,6 +14,154 @@ struct EngineSessionModelTests {
         .resumed(EngineResumed(sessionID: "s", turns: [], rewoundTo: 1, filesChanged: nil, contextUsed: nil))
     }
 
+    // MARK: steps → phase and composer
+
+    /// One thing done to a session model, so a table row can script a run.
+    enum Step: Sendable {
+        case willStart, didStart, ready, loading, awaitingInput, generating, willQuit, exit, notFound
+        case prompt(String), send(String)
+    }
+
+    private static func play(_ steps: [Step]) -> EngineSessionModel {
+        var m = EngineSessionModel()
+        for step in steps {
+            switch step {
+            case .willStart: m.willStart()
+            case .didStart: m.didStart()
+            case .ready: m.apply(.ready)
+            case .loading: m.apply(.loading("mapping weights"))
+            case .awaitingInput: m.apply(.awaitingInput)
+            case .generating: m.apply(.generating(true))
+            case .willQuit: m.willQuit()
+            case .exit: m.didExit(EngineExit(code: 0, message: "ended"), directory: nil)
+            case .notFound: m.didNotFind(searched: ["/x"])
+            case .prompt(let text): m.apply(.prompt(text))
+            case .send(let text): _ = m.send(text)
+            }
+        }
+        return m
+    }
+
+    struct LabelCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let steps: [Step]
+        let label: String
+        var phase: EngineSessionPhase? = nil
+        var canSend: Bool? = nil
+        var canStop: Bool? = nil
+    }
+
+    private static let loaded: [Step] = [.didStart, .ready, .loading]
+
+    static let labelCases: [LabelCase] = [
+        .init(testDescription: "composerLabels (not started)", steps: [], label: "Not started", phase: .idle),
+        .init(testDescription: "willStartShowsStarting", steps: [.willStart], label: "Starting…", phase: .starting),
+        .init(testDescription: "composerLabels (didStart)", steps: [.didStart], label: "Starting…", phase: .starting),
+        .init(testDescription: "readyMovesToRunning", steps: [.didStart, .ready], label: "Ready", phase: .running),
+        .init(testDescription: "composerLabels (loading)", steps: loaded, label: "Loading model…"),
+        .init(testDescription: "composerLabels (queued)", steps: loaded + [.send("a"), .send("b")],
+              label: "Loading model… · 2 queued"),
+        .init(testDescription: "composerLabels (ready)", steps: loaded + [.awaitingInput], label: "Ready",
+              canSend: true, canStop: false),
+        .init(testDescription: "generatingLabelComesFromComposer (working)", steps: [.didStart, .ready, .prompt("hi")],
+              label: "Working…", canSend: true, canStop: true),
+        .init(testDescription: "generatingLabelComesFromComposer",
+              steps: [.didStart, .ready, .prompt("hi"), .generating], label: "Generating…"),
+        .init(testDescription: "willQuitMovesToQuitting", steps: [.didStart, .ready, .prompt("a"), .willQuit],
+              label: "Ending…", phase: .quitting, canSend: false),
+        .init(testDescription: "composerLabels (ended)", steps: [.didStart, .ready, .willQuit, .exit], label: "ended",
+              phase: .ended(EngineExit(code: 0, message: "ended"))),
+        .init(testDescription: "composerLabels (not found)", steps: [.notFound], label: "ds4-dogfood not found",
+              phase: .notFound(["/x"])),
+    ]
+
+    @Test(arguments: labelCases) func phaseAndLabel(_ c: LabelCase) {
+        let m = Self.play(c.steps)
+        #expect(m.composer.label == c.label)
+        if let phase = c.phase { #expect(m.phase == phase) }
+        if let canSend = c.canSend { #expect(m.composer.canSend == canSend) }
+        if let canStop = c.canStop { #expect(m.composer.canStop == canStop) }
+    }
+
+    @Test(arguments: [
+        (EngineSessionPhase.quitting, true), (.starting, true), (.running, true), (.idle, false),
+        (.ended(EngineExit(code: 0, message: "ended")), false), (.notFound([]), false),
+    ]) func quittingIsActive(_ phase: EngineSessionPhase, _ active: Bool) {
+        #expect(phase.isActive == active)
+    }
+
+    struct SendCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let steps: [Step]
+        let sent: Bool
+        let pending: Int
+    }
+
+    static let sendCases: [SendCase] = [
+        .init(testDescription: "sendAcceptedWhileRunning", steps: [.didStart, .ready], sent: true, pending: 1),
+        .init(testDescription: "canSendWhileBusy (mid-turn prompt shows as queued)",
+              steps: [.didStart, .ready, .prompt("x")], sent: true, pending: 1),
+        .init(testDescription: "sendRefusedWhileQuitting", steps: [.didStart, .ready, .willQuit], sent: false,
+              pending: 0),
+    ]
+
+    @Test(arguments: sendCases) func send(_ c: SendCase) {
+        var m = Self.play(c.steps)
+        let before = m.transcript.rows
+        #expect(m.send("hi") == c.sent)
+        #expect(m.transcript.rows == (c.sent ? before + [.user("hi")] : before))
+        #expect(m.transcript.pendingUserCount == c.pending)
+    }
+
+    struct ButtonCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let steps: [Step]
+        let input: String
+        let button: ComposerButton
+    }
+
+    private static let idle: [Step] = [.didStart, .ready, .awaitingInput]
+    private static let busy: [Step] = idle + [.send("go"), .prompt("go")]
+
+    static let buttonCases: [ButtonCase] = [
+        .init(testDescription: "composerButtonStates (idle, text)", steps: idle, input: "hi",
+              button: .send(enabled: true)),
+        .init(testDescription: "composerButtonStates (idle, blank)", steps: idle, input: "  ",
+              button: .send(enabled: false)),
+        .init(testDescription: "composerButtonStates (busy, empty)", steps: busy, input: "", button: .stop),
+        .init(testDescription: "composerButtonStates (busy, text)", steps: busy, input: "more",
+              button: .send(enabled: true)),
+        .init(testDescription: "composerButtonStates (not started)", steps: [], input: "hi",
+              button: .send(enabled: false)),
+    ]
+
+    @Test(arguments: buttonCases) func composerButtonStates(_ c: ButtonCase) {
+        #expect(Self.play(c.steps).composer.button(forInput: c.input) == c.button)
+    }
+
+    // MARK: SU.7a: the current session's directory id
+
+    @Test func currentSessionIDFromResumed() {
+        var m = running()
+        m.apply(.resumed(EngineResumed(sessionID: "a", turns: [], rewoundTo: nil, filesChanged: nil, contextUsed: nil)))
+        #expect(m.currentSessionID == "a")
+        // A later pause names this process's own directory; the chain's id stays.
+        m.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1,
+                                    capturePath: "/s/sessions/c/run-1.partial.json")))
+        #expect(m.currentSessionID == "a")
+    }
+
+    @Test func currentSessionIDFromFirstPause() {
+        var m = running()
+        m.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1,
+                                    capturePath: "/s/sessions/b/run-1.partial.json")))
+        #expect(m.currentSessionID == "b")
+        m.didStart()
+        #expect(m.currentSessionID == nil)
+    }
+
+    // MARK: relaunch
+
     /// Final review, Important #1: the divider names the relaunch that ran,
     /// not the last refusal that arrived.
     @Test func dividerNamesTheExecutedRelaunch() {
@@ -50,60 +198,7 @@ struct EngineSessionModelTests {
         #expect(m.phase == .starting)
     }
 
-    @Test func willStartShowsStarting() {
-        var m = EngineSessionModel()
-        m.willStart()
-        #expect(m.phase == .starting)
-        #expect(m.composer.label == "Starting…")
-    }
-
-    @Test func readyMovesToRunning() {
-        var m = EngineSessionModel()
-        m.didStart()
-        #expect(m.phase == .starting)
-        m.apply(.ready)
-        #expect(m.phase == .running)
-    }
-
-    @Test func generatingLabelComesFromComposer() {
-        var m = running()
-        m.apply(.prompt("hi"))
-        #expect(m.composer.label == "Working…")
-        m.apply(.generating(true))
-        #expect(m.composer.label == "Generating…")
-    }
-
-    @Test func willQuitMovesToQuitting() {
-        var m = running()
-        m.willQuit()
-        #expect(m.phase == .quitting)
-    }
-
-    @Test func quittingIsActive() {
-        #expect(EngineSessionPhase.quitting.isActive)
-        #expect(EngineSessionPhase.starting.isActive)
-        #expect(EngineSessionPhase.running.isActive)
-        #expect(!EngineSessionPhase.idle.isActive)
-        #expect(!EngineSessionPhase.ended(EngineExit(code: 0, message: "ended")).isActive)
-        #expect(!EngineSessionPhase.notFound([]).isActive)
-    }
-
-    @Test func sendRefusedWhileQuitting() {
-        var m = running()
-        m.willQuit()
-        let rows = m.transcript.rows
-        let sent = m.send("hi")
-        #expect(sent == false)
-        #expect(m.transcript.rows == rows)
-    }
-
-    @Test func sendAcceptedWhileRunning() {
-        var m = running()
-        let sent = m.send("hi")
-        #expect(sent)
-        #expect(m.transcript.rows == [.user("hi")])
-        #expect(m.transcript.pendingUserCount == 1)
-    }
+    // MARK: exit
 
     @Test func busyClearsOnExit() {
         var m = running()
@@ -117,47 +212,6 @@ struct EngineSessionModelTests {
         #expect(m.transcript.rows.last == .system("exited with code 9"))
     }
 
-    @Test func composerLabels() {
-        var m = EngineSessionModel()
-        #expect(m.composer.label == "Not started")
-        m.didStart()
-        #expect(m.composer.label == "Starting…")
-        m.apply(.ready)
-        m.apply(.loading("mapping weights"))
-        #expect(m.composer.label == "Loading model…")
-        let a = m.send("a")
-        let b = m.send("b")
-        #expect(a && b)
-        #expect(m.composer.label == "Loading model… · 2 queued")
-        m.apply(.awaitingInput)
-        #expect(m.composer.label == "Ready")
-        #expect(m.composer.canSend && !m.composer.canStop)
-        m.apply(.prompt("a"))
-        #expect(m.composer.label == "Working…")
-        #expect(m.composer.canSend && m.composer.canStop)
-        m.willQuit()
-        #expect(!m.composer.canSend)
-        #expect(m.composer.label == "Ending…")
-        #expect(!m.composer.canSend)
-        let exit = EngineExit(code: 0, message: "ended")
-        m.didExit(exit, directory: nil)
-        #expect(m.composer.label == "ended")
-        var nf = EngineSessionModel()
-        nf.didNotFind(searched: ["/x"])
-        #expect(nf.composer.label == "ds4-dogfood not found")
-    }
-
-    @Test func canSendWhileBusy() {
-        var m = running()
-        m.apply(.prompt("x"))
-        #expect(m.transcript.isBusy)
-        #expect(m.composer.canSend && m.composer.canStop)
-        // A mid-turn prompt is appended and shows as queued until steering.
-        let sent = m.send("more")
-        #expect(sent)
-        #expect(m.transcript.pendingUserCount == 1)
-    }
-
     @Test func failedLaunchEndsTranscript() {
         var m = EngineSessionModel()
         m.didStart()
@@ -167,20 +221,6 @@ struct EngineSessionModelTests {
         #expect(m.phase == .ended(exit))
         #expect(!m.transcript.isBusy)
         #expect(m.transcript.loadingText == nil)
-    }
-
-    // MARK: SU.5a2 Task 1
-
-    @Test func composerButtonStates() {
-        var m = running()
-        m.apply(.awaitingInput)
-        #expect(m.composer.button(forInput: "hi") == .send(enabled: true))
-        #expect(m.composer.button(forInput: "  ") == .send(enabled: false))
-        _ = m.send("go")
-        m.apply(.prompt("go"))
-        #expect(m.composer.button(forInput: "") == .stop)
-        #expect(m.composer.button(forInput: "more") == .send(enabled: true))
-        #expect(EngineSessionModel().composer.button(forInput: "hi") == .send(enabled: false))
     }
 
     @Test func notFoundNoticeListsSearched() {

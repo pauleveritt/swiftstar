@@ -9,7 +9,7 @@ import SwiftStarKit
 /// serialized and every touched key is saved, reset to a known value before
 /// use, and restored afterward.
 @MainActor
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
+@Suite(.serialized, .integration, .tags(.integration), .timeLimit(.minutes(1)))
 struct EngineControllerTests {
     /// A standalone `models --json` fake that needs no environment variables:
     /// `EngineController.loadCatalog()` calls the loader with `environment:
@@ -40,25 +40,11 @@ struct EngineControllerTests {
     }
 
     @Test func catalogRefetchesWhenEngineUpgradedInPlace() async throws {
-        let tempPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("p30-fake-\(UUID().uuidString)").path
-        defer { try? FileManager.default.removeItem(atPath: tempPath) }
-        let callLogPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("p30-calls-\(UUID().uuidString)").path
-        defer { try? FileManager.default.removeItem(atPath: callLogPath) }
-        try writeFakeEngine(to: tempPath, callLogPath: callLogPath)
-
-        let defaults = UserDefaults.standard
-        let savedExecutable = defaults.string(forKey: DefaultsKey.executable.rawValue)
-        defaults.set(tempPath, forKey: DefaultsKey.executable.rawValue)
-        defer {
-            if let savedExecutable {
-                defaults.set(savedExecutable, forKey: DefaultsKey.executable.rawValue)
-            } else {
-                defaults.removeObject(forKey: DefaultsKey.executable.rawValue)
-            }
-        }
-
+        let script = tempPath("engine"), callLogPath = tempPath("calls")
+        defer { for p in [script, callLogPath] { try? FileManager.default.removeItem(atPath: p) } }
+        try writeFakeEngine(to: script, callLogPath: callLogPath)
+        let defaults = DefaultsScope([.executable: script])
+        defer { defaults.restore() }
         let controller = EngineController()
 
         await controller.loadCatalogIfNeeded()
@@ -70,9 +56,9 @@ struct EngineControllerTests {
         #expect(callCount(callLogPath) == 1)
 
         // "Upgrade" the engine in place: rewrite the script, bumping its mtime.
-        try writeFakeEngine(to: tempPath, callLogPath: callLogPath)
+        try writeFakeEngine(to: script, callLogPath: callLogPath)
         try FileManager.default.setAttributes(
-            [.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: tempPath)
+            [.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: script)
 
         await controller.loadCatalogIfNeeded()
         #expect(callCount(callLogPath) == 2)
@@ -121,62 +107,22 @@ struct EngineControllerTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
     }
 
-    private func argvLines(_ logPath: String) -> [[String]] {
-        ((try? String(contentsOfFile: logPath, encoding: .utf8)) ?? "")
-            .split(separator: "\n")
-            .compactMap { line -> [String]? in
-                (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String]
-            }
-    }
-
-    private func poll(timeout: Duration = .seconds(5), _ condition: () -> Bool) async {
-        let deadline = ContinuousClock.now + timeout
-        while !condition(), ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-    }
-
-    private static let realModels = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("fixtures/engine/models-real.json")
-
-    /// Runs `body` with the executable and model id defaults set, restoring both.
-    private func withDefaults(executable: String, modelID: String?, _ body: () async -> Void) async {
-        let defaults = UserDefaults.standard
-        let saved = (defaults.string(forKey: DefaultsKey.executable.rawValue),
-                     defaults.string(forKey: DefaultsKey.modelID.rawValue))
-        defaults.set(executable, forKey: DefaultsKey.executable.rawValue)
-        if let modelID { defaults.set(modelID, forKey: DefaultsKey.modelID.rawValue) }
-        else { defaults.removeObject(forKey: DefaultsKey.modelID.rawValue) }
-        defer {
-            for (key, value) in [(DefaultsKey.executable, saved.0), (DefaultsKey.modelID, saved.1)] {
-                if let value { defaults.set(value, forKey: key.rawValue) }
-                else { defaults.removeObject(forKey: key.rawValue) }
-            }
-        }
-        await body()
-    }
-
-    private func tempPath(_ name: String) -> String {
-        FileManager.default.temporaryDirectory.appendingPathComponent("en1-\(name)-\(UUID().uuidString)").path
-    }
-
     @Test func staleModelClearedBeforeSpawn() async throws {
         let script = tempPath("session"), log = tempPath("argv")
         defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
         try writeSessionFake(to: script, argvLogPath: log,
-                             models: try String(contentsOf: Self.realModels, encoding: .utf8))
-        await withDefaults(executable: script, modelID: "laguna-xs-2.1") {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            await controller.start()
-            await poll { controller.phase == .running }
-            #expect(argvLines(log).first?.contains("--model-id") == false)
-            #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "")
-            #expect(controller.transcript.rows.contains(
-                .system("laguna-xs-2.1 isn't offered by the engine; using the engine default")))
-            await controller.quit()
-        }
+                             models: try String(contentsOfFile: Fixtures.path("models-real.json"), encoding: .utf8))
+        let defaults = DefaultsScope([.executable: script, .modelID: "laguna-xs-2.1"])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.start()
+        await eventually { controller.phase == .running }
+        #expect(argvLog(log).first?.contains("--model-id") == false)
+        #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "")
+        #expect(controller.transcript.rows.contains(
+            .system("laguna-xs-2.1 isn't offered by the engine; using the engine default")))
+        await controller.quit()
     }
 
     /// Found live (EN.1 Task 7): at launch a defaults change makes the
@@ -186,184 +132,429 @@ struct EngineControllerTests {
         let script = tempPath("session"), log = tempPath("argv")
         defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
         try writeSessionFake(to: script, argvLogPath: log,
-                             models: try String(contentsOf: Self.realModels, encoding: .utf8), modelsDelay: 0.5)
-        await withDefaults(executable: script, modelID: "laguna-xs-2.1") {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            let inFlight = Task { await controller.loadCatalog() }
-            try? await Task.sleep(for: .milliseconds(50))
-            await controller.start()
-            await poll { controller.phase == .running }
-            #expect(argvLines(log).first?.contains("--model-id") == false)
-            await inFlight.value
-            await controller.quit()
-        }
+                             models: try String(contentsOfFile: Fixtures.path("models-real.json"), encoding: .utf8), modelsDelay: 0.5)
+        let defaults = DefaultsScope([.executable: script, .modelID: "laguna-xs-2.1"])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        let inFlight = Task { await controller.loadCatalog() }
+        try? await Task.sleep(for: .milliseconds(50))
+        await controller.start()
+        await eventually { controller.phase == .running }
+        #expect(argvLog(log).first?.contains("--model-id") == false)
+        await inFlight.value
+        await controller.quit()
     }
 
     @Test func startProceedsWhenCatalogFails() async throws {
         let script = tempPath("session"), log = tempPath("argv")
         defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
         try writeSessionFake(to: script, argvLogPath: log)
-        await withDefaults(executable: script, modelID: "laguna-xs-2.1") {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            await controller.start()
-            await poll { controller.phase == .running }
-            let argv = argvLines(log).first ?? []
-            #expect(argv.firstIndex(of: "--model-id").map { argv[$0 + 1] } == "laguna-xs-2.1")
-            await controller.quit()
+        let defaults = DefaultsScope([.executable: script, .modelID: "laguna-xs-2.1"])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.start()
+        await eventually { controller.phase == .running }
+        let argv = argvLog(log).first ?? []
+        #expect(argv.firstIndex(of: "--model-id").map { argv[$0 + 1] } == "laguna-xs-2.1")
+        await controller.quit()
+    }
+
+    /// Deferred from 5a2: "Starting…" shows while the model list loads, before
+    /// any spawn.
+    @Test func startShowsStartingWhileTheListLoads() async throws {
+        let script = tempPath("session"), log = tempPath("argv")
+        defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
+        try writeSessionFake(to: script, argvLogPath: log,
+                             models: try String(contentsOfFile: Fixtures.path("models-real.json"), encoding: .utf8),
+                             modelsDelay: 0.5)
+        let defaults = DefaultsScope([.executable: script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        let starting = Task { await controller.start() }
+        #expect(await eventually(within: .milliseconds(300)) { controller.composer.label == "Starting…" })
+        #expect(argvLog(log).isEmpty)
+        await starting.value
+        #expect(await eventually { controller.phase == .running })
+        await controller.quit()
+    }
+
+    // MARK: SU.6c, D1: no usable workspace
+
+    /// A temporary folder with a `.git` directory: a usable workspace.
+    private func tempRepo() throws -> String {
+        let path = tempPath("repo")
+        try FileManager.default.createDirectory(atPath: path + "/.git", withIntermediateDirectories: true)
+        return path
+    }
+
+    @Test func missingWorkspaceFallsBackToRecent() throws {
+        let repo = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        let gone = tempPath("gone")
+        let defaults = DefaultsScope([.workspace: gone, .recentWorkspaces: [gone, repo]])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        #expect(controller.workspace?.path == repo)
+        #expect(UserDefaults.standard.string(forKey: DefaultsKey.workspace.rawValue) == repo)
+    }
+
+    @Test func noWorkspaceDoesNotSpawn() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: tempPath("gone"),
+                                      .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        #expect(controller.workspace == nil)
+        await controller.start()
+        #expect(f.spawnArgv.isEmpty)
+        #expect(controller.wantsFolder)
+        #expect(controller.phase == .idle)
+        let asked = controller.transcript.rows.contains { row in
+            if case .system(let s) = row { s.hasSuffix("Choose a folder in a git repository to start.") } else { false }
         }
+        #expect(asked)
     }
 
-    private static let fixtures = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("fixtures/engine")
+    // MARK: SU.6c, D2: the last session's apply command
 
-    /// `fake-ds4-dogfood` behind a wrapper that bakes in its environment (the
-    /// controller spawns with the test process's environment, see the top of
-    /// this file): replays tool-read, resumes from resumed.ndjson, logs each
-    /// spawn's argv and each stdin line. `refuseResume` makes the relaunched
-    /// start exit 2 before `ready`.
-    private func writeFakeWrapper(
-        to path: String, spawnLog: String, inputLog: String, refuseResume: Bool = false,
-        extra: [String: String] = [:]
-    ) throws {
-        let f = Self.fixtures
-        var refuse = refuseResume ? #"case "$*" in *--resume*) export FAKE_ENGINE_REFUSE=1;; esac"# : ""
-        for (k, v) in extra.sorted(by: { $0.key < $1.key }) { refuse += "\nexport \(k)=\(v)" }
-        let script = """
-        #!/bin/sh
-        export FAKE_ENGINE_FIXTURE=\(f.appendingPathComponent("tool-read.ndjson").path)
-        export FAKE_ENGINE_RESUME_FIXTURE=\(f.appendingPathComponent("resumed.ndjson").path)
-        export FAKE_ENGINE_MODELS=\(f.appendingPathComponent("models-real.json").path)
-        export FAKE_ENGINE_SPAWN_LOG=\(spawnLog)
-        export FAKE_ENGINE_LOG=\(inputLog)
-        export FAKE_ENGINE_PACE_MS=50
-        \(refuse)
-        exec /usr/bin/env python3 \(f.appendingPathComponent("fake-ds4-dogfood").path) "$@"
-        """
-        try script.write(toFile: path, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+    @Test func lastSessionDirectoryOutlivesTheController() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .lastSessionDirectory: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        await controller.quit()
+        // The fake's exit names /tmp/fake-session ("Session artifacts:").
+        let next = EngineController()
+        #expect(next.lastSessionDirectory?.path == "/tmp/fake-session")
+        #expect(next.applyCommand == nil)  // that folder doesn't exist here
     }
 
-    private struct Fake {
-        let script: String, spawns: String, inputs: String
-        var paths: [String] { [script, spawns, inputs] }
+    /// Final review: applying during a session changes the checkout under
+    /// it (TUI.21 non-goal), so the menu item waits for the session to end.
+    @Test func copyApplyCommandWaitsForTheSessionToEnd() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let dir = tempPath("sessions") + "/20261013-000000-y"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .lastSessionDirectory: dir])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        #expect(!controller.canCopyApplyCommand)
+        await controller.quit()
+        #expect(controller.canCopyApplyCommand == (controller.applyCommand != nil))
     }
 
-    private func fake(refuseResume: Bool = false, extra: [String: String] = [:]) throws -> Fake {
-        let f = Fake(script: tempPath("wrapper"), spawns: tempPath("spawns"), inputs: tempPath("inputs"))
-        try writeFakeWrapper(
-            to: f.script, spawnLog: f.spawns, inputLog: f.inputs, refuseResume: refuseResume, extra: extra)
-        return f
+    @Test func applyCommandNeedsAnExistingDirectory() throws {
+        let dir = tempPath("sessions") + "/20261013-000000-x"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let defaults = DefaultsScope([.lastSessionDirectory: dir])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        #expect(controller.applyCommand == "ds4-dogfood apply 20261013-000000-x")
+        try FileManager.default.removeItem(atPath: dir)
+        #expect(controller.applyCommand == nil)
+    }
+
+    // MARK: SU.7a: conversations and resume
+
+    private static let fixtureConversations: [Conversation] = {
+        let data = (try? Data(contentsOf: Fixtures.root.appendingPathComponent("sessions.json"))) ?? Data()
+        return Conversations.group((try? EngineSessionEntry.decodeList(data).get()) ?? [])
+    }()
+
+    /// The newest resumable conversation in the fixture.
+    private var resumable: Conversation { Self.fixtureConversations.first { $0.resumable }! }
+
+    @Test func conversationsLoadForTheWorkspace() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let repo = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: repo])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        await controller.reloadConversations()
+        #expect(controller.conversations.map(\.id) == Self.fixtureConversations.map(\.id))
+    }
+
+    @Test func resumeSpawnsResumeArgv() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        let c = resumable
+        await controller.resume(c)
+        let spawned = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(spawned)
+        let root = FileManager.default.temporaryDirectory
+        #expect(f.spawnArgv.last == EngineCommand.resumeArguments(id: c.id, source: root))
+        #expect(controller.transcript.rows.first == .divider("Resumed session \(c.id)"))
+        await controller.quit()
+    }
+
+    @Test func resumeAsksMidTurn() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        #expect(!controller.resumeNeedsConfirmation)
+        controller.send("Use the read tool on Package.swift")
+        let busy = await eventually { controller.transcript.isBusy }
+        #expect(busy)
+        #expect(controller.resumeNeedsConfirmation)
+        await controller.quit()
+    }
+
+    @Test func resumingTheCurrentConversationDoesNothing() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        await controller.reloadConversations()
+        let c = resumable
+        await controller.resume(c)
+        let resumed = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(resumed)
+        #expect(controller.currentConversationID == c.id)
+        await controller.resume(c)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(f.spawnArgv.count == 2)
+        await controller.quit()
+    }
+
+    /// Final review: after Quit nothing is current, so the conversation just
+    /// ended can be resumed again.
+    @Test func endedConversationCanBeResumedAgain() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        await controller.reloadConversations()
+        let c = resumable
+        await controller.resume(c)
+        let resumed = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(resumed)
+        await controller.quit()
+        #expect(controller.currentConversationID == nil)
+        await controller.resume(c)
+        let again = await eventually(within: .seconds(10)) { f.spawnArgv.count == 3 }
+        #expect(again)
+        await controller.quit()
+    }
+
+    @Test func resumeIgnoredWhileStarting() async throws {
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_MODELS_SLEEP_MS": "500"])
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        let starting = Task { await controller.start() }
+        let isStarting = await eventually { controller.phase == .starting }
+        #expect(isStarting)
+        await controller.resume(resumable)
+        await starting.value
+        let up = await eventually { controller.phase == .running }
+        #expect(up)
+        #expect(f.spawnArgv.count == 1)
+        #expect(f.spawnArgv.first?.contains("--resume") == false)
+        await controller.quit()
+    }
+
+    @Test func staleListIsDropped() async throws {
+        let f = try FakeEngine(sessions: "sessions.json", extra: ["FAKE_ENGINE_SESSIONS_SLEEP_MS": "500"])
+        defer { f.remove() }
+        let a = try tempRepo(), b = try tempRepo()
+        defer { for p in [a, b] { try? FileManager.default.removeItem(atPath: p) } }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: a])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        let loading = Task { await controller.reloadConversations() }
+        try? await Task.sleep(for: .milliseconds(150))
+        controller.workspace = URL(fileURLWithPath: b)
+        await loading.value
+        #expect(controller.conversations.isEmpty)
+    }
+
+    @Test func sessionListUnavailableIsANote() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.reloadConversations()
+        #expect(controller.conversations.isEmpty)
+        await controller.start()
+        let up = await eventually { controller.phase == .running }
+        #expect(up)
+        let notes = controller.transcript.rows.filter { row in
+            if case .system(let s) = row { s.hasPrefix("Session list unavailable") } else { false }
+        }
+        #expect(notes.count == 1)
+        await controller.quit()
+    }
+
+    @Test func conversationsReloadAfterExit() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        #expect(controller.conversations.isEmpty)
+        await controller.quit()
+        let reloaded = await eventually { !controller.conversations.isEmpty }
+        #expect(reloaded)
+    }
+
+    @Test func refusedResumeShowsTheHint() async throws {
+        let f = try FakeEngine(sessions: "sessions.json", refuseResume: true)
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        let c = resumable
+        await controller.resume(c)
+        let ended = await eventually(within: .seconds(10)) {
+            if case .ended = controller.phase { true } else { false } }
+        #expect(ended)
+        let hint = "Its files can still be recovered by starting a new conversation from it in Terminal: "
+            + "`ds4-dogfood tui --resume \(c.id) --new-conversation`"
+        #expect(controller.transcript.rows.last == .system(hint))
     }
 
     /// A started controller whose session is idle at its first `input`.
-    private func running(_ f: Fake, graces: EngineGraces = .standard) async -> EngineController {
+    private func running(_ f: FakeEngine, graces: EngineGraces = .standard) async -> EngineController {
         let controller = EngineController(graces: graces)
         controller.workspace = FileManager.default.temporaryDirectory
         await controller.start()
-        await poll { controller.phase == .running && controller.composer.canSend && !controller.transcript.isBusy
+        await eventually { controller.phase == .running && controller.composer.canSend && !controller.transcript.isBusy
             && controller.transcript.isAwaitingInput }
         return controller
     }
 
     @Test func rewindRelaunches() async throws {
-        let f = try fake()
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let controller = await running(f)
-            controller.send("/rewind 1")
-            await poll(timeout: .seconds(15)) {
-                argvLines(f.spawns).count == 2 && controller.transcript.isAwaitingInput }
-            let spawns = argvLines(f.spawns)
-            #expect(spawns.count == 2)
-            let source = spawns.first.flatMap { a in a.firstIndex(of: "--source").map { a[$0 + 1] } } ?? "?"
-            #expect(spawns.last == ["tui", "--resume", "/tmp/fake-ds4-session", "--source", source,
-                                    "--rewind-to", "1", "--ndjson"])
-            #expect(controller.transcript.rows.first == .divider("Rewound to prompt 1"))
-            await controller.quit()
-        }
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.send("/rewind 1")
+        await eventually(within: .seconds(15)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        let spawns = f.spawnArgv
+        #expect(spawns.count == 2)
+        let source = spawns.first.flatMap { a in a.firstIndex(of: "--source").map { a[$0 + 1] } } ?? "?"
+        #expect(spawns.last == ["tui", "--resume", "/tmp/fake-ds4-session", "--source", source,
+                                "--rewind-to", "1", "--ndjson"])
+        #expect(controller.transcript.rows.first == .divider("Rewound to prompt 1"))
+        await controller.quit()
     }
 
     @Test func modelMenuSendsModelCommand() async throws {
-        let f = try fake()
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let controller = await running(f)
-            controller.select(modelID: "qwen3.8-flash-next")
-            await poll(timeout: .seconds(15)) {
-                argvLines(f.spawns).count == 2 && controller.transcript.isAwaitingInput }
-            let prompts = ((try? String(contentsOfFile: f.inputs, encoding: .utf8)) ?? "")
-                .split(separator: "\n")
-                .compactMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
-                .compactMap { $0["text"] as? String }
-            #expect(prompts.contains("/model qwen3.8-flash-next"))
-            #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "qwen3.8-flash-next")
-            #expect(controller.transcript.rows.first
-                == .divider("Switched to qwen3.8-flash-next: new conversation, files kept"))
-            await controller.quit()
-        }
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.select(modelID: "qwen3.8-flash-next")
+        await eventually(within: .seconds(15)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        let prompts = f.prompts
+        #expect(prompts.contains("/model qwen3.8-flash-next"))
+        #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "qwen3.8-flash-next")
+        #expect(controller.transcript.rows.first
+            == .divider("Switched to qwen3.8-flash-next: new conversation, files kept"))
+        await controller.quit()
     }
 
     @Test func modelMenuIdleRestartsFresh() async throws {
-        let f = try fake()
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            controller.select(modelID: "qwen3.8-flash-next")
-            #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "qwen3.8-flash-next")
-            await controller.start()
-            await poll { controller.phase == .running }
-            let argv = argvLines(f.spawns).first ?? []
-            #expect(argv.firstIndex(of: "--model-id").map { argv[$0 + 1] } == "qwen3.8-flash-next")
-            #expect(argv.firstIndex(of: "--commit").map { argv[$0 + 1] } == "HEAD")
-            await controller.quit()
-        }
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        controller.select(modelID: "qwen3.8-flash-next")
+        #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "qwen3.8-flash-next")
+        await controller.start()
+        await eventually { controller.phase == .running }
+        let argv = f.spawnArgv.first ?? []
+        #expect(argv.firstIndex(of: "--model-id").map { argv[$0 + 1] } == "qwen3.8-flash-next")
+        #expect(argv.firstIndex(of: "--commit").map { argv[$0 + 1] } == "HEAD")
+        await controller.quit()
     }
 
     @Test func relaunchRefusedEndsCleanly() async throws {
-        let f = try fake(refuseResume: true)
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let controller = await running(f)
-            controller.send("Use the read tool on Package.swift")
-            await poll(timeout: .seconds(10)) {
-                controller.transcript.isAwaitingInput
-                    && controller.transcript.rows.contains { if case .answer = $0 { true } else { false } }
-            }
-            controller.send("/rewind 1")
-            await poll(timeout: .seconds(15)) {
-                if argvLines(f.spawns).count == 2, case .ended = controller.phase { return true }
-                return false
-            }
-            guard case .ended(let exit) = controller.phase else {
-                Issue.record("not ended: \(controller.phase)"); return
-            }
-            #expect(exit.message == "refused to start: ds4-dogfood tui: error: no model on this Mac")
-            // The conversation and the old session's pointer stay on screen.
-            #expect(controller.transcript.rows.contains { if case .answer = $0 { true } else { false } })
-            #expect(controller.transcript.rows.contains {
-                if case .system(let s) = $0 { s.hasPrefix("Session: ") } else { false } })
-            #expect(controller.transcript.rows.last == .system(exit.message))
+        let f = try FakeEngine(refuseResume: true)
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.send("Use the read tool on Package.swift")
+        await eventually(within: .seconds(10)) {
+            controller.transcript.isAwaitingInput
+                && controller.transcript.rows.contains { if case .answer = $0 { true } else { false } }
         }
+        controller.send("/rewind 1")
+        await eventually(within: .seconds(15)) {
+            if f.spawnArgv.count == 2, case .ended = controller.phase { return true }
+            return false
+        }
+        guard case .ended(let exit) = controller.phase else {
+            Issue.record("not ended: \(controller.phase)"); return
+        }
+        #expect(exit.message == "refused to start: ds4-dogfood tui: error: no model on this Mac")
+        // The conversation and the old session's pointer stay on screen.
+        #expect(controller.transcript.rows.contains { if case .answer = $0 { true } else { false } })
+        #expect(controller.transcript.rows.contains {
+            if case .system(let s) = $0 { s.hasPrefix("Session: ") } else { false } })
+        #expect(controller.transcript.rows.last == .system(exit.message))
     }
 
     @Test func relaunchIgnoredWhileTerminating() async throws {
-        let f = try fake()
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let controller = await running(f)
-            controller.beginTerminating()
-            controller.send("/rewind 1")
-            await poll(timeout: .seconds(10)) {
-                if case .ended = controller.phase { return true }
-                return false
-            }
-            try? await Task.sleep(for: .milliseconds(300))
-            #expect(argvLines(f.spawns).count == 1)
-        }
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.beginTerminating()
+        controller.send("/rewind 1")
+        #expect(await eventually { f.prompts.contains("/rewind 1") })
+        // Ignored outright: no quit, and no second spawn.
+        let respawned = await eventually(within: .seconds(1)) { f.spawnArgv.count > 1 }
+        #expect(!respawned)
+        #expect(controller.phase == .running)
+        await controller.quit()
+    }
+
+    /// Deferred from 5a1: a relaunch whose quit hit the safety bound must not
+    /// start a second engine beside one that may still hold the GPU.
+    @Test func relaunchSkippedWhenQuitHitTheBound() async throws {
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let graces = EngineGraces(
+            stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(1), safetyBound: .milliseconds(400))
+        let controller = await running(f, graces: graces)
+        controller.send("/rewind 1")
+        #expect(await eventually(within: .seconds(3)) {
+            controller.transcript.rows.contains(.system("Relaunch skipped: the engine did not exit.")) })
+        #expect(f.spawnArgv.count == 1)
     }
 
     // MARK: SU.5a1 Task 6
@@ -371,20 +562,20 @@ struct EngineControllerTests {
     /// Audit B4: when even the safety bound passes, the session is ended, so
     /// the app is not left at "Ending…" with Start disabled.
     @Test func quitBoundEndsTheSession() async throws {
-        let f = try fake(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let graces = EngineGraces(
-                stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(3), safetyBound: .milliseconds(500))
-            let controller = await running(f, graces: graces)
-            await controller.quit()
-            await poll(timeout: .seconds(2)) { if case .ended = controller.phase { true } else { false } }
-            guard case .ended(let exit) = controller.phase else { Issue.record("phase \(controller.phase)"); return }
-            #expect(exit.message == "the engine did not exit after quit; it may still be running")
-            #expect(!controller.isActive)
-            try? await Task.sleep(for: .seconds(4))  // the old session's SIGKILL lands; nothing changes
-            #expect(controller.transcript.rows.last == .system(exit.message))
-        }
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let graces = EngineGraces(
+            stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(1), safetyBound: .milliseconds(500))
+        let controller = await running(f, graces: graces)
+        await controller.quit()
+        await eventually(within: .seconds(2)) { if case .ended = controller.phase { true } else { false } }
+        guard case .ended(let exit) = controller.phase else { Issue.record("phase \(controller.phase)"); return }
+        #expect(exit.message == "the engine did not exit after quit; it may still be running")
+        #expect(!controller.isActive)
+        try? await Task.sleep(for: .seconds(1.5))  // past the old session's SIGKILL; nothing changes
+        #expect(controller.transcript.rows.last == .system(exit.message))
     }
 
     @Test func fixtureStartStaysIdle() async {
@@ -400,36 +591,33 @@ struct EngineControllerTests {
         defer { for p in [a, aLog, b, bLog] { try? FileManager.default.removeItem(atPath: p) } }
         try writeFakeEngine(to: a, callLogPath: aLog)
         try writeFakeEngine(to: b, callLogPath: bLog)
-        await withDefaults(executable: a, modelID: nil) {
-            let controller = EngineController()
-            await controller.loadCatalogIfNeeded()
-            controller.select(modelID: "x")
-            controller.select(contextSize: 4096)
-            try? await Task.sleep(for: .milliseconds(300))
-            #expect(callCount(aLog) == 1)
-            UserDefaults.standard.set(b, forKey: DefaultsKey.executable.rawValue)
-            await poll { callCount(bLog) == 1 }
-            #expect(callCount(bLog) == 1)
-            UserDefaults.standard.removeObject(forKey: DefaultsKey.contextSize.rawValue)
-        }
+        let defaults = DefaultsScope([.executable: a, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        await controller.loadCatalogIfNeeded()
+        controller.select(modelID: "x")
+        controller.select(contextSize: 4096)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(callCount(aLog) == 1)
+        UserDefaults.standard.set(b, forKey: DefaultsKey.executable.rawValue)
+        await eventually { callCount(bLog) == 1 }
+        #expect(callCount(bLog) == 1)
+        UserDefaults.standard.removeObject(forKey: DefaultsKey.contextSize.rawValue)
     }
 
     @Test func secondModelPickWhilePendingIsRefused() async throws {
-        let f = try fake()
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let controller = await running(f)
-            controller.select(modelID: "qwen3.8-flash-next")
-            controller.select(modelID: "qwen3.8-27b")
-            #expect(controller.transcript.rows.contains(.system("A model switch is already pending.")))
-            await poll(timeout: .seconds(15)) { argvLines(f.spawns).count == 2 && controller.transcript.isAwaitingInput }
-            let prompts = ((try? String(contentsOfFile: f.inputs, encoding: .utf8)) ?? "")
-                .split(separator: "\n")
-                .compactMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
-                .compactMap { $0["text"] as? String }
-            #expect(prompts.filter { $0.hasPrefix("/model") } == ["/model qwen3.8-flash-next"])
-            await controller.quit()
-        }
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.select(modelID: "qwen3.8-flash-next")
+        controller.select(modelID: "qwen3.8-27b")
+        #expect(controller.transcript.rows.contains(.system("A model switch is already pending.")))
+        await eventually(within: .seconds(15)) { f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        let prompts = f.prompts
+        #expect(prompts.filter { $0.hasPrefix("/model") } == ["/model qwen3.8-flash-next"])
+        await controller.quit()
     }
 
     // MARK: 5a1 final review
@@ -440,93 +628,82 @@ struct EngineControllerTests {
         let script = tempPath("session"), log = tempPath("argv")
         defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
         try writeSessionFake(to: script, argvLogPath: log)
-        await withDefaults(executable: script, modelID: nil) {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            await controller.start()
-            await poll { controller.phase == .running }
-            #expect(controller.transcript.rows.contains {
-                if case .system(let s) = $0 { s.hasPrefix("Model list unavailable") } else { false } })
-            await controller.quit()
-        }
+        let defaults = DefaultsScope([.executable: script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.start()
+        await eventually { controller.phase == .running }
+        #expect(controller.transcript.rows.contains {
+            if case .system(let s) = $0 { s.hasPrefix("Model list unavailable") } else { false } })
+        await controller.quit()
     }
 
     /// After the safety bound, a restart (menu pick) must not start a second
     /// engine beside one that may still hold the GPU; a deliberate Start does.
     @Test func restartAfterQuitBoundIsSkippedButStartWorks() async throws {
-        let f = try fake(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let graces = EngineGraces(
-                stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(2), safetyBound: .milliseconds(500))
-            let controller = await running(f, graces: graces)
-            await controller.quit()
-            await controller.restart()
-            #expect(argvLines(f.spawns).count == 1)
-            #expect(controller.transcript.rows.contains {
-                if case .system(let s) = $0 { s.hasPrefix("Restart skipped") } else { false } })
-            try? await Task.sleep(for: .seconds(3))  // the old engine's SIGKILL lands
-            await controller.start()
-            await poll { controller.phase == .running && controller.transcript.isAwaitingInput }
-            #expect(argvLines(f.spawns).count == 2)
-            controller.select(modelID: "qwen3.8-flash-next")
-            #expect(!controller.transcript.rows.contains(.system("A model switch is already pending.")))
-            // This fake ignores quit and SIGTERM: wait out the SIGKILL, or it
-            // outlives the test run.
-            await controller.quit()
-            try? await Task.sleep(for: .seconds(3))
-        }
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let graces = EngineGraces(
+            stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(1), safetyBound: .milliseconds(500))
+        let controller = await running(f, graces: graces)
+        await controller.quit()
+        await controller.restart()
+        #expect(f.spawnArgv.count == 1)
+        #expect(controller.transcript.rows.contains {
+            if case .system(let s) = $0 { s.hasPrefix("Restart skipped") } else { false } })
+        try? await Task.sleep(for: .seconds(1.5))  // past the old engine's SIGKILL
+        await controller.start()
+        await eventually { controller.phase == .running && controller.transcript.isAwaitingInput }
+        #expect(f.spawnArgv.count == 2)
+        controller.select(modelID: "qwen3.8-flash-next")
+        #expect(!controller.transcript.rows.contains(.system("A model switch is already pending.")))
+        await controller.quit()  // this fake ignores quit and SIGTERM; f.remove() ends it
     }
 
     // MARK: AN.2, analyze and done
 
-    private func prompts(_ f: Fake) -> [String] {
-        ((try? String(contentsOfFile: f.inputs, encoding: .utf8)) ?? "")
-            .split(separator: "\n")
-            .compactMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
-            .compactMap { $0["text"] as? String }
-    }
-
     /// Running, one prompt answered, so a checkpoint has named the directory.
-    private func answered(_ f: Fake) async -> EngineController {
+    private func answered(_ f: FakeEngine) async -> EngineController {
         let controller = await running(f)
         controller.send("Read a file")
-        await poll(timeout: .seconds(10)) {
+        await eventually(within: .seconds(10)) {
             controller.transcript.isAwaitingInput && !controller.transcript.isBusy && controller.model.canAnalyze }
         return controller
     }
 
     @Test func analyzeForksThenSendsPrompt() async throws {
-        let f = try fake()
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let controller = await answered(f)
-            #expect(controller.model.canAnalyze)
-            controller.reportLoader = { _ in .success("R-REPORT") }
-            await controller.analyze()
-            await poll(timeout: .seconds(15)) { prompts(f).contains { $0.contains("R-REPORT") } }
-            let spawns = argvLines(f.spawns)
-            #expect(spawns.count == 2)
-            #expect(spawns.last?.contains("--resume") == true)
-            #expect(controller.transcript.rows.contains(.report("R-REPORT")))
-            #expect(prompts(f).contains { $0.contains("R-REPORT") })
-            await controller.quit()
-        }
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await answered(f)
+        #expect(controller.model.canAnalyze)
+        controller.reportLoader = { _ in .success("R-REPORT") }
+        await controller.analyze()
+        await eventually(within: .seconds(15)) { f.prompts.contains { $0.contains("R-REPORT") } }
+        #expect(f.spawnArgv.count == 2)
+        #expect(f.spawnArgv.last?.contains("--resume") == true)
+        #expect(controller.transcript.rows.contains(.report("R-REPORT")))
+        #expect(f.prompts.contains { $0.contains("R-REPORT") })
+        await controller.quit()
     }
 
     @Test func analyzeFailureDoesNotFork() async throws {
-        let f = try fake()
-        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
-        await withDefaults(executable: f.script, modelID: nil) {
-            let controller = await answered(f)
-            controller.reportLoader = { _ in .failure(SessionReportFailure(message: "boom")) }
-            await controller.analyze()
-            #expect(argvLines(f.spawns).count == 1)
-            #expect(controller.transcript.rows.contains {
-                if case .error(let s) = $0 { s.contains("boom") } else { false } })
-            #expect(controller.model.analysis == nil)
-            #expect(controller.composer.canSend)
-            await controller.quit()
-        }
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await answered(f)
+        controller.reportLoader = { _ in .failure(SessionReportFailure(message: "boom")) }
+        await controller.analyze()
+        #expect(f.spawnArgv.count == 1)
+        #expect(controller.transcript.rows.contains {
+            if case .error(let s) = $0 { s.contains("boom") } else { false } })
+        #expect(controller.model.analysis == nil)
+        #expect(controller.composer.canSend)
+        await controller.quit()
     }
 }

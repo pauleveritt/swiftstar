@@ -10,5 +10,7 @@ struct DefaultsKeyTests {
         #expect(DefaultsKey.recentWorkspaces.rawValue == "recentWorkspaces")
         #expect(DefaultsKey.inspectorPresented.rawValue == "appShellInspectorPresented")
         #expect(DefaultsKey.transcriptFontSize.rawValue == "transcriptFontSize")
+        #expect(DefaultsKey.lastSessionDirectory.rawValue == "lastSessionDirectory")
+        #expect(DefaultsKey.sidebarVisible.rawValue == "sidebarVisible")
     }
 }

@@ -7,8 +7,8 @@
 
 ## Now
 
-- **Next:** SU.5b (test consolidation; plan not written), then SU.6 and SU.7.
-- **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed). AN.2 is done on branch `session-last`; the owner's app click-through is open.
+- **Next:** SU.7b (switching projects), or a last SU.6 part for its remaining punch list.
+- **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -48,34 +48,31 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.2 | Testable view logic | Move view-adjacent logic into Kit, with tests | done 2026-10-03: [spec](docs/superpowers/specs/2026-10-03-su2-testable-view-logic-design.md), [plan](docs/superpowers/plans/2026-10-03-su2-testable-view-logic.md) |
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
-| SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | 5a done 2026-10-13: [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), each with its Result. Next 5b (tests). [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
-| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | not brainstormed |
-| SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
+| SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
+| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6d, 6a, 6b and 6c done 2026-10-13: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md), [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md), [6b](docs/superpowers/plans/2026-10-13-su6b-session-card.md), [6c](docs/superpowers/plans/2026-10-13-su6c-remembering.md). The punch list below waits |
+| SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | 7a done 2026-10-13: a sidebar of this project's conversations; clicking one resumes it. [Spec](docs/superpowers/specs/2026-10-13-su7a-sessions-and-resume-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-su7a-sessions-and-resume.md). Next 7b (switching); more than one window (7c) waits on the engine |
 
 ### SU.6 punch list
 
-- **Markdown:** a native renderer, or keep the pinned `MarkdownView` fork. A
-  native renderer drops 7 packages but needs a block renderer.
-- **Metrics:**
-  - per-pause deltas, with the cumulative rate labelled "session avg"
-  - a prefill rate that leaves out prefix-cache tokens
+- **Metrics:** label Throughput's averages "session avg", since the engine's
+  counters run over the whole process (SU.6b). Per-pause and per-prompt
+  rates belong to phase AN's report.
 - **Engine information worth showing:**
-  - DFlash and start-up timings: `session.dflash`, `prefix_cache`,
-    `candidate_ready`
+  - start-up timings: `candidate_ready`, `index_primed`
   - the engine's stderr start notices
   - model sizes from `plan_gib` and `size_bytes`; drop the catalog fields
     the engine never sends
-- **Copy:**
-  - "Queued" only for rows the engine confirmed
-  - the old "agent" wording ("Ask the agent…", the "Agent" title)
 - **Native look:** Liquid Glass affordances; `NativeTooltip` checked against
   plain `.help`.
-- **The 27B's two texts:** the narration is the full reply and `answer` is
-  `finish`'s one-line summary (EN.1, D4). Show the narration as the answer
-  body, with the summary under it.
-- **Remembering:** the apply command kept across sessions; a first-launch
-  workspace, and a saved workspace that no longer exists (seen 2026-10-13: it
-  pointed at a deleted worktree, so every start was refused).
+- **Left from SU.5a** (each plan's Result):
+  - rate, duration, the status line and the ctx label ignore the locale; the
+    inspector mixes GB and GiB
+  - the model-list loader sleeps 1 s on every timeout, and waits out the
+    whole timeout when a grandchild holds its pipe
+  - the recorder can pair a new `resumed.ndjson` with an old
+    `relaunch-rewind.ndjson`, and leaves a `.tmp` on an exception
+  - `clamp`'s doc comment sits on `slot(for:)`; two comments still describe
+    the toolbar font
 
 ## Backlog
 
@@ -99,9 +96,9 @@ Deferred, each with the condition that reopens it.
   adds a spawn-time tool-policy flag worth a Settings control.*
 - **The catalog loader's pid-reuse window.** There is a small window before
   SIGKILL in which the pid could be reused. *Reopens if seen live.*
-- **SU.3's leftovers.** An Xcode Debug run with the memory widget toggling
-  is still unverified. The missing fixture-controller `start()` test lands
-  in SU.5a. *Reopens: the crash, if a Debug run shows it.*
+- **SU.3's leftover.** An Xcode Debug run with the memory widget toggling
+  is still unverified (its `start()` test landed in SU.5a1). *Reopens: the
+  crash, if a Debug run shows it.*
 
 ### Engine requests
 
@@ -112,8 +109,13 @@ there.
   Look opens the checkout's copy, not the edited one.
 - **`models --json` sends no `default_model_id`.** So "Engine default"
   can't name the model it means.
-- **Prefix-cache hits count as prefilled tokens.** This inflates the
-  per-pause prefill rate (`operator_telemetry.py:100-113`).
+- **`prefill_tokens` isn't prefill.** It's the transcript length minus evals
+  (`operator_telemetry.py:101-113`), so tokens the engine didn't prefill
+  count as prefilled:
+  - A prefix-cache hit's tokens. Since SU.6b, SwiftStar leaves those out.
+  - A resumed conversation's loaded KV. Session `160812` read about 106,700
+    tok/s.
+  - After `/clear` or a compaction, the count collapses.
 - **A `files --json` command,** for the `@` picker above.
 - **A second `/rewind` in a rewound session goes wrong** (live, 2026-10-13,
   sessions `20261013-121126` and `-121133`). In a session resumed with
@@ -125,6 +127,9 @@ there.
   and `-153456`, suffix `-session-last`): `rewound_to 0`, and the resumed
   turns included a prompt the first rewind had removed. It stopped AN.2's
   first attempt; the second avoids `/rewind`. Filed as [ds4-engine#219](https://github.com/pauleveritt/ds4-engine/issues/219).
+- **`resumed.turns` carries no narration.** So a 27B turn rebuilt after a
+  rewind or resume shows only its one-line summary, not the full reply
+  (SU.6a).
 - **Watch, not a request: the Satyrn rename.** `ds4-dogfood` and the
   `~/.local/state/ds4-engine` paths may be renamed. SwiftStar would need to
   change `EngineCommand.executableName`, and probing both names is the
@@ -139,15 +144,28 @@ found by the [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-an
 
 ### Process
 
+- **Integration runs in two worktrees at once interfere.** Both use the test
+  runner's `UserDefaults` domain (seen in SU.6c, alongside `session-last`).
+  *Reopens if parallel runs become routine. The fix is a per-run defaults
+  suite, injected into `EngineController`.*
 - **SU.1's window-close-quits live check covered idle only, not mid-turn.**
   The `quit()` mid-turn path is unit-tested. *Reopens when the GPU is free
   for a live run.*
+
+- **Swift 6.4 closure identities in tests.** A closure inside `#expect(...)`
+  and a same-typed sibling in one enclosing closure can run each other's
+  body (SU.5b), so test bodies stay at function level. *Reopens when a
+  toolchain fixes it; worth a minimal report to swiftlang.*
 
 ### Declined
 
 - **A menu-bar extra** (2026-08-21). *Reopens only on a direct request.*
 - **A docs site, P14** (2026-10-13). Markdown in the repository is the
   reader surface.
+- **A native Markdown renderer** (2026-10-13, [SU.6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md)).
+  Every native option loses syntax colour, and a SwiftUI one also loses
+  selection across an answer. *Reopens if the fork breaks on a toolchain
+  bump, a crash traces to it, or a patch re-base is due.*
 
 ## History
 

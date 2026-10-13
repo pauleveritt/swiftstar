@@ -61,9 +61,19 @@ public struct EngineWireParser: Sendable {
     private static func decode(_ e: [String: Any], kind: String, locale: Locale) -> EngineEvent {
         switch kind {
         case "session":
+            let d = e["dflash"] as? [String: Any]
             return .session(EngineSessionInfo(
                 modelID: e["model_id"] as? String,
-                contextSize: int(e["context_size"])))
+                contextSize: int(e["context_size"]),
+                dflash: (d?["on"] as? Bool).map {
+                    EngineDFlash(on: $0, reason: d?["reason"] as? String ?? "", drafter: d?["drafter"] as? String)
+                }))
+        case "prefix_cache":
+            return .prefixCache(EnginePrefixCache(
+                outcome: e["outcome"] as? String ?? "",
+                tokens: int(e["prefix_tokens"]),
+                loadMs: double(e["load_ms"]),
+                fillMs: double(e["fill_ms"])))
         case "prompt":
             return .prompt(e["text"] as? String ?? "")
         case "narration":

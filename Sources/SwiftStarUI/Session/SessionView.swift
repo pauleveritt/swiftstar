@@ -26,7 +26,7 @@ struct SessionView: View {
             Divider()
             StatusBarView(phase: controller.phase, composerLabel: controller.composer.label, metrics: controller.metrics)
         }
-        .navigationTitle("Agent")
+        .navigationTitle(WindowTitle.text(workspace: controller.workspace))
         .toolbar {
             SessionToolbar(
                 askingModel: $askingModel, askingContext: $askingContext,
@@ -39,6 +39,20 @@ struct SessionView: View {
         .task {
             if controller.phase == .idle { await controller.start() }
             else { await controller.loadCatalogIfNeeded() }
+        }
+        // No usable workspace (SU.6c, D1): ask for one, and start in it.
+        // The modal panel runs on a later main-actor turn, not inside
+        // SwiftUI's update of `.onChange` (final review).
+        .onChange(of: controller.wantsFolder) { _, wants in
+            guard wants else { return }
+            Task { @MainActor in
+                if let url = WorkspacePicker.run(from: controller.workspace) {
+                    controller.select(workspace: url)
+                    await controller.start()
+                } else {
+                    controller.folderPickerDismissed()
+                }
+            }
         }
         .alert("Other model", isPresented: $askingModel) {
             TextField("Model id", text: $entry)

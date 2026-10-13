@@ -18,6 +18,12 @@ struct SwiftStarApp: App {
         }
         .commands {
             ToolbarCommands()
+            // SU.6c, D2: the last session's apply command, one click away.
+            CommandMenu("Session") {
+                Button("Copy Apply Command") { engine.copyApplyCommand() }
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                    .disabled(!engine.canCopyApplyCommand)
+            }
         }
         .defaultSize(width: 900, height: 640)
         .restorationBehavior(.disabled)

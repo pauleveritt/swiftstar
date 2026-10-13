@@ -144,13 +144,7 @@ struct SessionToolbar: ToolbarContent {
     }
 
     private func pickWorkspace() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = controller.workspace
-        panel.message = "Choose a folder in the git repository the engine should work on"
-        if panel.runModal() == .OK, let url = panel.url {
+        if let url = WorkspacePicker.run(from: controller.workspace) {
             controller.select(workspace: url)
         }
     }

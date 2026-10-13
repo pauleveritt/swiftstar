@@ -39,6 +39,20 @@ public enum MetricsFormatting {
         gib(Double(bytes) / 1_073_741_824, locale: locale)
     }
 
+    /// The Session card's prefix-cache line: "hit · 944 tokens in 20 ms",
+    /// "miss · 944 tokens filled in 3.9s", or the engine's word and the count.
+    public static func prefixCacheLine(_ p: EnginePrefixCache, locale: Locale = .current) -> String {
+        let tokens = p.tokens.map { " · \(number($0, locale: locale)) tokens" } ?? ""
+        switch p.outcome {
+        case "hit":
+            return "hit\(tokens)" + (p.loadMs.map { " in \(Int($0.rounded())) ms" } ?? "")
+        case "miss":
+            return "miss\(tokens)" + (p.fillMs.map { " filled in \(duration(seconds: $0 / 1000))" } ?? "")
+        default:
+            return "\(p.outcome)\(tokens)"
+        }
+    }
+
     /// One style for every duration: tenths under ten seconds, whole seconds
     /// from there ("1.8s", "75s").
     public static func duration(seconds: Double) -> String {

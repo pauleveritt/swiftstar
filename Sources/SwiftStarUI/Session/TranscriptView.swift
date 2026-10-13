@@ -20,7 +20,7 @@ struct TranscriptView: View {
                 // stable identity for a row's whole lifetime.
                 ForEach(Array(transcript.rows.enumerated()), id: \.offset) { index, row in
                     TranscriptRowView(
-                        row: row, queued: transcript.isPending(rowAt: index), source: source,
+                        row: row, queued: transcript.isQueued(rowAt: index), source: source,
                         analyze: index == lastAnswer ? analyze : nil)
                         .modifier(AnalysisRule(active: analysisFirstRow.map { index >= $0 } ?? false))
                 }

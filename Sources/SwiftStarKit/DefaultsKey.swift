@@ -9,4 +9,8 @@ public enum DefaultsKey: String, Sendable {
     case recentWorkspaces = "recentWorkspaces"
     case inspectorPresented = "appShellInspectorPresented"
     case transcriptFontSize = "transcriptFontSize"
+    /// The most recent ended session's directory (SU.6c, D2).
+    case lastSessionDirectory = "lastSessionDirectory"
+    /// The conversation sidebar is shown (SU.7a).
+    case sidebarVisible = "sidebarVisible"
 }

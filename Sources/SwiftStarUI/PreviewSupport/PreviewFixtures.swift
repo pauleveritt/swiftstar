@@ -12,7 +12,9 @@ extension EngineController {
     /// A running session, mid-conversation: one answered turn with a tool
     /// call, metrics populated, awaiting the next prompt.
     static var previewRunning: EngineController {
-        EngineController(model: runningModel(withGPU: true))
+        EngineController(
+            model: runningModel(withGPU: true), conversations: .preview,
+            workspace: URL(fileURLWithPath: "/Users/example/projects/swiftstar"))
     }
 
     /// The running session without GPU metrics, as before the engine's first
@@ -28,7 +30,12 @@ extension EngineController {
         // the preview and this fixture's state is lost.
         model.didStart()
         model.apply(.ready)
-        model.apply(.session(EngineSessionInfo(modelID: "qwen3.8-27b", contextSize: 8192)))
+        model.apply(.session(EngineSessionInfo(
+            modelID: "qwen3.8-27b", contextSize: 8192,
+            dflash: EngineDFlash(
+                on: true, reason: "plan 19.27 GiB <= budget 107.52 GiB",
+                drafter: "/Users/example/models/dflash-Qwen3.8-27B-Q4_0.gguf"))))
+        model.apply(.prefixCache(EnginePrefixCache(outcome: "hit", tokens: 944, loadMs: 20, fillMs: nil)))
         _ = model.send("Summarize SessionView.swift")
         model.apply(.prompt("Summarize SessionView.swift"))
         let tool = EngineTool(op: "read", path: "Sources/SwiftStarUI/Session/SessionView.swift")
@@ -40,9 +47,10 @@ extension EngineController {
         model.apply(.answer(EngineAnswer(
             text: "`SessionView` renders the transcript, composer, and status bar for one engine session.",
             contextUsed: 512, contextSize: 8192, durationMs: 1830)))
+        // Session 20261013-154825's first checkpoint, after its 944-token cache hit.
         model.apply(.pause(PauseMetrics(
-            prefillTokens: 512, prefillMs: 210, evalCount: 64, evalMs: 980,
-            capturePath: "/state/sessions/20261013-123136-swiftstar/run-1.partial.json")))
+            prefillTokens: 1146, prefillMs: 1084, evalCount: 64, evalMs: 980,
+            capturePath: "/Users/example/.local/state/ds4-engine/sessions/20261013-121126-swiftstar/run-1.partial.json")))
         if withGPU {
             model.apply(.memory(EngineMemory(allocatedBytes: 6_400_000_000, budgetBytes: 21_000_000_000, planGiB: 6.0)))
         }
@@ -162,5 +170,28 @@ extension EngineSessionModel {
             model.apply(.awaitingInput)
         }
         return model
+    }
+}
+
+extension [Conversation] {
+    /// Three conversations for the sidebar: the second is the running one,
+    /// the third can't be resumed.
+    static var preview: [Conversation] {
+        let now = Date()
+        return [
+            Conversation(
+                id: "20261013-123136-swiftstar", title: "Hello", updated: now.addingTimeInterval(-12 * 60),
+                modelID: "qwen3.8-flash-next", resumable: true, problems: [],
+                sessionIDs: ["20261013-123136-swiftstar", "20261013-122439-swiftstar"]),
+            Conversation(
+                id: "20261013-121126-swiftstar",
+                title: "Answer in one short sentence, without tools: what is 2 + 2?",
+                updated: now.addingTimeInterval(-40 * 60), modelID: "qwen3.8-27b", resumable: true, problems: [],
+                sessionIDs: ["20261013-121126-swiftstar", "20261013-121116-swiftstar"]),
+            Conversation(
+                id: "20261003-203830-swiftstar", title: "Untitled", updated: now.addingTimeInterval(-10 * 86_400),
+                modelID: "laguna-xs-2.1", resumable: false, problems: ["no receipt", "no capture"],
+                sessionIDs: ["20261003-203830-swiftstar"]),
+        ]
     }
 }

@@ -1,0 +1,269 @@
+[
+ {
+  "id": "20261013-123136-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261013-123136-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "qwen3.8-flash-next",
+  "context_size": 20000,
+  "updated": "2026-10-13T12:34:43",
+  "prompts": 4,
+  "first_prompt": "Hello",
+  "last_prompt": "Revert the changes",
+  "context_used": 7300,
+  "resumed_from": "/Users/example/.local/state/ds4-engine/sessions/20261013-122439-swiftstar",
+  "commit": "fb3db29dd9a14f7d049a3907dc7323b7b343e60f",
+  "files_changed": 0,
+  "snapshots": [
+   0,
+   1,
+   2,
+   3,
+   4
+  ],
+  "resumable": true,
+  "problems": []
+ },
+ {
+  "id": "20261013-122439-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261013-122439-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "qwen3.8-27b",
+  "context_size": 60000,
+  "updated": "2026-10-13T12:31:35",
+  "prompts": 3,
+  "first_prompt": "I want to see how you work as an agent. Find one of the simple Swift tests. Then find the code that it testing. Change the code in a way that makes the test fail, then run the test.",
+  "last_prompt": "Revert the changes",
+  "context_used": 6911,
+  "resumed_from": "/Users/example/.local/state/ds4-engine/sessions/20261013-122106-swiftstar",
+  "commit": "ee9ca0c1273eacf3323fca52901c14c62373a238",
+  "files_changed": 0,
+  "snapshots": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "resumable": true,
+  "problems": []
+ },
+ {
+  "id": "20261013-122106-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261013-122106-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "qwen3.8-27b",
+  "context_size": 60000,
+  "updated": "2026-10-13T12:24:39",
+  "prompts": 4,
+  "first_prompt": "Hello",
+  "last_prompt": "Revert those changes",
+  "context_used": 8891,
+  "resumed_from": null,
+  "commit": "ee9ca0c1273eacf3323fca52901c14c62373a238",
+  "files_changed": 0,
+  "snapshots": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "resumable": true,
+  "problems": []
+ },
+ {
+  "id": "20261013-121809-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261013-121809-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "qwen3.8-flash-next",
+  "context_size": 20000,
+  "updated": "2026-10-13T12:18:28",
+  "prompts": 0,
+  "first_prompt": null,
+  "last_prompt": null,
+  "context_used": null,
+  "resumed_from": "/Users/example/.local/state/ds4-engine/sessions/20261013-121133-swiftstar",
+  "commit": "b68d7efe8046a43a5fde792623669e3bdb7bfeb2",
+  "files_changed": 0,
+  "snapshots": [
+   0
+  ],
+  "resumable": false,
+  "problems": [
+   "no capture",
+   "no prompt"
+  ]
+ },
+ {
+  "id": "20261013-121133-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261013-121133-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "qwen3.8-27b",
+  "context_size": 131072,
+  "updated": "2026-10-13T12:18:09",
+  "prompts": 0,
+  "first_prompt": null,
+  "last_prompt": null,
+  "context_used": null,
+  "resumed_from": "/Users/example/.local/state/ds4-engine/sessions/20261013-121126-swiftstar",
+  "commit": "b68d7efe8046a43a5fde792623669e3bdb7bfeb2",
+  "files_changed": 0,
+  "snapshots": [
+   0
+  ],
+  "resumable": false,
+  "problems": [
+   "no capture",
+   "no prompt"
+  ]
+ },
+ {
+  "id": "20261013-121126-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261013-121126-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "qwen3.8-27b",
+  "context_size": 131072,
+  "updated": "2026-10-13T12:11:33",
+  "prompts": 1,
+  "first_prompt": "Answer in one short sentence, without tools: what is 5 + 5?",
+  "last_prompt": "Answer in one short sentence, without tools: what is 5 + 5?",
+  "context_used": 1106,
+  "resumed_from": "/Users/example/.local/state/ds4-engine/sessions/20261013-121116-swiftstar",
+  "commit": "b68d7efe8046a43a5fde792623669e3bdb7bfeb2",
+  "files_changed": 0,
+  "snapshots": [
+   0,
+   1
+  ],
+  "resumable": true,
+  "problems": []
+ },
+ {
+  "id": "20261013-121116-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261013-121116-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "qwen3.8-27b",
+  "context_size": 131072,
+  "updated": "2026-10-13T12:11:25",
+  "prompts": 2,
+  "first_prompt": "Answer in one short sentence, without tools: what is 2 + 2?",
+  "last_prompt": "Answer in one short sentence, without tools: what is 3 + 3?",
+  "context_used": 1108,
+  "resumed_from": null,
+  "commit": "b68d7efe8046a43a5fde792623669e3bdb7bfeb2",
+  "files_changed": 0,
+  "snapshots": [
+   1,
+   2
+  ],
+  "resumable": true,
+  "problems": []
+ },
+ {
+  "id": "20261013-115639-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261013-115639-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "qwen3.8-27b",
+  "context_size": 60000,
+  "updated": "2026-10-13T11:57:27",
+  "prompts": 0,
+  "first_prompt": null,
+  "last_prompt": null,
+  "context_used": null,
+  "resumed_from": null,
+  "commit": "d2d1aaa32fdd97d944f2986191a19173d8c01252",
+  "files_changed": 0,
+  "snapshots": [],
+  "resumable": false,
+  "problems": [
+   "no capture",
+   "no prompt"
+  ]
+ },
+ {
+  "id": "20261003-203830-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261003-203830-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "laguna-xs-2.1",
+  "context_size": 60000,
+  "updated": "2026-10-03T20:38:30",
+  "prompts": 0,
+  "first_prompt": null,
+  "last_prompt": null,
+  "context_used": null,
+  "resumed_from": null,
+  "commit": null,
+  "files_changed": 0,
+  "snapshots": [],
+  "resumable": false,
+  "problems": [
+   "no receipt",
+   "no capture",
+   "no prompt"
+  ]
+ },
+ {
+  "id": "20261003-202443-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261003-202443-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "laguna-xs-2.1",
+  "context_size": 60000,
+  "updated": "2026-10-03T20:24:43",
+  "prompts": 0,
+  "first_prompt": null,
+  "last_prompt": null,
+  "context_used": null,
+  "resumed_from": null,
+  "commit": null,
+  "files_changed": 0,
+  "snapshots": [],
+  "resumable": false,
+  "problems": [
+   "no receipt",
+   "no capture",
+   "no prompt"
+  ]
+ },
+ {
+  "id": "20261003-201133-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261003-201133-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "laguna-xs-2.1",
+  "context_size": 60000,
+  "updated": "2026-10-03T20:11:33",
+  "prompts": 0,
+  "first_prompt": null,
+  "last_prompt": null,
+  "context_used": null,
+  "resumed_from": null,
+  "commit": null,
+  "files_changed": 0,
+  "snapshots": [],
+  "resumable": false,
+  "problems": [
+   "no receipt",
+   "no capture",
+   "no prompt"
+  ]
+ },
+ {
+  "id": "20261003-200939-swiftstar",
+  "path": "/Users/example/.local/state/ds4-engine/sessions/20261003-200939-swiftstar",
+  "source": "/Users/example/projects/swiftstar",
+  "model_id": "laguna-xs-2.1",
+  "context_size": 60000,
+  "updated": "2026-10-03T20:09:39",
+  "prompts": 0,
+  "first_prompt": null,
+  "last_prompt": null,
+  "context_used": null,
+  "resumed_from": null,
+  "commit": null,
+  "files_changed": 0,
+  "snapshots": [],
+  "resumable": false,
+  "problems": [
+   "no receipt",
+   "no capture",
+   "no prompt"
+  ]
+ }
+]

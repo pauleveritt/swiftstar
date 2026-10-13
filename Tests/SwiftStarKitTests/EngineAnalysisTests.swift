@@ -50,7 +50,7 @@ struct EngineAnalysisTests {
     @Test func directoryFromFirstCheckpoint() throws {
         var m = EngineSessionModel()
         m.didStart()
-        for e in try EngineTranscriptTests.events(fromFixture: "tool-read.ndjson") { m.apply(e) }
+        for e in try Fixtures.events("tool-read.ndjson") { m.apply(e) }
         #expect(m.sessionDirectory?.lastPathComponent == "20261013-112927-swiftstar")
     }
 
@@ -90,7 +90,7 @@ struct EngineAnalysisTests {
         var m = idle()
         let r = m.beginAnalysis(report: "R", source: Self.source)
         #expect(r?.kind == .resume)
-        #expect(r?.argv == ["tui", "--resume", Self.main.path, "--source", "/repo", "--ndjson"])
+        #expect(r?.argv == ["tui", "--ndjson", "--resume", Self.main.lastPathComponent, "--source", "/repo"])
         guard case .forking(let main, let report)? = m.analysis?.stage else {
             Issue.record("not forking: \(String(describing: m.analysis))"); return
         }

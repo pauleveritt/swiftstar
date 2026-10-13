@@ -6,18 +6,15 @@
 (`{"kind":"queued","count":n}`); `stop` refuses with "no turn is running"
 unless a turn is active, and is idempotent; `quit` (or stdin EOF) emits
 `{"kind":"quitting"}` at once, drops any queued prompts, and actually closes
-at the next natural pause if a turn is running, or at once if idle; an empty
-prompt, a non-JSON line, or JSON that isn't an object are refused with the
-relay's own texts. `FAKE_ENGINE_LOAD_MS` (default 0) pauses after the
-fixture's own recorded "Loading model" status line, before the first
-`input`; prompts sent during the gap are queued like any other busy prompt.
-`FAKE_ENGINE_IGNORE_QUIT` makes quit and EOF no-ops (EOF then hangs) for the
+at the next natural pause if a turn is running, or at once if idle; a
+non-JSON line, or JSON that isn't an object, is refused with the relay's own
+texts. `FAKE_ENGINE_IGNORE_QUIT` makes quit and EOF no-ops (EOF then hangs) for the
 SIGKILL-escalation test.
 
 Env: FAKE_ENGINE_FIXTURE, FAKE_ENGINE_PACE_MS (300), FAKE_ENGINE_EXIT (0),
 FAKE_ENGINE_EXIT_STDERR (extra stderr line written just before exit),
 FAKE_ENGINE_REFUSE, FAKE_ENGINE_IGNORE_QUIT, FAKE_ENGINE_IGNORE_SIGTERM (SIG_IGN),
-FAKE_ENGINE_LOAD_MS (0), FAKE_ENGINE_LOG, FAKE_ENGINE_PIDFILE (written in
+FAKE_ENGINE_LOG, FAKE_ENGINE_PIDFILE (written in
 every mode, including `models`), FAKE_ENGINE_ARGV_LOG (write argv, one per
 line, at start), FAKE_ENGINE_SPAWN_LOG (append argv as one JSON array per
 `tui` spawn, for tests that see more than one), FAKE_ENGINE_RESUME_FIXTURE
@@ -30,6 +27,9 @@ exits 2 with "boom" when FAKE_ENGINE_MODELS_FAIL=1, or with over 5 KiB of filler
 "the real last line" when FAKE_ENGINE_MODELS_HUGE_STDERR=1, or with argparse's "invalid
 choice" message when FAKE_ENGINE_MODELS_UNKNOWN=1 (or no file is set, like an older
 engine); FAKE_ENGINE_MODELS_SLEEP_MS delays first.
+`sessions --json` mode (argv[1] == "sessions"): prints the FAKE_ENGINE_SESSIONS
+file after FAKE_ENGINE_SESSIONS_SLEEP_MS, or exits 2 with "invalid choice"
+when it is unset.
 Replays the fixture up to and including each `input` line, pausing after every
 `tool_start` until a stdin line arrives or the pace elapses.
 """
@@ -84,6 +84,19 @@ if sys.argv[1:2] == ["models"]:
         sys.stdout.write(f.read())
     sys.exit(0)
 
+if sys.argv[1:2] == ["sessions"]:
+    # SU.7a: prints the FAKE_ENGINE_SESSIONS file, after
+    # FAKE_ENGINE_SESSIONS_SLEEP_MS; unset, exits 2 like an engine without
+    # the command.
+    time.sleep(int(env.get("FAKE_ENGINE_SESSIONS_SLEEP_MS", "0")) / 1000.0)
+    if not env.get("FAKE_ENGINE_SESSIONS"):
+        sys.stderr.write("ds4-dogfood: error: argument command: invalid choice: 'sessions'\n")
+        sys.stderr.flush()
+        sys.exit(2)
+    with open(env["FAKE_ENGINE_SESSIONS"]) as f:
+        sys.stdout.write(f.read())
+    sys.exit(0)
+
 if env.get("FAKE_ENGINE_SPAWN_LOG") and sys.argv[1:2] == ["tui"]:
     with open(env["FAKE_ENGINE_SPAWN_LOG"], "a") as f:
         f.write(json.dumps(sys.argv[1:]) + "\n")
@@ -96,13 +109,22 @@ if env.get("FAKE_ENGINE_REFUSE") == "1":
 pace = int(env.get("FAKE_ENGINE_PACE_MS", "300")) / 1000.0
 exit_code = int(env.get("FAKE_ENGINE_EXIT", "0"))
 ignore_quit = env.get("FAKE_ENGINE_IGNORE_QUIT") == "1"
-load_ms = int(env.get("FAKE_ENGINE_LOAD_MS", "0"))
 log_path = env.get("FAKE_ENGINE_LOG")
 fixture_path = env["FAKE_ENGINE_FIXTURE"]
 if "--resume" in sys.argv and env.get("FAKE_ENGINE_RESUME_FIXTURE"):
     fixture_path = env["FAKE_ENGINE_RESUME_FIXTURE"]
 with open(fixture_path) as f:
     fixture = [ln.rstrip("\n") for ln in f if ln.strip()]
+if "--resume" in sys.argv:
+    # The real engine's `resumed` names the session it resumed (SU.7a).
+    resume_id = sys.argv[sys.argv.index("--resume") + 1]
+    def name_resumed(line):
+        obj = json.loads(line)
+        if obj.get("kind") == "event" and obj["event"].get("kind") == "resumed":
+            obj["event"]["session"] = resume_id
+            return json.dumps(obj)
+        return line
+    fixture = [name_resumed(ln) for ln in fixture]
 
 inbox = queue.Queue()
 
@@ -294,9 +316,6 @@ def handle(kind, text):
         return True
     if kind == "prompt":
         prompt_text = (json.loads(text).get("text") if text else None) or ""
-        if not prompt_text.strip():
-            emit('{"kind": "error", "text": "a prompt needs a non-empty text"}')
-            return False
         if quitting:
             emit('{"kind": "error", "text": "the session is quitting"}')
             return False
@@ -358,27 +377,6 @@ def interrupt():
     reach_pause()
 
 
-load_gap_done = False
-
-
-def load_gap():
-    """The fixture's own recorded `status` line (model loading) is followed
-    by a real gap before the engine is ready; a prompt sent during it is
-    queued like any other busy prompt, since `accepting` is still false."""
-    global load_gap_done
-    load_gap_done = True
-    deadline = time.monotonic() + load_ms / 1000.0
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return
-        try:
-            kind, text = inbox.get(timeout=remaining)
-        except queue.Empty:
-            return
-        handle(kind, text)
-
-
 def replay():
     """Emit through the next `input`, pausing after each tool_start."""
     global idx
@@ -386,8 +384,6 @@ def replay():
         line = fixture[idx]
         idx += 1
         emit(line)
-        if not load_gap_done and is_kind(line, "status"):
-            load_gap()
         if is_kind(line, "input"):
             reach_pause(already_emitted_input=True)
             return
@@ -403,8 +399,7 @@ def replay():
 
 
 threading.Thread(target=reader, daemon=True).start()
-replay()  # handshake through the first `input`; the fixture's own `status`
-# line triggers the load gap (see load_gap()) if FAKE_ENGINE_LOAD_MS is set.
+replay()  # handshake through the first `input`
 while True:
     kind, text = inbox.get()
     handle(kind, text)

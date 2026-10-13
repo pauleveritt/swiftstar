@@ -87,6 +87,11 @@ public struct EngineSessionModel: Equatable, Sendable {
     /// An analysis in progress (AN.2), from Analyze until Done's return.
     public private(set) var analysis: EngineAnalysis?
 
+    /// The session directory this conversation is known by (SU.7a): the one
+    /// a `.resumed` names, else this process's own, from the first pause's
+    /// capture path. Cleared by a fresh start.
+    public private(set) var currentSessionID: String?
+
     public init() {}
 
     /// Analyze is offered: idle at `input`, nothing pending, the directory
@@ -104,7 +109,7 @@ public struct EngineSessionModel: Equatable, Sendable {
         transcript.appendSystem(EngineAnalysis.forkingNotice)
         return EngineRelaunch(
             kind: .resume,
-            argv: EngineCommand.forkArguments(sessionDirectory: main, source: source),
+            argv: EngineCommand.resumeArguments(id: main.lastPathComponent, source: source),
             reason: "analysis")
     }
 
@@ -157,6 +162,7 @@ public struct EngineSessionModel: Equatable, Sendable {
         pendingRelaunch = nil
         sessionDirectory = nil
         analysis = nil
+        currentSessionID = nil
         phase = .starting
     }
 
@@ -190,6 +196,7 @@ public struct EngineSessionModel: Equatable, Sendable {
         case .resumed(let r):
             transcript.rebuild(from: r, divider: divider(for: r))
             pendingRelaunch = nil
+            if !r.sessionID.isEmpty { currentSessionID = r.sessionID }
         case .pause(let m):
             if sessionDirectory == nil, let path = m.capturePath {
                 sessionDirectory = URL(fileURLWithPath: path).deletingLastPathComponent()
@@ -204,6 +211,10 @@ public struct EngineSessionModel: Equatable, Sendable {
             transcript.apply(event)
         default:
             transcript.apply(event)
+        }
+        if case .pause(let p) = event, currentSessionID == nil,
+           let path = p.capturePath, let id = EngineSessionEntry.directoryID(fromCapturePath: path) {
+            currentSessionID = id
         }
         EngineMetricsReducer.reduce(&metrics, event)
     }
