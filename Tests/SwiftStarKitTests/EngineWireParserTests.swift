@@ -28,6 +28,8 @@ struct EngineWireParserTests {
     // operator_telemetry.py (cited per row where the old tests cited them).
     static let afterReadyCases: [LineCase] = [
         .init(testDescription: "unknownEventKindIsIgnored", line: ev(#""kind":"flux_capacitor""#), expected: .ignored),
+        .init(testDescription: "sessionWithoutDFlash (SU.6b)", line: ev(#""kind":"session","model_id":"m","context_size":10"#),
+              expected: .session(EngineSessionInfo(modelID: "m", contextSize: 10, dflash: nil))),
         .init(testDescription: "unavailableSnapshotIsIgnored",
               line: ev(#""kind":"checkpoint","snapshot":{"status":"unavailable"}"#), expected: .ignored),
         .init(testDescription: "nullSnapshotFieldsAreNil",
@@ -173,6 +175,18 @@ struct EngineWireParserTests {
         }
         #expect(!pauses.isEmpty)
         #expect(pauses.allSatisfy { $0.evalCount > 0 })
+        // SU.6b: the 27B's DFlash decision and its prefix-cache miss.
+        let dflash = events.compactMap { e -> EngineDFlash? in
+            if case .session(let s) = e { return s.dflash } else { return nil }
+        }.first
+        #expect(dflash?.on == true)
+        #expect(dflash?.reason.hasPrefix("plan 19.27 GiB") == true)
+        #expect(dflash?.drafter?.hasSuffix("dflash-Qwen3.8-27B-Q4_0.gguf") == true)
+        let cache = events.compactMap { e -> EnginePrefixCache? in
+            if case .prefixCache(let p) = e { return p } else { return nil }
+        }
+        #expect(cache.map(\.outcome) == ["miss"])
+        #expect(cache.first?.tokens == 944)
         guard case .closed = events.last(where: { $0 != .ignored }) else {
             Issue.record("last non-ignored event is not closed"); return
         }

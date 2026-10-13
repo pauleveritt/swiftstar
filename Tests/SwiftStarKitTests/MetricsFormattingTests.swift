@@ -41,6 +41,15 @@ struct MetricsFormattingTests {
         #expect(text == c.text)
     }
 
+    // SU.6b: the Session card's prefix-cache line.
+    @Test(arguments: [
+        (EnginePrefixCache(outcome: "hit", tokens: 944, loadMs: 20, fillMs: nil), "hit · 944 tokens in 20 ms"),
+        (EnginePrefixCache(outcome: "miss", tokens: 944, loadMs: nil, fillMs: 3880), "miss · 944 tokens filled in 3.9s"),
+        (EnginePrefixCache(outcome: "error", tokens: 944, loadMs: nil, fillMs: nil), "error · 944 tokens"),
+    ]) func prefixCacheLine(_ p: EnginePrefixCache, _ line: String) {
+        #expect(MetricsFormatting.prefixCacheLine(p, locale: Locale(identifier: "en_US")) == line)
+    }
+
     @Test func contextTooltipMatchesTodaysWording() {
         #expect(MetricsFormatting.contextTooltip(used: 512, size: 2048, locale: Locale(identifier: "en_US"))
             == "Context window: 512 of 2,048 tokens (25% used).")

@@ -8,6 +8,9 @@ public struct EngineMetricsState: Equatable, Sendable {
     public var gpuAllocatedBytes: Int64?
     public var gpuBudgetBytes: Int64?
     public var planGiB: Double?
+    /// This process's prefix-cache outcome; a hit is left out of the prefill
+    /// rate, since the engine counts its tokens as prefilled (SU.6b, D3).
+    public var prefixCache: EnginePrefixCache?
 
     public init(prefillTPS: Double? = nil, generationTPS: Double? = nil,
                 contextUsed: Int? = nil, contextSize: Int? = nil,
@@ -27,13 +30,23 @@ public enum EngineMetricsReducer {
     public static func reduce(_ state: inout EngineMetricsState, _ event: EngineEvent) {
         switch event {
         case .pause(let p):
-            state.prefillTPS = rate(p.prefillTokens, p.prefillMs) ?? state.prefillTPS
+            // Checkpoint counters accumulate over the process, so a hit's
+            // tokens and load time stay in them until the next `.session`.
+            var tokens = p.prefillTokens, ms = p.prefillMs
+            if let hit = state.prefixCache, hit.outcome == "hit" {
+                tokens = tokens.map { $0 - (hit.tokens ?? 0) }.flatMap { $0 > 0 ? $0 : nil }
+                ms = ms.map { $0 - (hit.loadMs ?? 0) }
+            }
+            state.prefillTPS = rate(tokens, ms) ?? state.prefillTPS
             state.generationTPS = rate(p.evalCount, p.evalMs) ?? state.generationTPS
         case .answer(let a):
             state.contextUsed = a.contextUsed ?? state.contextUsed
             state.contextSize = a.contextSize ?? state.contextSize
         case .session(let info):
             state.contextSize = info.contextSize ?? state.contextSize
+            state.prefixCache = nil  // a new process: new counters
+        case .prefixCache(let p):
+            state.prefixCache = p
         case .resumed(let r):
             // A relaunched session's context, before its first answer.
             state.contextUsed = r.contextUsed ?? state.contextUsed

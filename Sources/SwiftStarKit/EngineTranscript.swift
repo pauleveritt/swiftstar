@@ -222,7 +222,7 @@ public struct EngineTranscript: Equatable, Sendable {
             session = info
         case .closed:
             end()
-        case .ready, .pause, .memory, .protocolError, .ignored:
+        case .ready, .pause, .memory, .prefixCache, .protocolError, .ignored:
             break
         }
     }
