@@ -42,25 +42,25 @@ struct EngineControllerTests {
         let script = tempPath("engine"), callLogPath = tempPath("calls")
         defer { for p in [script, callLogPath] { try? FileManager.default.removeItem(atPath: p) } }
         try writeFakeEngine(to: script, callLogPath: callLogPath)
-        try await withDefaults([.executable: script]) {
-            let controller = EngineController()
+        let defaults = DefaultsScope([.executable: script])
+        defer { defaults.restore() }
+        let controller = EngineController()
 
-            await controller.loadCatalogIfNeeded()
-            #expect(controller.catalog != nil)
-            #expect(callCount(callLogPath) == 1)
+        await controller.loadCatalogIfNeeded()
+        #expect(controller.catalog != nil)
+        #expect(callCount(callLogPath) == 1)
 
-            // Same path, unchanged content: a second call is a cache hit, no retry.
-            await controller.loadCatalogIfNeeded()
-            #expect(callCount(callLogPath) == 1)
+        // Same path, unchanged content: a second call is a cache hit, no retry.
+        await controller.loadCatalogIfNeeded()
+        #expect(callCount(callLogPath) == 1)
 
-            // "Upgrade" the engine in place: rewrite the script, bumping its mtime.
-            try writeFakeEngine(to: script, callLogPath: callLogPath)
-            try FileManager.default.setAttributes(
-                [.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: script)
+        // "Upgrade" the engine in place: rewrite the script, bumping its mtime.
+        try writeFakeEngine(to: script, callLogPath: callLogPath)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: script)
 
-            await controller.loadCatalogIfNeeded()
-            #expect(callCount(callLogPath) == 2)
-        }
+        await controller.loadCatalogIfNeeded()
+        #expect(callCount(callLogPath) == 2)
     }
 
     /// A standalone `tui --ndjson` fake, again with no environment
@@ -111,17 +111,17 @@ struct EngineControllerTests {
         defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
         try writeSessionFake(to: script, argvLogPath: log,
                              models: try String(contentsOfFile: Fixtures.path("models-real.json"), encoding: .utf8))
-        await withDefaults([.executable: script, .modelID: "laguna-xs-2.1"]) {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            await controller.start()
-            await eventually { controller.phase == .running }
-            #expect(argvLog(log).first?.contains("--model-id") == false)
-            #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "")
-            #expect(controller.transcript.rows.contains(
-                .system("laguna-xs-2.1 isn't offered by the engine; using the engine default")))
-            await controller.quit()
-        }
+        let defaults = DefaultsScope([.executable: script, .modelID: "laguna-xs-2.1"])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.start()
+        await eventually { controller.phase == .running }
+        #expect(argvLog(log).first?.contains("--model-id") == false)
+        #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "")
+        #expect(controller.transcript.rows.contains(
+            .system("laguna-xs-2.1 isn't offered by the engine; using the engine default")))
+        await controller.quit()
     }
 
     /// Found live (EN.1 Task 7): at launch a defaults change makes the
@@ -132,32 +132,52 @@ struct EngineControllerTests {
         defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
         try writeSessionFake(to: script, argvLogPath: log,
                              models: try String(contentsOfFile: Fixtures.path("models-real.json"), encoding: .utf8), modelsDelay: 0.5)
-        await withDefaults([.executable: script, .modelID: "laguna-xs-2.1"]) {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            let inFlight = Task { await controller.loadCatalog() }
-            try? await Task.sleep(for: .milliseconds(50))
-            await controller.start()
-            await eventually { controller.phase == .running }
-            #expect(argvLog(log).first?.contains("--model-id") == false)
-            await inFlight.value
-            await controller.quit()
-        }
+        let defaults = DefaultsScope([.executable: script, .modelID: "laguna-xs-2.1"])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        let inFlight = Task { await controller.loadCatalog() }
+        try? await Task.sleep(for: .milliseconds(50))
+        await controller.start()
+        await eventually { controller.phase == .running }
+        #expect(argvLog(log).first?.contains("--model-id") == false)
+        await inFlight.value
+        await controller.quit()
     }
 
     @Test func startProceedsWhenCatalogFails() async throws {
         let script = tempPath("session"), log = tempPath("argv")
         defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
         try writeSessionFake(to: script, argvLogPath: log)
-        await withDefaults([.executable: script, .modelID: "laguna-xs-2.1"]) {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            await controller.start()
-            await eventually { controller.phase == .running }
-            let argv = argvLog(log).first ?? []
-            #expect(argv.firstIndex(of: "--model-id").map { argv[$0 + 1] } == "laguna-xs-2.1")
-            await controller.quit()
-        }
+        let defaults = DefaultsScope([.executable: script, .modelID: "laguna-xs-2.1"])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.start()
+        await eventually { controller.phase == .running }
+        let argv = argvLog(log).first ?? []
+        #expect(argv.firstIndex(of: "--model-id").map { argv[$0 + 1] } == "laguna-xs-2.1")
+        await controller.quit()
+    }
+
+    /// Deferred from 5a2: "Starting…" shows while the model list loads, before
+    /// any spawn.
+    @Test func startShowsStartingWhileTheListLoads() async throws {
+        let script = tempPath("session"), log = tempPath("argv")
+        defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
+        try writeSessionFake(to: script, argvLogPath: log,
+                             models: try String(contentsOfFile: Fixtures.path("models-real.json"), encoding: .utf8),
+                             modelsDelay: 0.5)
+        let defaults = DefaultsScope([.executable: script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        let starting = Task { await controller.start() }
+        #expect(await eventually(within: .milliseconds(300)) { controller.composer.label == "Starting…" })
+        #expect(argvLog(log).isEmpty)
+        await starting.value
+        #expect(await eventually { controller.phase == .running })
+        await controller.quit()
     }
 
     /// A started controller whose session is idle at its first `input`.
@@ -173,96 +193,112 @@ struct EngineControllerTests {
     @Test func rewindRelaunches() async throws {
         let f = try FakeEngine()
         defer { f.remove() }
-        await withDefaults([.executable: f.script, .modelID: nil]) {
-            let controller = await running(f)
-            controller.send("/rewind 1")
-            await eventually(within: .seconds(15)) {
-                f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
-            let spawns = f.spawnArgv
-            #expect(spawns.count == 2)
-            let source = spawns.first.flatMap { a in a.firstIndex(of: "--source").map { a[$0 + 1] } } ?? "?"
-            #expect(spawns.last == ["tui", "--resume", "/tmp/fake-ds4-session", "--source", source,
-                                    "--rewind-to", "1", "--ndjson"])
-            #expect(controller.transcript.rows.first == .divider("Rewound to prompt 1"))
-            await controller.quit()
-        }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.send("/rewind 1")
+        await eventually(within: .seconds(15)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        let spawns = f.spawnArgv
+        #expect(spawns.count == 2)
+        let source = spawns.first.flatMap { a in a.firstIndex(of: "--source").map { a[$0 + 1] } } ?? "?"
+        #expect(spawns.last == ["tui", "--resume", "/tmp/fake-ds4-session", "--source", source,
+                                "--rewind-to", "1", "--ndjson"])
+        #expect(controller.transcript.rows.first == .divider("Rewound to prompt 1"))
+        await controller.quit()
     }
 
     @Test func modelMenuSendsModelCommand() async throws {
         let f = try FakeEngine()
         defer { f.remove() }
-        await withDefaults([.executable: f.script, .modelID: nil]) {
-            let controller = await running(f)
-            controller.select(modelID: "qwen3.8-flash-next")
-            await eventually(within: .seconds(15)) {
-                f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
-            let prompts = f.prompts
-            #expect(prompts.contains("/model qwen3.8-flash-next"))
-            #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "qwen3.8-flash-next")
-            #expect(controller.transcript.rows.first
-                == .divider("Switched to qwen3.8-flash-next: new conversation, files kept"))
-            await controller.quit()
-        }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.select(modelID: "qwen3.8-flash-next")
+        await eventually(within: .seconds(15)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        let prompts = f.prompts
+        #expect(prompts.contains("/model qwen3.8-flash-next"))
+        #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "qwen3.8-flash-next")
+        #expect(controller.transcript.rows.first
+            == .divider("Switched to qwen3.8-flash-next: new conversation, files kept"))
+        await controller.quit()
     }
 
     @Test func modelMenuIdleRestartsFresh() async throws {
         let f = try FakeEngine()
         defer { f.remove() }
-        await withDefaults([.executable: f.script, .modelID: nil]) {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            controller.select(modelID: "qwen3.8-flash-next")
-            #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "qwen3.8-flash-next")
-            await controller.start()
-            await eventually { controller.phase == .running }
-            let argv = f.spawnArgv.first ?? []
-            #expect(argv.firstIndex(of: "--model-id").map { argv[$0 + 1] } == "qwen3.8-flash-next")
-            #expect(argv.firstIndex(of: "--commit").map { argv[$0 + 1] } == "HEAD")
-            await controller.quit()
-        }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        controller.select(modelID: "qwen3.8-flash-next")
+        #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "qwen3.8-flash-next")
+        await controller.start()
+        await eventually { controller.phase == .running }
+        let argv = f.spawnArgv.first ?? []
+        #expect(argv.firstIndex(of: "--model-id").map { argv[$0 + 1] } == "qwen3.8-flash-next")
+        #expect(argv.firstIndex(of: "--commit").map { argv[$0 + 1] } == "HEAD")
+        await controller.quit()
     }
 
     @Test func relaunchRefusedEndsCleanly() async throws {
         let f = try FakeEngine(refuseResume: true)
         defer { f.remove() }
-        await withDefaults([.executable: f.script, .modelID: nil]) {
-            let controller = await running(f)
-            controller.send("Use the read tool on Package.swift")
-            await eventually(within: .seconds(10)) {
-                controller.transcript.isAwaitingInput
-                    && controller.transcript.rows.contains { if case .answer = $0 { true } else { false } }
-            }
-            controller.send("/rewind 1")
-            await eventually(within: .seconds(15)) {
-                if f.spawnArgv.count == 2, case .ended = controller.phase { return true }
-                return false
-            }
-            guard case .ended(let exit) = controller.phase else {
-                Issue.record("not ended: \(controller.phase)"); return
-            }
-            #expect(exit.message == "refused to start: ds4-dogfood tui: error: no model on this Mac")
-            // The conversation and the old session's pointer stay on screen.
-            #expect(controller.transcript.rows.contains { if case .answer = $0 { true } else { false } })
-            #expect(controller.transcript.rows.contains {
-                if case .system(let s) = $0 { s.hasPrefix("Session: ") } else { false } })
-            #expect(controller.transcript.rows.last == .system(exit.message))
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.send("Use the read tool on Package.swift")
+        await eventually(within: .seconds(10)) {
+            controller.transcript.isAwaitingInput
+                && controller.transcript.rows.contains { if case .answer = $0 { true } else { false } }
         }
+        controller.send("/rewind 1")
+        await eventually(within: .seconds(15)) {
+            if f.spawnArgv.count == 2, case .ended = controller.phase { return true }
+            return false
+        }
+        guard case .ended(let exit) = controller.phase else {
+            Issue.record("not ended: \(controller.phase)"); return
+        }
+        #expect(exit.message == "refused to start: ds4-dogfood tui: error: no model on this Mac")
+        // The conversation and the old session's pointer stay on screen.
+        #expect(controller.transcript.rows.contains { if case .answer = $0 { true } else { false } })
+        #expect(controller.transcript.rows.contains {
+            if case .system(let s) = $0 { s.hasPrefix("Session: ") } else { false } })
+        #expect(controller.transcript.rows.last == .system(exit.message))
     }
 
     @Test func relaunchIgnoredWhileTerminating() async throws {
         let f = try FakeEngine()
         defer { f.remove() }
-        await withDefaults([.executable: f.script, .modelID: nil]) {
-            let controller = await running(f)
-            controller.beginTerminating()
-            controller.send("/rewind 1")
-            await eventually(within: .seconds(10)) {
-                if case .ended = controller.phase { return true }
-                return false
-            }
-            try? await Task.sleep(for: .milliseconds(300))
-            #expect(f.spawnArgv.count == 1)
-        }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.beginTerminating()
+        controller.send("/rewind 1")
+        #expect(await eventually { f.prompts.contains("/rewind 1") })
+        // Ignored outright: no quit, and no second spawn.
+        let respawned = await eventually(within: .seconds(1)) { f.spawnArgv.count > 1 }
+        #expect(!respawned)
+        #expect(controller.phase == .running)
+        await controller.quit()
+    }
+
+    /// Deferred from 5a1: a relaunch whose quit hit the safety bound must not
+    /// start a second engine beside one that may still hold the GPU.
+    @Test func relaunchSkippedWhenQuitHitTheBound() async throws {
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let graces = EngineGraces(
+            stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(1), safetyBound: .milliseconds(400))
+        let controller = await running(f, graces: graces)
+        controller.send("/rewind 1")
+        #expect(await eventually(within: .seconds(3)) {
+            controller.transcript.rows.contains(.system("Relaunch skipped: the engine did not exit.")) })
+        #expect(f.spawnArgv.count == 1)
     }
 
     // MARK: SU.5a1 Task 6
@@ -272,18 +308,18 @@ struct EngineControllerTests {
     @Test func quitBoundEndsTheSession() async throws {
         let f = try FakeEngine(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
         defer { f.remove() }
-        await withDefaults([.executable: f.script, .modelID: nil]) {
-            let graces = EngineGraces(
-                stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(3), safetyBound: .milliseconds(500))
-            let controller = await running(f, graces: graces)
-            await controller.quit()
-            await eventually(within: .seconds(2)) { if case .ended = controller.phase { true } else { false } }
-            guard case .ended(let exit) = controller.phase else { Issue.record("phase \(controller.phase)"); return }
-            #expect(exit.message == "the engine did not exit after quit; it may still be running")
-            #expect(!controller.isActive)
-            try? await Task.sleep(for: .seconds(4))  // the old session's SIGKILL lands; nothing changes
-            #expect(controller.transcript.rows.last == .system(exit.message))
-        }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let graces = EngineGraces(
+            stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(1), safetyBound: .milliseconds(500))
+        let controller = await running(f, graces: graces)
+        await controller.quit()
+        await eventually(within: .seconds(2)) { if case .ended = controller.phase { true } else { false } }
+        guard case .ended(let exit) = controller.phase else { Issue.record("phase \(controller.phase)"); return }
+        #expect(exit.message == "the engine did not exit after quit; it may still be running")
+        #expect(!controller.isActive)
+        try? await Task.sleep(for: .seconds(1.5))  // past the old session's SIGKILL; nothing changes
+        #expect(controller.transcript.rows.last == .system(exit.message))
     }
 
     @Test func fixtureStartStaysIdle() async {
@@ -299,33 +335,33 @@ struct EngineControllerTests {
         defer { for p in [a, aLog, b, bLog] { try? FileManager.default.removeItem(atPath: p) } }
         try writeFakeEngine(to: a, callLogPath: aLog)
         try writeFakeEngine(to: b, callLogPath: bLog)
-        await withDefaults([.executable: a, .modelID: nil]) {
-            let controller = EngineController()
-            await controller.loadCatalogIfNeeded()
-            controller.select(modelID: "x")
-            controller.select(contextSize: 4096)
-            try? await Task.sleep(for: .milliseconds(300))
-            #expect(callCount(aLog) == 1)
-            UserDefaults.standard.set(b, forKey: DefaultsKey.executable.rawValue)
-            await eventually { callCount(bLog) == 1 }
-            #expect(callCount(bLog) == 1)
-            UserDefaults.standard.removeObject(forKey: DefaultsKey.contextSize.rawValue)
-        }
+        let defaults = DefaultsScope([.executable: a, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        await controller.loadCatalogIfNeeded()
+        controller.select(modelID: "x")
+        controller.select(contextSize: 4096)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(callCount(aLog) == 1)
+        UserDefaults.standard.set(b, forKey: DefaultsKey.executable.rawValue)
+        await eventually { callCount(bLog) == 1 }
+        #expect(callCount(bLog) == 1)
+        UserDefaults.standard.removeObject(forKey: DefaultsKey.contextSize.rawValue)
     }
 
     @Test func secondModelPickWhilePendingIsRefused() async throws {
         let f = try FakeEngine()
         defer { f.remove() }
-        await withDefaults([.executable: f.script, .modelID: nil]) {
-            let controller = await running(f)
-            controller.select(modelID: "qwen3.8-flash-next")
-            controller.select(modelID: "qwen3.8-27b")
-            #expect(controller.transcript.rows.contains(.system("A model switch is already pending.")))
-            await eventually(within: .seconds(15)) { f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
-            let prompts = f.prompts
-            #expect(prompts.filter { $0.hasPrefix("/model") } == ["/model qwen3.8-flash-next"])
-            await controller.quit()
-        }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.select(modelID: "qwen3.8-flash-next")
+        controller.select(modelID: "qwen3.8-27b")
+        #expect(controller.transcript.rows.contains(.system("A model switch is already pending.")))
+        await eventually(within: .seconds(15)) { f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        let prompts = f.prompts
+        #expect(prompts.filter { $0.hasPrefix("/model") } == ["/model qwen3.8-flash-next"])
+        await controller.quit()
     }
 
     // MARK: 5a1 final review
@@ -336,15 +372,15 @@ struct EngineControllerTests {
         let script = tempPath("session"), log = tempPath("argv")
         defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
         try writeSessionFake(to: script, argvLogPath: log)
-        await withDefaults([.executable: script, .modelID: nil]) {
-            let controller = EngineController()
-            controller.workspace = FileManager.default.temporaryDirectory
-            await controller.start()
-            await eventually { controller.phase == .running }
-            #expect(controller.transcript.rows.contains {
-                if case .system(let s) = $0 { s.hasPrefix("Model list unavailable") } else { false } })
-            await controller.quit()
-        }
+        let defaults = DefaultsScope([.executable: script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.start()
+        await eventually { controller.phase == .running }
+        #expect(controller.transcript.rows.contains {
+            if case .system(let s) = $0 { s.hasPrefix("Model list unavailable") } else { false } })
+        await controller.quit()
     }
 
     /// After the safety bound, a restart (menu pick) must not start a second
@@ -352,25 +388,22 @@ struct EngineControllerTests {
     @Test func restartAfterQuitBoundIsSkippedButStartWorks() async throws {
         let f = try FakeEngine(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
         defer { f.remove() }
-        await withDefaults([.executable: f.script, .modelID: nil]) {
-            let graces = EngineGraces(
-                stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(2), safetyBound: .milliseconds(500))
-            let controller = await running(f, graces: graces)
-            await controller.quit()
-            await controller.restart()
-            #expect(f.spawnArgv.count == 1)
-            #expect(controller.transcript.rows.contains {
-                if case .system(let s) = $0 { s.hasPrefix("Restart skipped") } else { false } })
-            try? await Task.sleep(for: .seconds(3))  // the old engine's SIGKILL lands
-            await controller.start()
-            await eventually { controller.phase == .running && controller.transcript.isAwaitingInput }
-            #expect(f.spawnArgv.count == 2)
-            controller.select(modelID: "qwen3.8-flash-next")
-            #expect(!controller.transcript.rows.contains(.system("A model switch is already pending.")))
-            // This fake ignores quit and SIGTERM: wait out the SIGKILL, or it
-            // outlives the test run.
-            await controller.quit()
-            try? await Task.sleep(for: .seconds(3))
-        }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let graces = EngineGraces(
+            stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(1), safetyBound: .milliseconds(500))
+        let controller = await running(f, graces: graces)
+        await controller.quit()
+        await controller.restart()
+        #expect(f.spawnArgv.count == 1)
+        #expect(controller.transcript.rows.contains {
+            if case .system(let s) = $0 { s.hasPrefix("Restart skipped") } else { false } })
+        try? await Task.sleep(for: .seconds(1.5))  // past the old engine's SIGKILL
+        await controller.start()
+        await eventually { controller.phase == .running && controller.transcript.isAwaitingInput }
+        #expect(f.spawnArgv.count == 2)
+        controller.select(modelID: "qwen3.8-flash-next")
+        #expect(!controller.transcript.rows.contains(.system("A model switch is already pending.")))
+        await controller.quit()  // this fake ignores quit and SIGTERM; f.remove() ends it
     }
 }

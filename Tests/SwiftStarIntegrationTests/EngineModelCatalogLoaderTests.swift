@@ -31,22 +31,34 @@ struct EngineModelCatalogLoaderTests {
         if case .failure(.failed) = missing {} else { Issue.record("launch failure expected") }
     }
 
-    @Test func loaderFallsBackOnTimeout() async {
-        let started = Date()
-        let result = await EngineModelCatalogLoader.load(
-            executable: Self.fake, timeout: .milliseconds(500),
-            environment: env(["FAKE_ENGINE_MODELS_SLEEP_MS": "5000"]))
-        #expect(result == .failure(.timedOut))
-        #expect(Date().timeIntervalSince(started) < 3)
+    nonisolated struct TimeoutCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let env: [String: String]
+        /// Seconds the load may take in all, the 0.5 s timeout included.
+        let within: Double
     }
 
-    @Test func loaderTimesOutOnChildIgnoringSIGTERM() async {
+    nonisolated static let timeoutCases: [TimeoutCase] = [
+        .init(testDescription: "loaderFallsBackOnTimeout", env: ["FAKE_ENGINE_MODELS_SLEEP_MS": "5000"], within: 3),
+        .init(testDescription: "loaderTimesOutOnChildIgnoringSIGTERM",
+              env: ["FAKE_ENGINE_MODELS_SLEEP_MS": "8000", "FAKE_ENGINE_IGNORE_SIGTERM": "1"], within: 2.5),
+    ]
+
+    /// The load returns at its timeout either way; the child must also be
+    /// gone (SIGKILL for one that ignores SIGTERM), or it outlives the app.
+    @Test(arguments: timeoutCases) func loaderTimesOut(_ c: TimeoutCase) async throws {
+        let pidFile = tempPath("models-pid")
+        defer { try? FileManager.default.removeItem(atPath: pidFile) }
         let started = Date()
         let result = await EngineModelCatalogLoader.load(
             executable: Self.fake, timeout: .milliseconds(500),
-            environment: env(["FAKE_ENGINE_MODELS_SLEEP_MS": "8000", "FAKE_ENGINE_IGNORE_SIGTERM": "1"]))
+            environment: env(c.env.merging(["FAKE_ENGINE_PIDFILE": pidFile]) { a, _ in a }))
         #expect(result == .failure(.timedOut))
-        #expect(Date().timeIntervalSince(started) < 2.5)
+        #expect(Date().timeIntervalSince(started) < c.within)
+        let pid = try #require(Int32(String(contentsOfFile: pidFile, encoding: .utf8)))
+        let gone = await eventually(within: .seconds(2)) { kill(pid, 0) != 0 }
+        #expect(gone)
+        if !gone { kill(pid, SIGKILL) }
     }
 
     @Test func loaderReportsStderrTailBeyond4KiB() async {

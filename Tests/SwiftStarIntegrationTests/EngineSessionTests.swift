@@ -99,59 +99,46 @@ struct EngineSessionTests {
     /// firing immediately on `quit` isn't independently assertable — the
     /// wire parser still decodes it as `.ignored` — but its real consequence
     /// (a mid-turn quit ending fast and in the right order) is exactly what
-    /// `quitMidTurnStopsFirst` and `quitWithQueuedPromptEndsPromptly` prove.
+    /// `quitWithQueuedPromptEndsPromptly` proves.
+    ///
+    /// Cut in SU.5b (owner decision): emptyPromptIsRefused, stopWhileIdleIsRefused,
+    /// secondStopIsIdempotent and loadGapQueuesAndKeepsStopDisabled pinned only
+    /// the fake's own behaviour; notRunningErrorIsReadable pinned one string.
+    /// quitMidTurnStopsFirst folded into quitWithQueuedPromptEndsPromptly, which
+    /// asserts the same stop-before-quit order and a clean exit.
 
-    @Test func emptyPromptIsRefused() async throws {
-        let (session, rec) = make(fixture: "tool-read")
-        try session.start()
-        #expect(await eventually { rec.count(isAwaiting) == 1 })
-        try session.send(prompt: "   ")
-        #expect(await eventually { rec.events.contains(.error("a prompt needs a non-empty text")) })
-        session.quit()
-        #expect(await eventually { rec.exit != nil })
+    nonisolated struct DirectoryCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        /// The `closed` event's capture path; nil sends none.
+        let capturePath: String?
+        /// The expected directory, relative to the working directory when it
+        /// doesn't start with "/".
+        let directory: String
     }
 
-    @Test func stopWhileIdleIsRefused() async throws {
-        let (session, rec) = make(fixture: "tool-read")
+    nonisolated static let directoryCases: [DirectoryCase] = [
+        .init(testDescription: "sessionDirectoryKnownAtExit (stderr line)", capturePath: nil,
+              directory: "/tmp/fake-session"),
+        // The closed event wins over the (later) stderr "Session artifacts:" line.
+        .init(testDescription: "closedCapturePathResolvesSessionDirectory",
+              capturePath: "session-x/run-1-123.json", directory: "session-x"),
+    ]
+
+    @Test(arguments: directoryCases) func sessionDirectory(_ c: DirectoryCase) async throws {
+        let dir = URL(fileURLWithPath: tempPath("wd"))
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (session, rec) = make(
+            fixture: "tool-read", extra: c.capturePath.map { ["FAKE_ENGINE_CAPTURE_PATH": $0] } ?? [:],
+            workingDirectory: dir)
         try session.start()
         #expect(await eventually { rec.count(isAwaiting) == 1 })
-        try session.stop()
-        #expect(await eventually { rec.events.contains(.error("no turn is running")) })
         session.quit()
         #expect(await eventually { rec.exit != nil })
-    }
-
-    @Test func secondStopIsIdempotent() async throws {
-        let (session, rec) = make(fixture: "stop", pace: 30000)
-        try session.start()
-        #expect(await eventually { rec.count(isAwaiting) == 1 })
-        try session.send(prompt: "read everything")
-        #expect(await eventually { rec.has(isToolStart) })
-        try session.stop()
-        try session.stop()
-        #expect(await eventually { rec.has(isInterrupted) })
-        // No second "stopping"-triggered error or duplicate interrupt.
-        #expect(rec.count(isInterrupted) == 1)
-        #expect(!rec.events.contains(.error("no turn is running")))
-        session.quit()
-        #expect(await eventually { rec.exit != nil })
-    }
-
-    @Test func loadGapQueuesAndKeepsStopDisabled() async throws {
-        // A2: a prompt sent during the model-load gap is queued, not
-        // forwarded, and Stop stays disabled (no turn exists yet) until the
-        // gap elapses and the fixture's own `input` finally arrives.
-        let (session, rec) = make(fixture: "tool-read", extra: ["FAKE_ENGINE_LOAD_MS": "300"])
-        try session.start()
-        try session.send(prompt: "typed while loading")
-        #expect(await eventually { rec.has(isQueued) })
-        #expect(!rec.has(isAwaiting), "input must not arrive before the gap elapses")
-        try? await Task.sleep(for: .milliseconds(100))
-        try session.stop()
-        #expect(await eventually { rec.events.contains(.error("no turn is running")) })
-        #expect(await eventually(within: .seconds(1)) { rec.count(isAwaiting) == 1 })
-        session.quit()
-        #expect(await eventually { rec.exit != nil })
+        let expected = c.directory.hasPrefix("/")
+            ? c.directory : dir.appendingPathComponent(c.directory).standardizedFileURL.path
+        #expect(rec.exits.first?.1?.path == expected)
+        #expect(session.sessionDirectory?.path == expected)
     }
 
     @Test func stopMidTurn() async throws {
@@ -231,16 +218,6 @@ struct EngineSessionTests {
         #expect(rec.exit?.message == "refused to start: ds4-dogfood tui: error: no model on this Mac")
     }
 
-    @Test func sessionDirectoryKnownAtExit() async throws {
-        let (session, rec) = make(fixture: "tool-read")
-        try session.start()
-        #expect(await eventually { rec.count(isAwaiting) == 1 })
-        session.quit()
-        #expect(await eventually { rec.exit != nil })
-        #expect(rec.exits.first?.1?.path == "/tmp/fake-session")
-        #expect(session.sessionDirectory?.path == "/tmp/fake-session")
-    }
-
     @Test func exitOneReportsStderrTailAtProcessLevel() async throws {
         // EngineCommandTests.exitOneIsNotClean already proves this at the
         // pure EngineExit.describe level; this proves the process-level
@@ -291,26 +268,6 @@ struct EngineSessionTests {
         if pid > 0, kill(pid, 0) == 0 { kill(pid, SIGKILL) }
     }
 
-    @Test func quitMidTurnStopsFirst() async throws {
-        let log = FileManager.default.temporaryDirectory
-            .appendingPathComponent("engine-session-\(UUID().uuidString).log")
-        defer { try? FileManager.default.removeItem(at: log) }
-        let (session, rec) = make(fixture: "tool-read", pace: 30000, log: log)
-        try session.start()
-        #expect(await eventually { rec.count(isAwaiting) == 1 })
-        try session.send(prompt: "read Package.swift")
-        #expect(await eventually { rec.has(isToolStart) })
-        session.quit()
-        #expect(await eventually { rec.exit != nil })
-        let kinds = try String(contentsOf: log, encoding: .utf8).split(separator: "\n").compactMap { line in
-            (try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])?["kind"] as? String
-        }
-        let stop = try #require(kinds.firstIndex(of: "stop"))
-        let quit = try #require(kinds.firstIndex(of: "quit"))
-        #expect(stop < quit, "\(kinds)")
-        #expect(rec.exit?.code == 0)
-    }
-
     private func loggedKinds(_ log: URL) throws -> [String] {
         try String(contentsOf: log, encoding: .utf8).split(separator: "\n").compactMap { line in
             (try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])?["kind"] as? String
@@ -359,29 +316,6 @@ struct EngineSessionTests {
         #expect(stop < quit, "\(kinds)")
         #expect(rec.exit?.message == "ended", "\(String(describing: rec.exit))")
         #expect(!rec.events.contains { if case .prompt(let t) = $0 { t == "second, queued" } else { false } })
-    }
-
-    @Test func notRunningErrorIsReadable() {
-        #expect(EngineSessionError.notRunning.localizedDescription == "The engine is not running.")
-    }
-
-    @Test func closedCapturePathResolvesSessionDirectory() async throws {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("engine-wd-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let (session, rec) = make(
-            fixture: "tool-read",
-            extra: ["FAKE_ENGINE_CAPTURE_PATH": "session-x/run-1-123.json"],
-            workingDirectory: dir)
-        try session.start()
-        #expect(await eventually { rec.count(isAwaiting) == 1 })
-        session.quit()
-        #expect(await eventually { rec.exit != nil })
-        // The closed event wins over the (later) stderr "Session artifacts:" line.
-        let expected = dir.appendingPathComponent("session-x").standardizedFileURL.path
-        #expect(rec.exits.first?.1?.path == expected, "got \(String(describing: rec.exits.first?.1?.path)) want \(expected)")
-        #expect(session.sessionDirectory?.path == expected)
     }
 
     @Test func droppedSessionTerminatesTheEngine() async throws {
