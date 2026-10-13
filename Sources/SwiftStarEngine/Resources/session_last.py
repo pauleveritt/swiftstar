@@ -108,3 +108,86 @@ def steps(session: Session) -> list[Prompt]:
 
 def _text(texts: list[str], i: int) -> str:
     return texts[i] if i < len(texts) else ""
+
+
+# The engine's guard notices, as a tool result begins, by `loop_guards` kind
+# (ds4-engine 5451cd7d). `answer_cap` and `self_copy` act on sampling, not on
+# a tool result, so no step carries them.
+GUARD_MARKERS = {
+    # crates/ds4-native/src/shown.rs:209
+    "already_shown": "[Already shown above:",
+    # crates/ds4-native/src/loop_guards.rs:78
+    "repeated_call": "Tool error: not run. You already made this exact call",
+    # crates/ds4-native/src/loop_guards.rs:81-86
+    "call_cycle": "Tool error: not run. Your last",
+}
+
+CHECKS = ("F1", "F2", "F3", "U1", "U2")
+BOOKKEEPING = "host_results"
+WRITES = ("edit", "write")
+
+
+@dataclass
+class Flag:
+    """A failed (F) or useless (U) step; `step` is None for a whole prompt."""
+
+    prompt: int
+    step: int | None
+    rule: str
+    evidence: str
+
+
+def _args(t: dict) -> dict:
+    return {k: v for k, v in t.get("args") or []}
+
+
+def _guard(text: str) -> str | None:
+    return next((kind for kind, mark in GUARD_MARKERS.items() if text.startswith(mark)), None)
+
+
+def flags(prompts: list[Prompt], events: list[dict]) -> list[Flag]:
+    """Each step gets at most one flag, in the order U1, F1, U2: a loop
+    refusal fails, but the engine refused it as waste. F2 and F3 flag a
+    prompt."""
+    found: list[Flag] = []
+    seen: set[tuple] = set()  # (name, args) since the path was last written
+    for p in prompts:
+        for s in p.steps:
+            t = s.tool
+            if t is None or t.get("name") == BOOKKEEPING:
+                continue
+            text = t.get("result_text") or ""
+            args = _args(t)
+            key = (t.get("name"), tuple(sorted(args.items())))
+            if (kind := _guard(text)) is not None:
+                found.append(Flag(p.index, s.index, "U1", kind))
+            elif t.get("result_ok") is False:
+                found.append(Flag(p.index, s.index, "F1", text.splitlines()[0] if text else "failed"))
+            elif key in seen:
+                found.append(Flag(p.index, s.index, "U2", f"repeat of {t.get('name')} {args.get('path', '')}".rstrip()))
+            if t.get("name") in WRITES:
+                seen = {k for k in seen if dict(k[1]).get("path") != args.get("path")}
+            else:
+                seen.add(key)
+        for e in events:
+            if e.get("turn") != p.index:
+                continue
+            if e.get("kind") == "native_end" and e.get("status") != "ok":
+                found.append(Flag(p.index, None, "F2", f"native_end status {e.get('status')}"))
+            elif e.get("kind") == "error":
+                found.append(Flag(p.index, None, "F2", str(e.get("text") or "error")))
+        if not p.answered:
+            found.append(Flag(p.index, None, "F3", "no answer"))
+    return found
+
+
+def guard_mismatch(found: list[Flag], loop_guards: dict) -> str | None:
+    """Guard notices found in results against the engine's own counts, so a
+    notice whose wording this doesn't know shows up as a difference."""
+    diffs = []
+    for kind in GUARD_MARKERS:
+        n = sum(1 for f in found if f.rule == "U1" and f.evidence == kind)
+        counted = loop_guards.get(kind, 0)
+        if n != counted:
+            diffs.append(f"{kind}: found {n}, counted {counted}")
+    return "; ".join(diffs) or None
