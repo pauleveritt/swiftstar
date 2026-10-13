@@ -358,21 +358,12 @@ changed. The gates ran once, live, through `EngineController` on
 sessions are `20261013-153202`, `-153218` and `-153456`, all suffixed
 `-session-last`, under `~/.local/state/ds4-engine/sessions/`.
 
-**Gate 2, reading a session that hasn't closed: passed.**
-- At a pause after two prompts, `receipt.json`'s `capture_path` named the
-  `.partial.json` capture, with `capture_status` "retained".
-- `session_last.py --session` exited 0. It reported both prompts and their
-  steps, outcome `in-progress`, "not closed", and no warning.
+**Gate 2, reading a live session: passed.** At a pause, the receipt named
+the `.partial.json` capture, and `session_last.py --session` exited 0 with
+both prompts, outcome `in-progress`, and no warning.
 
-**Gate 3, Done's time: 2.8 s at small context; the large case is
-unmeasured.**
-- The first `/rewind 1`, at `ctx_used` 1,332, rebuilt the transcript to
-  the two original prompts in 2.8 s, from send to the engine's `input`.
-- The large case (`ctx_used` 37,035, after reading nine files) was the
-  second rewind, below; its timing is lost to the test's wait condition.
-- On a rewind, the relaunch is ~2.4 s to `candidate_ready`, and the engine
-  emits no refill before the next prompt. The refill seems to be paid at
-  the next prompt's first sync, not at Done. Unmeasured.
+**Gate 3:** the first `/rewind 1`, at `ctx_used` 1,332, rebuilt in 2.8 s.
+The large case is measured below.
 
 **Gate 1, a second rewind in a rewound session: failed.**
 - In session `153202`: "one", an `ls`, "three". `/rewind 1` gave `153218`
@@ -391,8 +382,17 @@ unmeasured.**
   logged, so inferred). No lock or second engine was involved: ds4-engine
   has none, and `native.log` shows a normal load.
 
-**For AN:** Done can't be built on `/rewind` until ds4-engine fixes repeated
-rewind. A first rewind's large-context cost (the relaunch, plus the refill at
-the next prompt) is still unknown, and should be measured against the
-owner's 30 s line before AN is redesigned. The engine request is drafted for
-the owner to file.
+**A first rewind at large context, measured after (sessions `154825` →
+`155435`):**
+- The setup: a read prompt reaching `ctx_used` 37,744, then a short prompt
+  (41,929).
+- `/rewind 1` took **3.6 s** to rebuild.
+- The next prompt took **243 s**: one sync prefilled 37,764 tokens in
+  242.3 s, about 156 tok/s, with no `prefix_cache` event. The same prompt
+  again took 1.5 s.
+- So a rewind refills the whole restored conversation, at about 8× the
+  owner's 30 s line at 37k.
+
+**For AN:** Done can't be built on `/rewind`. Repeated rewind is wrong, and
+a rewind refills from scratch, paid at the next prompt. Filed upstream with
+the owner's approval.
