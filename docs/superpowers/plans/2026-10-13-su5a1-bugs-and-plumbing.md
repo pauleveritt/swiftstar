@@ -261,3 +261,37 @@ signature. It now transforms only text outside fenced blocks
 
 - [ ] Run `just lint-docs` and both tiers. Add `## Result` to this plan. Update
   `ROADMAP.md`'s SU.5 row to "5a1 done", with links. Commit.
+
+## Result
+
+**Commits:** `e0263d9`..`55461ca` on `main` (Tasks 1–6, then the final-review
+fixes). Suite: 175 fast, 45 integration.
+
+**Diverged:**
+- `signal(SIGPIPE, SIG_IGN)` stays in `EngineSession`. The integration tests
+  run it without an app delegate.
+- The defaults observer's early return is a cost fix with no possible RED.
+  It is pinned by `catalogReloadsOnlyForANewExecutable`.
+- `fixtureStartStaysIdle` was not break-checked, since breaking it would
+  spawn the real engine.
+- The final review found two Task 6 regressions, both fixed: the catalog
+  note was lost on first start, and restart started a second engine after
+  the bound.
+- It also found deLaTeXed edge cases, now fixed to CommonMark's fence and
+  span rules.
+- It also found a crash race. Closing a pipe from outside its handler is
+  unsafe (`availableData` raises), so `PipeReading.stop` never closes. The
+  reviewer's `read(upToCount:)` fix blocks a handler and was not taken.
+- Per-session flags reset at every start, and `afterProtocolError` names
+  only our own SIGTERM's outcome.
+
+**Deferred minors** (for 5a2, 5b or SU.6):
+- rate and duration aren't locale-aware, nor are the status-report line or
+  the toolbar's ctx label
+- an unreachable guard in `quit()`
+- the loader sleeps 1 s on every timeout, and waits out the full timeout
+  when a grandchild holds its pipe
+- `trimmedOrNil`'s home
+- no test for "Relaunch skipped", nor a controller-level `willStart` test
+- 4-space indented code isn't protected
+- the inspector mixes GB and GiB
