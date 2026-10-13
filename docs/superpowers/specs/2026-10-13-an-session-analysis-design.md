@@ -1,8 +1,8 @@
 # SwiftStar AN design: analyzing a session
 
 **Date:** 2026-10-13
-**Status:** design approved in conversation 2026-10-13; this written spec
-awaits owner review.
+**Status:** approved by the owner 2026-10-13. **Revised the same day**
+(fork by resume, at the end): the revision awaits owner review.
 **Phase:** AN (Analyze), a new named phase. This spec covers AN.1 and AN.2
 in full and names AN.3 and AN.4.
 **Evidence:** session directories under `~/.local/state/ds4-engine/sessions/`
@@ -360,3 +360,97 @@ If a gate fails, AN.2 stops there, and the failure becomes an engine request.
   uncounted; the check against `loop_guards` totals makes that visible.
 - **Analyzing makes the context grow until Done.** A long analysis at high
   `ctx_used` is slower for the reason BRIEF's finding gives.
+
+## Revision, 2026-10-13: fork by resume, return by resume
+
+Directed by the owner after AN.2's gates. **This supersedes D4 and §3.1's
+Done step, and §3.4's gates.** §3.2 and §3.3 change only as described here;
+everything else above stands.
+
+### What was measured
+
+From [AN.2's Result](../plans/2026-10-13-an2-analyze-and-done.md#result),
+live on `qwen3.8-27b`:
+- **A second `/rewind` in a rewound session resumes a removed turn.** Filed
+  as [ds4-engine#219](https://github.com/pauleveritt/ds4-engine/issues/219).
+- **A first `/rewind 1` at 37,744 tokens rebuilt in 3.6 s, but the next
+  prompt took 243 s.** It refilled the whole conversation at about 156
+  tok/s, because a rewind snapshot keeps no saved state
+  (`E/src/ds4_engine/tui_cli.py:144-158`).
+- **Resuming a session with its saved state reached `input` in 4.5 s.** Its
+  first prompt at 41,949 tokens then took 1.4 s, with `sync_ms` 393.
+- The 17 s that first ruled out a fork was a model switch, not a resume.
+
+### D4, revised: the analysis runs in a fork, and Done returns to the original
+
+- **Analyze:**
+  - SwiftStar quits the main session at its pause. The engine saves the
+    conversation's state at every wait.
+  - It starts `tui --resume <main dir> --source <root> --ndjson`. This is
+    the shape of the engine's own `restart_argv` for a session SwiftStar
+    started (`E/src/ds4_engine/tui_cli.py:412-416`).
+  - The resumed session is the **analysis session**: a new directory with
+    the full main context and no refill. The report goes in as its first
+    prompt.
+  - SwiftStar builds this argv because `/resume` refuses the session it is
+    running in ("that is this session", `E/src/ds4_engine/tui_cli.py:938`).
+- **Done:**
+  - SwiftStar sends `/resume <main id>` from the analysis session.
+  - The engine refuses with a `relaunch` argv (TUI.34), and EN.1's
+    relaunch path runs it.
+  - The main directory is never written to after it ends ("an earlier
+    session is evidence", `E/src/ds4_engine/sessions.py`), so the main
+    context returns exactly, without the analysis.
+- **Pruning is safe.** The engine keeps the 3 newest saved states plus the
+  one being resumed (`sessions.py:31`, `tui_cli.py:908`). One analysis
+  session between the main session and its return leaves the main state in
+  the 3, and the return spares it anyway.
+- **Cost:** two resumes, about 4.5 s each, and no refill at the next
+  prompt. This is under the owner's 30 s line.
+- **Nothing is lost:** the analysis stays readable in its own directory
+  (`just last --session`).
+- **No `/rewind`,** so #219 doesn't block this.
+
+### §3.1, revised: what the owner sees
+
+1. **Analyze** on the last answer, as before.
+2. The transcript shows `Starting analysis…` while the fork starts. It is
+   then rebuilt from the main session's turns under the divider
+   `Analysis — a copy of this session`, followed by the report card and the
+   analysis prompt.
+3. **While analyzing:** the banner reads `Analyzing a copy — Done returns to
+   the session as it was`, with **Done**. The composer tint and placeholder
+   are as before.
+4. **Done:** the transcript is rebuilt from the main session, under
+   `Analysis ended — back at prompt k`, where `k` is the number of turns
+   resumed.
+5. A relaunch other than Done during analysis (`/model`, `/resume`, a
+   rewind) ends the analysis state with that relaunch's usual divider. The
+   main session is still on disk and can be resumed by hand.
+
+### §3.4, revised: one live check first
+
+Before any app code, a throwaway driver over `--ndjson` runs the whole loop:
+- a main session with two prompts
+- quit, then resume it as the analysis session, then one question
+- `/resume <main id>`, then run its `relaunch`
+
+**Pass:** each resume reaches `input` within 10 s, and the first prompt
+after each has `sync_ms` under 5,000. The returned session's
+`resumed.turns` are the main's two, without the analysis. The main
+directory's `conversation.kv` still exists. If any of these fails, AN.2
+stops and the owner decides.
+
+### AN.1 additions, from the review
+
+- **A refill flag.** A pause whose `sync_ms` is over 10,000 is flagged, with
+  its tokens and time as evidence. The report on the 243 s session said
+  "no flagged steps".
+- **`/last` points Claude at `conversation.json`** too: what the model saw.
+
+### Still out
+
+- the chart card
+- remedies (AN.3)
+- making rewind keep saved state: an engine request, not needed by this
+  design
