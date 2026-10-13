@@ -51,6 +51,70 @@ public final class EngineController {
     /// it (ds4-engine TUI.21's non-goal).
     public var canCopyApplyCommand: Bool { !isActive && applyCommand != nil }
 
+    // MARK: conversations (SU.7a)
+
+    /// This project's conversations, newest first; empty until loaded and
+    /// with no workspace.
+    private(set) var conversations: [Conversation] = []
+    @ObservationIgnored private var sessionListNote: String?
+    /// Roots whose "Session list unavailable" note was shown: once each.
+    @ObservationIgnored private var notedSessionListRoots: Set<String> = []
+
+    /// The conversation the current session belongs to, if it's listed.
+    var currentConversationID: String? {
+        guard let id = model.currentSessionID else { return nil }
+        return conversations.first { $0.sessionIDs.contains(id) }?.id
+    }
+
+    /// Resuming mid-turn ends the turn: the view asks first.
+    var resumeNeedsConfirmation: Bool { transcript.isBusy }
+
+    /// The git root the list is for: the workspace's, else the folder itself.
+    private var conversationRoot: URL? { workspace.map { ProjectRoot.locate(anchor: $0) ?? $0 } }
+
+    /// Loads the list for the current workspace. A result for a workspace
+    /// that has since changed is dropped; a failure keeps the list and notes
+    /// why once per root.
+    func reloadConversations() async {
+        guard !isFixture else { return }
+        guard let root = conversationRoot, let path = resolveExecutablePath() else {
+            conversations = []
+            return
+        }
+        let result = await SessionListLoader.load(executable: path, source: root)
+        guard conversationRoot?.standardizedFileURL.path == root.standardizedFileURL.path else { return }
+        switch result {
+        case .success(let entries):
+            conversations = Conversations.group(entries)
+            sessionListNote = nil
+        case .failure(let error):
+            sessionListNote = "Session list unavailable: \(error.reason)"
+            if session != nil { showSessionListNote() }
+        }
+    }
+
+    private func showSessionListNote() {
+        guard let note = sessionListNote, let root = conversationRoot?.path,
+              notedSessionListRoots.insert(root).inserted else { return }
+        model.apply(.notice(note))
+    }
+
+    /// Ends the current session and resumes `c` (SU.7a, D3), through the
+    /// relaunch path. Ignored while starting or quitting, for a conversation
+    /// that can't be resumed, and for the one already running.
+    func resume(_ c: Conversation) async {
+        guard !isFixture, canChoose, c.resumable, c.id != currentConversationID,
+              let root = conversationRoot else { return }
+        await relaunch(EngineRelaunch(
+            kind: .resume, argv: EngineCommand.resumeArguments(id: c.id, source: root), reason: ""))
+    }
+
+    /// Ends the current session and starts a fresh one with Settings.
+    func newConversation() async {
+        guard !isFixture else { return }
+        await restart()
+    }
+
     /// `start()` found no usable workspace: the view opens the folder picker
     /// (SU.6c, D1). Reset by a folder choice or `folderPickerDismissed()`.
     private(set) var wantsFolder = false
@@ -169,6 +233,8 @@ public final class EngineController {
         workspaceNote = nil
         guard url.standardizedFileURL.path != workspace?.standardizedFileURL.path else { return }
         workspace = url
+        conversations = []
+        Task { await reloadConversations() }
         restartIfRunning()
     }
 
@@ -360,6 +426,7 @@ public final class EngineController {
         if let note = workspaceNote { model.apply(.notice(note)); workspaceNote = nil }
         if let notice { model.apply(.notice(notice)) }
         showCatalogNote()
+        showSessionListNote()
         do {
             try session.start()
             self.session = session
@@ -458,7 +525,19 @@ public final class EngineController {
             lastSessionDirectory = directory
             UserDefaults.standard.set(directory.path, forKey: DefaultsKey.lastSessionDirectory.rawValue)
         }
+        // A resume the engine refused to start (its `.resumed` never came):
+        // a model it no longer offers can still give back the files.
+        let refusedResume = model.pendingRelaunch.flatMap { r -> String? in
+            guard r.kind == .resume, let i = r.argv.firstIndex(of: "--resume"), i + 1 < r.argv.count else { return nil }
+            return r.argv[i + 1]
+        }
         model.didExit(exit, directory: directory)
+        if let id = refusedResume, exit.message.contains("model") {
+            model.apply(.notice(
+                "Its files can still be recovered by starting a new conversation from it in Terminal: "
+                + "`ds4-dogfood tui --resume \(id) --new-conversation`"))
+        }
+        Task { await reloadConversations() }
         quitGeneration += 1
         resumeQuitWaiters()
     }

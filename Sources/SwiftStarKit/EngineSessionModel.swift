@@ -82,6 +82,11 @@ public struct EngineSessionModel: Equatable, Sendable {
     /// two refusals arrive, only the one actually run may name the divider.
     public private(set) var pendingRelaunch: EngineRelaunch?
 
+    /// The session directory this conversation is known by (SU.7a): the one
+    /// a `.resumed` names, else this process's own, from the first pause's
+    /// capture path. Cleared by a fresh start.
+    public private(set) var currentSessionID: String?
+
     public init() {}
 
     public var composer: EngineComposer {
@@ -93,6 +98,7 @@ public struct EngineSessionModel: Equatable, Sendable {
         transcript = EngineTranscript()
         metrics = EngineMetricsState()
         pendingRelaunch = nil
+        currentSessionID = nil
         phase = .starting
     }
 
@@ -125,8 +131,13 @@ public struct EngineSessionModel: Equatable, Sendable {
         case .resumed(let r):
             transcript.rebuild(from: r, divider: r.divider(after: pendingRelaunch))
             pendingRelaunch = nil
+            if !r.sessionID.isEmpty { currentSessionID = r.sessionID }
         default:
             transcript.apply(event)
+        }
+        if case .pause(let p) = event, currentSessionID == nil,
+           let path = p.capturePath, let id = EngineSessionEntry.directoryID(fromCapturePath: path) {
+            currentSessionID = id
         }
         EngineMetricsReducer.reduce(&metrics, event)
     }

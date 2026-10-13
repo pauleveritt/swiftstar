@@ -139,6 +139,27 @@ struct EngineSessionModelTests {
         #expect(Self.play(c.steps).composer.button(forInput: c.input) == c.button)
     }
 
+    // MARK: SU.7a: the current session's directory id
+
+    @Test func currentSessionIDFromResumed() {
+        var m = running()
+        m.apply(.resumed(EngineResumed(sessionID: "a", turns: [], rewoundTo: nil, filesChanged: nil, contextUsed: nil)))
+        #expect(m.currentSessionID == "a")
+        // A later pause names this process's own directory; the chain's id stays.
+        m.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1,
+                                    capturePath: "/s/sessions/c/run-1.partial.json")))
+        #expect(m.currentSessionID == "a")
+    }
+
+    @Test func currentSessionIDFromFirstPause() {
+        var m = running()
+        m.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1,
+                                    capturePath: "/s/sessions/b/run-1.partial.json")))
+        #expect(m.currentSessionID == "b")
+        m.didStart()
+        #expect(m.currentSessionID == nil)
+    }
+
     // MARK: relaunch
 
     /// Final review, Important #1: the divider names the relaunch that ran,

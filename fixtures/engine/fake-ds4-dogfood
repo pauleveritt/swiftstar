@@ -115,6 +115,16 @@ if "--resume" in sys.argv and env.get("FAKE_ENGINE_RESUME_FIXTURE"):
     fixture_path = env["FAKE_ENGINE_RESUME_FIXTURE"]
 with open(fixture_path) as f:
     fixture = [ln.rstrip("\n") for ln in f if ln.strip()]
+if "--resume" in sys.argv:
+    # The real engine's `resumed` names the session it resumed (SU.7a).
+    resume_id = sys.argv[sys.argv.index("--resume") + 1]
+    def name_resumed(line):
+        obj = json.loads(line)
+        if obj.get("kind") == "event" and obj["event"].get("kind") == "resumed":
+            obj["event"]["session"] = resume_id
+            return json.dumps(obj)
+        return line
+    fixture = [name_resumed(ln) for ln in fixture]
 
 inbox = queue.Queue()
 

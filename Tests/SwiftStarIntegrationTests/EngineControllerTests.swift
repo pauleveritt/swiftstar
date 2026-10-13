@@ -260,6 +260,159 @@ struct EngineControllerTests {
         #expect(controller.applyCommand == nil)
     }
 
+    // MARK: SU.7a: conversations and resume
+
+    private static let fixtureConversations: [Conversation] = {
+        let data = (try? Data(contentsOf: Fixtures.root.appendingPathComponent("sessions.json"))) ?? Data()
+        return Conversations.group((try? EngineSessionEntry.decodeList(data).get()) ?? [])
+    }()
+
+    /// The newest resumable conversation in the fixture.
+    private var resumable: Conversation { Self.fixtureConversations.first { $0.resumable }! }
+
+    @Test func conversationsLoadForTheWorkspace() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let repo = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: repo])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        await controller.reloadConversations()
+        #expect(controller.conversations.map(\.id) == Self.fixtureConversations.map(\.id))
+    }
+
+    @Test func resumeSpawnsResumeArgv() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        let c = resumable
+        await controller.resume(c)
+        let spawned = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(spawned)
+        let root = FileManager.default.temporaryDirectory
+        #expect(f.spawnArgv.last == EngineCommand.resumeArguments(id: c.id, source: root))
+        #expect(controller.transcript.rows.first == .divider("Resumed session \(c.id)"))
+        await controller.quit()
+    }
+
+    @Test func resumeAsksMidTurn() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        #expect(!controller.resumeNeedsConfirmation)
+        controller.send("Use the read tool on Package.swift")
+        let busy = await eventually { controller.transcript.isBusy }
+        #expect(busy)
+        #expect(controller.resumeNeedsConfirmation)
+        await controller.quit()
+    }
+
+    @Test func resumingTheCurrentConversationDoesNothing() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        await controller.reloadConversations()
+        let c = resumable
+        await controller.resume(c)
+        let resumed = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(resumed)
+        #expect(controller.currentConversationID == c.id)
+        await controller.resume(c)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(f.spawnArgv.count == 2)
+        await controller.quit()
+    }
+
+    @Test func resumeIgnoredWhileStarting() async throws {
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_MODELS_SLEEP_MS": "500"])
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        let starting = Task { await controller.start() }
+        let isStarting = await eventually { controller.phase == .starting }
+        #expect(isStarting)
+        await controller.resume(resumable)
+        await starting.value
+        let up = await eventually { controller.phase == .running }
+        #expect(up)
+        #expect(f.spawnArgv.count == 1)
+        #expect(f.spawnArgv.first?.contains("--resume") == false)
+        await controller.quit()
+    }
+
+    @Test func staleListIsDropped() async throws {
+        let f = try FakeEngine(sessions: "sessions.json", extra: ["FAKE_ENGINE_SESSIONS_SLEEP_MS": "500"])
+        defer { f.remove() }
+        let a = try tempRepo(), b = try tempRepo()
+        defer { for p in [a, b] { try? FileManager.default.removeItem(atPath: p) } }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: a])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        let loading = Task { await controller.reloadConversations() }
+        try? await Task.sleep(for: .milliseconds(150))
+        controller.workspace = URL(fileURLWithPath: b)
+        await loading.value
+        #expect(controller.conversations.isEmpty)
+    }
+
+    @Test func sessionListUnavailableIsANote() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        controller.workspace = FileManager.default.temporaryDirectory
+        await controller.reloadConversations()
+        #expect(controller.conversations.isEmpty)
+        await controller.start()
+        let up = await eventually { controller.phase == .running }
+        #expect(up)
+        let notes = controller.transcript.rows.filter { row in
+            if case .system(let s) = row { s.hasPrefix("Session list unavailable") } else { false }
+        }
+        #expect(notes.count == 1)
+        await controller.quit()
+    }
+
+    @Test func conversationsReloadAfterExit() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        #expect(controller.conversations.isEmpty)
+        await controller.quit()
+        let reloaded = await eventually { !controller.conversations.isEmpty }
+        #expect(reloaded)
+    }
+
+    @Test func refusedResumeShowsTheHint() async throws {
+        let f = try FakeEngine(sessions: "sessions.json", refuseResume: true)
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        let c = resumable
+        await controller.resume(c)
+        let ended = await eventually(within: .seconds(10)) {
+            if case .ended = controller.phase { true } else { false } }
+        #expect(ended)
+        let hint = "Its files can still be recovered by starting a new conversation from it in Terminal: "
+            + "`ds4-dogfood tui --resume \(c.id) --new-conversation`"
+        #expect(controller.transcript.rows.last == .system(hint))
+    }
+
     /// A started controller whose session is idle at its first `input`.
     private func running(_ f: FakeEngine, graces: EngineGraces = .standard) async -> EngineController {
         let controller = EngineController(graces: graces)
