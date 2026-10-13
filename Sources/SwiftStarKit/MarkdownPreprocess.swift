@@ -14,20 +14,25 @@ public enum MarkdownPreprocess {
     public static func deLaTeXed(_ s: String) -> String {
         var out: [String] = []
         var prose: [String] = []
-        var fence: String?
+        var fence: (char: Character, count: Int)?
         func flush() {
             guard !prose.isEmpty else { return }
-            out.append(outsideInlineCode(prose.joined(separator: "\n")))
+            out.append(paragraphs(prose))
             prose = []
         }
         for line in s.components(separatedBy: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if let open = fence {
                 out.append(line)
-                if trimmed.hasPrefix(open) { fence = nil }
-            } else if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                // CommonMark: a closing fence is the same character, at least
+                // as long, with nothing after it.
+                if let run = fenceRun(trimmed), run.char == open.char, run.count >= open.count,
+                   trimmed.dropFirst(run.count).allSatisfy(\.isWhitespace) {
+                    fence = nil
+                }
+            } else if let run = fenceRun(trimmed) {
                 flush()
-                fence = String(trimmed.prefix(3))
+                fence = run
                 out.append(line)
             } else {
                 prose.append(line)
@@ -37,14 +42,79 @@ public enum MarkdownPreprocess {
         return out.joined(separator: "\n")
     }
 
-    /// Applies `prose(_:)` to the text between inline code spans. An unclosed
-    /// backtick is literal text, as in CommonMark.
+    /// A fence's opening run: three or more backticks or tildes (a backtick
+    /// fence's info string can't contain a backtick).
+    private static func fenceRun(_ line: String) -> (char: Character, count: Int)? {
+        guard let c = line.first, c == "`" || c == "~" else { return nil }
+        let n = line.prefix { $0 == c }.count
+        guard n >= 3 else { return nil }
+        if c == "`", line.dropFirst(n).contains("`") { return nil }
+        return (c, n)
+    }
+
+    /// Prose lines, one paragraph at a time: a code span never pairs across a
+    /// blank line. Blank lines pass through.
+    private static func paragraphs(_ lines: [String]) -> String {
+        var result: [String] = []
+        var paragraph: [String] = []
+        func end() {
+            guard !paragraph.isEmpty else { return }
+            result.append(outsideInlineCode(paragraph.joined(separator: "\n")))
+            paragraph = []
+        }
+        for line in lines {
+            if line.allSatisfy(\.isWhitespace) {
+                end()
+                result.append(line)
+            } else {
+                paragraph.append(line)
+            }
+        }
+        end()
+        return result.joined(separator: "\n")
+    }
+
+    /// Applies `prose(_:)` outside code spans. A span opens with a run of
+    /// backticks and closes at the next run of the same length; an opening
+    /// run with no closer is literal text (CommonMark).
     private static func outsideInlineCode(_ s: String) -> String {
-        let parts = s.components(separatedBy: "`")
-        let closedSpans = parts.count % 2 == 1 ? parts.count : parts.count - 1
-        return parts.enumerated().map { i, part in
-            i % 2 == 1 && i < closedSpans ? part : prose(part)
-        }.joined(separator: "`")
+        let chars = Array(s)
+        var out = ""
+        var pending = ""
+        var i = 0
+        func run(at k: Int) -> Int {
+            var n = 0
+            while k + n < chars.count, chars[k + n] == "`" { n += 1 }
+            return n
+        }
+        while i < chars.count {
+            guard chars[i] == "`" else {
+                pending.append(chars[i])
+                i += 1
+                continue
+            }
+            let n = run(at: i)
+            var j = i + n
+            var close: Int?
+            while j < chars.count {
+                if chars[j] == "`" {
+                    let m = run(at: j)
+                    if m == n { close = j; break }
+                    j += m
+                } else {
+                    j += 1
+                }
+            }
+            if let close {
+                out += prose(pending) + String(chars[i..<(close + n)])
+                pending = ""
+                i = close + n
+            } else {
+                pending += String(chars[i..<(i + n)])
+                i += n
+            }
+        }
+        return out + prose(pending)
     }
 
     private static func prose(_ s: String) -> String {

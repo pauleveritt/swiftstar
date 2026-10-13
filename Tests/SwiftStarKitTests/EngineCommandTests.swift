@@ -161,4 +161,11 @@ struct EngineCommandTests {
     @Test func plainInterruptStillInterrupted() {
         #expect(EngineExit.describe(code: 130, stderrTail: "", sawReady: true).message == "interrupted")
     }
+
+    /// Final review of 5a1: an engine that exits on its own keeps its reason.
+    @Test func ownExitAfterProtocolErrorKeepsTheEnginesReason() {
+        let e = EngineExit.describe(
+            code: 2, stderrTail: "ds4-dogfood tui: error: bad flag", sawReady: false, afterProtocolError: true)
+        #expect(e.message == "refused to start: ds4-dogfood tui: error: bad flag")
+    }
 }

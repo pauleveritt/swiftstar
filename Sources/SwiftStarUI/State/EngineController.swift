@@ -221,7 +221,9 @@ public final class EngineController {
         case .failure(let error):
             catalog = nil
             catalogNote = "Model list unavailable: \(error.reason)"
-            if isActive { showCatalogNote() }
+            // Only into a live session's transcript: a load during a start's
+            // "Starting…" is shown by that start, after its transcript resets.
+            if session != nil { showCatalogNote() }
         }
     }
 
@@ -236,7 +238,9 @@ public final class EngineController {
         guard model.phase != .quitting, !isTerminating else { return }
         await quit()
         guard !isTerminating else { return }
-        guard !isActive else {
+        // After the safety bound the old engine may still hold the GPU: a
+        // menu pick must not start a second one (a deliberate Start may).
+        guard !quitBoundFired, !isActive else {
             model.apply(.notice("Restart skipped: the engine has not exited yet. Try again in a moment."))
             return
         }
@@ -297,6 +301,10 @@ public final class EngineController {
             self.handleExit(exit, directory)
         }
         if let relaunch { model.didRelaunch(relaunch) } else { model.didStart() }
+        // Per-session state: a bound or a pending /model from an earlier
+        // session must not carry into this one.
+        quitBoundFired = false
+        pendingModelCommand = nil
         if let notice { model.apply(.notice(notice)) }
         showCatalogNote()
         do {

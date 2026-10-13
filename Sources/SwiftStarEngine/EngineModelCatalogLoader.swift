@@ -102,11 +102,7 @@ public enum EngineModelCatalogLoader {
             for await chunk in chunks { all.append(chunk) }
             return all
         }
-        let end: @Sendable () -> Void = {
-            handle.readabilityHandler = nil
-            try? handle.close()
-            continuation.finish()
-        }
+        let end: @Sendable () -> Void = { PipeReading.stop(handle, continuation) }
         return (task, end)
     }
 }

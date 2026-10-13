@@ -39,4 +39,24 @@ struct MarkdownPreprocessTests {
     @Test func unknownMacrosPassThrough() {
         #expect(MarkdownPreprocess.deLaTeXed(#"\foo{bar}"#) == #"\foo{bar}"#)
     }
+
+    // Final review of 5a1: CommonMark fence and code-span rules.
+    @Test func longerFenceHoldsAnInnerFence() {
+        let md = "````md\n```sh\necho $$\n```\n````"
+        #expect(MarkdownPreprocess.deLaTeXed(md) == md)
+    }
+
+    @Test func fenceClosesOnlyOnABareLine() {
+        let md = "```\n``` not a close\necho $$\n```"
+        #expect(MarkdownPreprocess.deLaTeXed(md) == md)
+    }
+
+    @Test func doubleBacktickSpanIsCode() {
+        #expect(MarkdownPreprocess.deLaTeXed("run ``echo $$`` now") == "run ``echo $$`` now")
+    }
+
+    @Test func loneBacktickDoesNotPairAcrossParagraphs() {
+        let md = "Press the ` key, then $$x$$.\n\nRun `echo $$` now."
+        #expect(MarkdownPreprocess.deLaTeXed(md) == "Press the ` key, then x.\n\nRun `echo $$` now.")
+    }
 }

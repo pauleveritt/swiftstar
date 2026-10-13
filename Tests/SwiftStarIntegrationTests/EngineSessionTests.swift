@@ -450,4 +450,15 @@ struct EngineSessionTests {
         session.quit()
         #expect(await wait { rec.exit != nil })
     }
+
+    /// Final review of 5a1: stopping a drain must not close the handle, since
+    /// a handler still running would call `availableData` on it, which raises
+    /// on a closed handle (exit 134). `fileDescriptor` raises the same way,
+    /// so reading it here crashes the test if `stop` closed the handle.
+    @Test func stopLeavesTheHandleOpen() {
+        let pipe = Pipe()
+        let (_, continuation) = AsyncStream<Data>.makeStream()
+        PipeReading.stop(pipe.fileHandleForReading, continuation)
+        #expect(pipe.fileHandleForReading.fileDescriptor >= 0)
+    }
 }

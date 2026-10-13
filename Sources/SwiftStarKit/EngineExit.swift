@@ -29,7 +29,9 @@ public struct EngineExit: Equatable, Sendable {
         if forced {
             return EngineExit(code: code, message: "ended by force after the quit timed out")
         }
-        if afterProtocolError {
+        // Only our own SIGTERM's outcome reads as ours; an engine that exits on
+        // its own after a bad line keeps its reason.
+        if afterProtocolError, (reason == .signal && code == SIGTERM) || (reason == .exit && code == 130) {
             return EngineExit(code: code, message: "ended after a protocol error")
         }
         if reason == .signal {

@@ -431,4 +431,46 @@ struct EngineControllerTests {
             await controller.quit()
         }
     }
+
+    // MARK: 5a1 final review
+
+    /// The first start loads the catalog; when that fails, the note must
+    /// survive into the session's transcript.
+    @Test func catalogNoteShownOnFirstStart() async throws {
+        let script = tempPath("session"), log = tempPath("argv")
+        defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
+        try writeSessionFake(to: script, argvLogPath: log)
+        await withDefaults(executable: script, modelID: nil) {
+            let controller = EngineController()
+            controller.workspace = FileManager.default.temporaryDirectory
+            await controller.start()
+            await poll { controller.phase == .running }
+            #expect(controller.transcript.rows.contains {
+                if case .system(let s) = $0 { s.hasPrefix("Model list unavailable") } else { false } })
+            await controller.quit()
+        }
+    }
+
+    /// After the safety bound, a restart (menu pick) must not start a second
+    /// engine beside one that may still hold the GPU; a deliberate Start does.
+    @Test func restartAfterQuitBoundIsSkippedButStartWorks() async throws {
+        let f = try fake(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
+        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
+        await withDefaults(executable: f.script, modelID: nil) {
+            let graces = EngineGraces(
+                stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(2), safetyBound: .milliseconds(500))
+            let controller = await running(f, graces: graces)
+            await controller.quit()
+            await controller.restart()
+            #expect(argvLines(f.spawns).count == 1)
+            #expect(controller.transcript.rows.contains {
+                if case .system(let s) = $0 { s.hasPrefix("Restart skipped") } else { false } })
+            try? await Task.sleep(for: .seconds(3))  // the old engine's SIGKILL lands
+            await controller.start()
+            await poll { controller.phase == .running && controller.transcript.isAwaitingInput }
+            #expect(argvLines(f.spawns).count == 2)
+            controller.select(modelID: "qwen3.8-flash-next")
+            #expect(!controller.transcript.rows.contains(.system("A model switch is already pending.")))
+        }
+    }
 }

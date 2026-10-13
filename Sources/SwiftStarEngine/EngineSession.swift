@@ -312,11 +312,7 @@ public final class EngineSession {
     /// stop reading, which ends the line loops and so reports the exit.
     private func endDrains() {
         guard !exitFired else { return }
-        for (handle, continuation) in drains {
-            handle.readabilityHandler = nil
-            try? handle.close()
-            continuation.finish()
-        }
+        for (handle, continuation) in drains { PipeReading.stop(handle, continuation) }
         drains = []
     }
 
