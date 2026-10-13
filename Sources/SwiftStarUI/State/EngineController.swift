@@ -225,10 +225,12 @@ public final class EngineController {
     /// Called when the app is terminating; quit waiters are still released.
     public func beginTerminating() { isTerminating = true }
 
-    /// Starts a session. Without `override` it first loads the model list and
+    /// Starts a session. Without `relaunch` it first loads the model list and
     /// clears a saved model the engine no longer offers (EN.1, D1); with one
-    /// (a relaunch) the argv is used exactly as given.
-    func start(arguments override: [String]? = nil) async {
+    /// the engine's argv is used exactly as given, and the rows stay until
+    /// the relaunched process reports what it kept.
+    func start(relaunch: EngineRelaunch? = nil) async {
+        let override = relaunch?.argv
         guard !isFixture, !isActive, !isTerminating else { return }
         var notice: String?
         if override == nil {
@@ -268,7 +270,7 @@ public final class EngineController {
             stopGrace: Self.stopGrace, termGrace: Self.termGrace, killGrace: Self.killGrace)
         session.onEvent = { [weak self] event in self?.handle(event) }
         session.onExit = { [weak self] exit, directory in self?.handleExit(exit, directory) }
-        model.didStart()
+        if let relaunch { model.didRelaunch(relaunch) } else { model.didStart() }
         if let notice { model.apply(.notice(notice)) }
         showCatalogNote()
         do {
@@ -296,7 +298,7 @@ public final class EngineController {
             modelID = id
             UserDefaults.standard.set(id, forKey: DefaultsKey.modelID.rawValue)
         }
-        await start(arguments: r.argv)
+        await start(relaunch: r)
     }
 
     func send(_ text: String) {

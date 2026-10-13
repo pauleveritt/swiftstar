@@ -231,6 +231,7 @@ public struct EngineTranscript: Equatable, Sendable {
     ) {
         for i in rows.indices.reversed() {
             guard case .tool(var card) = rows[i],
+                  card.rejection == nil,
                   card.tool.op == tool.op, card.tool.path == tool.path,
                   missing(card) else { continue }
             fill(&card)

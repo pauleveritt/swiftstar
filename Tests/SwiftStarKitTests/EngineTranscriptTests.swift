@@ -320,6 +320,18 @@ struct EngineToolCardFormattingTests {
         #expect(Array(t.rows.dropFirst()) == [.user("p"), .system("Stopped.")])
     }
 
+    /// Final review: a declined card never takes another call's end or result.
+    @Test func declinedCardDoesNotTakeAnotherCallsEnd() {
+        var t = EngineTranscript()
+        let tool = EngineTool(op: "read", path: "a.swift")
+        t.apply(.toolStart(tool))
+        t.apply(.toolRejected(EngineToolRejection(name: "read", reason: "repeated-call", path: "a.swift", text: "x")))
+        t.apply(.toolEnd(tool, ok: true, durationMs: 5))
+        let cards = t.rows.compactMap { if case .tool(let c) = $0 { c } else { nil } }
+        #expect(cards.first?.ok == true)
+        #expect(cards.last?.ok == nil && cards.last?.rejection != nil)
+    }
+
     @Test func declinedCardText() {
         var t = EngineTranscript()
         t.apply(.toolRejected(EngineToolRejection(

@@ -323,6 +323,11 @@ struct EngineControllerTests {
         defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
         await withDefaults(executable: f.script, modelID: nil) {
             let controller = await running(f)
+            controller.send("Use the read tool on Package.swift")
+            await poll(timeout: .seconds(10)) {
+                controller.transcript.isAwaitingInput
+                    && controller.transcript.rows.contains { if case .answer = $0 { true } else { false } }
+            }
             controller.send("/rewind 1")
             await poll(timeout: .seconds(15)) {
                 if argvLines(f.spawns).count == 2, case .ended = controller.phase { return true }
@@ -332,7 +337,11 @@ struct EngineControllerTests {
                 Issue.record("not ended: \(controller.phase)"); return
             }
             #expect(exit.message == "refused to start: ds4-dogfood tui: error: no model on this Mac")
-            #expect(!controller.transcript.rows.contains { if case .answer = $0 { true } else { false } })
+            // The conversation and the old session's pointer stay on screen.
+            #expect(controller.transcript.rows.contains { if case .answer = $0 { true } else { false } })
+            #expect(controller.transcript.rows.contains {
+                if case .system(let s) = $0 { s.hasPrefix("Session: ") } else { false } })
+            #expect(controller.transcript.rows.last == .system(exit.message))
         }
     }
 

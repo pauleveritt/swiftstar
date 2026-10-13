@@ -57,8 +57,9 @@ public struct EngineSessionModel: Equatable, Sendable {
     public private(set) var transcript = EngineTranscript()
     public private(set) var metrics = EngineMetricsState()
     public private(set) var sessionDirectory: URL?
-    /// The relaunch in progress: set by `.relaunch`, kept across the quit and
-    /// `didStart()`, and used for the divider when `.resumed` arrives.
+    /// The relaunch the controller is running (`didRelaunch`), used for the
+    /// divider when `.resumed` arrives. Not set by a `.relaunch` event: when
+    /// two refusals arrive, only the one actually run may name the divider.
     public private(set) var pendingRelaunch: EngineRelaunch?
 
     public init() {}
@@ -72,6 +73,17 @@ public struct EngineSessionModel: Equatable, Sendable {
         transcript = EngineTranscript()
         metrics = EngineMetricsState()
         sessionDirectory = nil
+        pendingRelaunch = nil
+        phase = .starting
+    }
+
+    /// A relaunch begins: like `didStart()`, but the rows and the old
+    /// session's pointer stay until `.resumed` replaces them, so a relaunch
+    /// the engine refuses to start leaves the conversation on screen.
+    public mutating func didRelaunch(_ relaunch: EngineRelaunch) {
+        transcript.end()
+        metrics = EngineMetricsState()
+        pendingRelaunch = relaunch
         phase = .starting
     }
 
@@ -85,9 +97,6 @@ public struct EngineSessionModel: Equatable, Sendable {
             transcript.appendSystem("Protocol error: \(message)")
         }
         switch event {
-        case .relaunch(let r):
-            pendingRelaunch = r
-            transcript.apply(event)
         case .resumed(let r):
             transcript.rebuild(from: r, divider: r.divider(after: pendingRelaunch))
             pendingRelaunch = nil

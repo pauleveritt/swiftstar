@@ -10,14 +10,45 @@ struct EngineSessionModelTests {
         return m
     }
 
-    @Test func pendingRelaunchSurvivesDidStart() {
+    private func resumedEvent() -> EngineEvent {
+        .resumed(EngineResumed(sessionID: "s", turns: [], rewoundTo: 1, filesChanged: nil, contextUsed: nil))
+    }
+
+    /// Final review, Important #1: the divider names the relaunch that ran,
+    /// not the last refusal that arrived.
+    @Test func dividerNamesTheExecutedRelaunch() {
         var m = running()
         m.apply(.relaunch(EngineRelaunch(kind: .rewind, argv: ["tui", "--ndjson"], reason: "")))
-        m.didStart()
+        m.apply(.relaunch(EngineRelaunch(kind: .model, argv: ["--model-id", "x", "--ndjson"], reason: "")))
+        m.didRelaunch(EngineRelaunch(kind: .rewind, argv: ["tui", "--ndjson"], reason: ""))
         m.apply(.ready)
-        m.apply(.resumed(EngineResumed(sessionID: "s", turns: [], rewoundTo: 1, filesChanged: nil, contextUsed: nil)))
+        m.apply(resumedEvent())
         #expect(m.transcript.rows.first == .divider("Rewound to prompt 1"))
         #expect(m.pendingRelaunch == nil)
+    }
+
+    @Test func freshStartForgetsARelaunch() {
+        var m = running()
+        m.didRelaunch(EngineRelaunch(kind: .rewind, argv: ["tui", "--ndjson"], reason: ""))
+        m.didStart()
+        m.apply(.ready)
+        m.apply(resumedEvent())
+        #expect(m.transcript.rows.first == .divider("Resumed session s"))
+    }
+
+    /// Final review, Important #2: until the relaunched process has proved it
+    /// starts, the old rows (and the session pointer) stay.
+    @Test func didRelaunchKeepsRows() {
+        var m = running()
+        _ = m.send("hi")
+        m.apply(.prompt("hi"))
+        m.apply(.answer(EngineAnswer(text: "hello", contextUsed: nil, contextSize: nil, durationMs: nil)))
+        m.didExit(EngineExit(code: 0, message: "ended"), directory: URL(fileURLWithPath: "/tmp/s1"))
+        let before = m.transcript.rows
+        m.didRelaunch(EngineRelaunch(kind: .rewind, argv: ["tui", "--ndjson"], reason: ""))
+        #expect(m.transcript.rows == before)
+        #expect(m.phase == .starting)
+        #expect(m.sessionDirectory?.path == "/tmp/s1")
     }
 
     @Test func readyMovesToRunning() {
