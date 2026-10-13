@@ -94,3 +94,32 @@ previews (light and dark, and increased contrast for the composer) plus
   SU.6 row lists 6e.
 - This plan gains `## Result`.
 - `just lint-docs`, `just test`, `just integration`.
+
+## Result
+
+Done 2026-10-13 on `su-ui`, in three commits: Task 1 (`e4eb7e2`), Task 2
+(`88287ae`) and this close.
+
+**Suites:** `just test` (75 passed, integration skipped) and
+`just integration` (75 passed, 37.6 s), with no other test run going.
+
+**Previews:** `StatusBarView`'s "Running", "Idle" and "No GPU metrics" and
+`MemoryStatusView`'s "Half full" render unchanged. `ComposerView`'s four
+previews were rendered in dark; "Ready" and "Analyzing" in light; "Ready"
+with increased contrast. The placeholder reads in each.
+
+**Diverged:**
+- **The Analyze tint is the accent at 25%, not full strength.** At full
+  strength (`.regular.tint(.accentColor)`, D3 as written) the field went
+  solid blue and the light-blue placeholder all but vanished. 25% is close
+  to the old 12% wash once the glass is under it.
+- **The worktree's first build needed the main checkout's dependency
+  clones.** GitHub fetches reset and timed out after 10 minutes. Copying
+  `.build/repositories` and `.build/checkouts` from the main checkout
+  (same `Package.resolved`), then `swift build --skip-update`, worked.
+
+**Not seen in a preview,** for the owner's check in the running app:
+- the tooltips on the context ring and the GPU figures (a snapshot can't
+  hover; D1 says the bridge comes back for a widget whose tooltip fails)
+- Send enabled and the red Stop: the field's text is private `@State`
+  and no fixture runs a turn, so every preview shows Send disabled
