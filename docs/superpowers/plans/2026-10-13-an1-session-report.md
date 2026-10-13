@@ -342,6 +342,20 @@ breaks, by kind:
 - `/last` in Claude Code: **not run.** The command file was created after
   this session started. The owner checks it in a new session.
 
+**Final review** (a fresh reviewer over the whole branch, which also ran
+the script against all 43 session directories on disk). Fixed, each RED
+then GREEN, with a break shown:
+- **Prompts are grouped by `user_turns[].turn_index`**, falling back to
+  "an answer closes a prompt" only when it is absent. Before, a prompt
+  cancelled before any step vanished: F3 went silent and later indices
+  shifted. `test_prompts_follow_user_turns`.
+- **Capture schema 19 is accepted.** It only adds `speculation`. Every 27B
+  report had carried a schema warning. `test_schema_19_accepted`.
+- **A write clears `grep` and `ls` history**, so a search after an edit is
+  verification, not U2. `test_grep_after_edit_not_flagged`.
+
+Deferred minors are in the ledger and the hand-off.
+
 **Findings for AN, from the first reports:**
 - **The slowest prefill is a small one.** In 123136 it is 57 tok/s at seq
   22, a 45-token prefill whose time is mostly fixed cost. "Slowest" may want

@@ -20,8 +20,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # The schema versions this was written against. Another version warns, and
-# the report is still attempted.
-CAPTURE_SCHEMA = 18
+# the report is still attempted. Capture 19 only adds the `speculation`
+# record (ds4-engine crates/ds4-capture/src/lib.rs:1395-1407), unread here.
+CAPTURE_SCHEMAS = (18, 19)
 EVENTS_SCHEMA = 1
 
 
@@ -84,7 +85,7 @@ def load(directory: Path) -> Session:
     else:
         # The engine writes no capture for a session that never reached the
         # model (`capture_status` "missing"), such as one rewound to 0.
-        capture = {"schema_version": CAPTURE_SCHEMA, "turns": [], "user_turns": []}
+        capture = {"schema_version": CAPTURE_SCHEMAS[-1], "turns": [], "user_turns": []}
         warnings.append(f"no capture (capture_status {receipt.get('capture_status')}): the model was never run")
     events = []
     for line in _read(directory / "operator-events.jsonl").splitlines():
@@ -94,8 +95,9 @@ def load(directory: Path) -> Session:
             break  # a torn last line
     diff_path = directory / "candidate.diff"
     diff = _read(diff_path) if diff_path.exists() else ""
-    if capture.get("schema_version") != CAPTURE_SCHEMA:
-        warnings.append(f"capture schema_version {capture.get('schema_version')}, written for {CAPTURE_SCHEMA}")
+    if capture.get("schema_version") not in CAPTURE_SCHEMAS:
+        known = " and ".join(map(str, CAPTURE_SCHEMAS))
+        warnings.append(f"capture schema_version {capture.get('schema_version')}, written for {known}")
     versions = {e.get("schema_version") for e in events} - {EVENTS_SCHEMA}
     if versions:
         warnings.append(f"events schema_version {sorted(map(str, versions))}, written for {EVENTS_SCHEMA}")
@@ -103,12 +105,33 @@ def load(directory: Path) -> Session:
 
 
 def steps(session: Session) -> list[Prompt]:
-    """The capture's steps grouped into prompts: an answer step closes one."""
+    """The capture's steps grouped into prompts. Each `user_turns` entry's
+    `turn_index` is the step its prompt starts at, so a prompt cancelled
+    before any step still counts. A capture without them falls back to
+    "an answer step closes a prompt"."""
+    user_turns = session.capture.get("user_turns") or []
+    turns = session.capture.get("turns") or []
+    starts = [u.get("turn_index") for u in user_turns]
+    if starts and all(isinstance(s, int) for s in starts):
+        prompts = []
+        for i, (u, start) in enumerate(zip(user_turns, starts)):
+            end = starts[i + 1] if i + 1 < len(starts) else len(turns)
+            own = [_step(j, i, turns[j]) for j in range(start, min(end, len(turns)))]
+            prompts.append(Prompt(i, u.get("text", ""), own, any(s.tool is None for s in own)))
+        return prompts
+    return _by_answers(session)
+
+
+def _step(i: int, prompt: int, turn: dict) -> Step:
+    return Step(i, prompt, turn.get("tool"), turn.get("context_used"), len(turn.get("tokens") or []))
+
+
+def _by_answers(session: Session) -> list[Prompt]:
     texts = [u.get("text", "") for u in session.capture.get("user_turns") or []]
     prompts: list[Prompt] = []
     current: list[Step] = []
     for i, turn in enumerate(session.capture.get("turns") or []):
-        step = Step(i, len(prompts), turn.get("tool"), turn.get("context_used"), len(turn.get("tokens") or []))
+        step = _step(i, len(prompts), turn)
         current.append(step)
         if step.tool is None:
             prompts.append(Prompt(len(prompts), _text(texts, len(prompts)), current, True))
@@ -137,6 +160,7 @@ GUARD_MARKERS = {
 CHECKS = ("F1", "F2", "F3", "U1", "U2")
 BOOKKEEPING = "host_results"
 WRITES = ("edit", "write")
+SEARCHES = ("grep", "ls")
 
 
 @dataclass
@@ -178,7 +202,9 @@ def flags(prompts: list[Prompt], events: list[dict]) -> list[Flag]:
             elif key in seen:
                 found.append(Flag(p.index, s.index, "U2", f"repeat of {t.get('name')} {args.get('path', '')}".rstrip()))
             if t.get("name") in WRITES:
-                seen = {k for k in seen if dict(k[1]).get("path") != args.get("path")}
+                # A write makes re-reading that path, and searching again,
+                # verification rather than waste.
+                seen = {k for k in seen if dict(k[1]).get("path") != args.get("path") and k[0] not in SEARCHES}
             else:
                 seen.add(key)
         for e in events:

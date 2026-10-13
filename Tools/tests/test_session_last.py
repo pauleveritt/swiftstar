@@ -56,10 +56,10 @@ class LoadTests(unittest.TestCase):
 
     def test_unknown_schema_warns(self):
         with Copy() as d:
-            Copy.edit_json(d / CAPTURE, lambda c: c.update(schema_version=19))
+            Copy.edit_json(d / CAPTURE, lambda c: c.update(schema_version=20))
             warnings = sl.load(d).warnings
             self.assertEqual(len(warnings), 1)
-            self.assertIn("19", warnings[0])
+            self.assertIn("20", warnings[0])
 
     def test_missing_capture_raises(self):
         with Copy() as d:
@@ -67,6 +67,22 @@ class LoadTests(unittest.TestCase):
             with self.assertRaises(sl.LoadError) as caught:
                 sl.load(d)
             self.assertIn(CAPTURE, str(caught.exception))
+
+    def test_prompts_follow_user_turns(self):
+        """A prompt cancelled before any step still counts, and a bookkeeping
+        step after an answer stays with its prompt (live: 181635, 122439)."""
+        turns = [{"tool": {"name": "ls", "args": [], "result_ok": True}}, {}, {"tool": {"name": "host_results", "args": []}}]
+        user_turns = [{"text": "a", "turn_index": 0}, {"text": "b", "turn_index": 3}]
+        session = sl.Session(Path("x"), [], {}, {"turns": turns, "user_turns": user_turns}, "", [])
+        prompts = sl.steps(session)
+        self.assertEqual([[s.index for s in p.steps] for p in prompts], [[0, 1, 2], []])
+        self.assertEqual([p.answered for p in prompts], [True, False])
+        self.assertEqual(rules(sl.flags(prompts, [])), [(None, "F3")])
+
+    def test_schema_19_accepted(self):
+        with Copy() as d:
+            Copy.edit_json(d / CAPTURE, lambda c: c.update(schema_version=19))
+            self.assertEqual(sl.load(d).warnings, [])
 
     def test_session_without_prompts(self):
         session = sl.Session(directory=Path("x"), events=[], receipt={}, capture={"turns": [], "user_turns": []}, diff="", warnings=[])
@@ -130,6 +146,14 @@ class FlagTests(unittest.TestCase):
     def test_repeat_after_edit_not_flagged(self):
         p = prompt(tool("read", path="a.swift"), tool("edit", path="a.swift"), tool("read", path="a.swift"))
         self.assertEqual(rules(sl.flags([p], [])), [])
+
+    def test_grep_after_edit_not_flagged(self):
+        p = prompt(tool("grep", pattern="x"), tool("edit", path="a.swift"), tool("grep", pattern="x"))
+        self.assertEqual(rules(sl.flags([p], [])), [])
+
+    def test_grep_repeat_without_edit_flagged(self):
+        p = prompt(tool("grep", pattern="x"), tool("grep", pattern="x"))
+        self.assertEqual(rules(sl.flags([p], [])), [(1, "U2")])
 
     def test_prompt_without_answer_flagged(self):
         self.assertEqual(rules(sl.flags([prompt(tool("ls", path="."), answered=False)], [])), [(None, "F3")])
