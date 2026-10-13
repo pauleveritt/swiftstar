@@ -151,3 +151,64 @@ public enum RecentWorkspaces {
         }
     }
 }
+
+/// A Recent folder, with its project's newest conversation it can resume
+/// (SU.7b, D2).
+public struct RecentProject: Equatable, Sendable, Identifiable {
+    public var id: String { path }
+    public let path: String
+    public let title: String
+    public let isCurrent: Bool
+    public let disabledReason: String?
+    /// Nil for the current project (its conversations are in the sidebar),
+    /// a missing folder, or a project with nothing to resume.
+    public let latest: Conversation?
+    /// "Hello · 12m ago".
+    public let latestLabel: String?
+
+    public init(path: String, title: String, isCurrent: Bool, disabledReason: String?,
+                latest: Conversation?, latestLabel: String?) {
+        self.path = path; self.title = title; self.isCurrent = isCurrent
+        self.disabledReason = disabledReason; self.latest = latest; self.latestLabel = latestLabel
+    }
+}
+
+public enum RecentProjects {
+    /// One row per Recent folder, in order. A folder's sessions are those
+    /// whose `source` is its git root (`rootOf`, else the folder itself),
+    /// compared after resolving symlinks: the engine records the path a
+    /// session started from, unresolved.
+    public static func items(
+        recents: [String], entries: [EngineSessionEntry], current: String?,
+        exists: (String) -> Bool, rootOf: (URL) -> URL?, now: Date, locale: Locale = .current
+    ) -> [RecentProject] {
+        let bySource = Dictionary(grouping: entries.filter { $0.source != nil }) { normalized($0.source!) }
+        return recents.map { path in
+            let url = URL(fileURLWithPath: path)
+            let isCurrent = path == current
+            let disabledReason = exists(path) ? nil : "folder not found"
+            var latest: Conversation?
+            if !isCurrent, disabledReason == nil {
+                let root = rootOf(url) ?? url
+                latest = Conversations.group(bySource[normalized(root.path)] ?? []).first(where: \.resumable)
+            }
+            return RecentProject(
+                path: path, title: url.leafName, isCurrent: isCurrent, disabledReason: disabledReason,
+                latest: latest, latestLabel: latest.map { label($0, now: now, locale: locale) })
+        }
+    }
+
+    /// The title, cut at 40 characters, then " · " and how long ago.
+    public static func label(_ c: Conversation, now: Date, locale: Locale) -> String {
+        let title = c.title.count > 40 ? String(c.title.prefix(40)) + "…" : c.title
+        let when = Conversations.subtitle(
+            Conversation(id: c.id, title: c.title, updated: c.updated, modelID: nil, resumable: c.resumable,
+                         problems: c.problems, sessionIDs: c.sessionIDs),
+            now: now, locale: locale)
+        return when.isEmpty ? title : "\(title) · \(when)"
+    }
+
+    private static func normalized(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+    }
+}

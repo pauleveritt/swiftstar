@@ -83,3 +83,15 @@ That makes seven conversations from twelve entries.
 - empty `first_prompt`s
 
 Re-capture it if `sessions --json` changes its fields.
+
+## `sessions-all.json` (SU.7b)
+
+Hand-written, in the shape of `sessions --json --all` (ds4-engine
+`5451cd7d`), with only the fields the app reads plus a few others. Two
+sources:
+- `alpha`: one resumable session
+- `beta`: a chain of two (`110000` ← `100000`, titled "Add a menu"), and a
+  newer standalone session that can't be resumed but has prompts, so it
+  stays a row and must be skipped for the older one
+
+The integration tests rewrite beta's `source` to a temporary repository.
