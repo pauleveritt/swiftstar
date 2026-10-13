@@ -8,10 +8,9 @@
 ## Now
 
 - **Next:** SU.5b (test consolidation; plan not written), then SU.6 and SU.7.
-- **In flight:** [AN.2](#phase-an-analyze), Analyze and Done (plan not
-  written).
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
-  worktree), and more than one window.
+  worktree), more than one window, and [AN.2](#phase-an-analyze)'s Done (a
+  second `/rewind` goes wrong).
 
 ## Phase EN: the engine contract
 
@@ -29,7 +28,7 @@ useful into ds4-engine. [Spec](docs/superpowers/specs/2026-10-13-an-session-anal
 | # | Cycle | Direction | Status |
 |---|---|---|---|
 | AN.1 | The report | `just last` and `/last`: the newest session's failed and useless steps, time, per-pause rates and raw signals, from the session directory with no model call | done 2026-10-13: [plan and Result](docs/superpowers/plans/2026-10-13-an1-session-report.md) |
-| AN.2 | Analyze and Done | An Analyze link on the last answer adds the report as a card and asks the model about it; Done sends `/rewind` back to before the analysis | not started; gated on the repeated-rewind bug, reading a live (`.partial.json`) session, and timing Done's refill (spec §3.4) |
+| AN.2 | Analyze and Done | An Analyze link on the last answer adds the report as a card and asks the model about it; Done sends `/rewind` back to before the analysis | stopped 2026-10-13 at gate 1: a second `/rewind` in a rewound session resumed the wrong turns (Engine requests). Live reads pass; first-rewind cost at large context unmeasured. [Plan and Result](docs/superpowers/plans/2026-10-13-an2-analyze-and-done.md) |
 | AN.3 | Remedies | Suggest and apply fixes from the flags, applied after Done in the main session | not brainstormed |
 | AN.4 | Into ds4-engine | `ds4-dogfood last [--session] [--json]` takes the script, tests and fixture; the app's `reportArgv` switches to it | opens on the owner's call, once the flag rules and summary rows stop changing |
 
@@ -114,7 +113,10 @@ there.
   ("after prompt 0"). The relaunch then resumed two turns, one of them the
   turn the first rewind removed, and dropped the newest. SwiftStar showed
   exactly what the engine sent. Seen with the `/rewind` queued behind a busy
-  turn; the unqueued case wasn't tried.
+  turn. **Seen again unqueued** (AN.2 gate 1, sessions `20261013-153218`
+  and `-153456`, suffix `-session-last`): `rewound_to 0`, and the resumed
+  turns included a prompt the first rewind had removed. This blocks AN.2's
+  Done.
 - **Watch, not a request: the Satyrn rename.** `ds4-dogfood` and the
   `~/.local/state/ds4-engine` paths may be renamed. SwiftStar would need to
   change `EngineCommand.executableName`, and probing both names is the

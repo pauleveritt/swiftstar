@@ -351,4 +351,48 @@ Most likely to bite first:
 
 ## Result
 
-Not started.
+**Stopped after Task 1, 2026-10-13: gate 1 failed** (P7, and the owner's
+rule that Done must stay under 30 s). Tasks 2–5 were not started; no code
+changed. The gates ran once, live, through `EngineController` on
+`qwen3.8-27b` against this worktree, using a throwaway test (deleted). The
+sessions are `20261013-153202`, `-153218` and `-153456`, all suffixed
+`-session-last`, under `~/.local/state/ds4-engine/sessions/`.
+
+**Gate 2, reading a session that hasn't closed: passed.**
+- At a pause after two prompts, `receipt.json`'s `capture_path` named the
+  `.partial.json` capture, with `capture_status` "retained".
+- `session_last.py --session` exited 0. It reported both prompts and their
+  steps, outcome `in-progress`, "not closed", and no warning.
+
+**Gate 3, Done's time: 2.8 s at small context; the large case is
+unmeasured.**
+- The first `/rewind 1`, at `ctx_used` 1,332, rebuilt the transcript to
+  the two original prompts in 2.8 s, from send to the engine's `input`.
+- The large case (`ctx_used` 37,035, after reading nine files) was the
+  second rewind, below; its timing is lost to the test's wait condition.
+- On a rewind, the relaunch is ~2.4 s to `candidate_ready`, and the engine
+  emits no refill before the next prompt. The refill seems to be paid at
+  the next prompt's first sync, not at Done. Unmeasured.
+
+**Gate 1, a second rewind in a rewound session: failed.**
+- In session `153202`: "one", an `ls`, "three". `/rewind 1` gave `153218`
+  with "one" and the `ls`: correct.
+- In `153218`: a large read prompt, then `/rewind 1`, sent idle. Expected:
+  "one" and the `ls`. Got (`153456`): `rewound_to 0`, divider "Rewound to
+  prompt 0", and `resumed.turns` "one", the `ls` **and "three"**, a prompt
+  the first rewind had removed. The read prompt was dropped, as it should be.
+- This matches EN.1's finding, there with the `/rewind` queued behind a busy
+  turn; here it was sent idle, so queueing is not the cause.
+- **No hang, corrected.** The test reported 600 s without settling. Its
+  wait was wrong, not the engine: it waited for the count of dividers to
+  grow, but a rebuild *replaces* the rows with one divider. `153456`'s
+  events end `candidate_ready` (2.3 s), `memory`, `where`, as `153218`'s do
+  before a prompt, so the engine was most likely idle at `input` (not
+  logged, so inferred). No lock or second engine was involved: ds4-engine
+  has none, and `native.log` shows a normal load.
+
+**For AN:** Done can't be built on `/rewind` until ds4-engine fixes repeated
+rewind. A first rewind's large-context cost (the relaunch, plus the refill at
+the next prompt) is still unknown, and should be measured against the
+owner's 30 s line before AN is redesigned. The engine request is drafted for
+the owner to file.
