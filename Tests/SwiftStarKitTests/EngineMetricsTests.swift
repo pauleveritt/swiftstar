@@ -62,4 +62,11 @@ struct EngineMetricsTests {
         EngineMetricsReducer.reduce(&s, .interrupted(contextUsed: nil, contextSize: nil))
         #expect(s.contextUsed == 512)
     }
+
+    @Test func resumedSetsContextUsed() {
+        var s = EngineMetricsState()
+        EngineMetricsReducer.reduce(&s, .resumed(EngineResumed(
+            sessionID: "s", turns: [], rewoundTo: 1, filesChanged: 0, contextUsed: 1071)))
+        #expect(s.contextUsed == 1071)
+    }
 }

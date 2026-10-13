@@ -8,6 +8,12 @@ public enum EngineSessionPhase: Equatable, Sendable {
     case ended(EngineExit)
     case notFound([String])
 
+    /// Shown above the prompt when the engine could not be found.
+    public var notFoundNotice: String? {
+        guard case .notFound(let searched) = self else { return nil }
+        return "ds4-dogfood was not found. Searched:\n" + searched.joined(separator: "\n")
+    }
+
     /// A process exists or is being torn down; starting another is refused.
     public var isActive: Bool {
         switch self {
@@ -17,19 +23,34 @@ public enum EngineSessionPhase: Equatable, Sendable {
     }
 }
 
+/// The composer's one button.
+public enum ComposerButton: Equatable, Sendable {
+    case send(enabled: Bool)
+    case stop
+}
+
 /// What the composer may do and the status text beside it.
 public struct EngineComposer: Equatable, Sendable {
-    public var canType: Bool
+    /// Typing and sending go together: the field is enabled exactly when a
+    /// prompt can be sent (the engine queues one sent while busy).
     public var canSend: Bool
     public var canStop: Bool
     public var label: String
 
+    /// Busy with an empty field, the button stops; with text typed it sends,
+    /// and the engine queues the prompt.
+    public func button(forInput input: String) -> ComposerButton {
+        let text = input.trimmedOrNil
+        if canStop, text == nil { return .stop }
+        return .send(enabled: canSend && text != nil)
+    }
+
     public static func state(phase: EngineSessionPhase, transcript: EngineTranscript) -> EngineComposer {
         switch phase {
         case .idle:
-            return EngineComposer(canType: false, canSend: false, canStop: false, label: "Not started")
+            return EngineComposer(canSend: false, canStop: false, label: "Not started")
         case .starting:
-            return EngineComposer(canType: false, canSend: false, canStop: false, label: "Starting…")
+            return EngineComposer(canSend: false, canStop: false, label: "Starting…")
         case .running:
             let busy = transcript.isBusy
             let label: String
@@ -39,13 +60,13 @@ public struct EngineComposer: Equatable, Sendable {
             } else {
                 label = transcript.isGenerating ? "Generating…" : busy ? "Working…" : "Ready"
             }
-            return EngineComposer(canType: true, canSend: true, canStop: busy, label: label)
+            return EngineComposer(canSend: true, canStop: busy, label: label)
         case .quitting:
-            return EngineComposer(canType: false, canSend: false, canStop: false, label: "Ending…")
+            return EngineComposer(canSend: false, canStop: false, label: "Ending…")
         case .ended(let exit):
-            return EngineComposer(canType: false, canSend: false, canStop: false, label: exit.message)
+            return EngineComposer(canSend: false, canStop: false, label: exit.message)
         case .notFound:
-            return EngineComposer(canType: false, canSend: false, canStop: false, label: "ds4-dogfood not found")
+            return EngineComposer(canSend: false, canStop: false, label: "ds4-dogfood not found")
         }
     }
 }

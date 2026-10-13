@@ -132,14 +132,14 @@ struct EngineSessionModelTests {
         #expect(m.composer.label == "Loading model… · 2 queued")
         m.apply(.awaitingInput)
         #expect(m.composer.label == "Ready")
-        #expect(m.composer.canSend && m.composer.canType && !m.composer.canStop)
+        #expect(m.composer.canSend && !m.composer.canStop)
         m.apply(.prompt("a"))
         #expect(m.composer.label == "Working…")
         #expect(m.composer.canSend && m.composer.canStop)
         m.willQuit()
         #expect(!m.composer.canSend)
         #expect(m.composer.label == "Ending…")
-        #expect(!m.composer.canType)
+        #expect(!m.composer.canSend)
         let exit = EngineExit(code: 0, message: "ended")
         m.didExit(exit, directory: nil)
         #expect(m.composer.label == "ended")
@@ -168,5 +168,24 @@ struct EngineSessionModelTests {
         #expect(m.phase == .ended(exit))
         #expect(!m.transcript.isBusy)
         #expect(m.transcript.loadingText == nil)
+    }
+
+    // MARK: SU.5a2 Task 1
+
+    @Test func composerButtonStates() {
+        var m = running()
+        m.apply(.awaitingInput)
+        #expect(m.composer.button(forInput: "hi") == .send(enabled: true))
+        #expect(m.composer.button(forInput: "  ") == .send(enabled: false))
+        _ = m.send("go")
+        m.apply(.prompt("go"))
+        #expect(m.composer.button(forInput: "") == .stop)
+        #expect(m.composer.button(forInput: "more") == .send(enabled: true))
+        #expect(EngineSessionModel().composer.button(forInput: "hi") == .send(enabled: false))
+    }
+
+    @Test func notFoundNoticeListsSearched() {
+        #expect(EngineSessionPhase.notFound(["/a/ds4-dogfood"]).notFoundNotice?.contains("/a/ds4-dogfood") == true)
+        #expect(EngineSessionPhase.running.notFoundNotice == nil)
     }
 }

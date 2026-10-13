@@ -104,11 +104,7 @@ struct SessionToolbar: ToolbarContent {
     private var modelMenu: some View {
         let loaded = controller.transcript.session?.modelID
         let items = ModelMenu.items(list: controller.catalog, settingsID: controller.modelID, loadedID: loaded)
-        var label = loaded ?? (controller.modelID.isEmpty ? "Engine default" : controller.modelID)
-        // A skipped restart leaves Settings ahead of the loaded model.
-        if let loaded, !controller.modelID.isEmpty, controller.modelID != loaded {
-            label = "\(loaded) → \(controller.modelID)"
-        }
+        let label = ModelMenu.label(loaded: loaded, chosen: controller.modelID)
         return Menu {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 choiceRow(title: item.title, checked: item.isChecked, disabledReason: item.disabledReason) {
@@ -130,12 +126,7 @@ struct SessionToolbar: ToolbarContent {
         let items = ContextMenu.items(
             list: controller.catalog, modelID: session?.modelID ?? controller.modelID,
             settingsContext: controller.contextSize, loaded: session?.contextSize)
-        let size = session?.contextSize ?? (controller.contextSize > 0 ? controller.contextSize : nil)
-        var label = size.map { "\($0.formatted(.number.grouping(.never))) ctx" } ?? "Default ctx"
-        if let loadedSize = session?.contextSize, controller.contextSize > 0,
-           controller.contextSize != loadedSize {
-            label = "\(loadedSize.formatted(.number.grouping(.never))) → \(controller.contextSize.formatted(.number.grouping(.never))) ctx"
-        }
+        let label = ContextMenu.label(loaded: session?.contextSize, chosen: controller.contextSize)
         return Menu {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 choiceRow(title: item.title, checked: item.isChecked, disabledReason: item.disabledReason) {

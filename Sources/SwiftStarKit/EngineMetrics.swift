@@ -34,6 +34,9 @@ public enum EngineMetricsReducer {
             state.contextSize = a.contextSize ?? state.contextSize
         case .session(let info):
             state.contextSize = info.contextSize ?? state.contextSize
+        case .resumed(let r):
+            // A relaunched session's context, before its first answer.
+            state.contextUsed = r.contextUsed ?? state.contextUsed
         case .interrupted(let used, let size):
             state.contextUsed = used ?? state.contextUsed
             state.contextSize = size ?? state.contextSize

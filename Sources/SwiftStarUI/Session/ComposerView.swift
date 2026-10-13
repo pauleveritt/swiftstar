@@ -14,7 +14,7 @@ struct ComposerView: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            if let notice = noticeText {
+            if let notice = controller.phase.notFoundNotice {
                 HStack {
                     Text(notice)
                         .font(.system(size: envTranscriptFontSize))
@@ -38,10 +38,9 @@ struct ComposerView: View {
                             .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
                     )
                     .onSubmit { send() }
-                    .disabled(!composerState.canType)
-                // Busy with text typed: the button sends (the engine queues it);
-                // busy with an empty field it stops.
-                let showsStop = composerState.canStop && trimmedInput.isEmpty
+                    .disabled(!composerState.canSend)
+                let button = composerState.button(forInput: input)
+                let showsStop = button == .stop
                 Button {
                     if showsStop {
                         controller.stop()
@@ -60,7 +59,7 @@ struct ComposerView: View {
                 // Icon-only, and the icon carries the whole meaning — the label
                 // has to move with the state or VoiceOver announces nothing.
                 .accessibilityLabel(showsStop ? "Stop generating" : "Send message")
-                .disabled(showsStop ? false : (!composerState.canSend || trimmedInput.isEmpty))
+                .disabled(button == .send(enabled: false))
             }
         }
         .padding(.horizontal, 12)
@@ -71,21 +70,8 @@ struct ComposerView: View {
         }
     }
 
-    /// Shown above the prompt field when the engine could not be found.
-    private var noticeText: String? {
-        if case .notFound(let searched) = controller.phase {
-            return "ds4-dogfood was not found. Searched:\n" + searched.joined(separator: "\n")
-        }
-        return nil
-    }
-
-    private var trimmedInput: String {
-        input.trimmedOrNil ?? ""
-    }
-
     private func send() {
-        let message = trimmedInput
-        guard composerState.canSend, !message.isEmpty else { return }
+        guard composerState.canSend, let message = input.trimmedOrNil else { return }
         input = ""
         controller.send(message)
     }

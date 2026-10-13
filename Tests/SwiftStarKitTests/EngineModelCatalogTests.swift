@@ -209,4 +209,28 @@ struct EngineModelCatalogTests {
             CatalogCacheKey(path: "/a", modifiedAt: nil)
                 != CatalogCacheKey(path: "/b", modifiedAt: nil))
     }
+
+    // MARK: SU.5a2 Task 1: toolbar labels and parsing
+
+    @Test func modelLabelLoadedToChosen() {
+        #expect(ModelMenu.label(loaded: nil, chosen: "") == "Engine default")
+        #expect(ModelMenu.label(loaded: nil, chosen: "x") == "x")
+        #expect(ModelMenu.label(loaded: "a", chosen: "b") == "a → b")
+        #expect(ModelMenu.label(loaded: "a", chosen: "a") == "a")
+        #expect(ModelMenu.label(loaded: "a", chosen: "") == "a")
+    }
+
+    @Test func contextLabelLoadedToChosen() {
+        #expect(ContextMenu.label(loaded: nil, chosen: 0) == "Default ctx")
+        #expect(ContextMenu.label(loaded: nil, chosen: 8192) == "8192 ctx")
+        #expect(ContextMenu.label(loaded: 8192, chosen: 0) == "8192 ctx")
+        #expect(ContextMenu.label(loaded: 8192, chosen: 4096) == "8192 → 4096 ctx")
+    }
+
+    @Test func contextParseCustom() {
+        #expect(ContextMenu.parseCustom(" 4096 ") == 4096)
+        #expect(ContextMenu.parseCustom("0") == nil)
+        #expect(ContextMenu.parseCustom("x") == nil)
+        #expect(ContextMenu.parseCustom("") == nil)
+    }
 }

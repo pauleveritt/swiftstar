@@ -47,12 +47,8 @@ struct StatusBarView: View {
         .padding(.vertical, 6)
     }
 
-    /// Rates and activity while the session is up, else the composer's
-    /// status label.
     private var statusText: String {
-        guard phase == .running else { return composerLabel }
-        return "Prefill avg \(MetricsFormatting.rate(metrics.prefillTPS)) · "
-            + "Generation avg \(MetricsFormatting.rate(metrics.generationTPS)) · \(composerLabel)"
+        MetricsFormatting.statusLine(phase: phase, label: composerLabel, metrics: metrics)
     }
 }
 

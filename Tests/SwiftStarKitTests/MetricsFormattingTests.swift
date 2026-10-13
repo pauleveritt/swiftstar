@@ -47,4 +47,12 @@ struct MetricsFormattingTests {
         #expect(EngineGraces.standard.safetyBound == .seconds(30))
         #expect(EngineSessionConstants.stderrTailLimit == 4096)
     }
+
+    @Test func statusLineRunningAndNot() {
+        var m = EngineMetricsState()
+        EngineMetricsReducer.reduce(&m, .pause(PauseMetrics(prefillTokens: 100, prefillMs: 1000, evalCount: 10, evalMs: 1000)))
+        #expect(MetricsFormatting.statusLine(phase: .running, label: "Ready", metrics: m)
+            == "Prefill avg 100.0 tok/s · Generation avg 10.0 tok/s · Ready")
+        #expect(MetricsFormatting.statusLine(phase: .idle, label: "Not started", metrics: m) == "Not started")
+    }
 }

@@ -19,7 +19,7 @@ public struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Section("Transcript") {
-                Slider(value: fontSliderValue, in: 0...3, step: 1) {
+                Slider(value: fontSliderValue, in: 0...Double(TranscriptFontScale.sizes.count - 1), step: 1) {
                     Text("Transcript font size")
                 }
                 HStack {
@@ -37,17 +37,14 @@ public struct SettingsView: View {
         .frame(width: 520, height: 300)
     }
 
-    /// The slider's 0…3 slot index, mapped through `TranscriptFontScale.sizes`
-    /// so the stored value is always a defined size (clamped on read).
-    private var fontSizeIndex: Int {
-        TranscriptFontScale.sizes.firstIndex(of: transcriptFontSize)
-            ?? TranscriptFontScale.sizes.firstIndex(of: TranscriptFontScale.clamp(transcriptFontSize))!
-    }
+    /// The slider's slot, mapped through `TranscriptFontScale` so the stored
+    /// value is always a defined size.
+    private var fontSizeIndex: Int { TranscriptFontScale.slot(for: transcriptFontSize) }
 
     private var fontSliderValue: Binding<Double> {
         Binding(
             get: { Double(fontSizeIndex) },
-            set: { transcriptFontSize = TranscriptFontScale.sizes[max(0, min(3, Int($0.rounded())))] }
+            set: { transcriptFontSize = TranscriptFontScale.size(forSlot: Int($0.rounded())) }
         )
     }
 }

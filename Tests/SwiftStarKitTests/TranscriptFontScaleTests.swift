@@ -46,4 +46,13 @@ struct TranscriptFontScaleTests {
         // new maximum. Pinned deliberately — silent, and the tie rule's doing.
         #expect(TranscriptFontScale.clamp(18) == 16)
     }
+
+    @Test func fontSlotRoundTrip() {
+        for s in TranscriptFontScale.sizes {
+            #expect(TranscriptFontScale.size(forSlot: TranscriptFontScale.slot(for: s)) == s)
+        }
+        #expect(TranscriptFontScale.slot(for: 999) == TranscriptFontScale.sizes.count - 1)
+        #expect(TranscriptFontScale.size(forSlot: 99) == TranscriptFontScale.sizes.last)
+        #expect(TranscriptFontScale.size(forSlot: -3) == TranscriptFontScale.sizes.first)
+    }
 }
