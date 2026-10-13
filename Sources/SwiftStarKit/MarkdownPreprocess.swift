@@ -6,12 +6,17 @@ public enum MarkdownPreprocess {
     /// LaTeX cleanup so the model's math reads as text rather than raw source.
     /// Strips wrappers and maps common symbols — not a TeX engine; unknown
     /// macros pass through. Code is left exactly as written: fenced blocks
-    /// (```` ``` ```` or `~~~`) and inline code spans are not touched, so
-    /// `echo $$` or `grep '\(a\)'` survive.
+    /// (```` ``` ```` or `~~~`), indented code blocks and inline code spans
+    /// are not touched, so `echo $$` or `grep '\(a\)'` survive. An indented
+    /// line counts as code after a blank line or more indented code; straight
+    /// after paragraph text it's a lazy continuation and stays prose. An
+    /// indented paragraph inside a list item is kept raw too (SU.6a, D4).
     public static func deLaTeXed(_ s: String) -> String {
         var out: [String] = []
         var prose: [String] = []
         var fence: (char: Character, count: Int)?
+        /// The previous line ended a block: blank, kept code, or the start.
+        var afterBreak = true
         func flush() {
             guard !prose.isEmpty else { return }
             out.append(paragraphs(prose))
@@ -26,13 +31,19 @@ public enum MarkdownPreprocess {
                 if let run = fenceRun(trimmed), run.char == open.char, run.count >= open.count,
                    trimmed.dropFirst(run.count).allSatisfy(\.isWhitespace) {
                     fence = nil
+                    afterBreak = true
                 }
+            } else if afterBreak, line.hasPrefix("    ") || line.hasPrefix("\t") {
+                flush()
+                out.append(line)
             } else if let run = fenceRun(trimmed) {
                 flush()
                 fence = run
                 out.append(line)
+                afterBreak = false
             } else {
                 prose.append(line)
+                afterBreak = trimmed.isEmpty
             }
         }
         flush()

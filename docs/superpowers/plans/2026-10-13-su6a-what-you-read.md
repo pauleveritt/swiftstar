@@ -252,3 +252,27 @@ interfaces and tests, not bodies (`docs/sdd.md`).
 - [ ] **Step 6: Run both tiers and commit.** Run `just test` and
   `just integration`, which must both pass. Commit with the message
   `SU.6a Task 3: indented code is left alone; close 6a`.
+
+## Result
+
+**Commits:** `a9b6ea9`..this one, on `main`. Suites: 94 fast and 39
+integration, all passing.
+
+**Break checks:** each new test failed against one broken line, then
+passed once it was restored.
+- **The merge:** always appending fails the merge rows, the mid-turn prompt
+  test and the fixture assertion. Comparing texts untrimmed fails
+  `equalTextsShowOnce`. Not skipping user rows fails
+  `promptBetweenNarrationAndAnswerStaysPending`.
+- **The title:** returning "Agent" for no workspace fails `windowTitle`.
+- **Indented code:** dropping the after-a-blank-line condition fails
+  `indentedLazyContinuationIsProse`.
+
+**Previews:** all of the touched files' previews were rendered and looked
+at. The preview window shows the preview's name rather than the session
+title, so the title is covered by `WindowTitle`'s test.
+
+**Diverged:**
+- The window-title test is its own `WindowTitleTests` suite, in
+  `FoundationExtensionTests.swift`.
+- `TranscriptRowView`'s comment-only change in Task 2 used Task 1's renders.

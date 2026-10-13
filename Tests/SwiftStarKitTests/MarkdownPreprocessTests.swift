@@ -25,6 +25,11 @@ struct MarkdownPreprocessTests {
         .init(testDescription: "loneBacktickDoesNotPairAcrossParagraphs",
               input: "Press the ` key, then $$x$$.\n\nRun `echo $$` now.",
               output: "Press the ` key, then x.\n\nRun `echo $$` now."),
+        // SU.6a: an indented fence marker is code; it opens no fence.
+        .init(testDescription: "indentedFenceMarkerOpensNoFence",
+              input: "Intro.\n\n    ```\n\nThen $$x$$.", output: "Intro.\n\n    ```\n\nThen x."),
+        // A lazy continuation (indented, straight after paragraph text) is prose.
+        .init(testDescription: "indentedLazyContinuationIsProse", input: "Text\n    \\(x\\)", output: "Text\n    x"),
     ]
 
     @Test(arguments: proseCases) func prose(_ c: ProseCase) {
@@ -40,6 +45,9 @@ struct MarkdownPreprocessTests {
         "````\n```\n$$x$$\n````",                          // longerFenceHoldsAnInnerFence (bare inner fence)
         "```\n``` not a close\necho $$\n```",              // fenceClosesOnlyOnABareLine
         "run ``echo $$`` now",                             // doubleBacktickSpanIsCode
+        "Intro.\n\n    echo $$\n    \\to y",               // indentedCodeAfterBlankLine (SU.6a)
+        "\techo \\to y",                                  // tabIndentedCodeAtStart
+        "- item\n\n    \\(a\\) stays",                     // indentedListParagraphKeptRaw (accepted trade-off)
     ]) func codeIsVerbatim(_ md: String) {
         #expect(MarkdownPreprocess.deLaTeXed(md) == md)
     }

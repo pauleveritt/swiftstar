@@ -28,7 +28,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
 | SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
-| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | in progress: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md) done 2026-10-13 (keep the Markdown fork; the self-test now covers Litext). Next: pick the next part |
+| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | in progress: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md) and [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md) ([spec](docs/superpowers/specs/2026-10-13-su6a-what-you-read-design.md)) done 2026-10-13. Next: 6b (engine information) or 6c (remembering) |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
 
 ### SU.6 punch list
@@ -42,14 +42,8 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
   - the engine's stderr start notices
   - model sizes from `plan_gib` and `size_bytes`; drop the catalog fields
     the engine never sends
-- **Copy:**
-  - "Queued" only for rows the engine confirmed
-  - the old "agent" wording ("Ask the agent…", the "Agent" title)
 - **Native look:** Liquid Glass affordances; `NativeTooltip` checked against
   plain `.help`.
-- **The 27B's two texts:** the narration is the full reply and `answer` is
-  `finish`'s one-line summary (EN.1, D4). Show the narration as the answer
-  body, with the summary under it.
 - **Remembering:** the apply command kept across sessions; a first-launch
   workspace, and a saved workspace that no longer exists (seen 2026-10-13: it
   pointed at a deleted worktree, so every start was refused).
@@ -58,7 +52,6 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
     inspector mixes GB and GiB
   - the model-list loader sleeps 1 s on every timeout, and waits out the
     whole timeout when a grandchild holds its pipe
-  - 4-space indented code isn't protected from de-LaTeXing
   - the recorder can pair a new `resumed.ndjson` with an old
     `relaunch-rewind.ndjson`, and leaves a `.tmp` on an exception
   - `clamp`'s doc comment sits on `slot(for:)`; two comments still describe
@@ -109,6 +102,9 @@ there.
   turn the first rewind removed, and dropped the newest. SwiftStar showed
   exactly what the engine sent. Seen with the `/rewind` queued behind a busy
   turn; the unqueued case wasn't tried.
+- **`resumed.turns` carries no narration.** So a 27B turn rebuilt after a
+  rewind or resume shows only its one-line summary, not the full reply
+  (SU.6a).
 - **Watch, not a request: the Satyrn rename.** `ds4-dogfood` and the
   `~/.local/state/ds4-engine` paths may be renamed. SwiftStar would need to
   change `EngineCommand.executableName`, and probing both names is the
