@@ -4,12 +4,10 @@ import Testing
 import SwiftStarKit
 
 /// Drives `EngineModelCatalogLoader` against the fake engine's `models --json` mode.
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
+@Suite(.serialized, .integration, .tags(.integration), .timeLimit(.minutes(1)))
 struct EngineModelCatalogLoaderTests {
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    private static let fake = repoRoot.appendingPathComponent("fixtures/engine/fake-ds4-dogfood").path
-    private static let models = repoRoot.appendingPathComponent("fixtures/engine/models.json").path
+    private static let fake = Fixtures.path("fake-ds4-dogfood")
+    private static let models = Fixtures.path("models.json")
 
     private func env(_ extra: [String: String] = [:]) -> [String: String] {
         var e = ProcessInfo.processInfo.environment

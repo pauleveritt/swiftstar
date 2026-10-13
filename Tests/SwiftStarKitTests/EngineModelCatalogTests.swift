@@ -3,19 +3,8 @@ import Testing
 @testable import SwiftStarKit
 
 struct EngineModelCatalogTests {
-    private static let sampleURL = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("fixtures/engine/models.json")
-
-    private static func sample() throws -> EngineModelList {
-        let data = try Data(contentsOf: sampleURL)
-        return try EngineModelList.decode(data).get()
-    }
-
-    private static func real() throws -> EngineModelList {
-        let url = sampleURL.deletingLastPathComponent().appendingPathComponent("models-real.json")
-        return try EngineModelList.decode(Data(contentsOf: url)).get()
-    }
+    private static func sample() throws -> EngineModelList { try Fixtures.modelList("models.json") }
+    private static func real() throws -> EngineModelList { try Fixtures.modelList("models-real.json") }
 
     @Test func validatedKeepsOfferedId() throws {
         let r = ModelMenu.validated(saved: "qwen3.8-27b", list: try Self.real())
@@ -63,8 +52,7 @@ struct EngineModelCatalogTests {
         // ds4-engine main (TUI.35) sends no `schema_version`, `default_model_id`
         // or `saved_model_id`, and names the context field `context`; the
         // decoder treats the first as version 1 and falls back for the second.
-        let url = Self.sampleURL.deletingLastPathComponent().appendingPathComponent("models-real.json")
-        let list = try EngineModelList.decode(Data(contentsOf: url)).get()
+        let list = try Self.real()
         #expect(list.models.count == 3)
         #expect(list.defaultModelID == nil)
         #expect(list.savedModelID == nil)

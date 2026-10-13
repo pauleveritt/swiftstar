@@ -21,7 +21,7 @@ struct EngineMetricsTests {
 
     @Test func answerAndMemoryFillContextAndGPU() throws {
         var s = EngineMetricsState()
-        for e in try EngineTranscriptTests.events(fromFixture: "tool-read.ndjson") {
+        for e in try Fixtures.events("tool-read.ndjson") {
             EngineMetricsReducer.reduce(&s, e)
         }
         #expect(s.contextUsed! > 0)

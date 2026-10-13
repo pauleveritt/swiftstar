@@ -3,18 +3,6 @@ import Foundation
 @testable import SwiftStarKit
 
 struct EngineWireParserTests {
-    private static var fixturesRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("fixtures/engine")
-    }
-
-    private static func events(fromFixture name: String) throws -> [EngineEvent] {
-        let text = try String(contentsOf: fixturesRoot.appendingPathComponent(name), encoding: .utf8)
-        var parser = EngineWireParser()
-        return text.split(whereSeparator: \.isNewline).map { parser.parse(String($0)) }
-    }
-
     private static func ready() -> EngineWireParser {
         var p = EngineWireParser()
         _ = p.parse(#"{"kind":"ready","protocol":1}"#)
@@ -26,7 +14,7 @@ struct EngineWireParserTests {
     }
 
     @Test func toolRejectedFixtureDecodes() throws {
-        let rejections = try Self.events(fromFixture: "tool-rejected.ndjson").compactMap { e -> EngineToolRejection? in
+        let rejections = try Fixtures.events("tool-rejected.ndjson").compactMap { e -> EngineToolRejection? in
             if case .toolRejected(let r) = e { r } else { nil }
         }
         #expect(rejections == [EngineToolRejection(
@@ -41,7 +29,7 @@ struct EngineWireParserTests {
     }
 
     @Test func rewindRefusedWithRelaunchDecodes() throws {
-        let relaunches = try Self.events(fromFixture: "relaunch-rewind.ndjson").compactMap { e -> EngineRelaunch? in
+        let relaunches = try Fixtures.events("relaunch-rewind.ndjson").compactMap { e -> EngineRelaunch? in
             if case .relaunch(let r) = e { r } else { nil }
         }
         #expect(relaunches.count == 1)
@@ -52,7 +40,7 @@ struct EngineWireParserTests {
     }
 
     @Test func resumedFixtureDecodes() throws {
-        let resumed = try Self.events(fromFixture: "resumed.ndjson").compactMap { e -> EngineResumed? in
+        let resumed = try Fixtures.events("resumed.ndjson").compactMap { e -> EngineResumed? in
             if case .resumed(let r) = e { r } else { nil }
         }
         let r = try #require(resumed.first)
@@ -91,7 +79,7 @@ struct EngineWireParserTests {
     }
 
     @Test func toolReadFixtureDecodes() throws {
-        let events = try Self.events(fromFixture: "tool-read.ndjson")
+        let events = try Fixtures.events("tool-read.ndjson")
         let results = events.compactMap { e -> EngineToolResult? in
             if case .toolResult(let r) = e { return r } else { return nil }
         }
@@ -117,11 +105,11 @@ struct EngineWireParserTests {
     }
 
     @Test func stopFixtureHasInterrupted() throws {
-        #expect(try Self.events(fromFixture: "stop.ndjson").contains { if case .interrupted = $0 { true } else { false } })
+        #expect(try Fixtures.events("stop.ndjson").contains { if case .interrupted = $0 { true } else { false } })
     }
 
     @Test func errorFixtureHasError() throws {
-        let events = try Self.events(fromFixture: "error.ndjson")
+        let events = try Fixtures.events("error.ndjson")
         #expect(events.contains { if case .error(let m) = $0 { m.contains("bogus") } else { false } })
     }
 

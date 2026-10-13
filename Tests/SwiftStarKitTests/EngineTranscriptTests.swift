@@ -3,15 +3,6 @@ import Foundation
 @testable import SwiftStarKit
 
 struct EngineTranscriptTests {
-    static func events(fromFixture name: String) throws -> [EngineEvent] {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("fixtures/engine")
-        let text = try String(contentsOf: root.appendingPathComponent(name), encoding: .utf8)
-        var parser = EngineWireParser()
-        return text.split(whereSeparator: \.isNewline).map { parser.parse(String($0)) }
-    }
-
     private func cards(_ t: EngineTranscript) -> [EngineToolCard] {
         t.rows.compactMap { if case .tool(let c) = $0 { c } else { nil } }
     }
@@ -19,7 +10,7 @@ struct EngineTranscriptTests {
     @Test func toolReadFixtureBuildsRows() throws {
         var t = EngineTranscript()
         t.appendUser("go")
-        for e in try Self.events(fromFixture: "tool-read.ndjson") { t.apply(e) }
+        for e in try Fixtures.events("tool-read.ndjson") { t.apply(e) }
         let cs = cards(t)
         #expect(cs.count == 1)
         #expect(cs.allSatisfy { $0.ok == true && $0.result != nil })
@@ -31,7 +22,7 @@ struct EngineTranscriptTests {
         var t = EngineTranscript()
         #expect(t.session == nil)
         var sawSession = false
-        for e in try Self.events(fromFixture: "tool-read.ndjson") {
+        for e in try Fixtures.events("tool-read.ndjson") {
             t.apply(e)
             if case .session = e {
                 sawSession = true
@@ -80,7 +71,7 @@ struct EngineTranscriptTests {
         var t = EngineTranscript()
         var started = false
         var sawGeneratingFlip = false
-        for e in try Self.events(fromFixture: "tool-read.ndjson") {
+        for e in try Fixtures.events("tool-read.ndjson") {
             t.apply(e)
             if case .prompt = e { started = true }
             if case .awaitingInput = e, started { break }
@@ -114,7 +105,7 @@ struct EngineTranscriptTests {
     @Test func interruptedAddsStoppedRow() throws {
         var t = EngineTranscript()
         t.appendUser("go")
-        for e in try Self.events(fromFixture: "stop.ndjson") { t.apply(e) }
+        for e in try Fixtures.events("stop.ndjson") { t.apply(e) }
         #expect(t.rows.last == .system("Stopped."))
         let before = t.rows.dropLast().last
         if case .system = before { Issue.record("row before Stopped is system") }
