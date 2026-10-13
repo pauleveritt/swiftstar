@@ -385,8 +385,10 @@ spawned without `--model-id`, ran `qwen3.8-27b`, and quit with no orphan.
 Not seen: the notice (no screen access); `staleModelClearedBeforeSpawn` pins
 it. **Owed by the owner, in the GUI:** `/rewind 1` (also queued behind a busy
 turn) and a mid-session model-menu switch.
-**Deferred minors** (ledger, for SU.5): a 10 s test; no notice when a relaunch
-is abandoned at the quit bound; no Kit test of `model_refused` or
+**Deferred minors** (for SU.5): a 10 s test; no notice when a relaunch is
+abandoned at the quit bound; no Kit test of `model_refused` or
 `resume_refused`; the "Other model" alert copy; the recorder overwriting its
 fixture before checking it; a second queued model pick dropped silently; no
-sign of activity while the launch waits for `models --json`.
+sign of activity while the launch waits for `models --json`;
+`resumed.context_used` not fed to the metrics; six main-actor warnings in a
+`#Preview` expansion that warnings-as-errors doesn't catch (pre-existing).
