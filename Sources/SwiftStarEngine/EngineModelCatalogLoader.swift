@@ -1,104 +1,112 @@
 import Foundation
 import SwiftStarKit
 
-/// Runs `<ds4-dogfood> models --json` off the main actor and decodes the list.
-/// Any failure (older engine without the command, non-zero exit, timeout,
-/// undecodable output) comes back as a `CatalogError`; callers fall back.
+/// Runs `<ds4-dogfood> models --json` and decodes the list. Any failure
+/// (older engine without the command, non-zero exit, timeout, undecodable
+/// output) comes back as a `CatalogError`; callers fall back.
+///
+/// Nothing here blocks a thread: output arrives through `readabilityHandler`
+/// streams (as in `EngineSession`), the exit through `terminationHandler`,
+/// and a task group races them against the timeout.
 public enum EngineModelCatalogLoader {
     public static func load(
         executable: String, timeout: Duration = .seconds(10),
         environment: [String: String]? = nil
     ) async -> Result<EngineModelList, CatalogError> {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: run(
-                    executable: executable, timeout: timeout, environment: environment))
-            }
-        }
-    }
-
-    private final class Flag: @unchecked Sendable {
-        private let lock = NSLock()
-        private var value = false
-        func set() { lock.lock(); value = true; lock.unlock() }
-        var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
-    }
-
-    private final class DataBox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var data = Data()
-        func set(_ d: Data) { lock.lock(); data = d; lock.unlock() }
-        var value: Data { lock.lock(); defer { lock.unlock() }; return data }
-    }
-
-    private static func run(
-        executable: String, timeout: Duration, environment: [String: String]?
-    ) -> Result<EngineModelList, CatalogError> {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = ["models", "--json"]
         process.environment = environment
-        let out = Pipe()
+        let out = Pipe(), err = Pipe()
         process.standardOutput = out
-        let err = Pipe()
         process.standardError = err
         process.standardInput = FileHandle.nullDevice
+        let (status, statusEnd) = AsyncStream<Int32>.makeStream()
+        process.terminationHandler = { p in
+            statusEnd.yield(p.terminationStatus)
+            statusEnd.finish()
+        }
+        let (outData, outEnd) = collect(out.fileHandleForReading)
+        let (errData, errEnd) = collect(err.fileHandleForReading)
         do {
             try process.run()
         } catch {
+            for end in [outEnd, errEnd] { end() }
             return .failure(.failed("could not launch \(executable): \(error.localizedDescription)"))
         }
-        let timedOut = Flag()
-        let seconds = Double(timeout.components.seconds)
-            + Double(timeout.components.attoseconds) / 1e18
-        let pid = process.processIdentifier
-        let killer = DispatchWorkItem {
-            timedOut.set()
-            if process.isRunning { process.terminate() }
-            // A child that ignores SIGTERM is killed a second later.
-            DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
-                if process.isRunning { kill(pid, SIGKILL) }
+        // The child holds its own copies; drop ours so EOF can arrive.
+        try? out.fileHandleForWriting.close()
+        try? err.fileHandleForWriting.close()
+
+        let outcome = await withTaskGroup(of: Outcome.self) { group in
+            group.addTask {
+                let stdout = await outData.value, stderr = await errData.value
+                var code: Int32 = -1
+                for await c in status { code = c }
+                return .finished(stdout: stdout, stderr: stderr, code: code)
             }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return .timedOut
+            }
+            let first = await group.next() ?? .timedOut
+            if case .timedOut = first {
+                // Kill the child (SIGKILL a second later if it ignores
+                // SIGTERM), and stop reading a pipe a grandchild may hold,
+                // so the collector above can finish.
+                if process.isRunning { process.terminate() }
+                try? await Task.sleep(for: .seconds(1))
+                if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+                for end in [outEnd, errEnd] { end() }
+            }
+            group.cancelAll()
+            return first
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: killer)
-        // Read on its own thread so a pipe held open by a grandchild cannot
-        // outlive the bound: the wait below gives up and closes the read end.
-        let box = DataBox()
-        let done = DispatchSemaphore(value: 0)
-        let handle = out.fileHandleForReading
-        DispatchQueue.global(qos: .utility).async {
-            box.set(handle.readDataToEndOfFile())
-            done.signal()
-        }
-        let errBox = DataBox()
-        let errDone = DispatchSemaphore(value: 0)
-        let errHandle = err.fileHandleForReading
-        DispatchQueue.global(qos: .utility).async {
-            errBox.set(errHandle.readDataToEndOfFile())
-            errDone.signal()
-        }
-        if done.wait(timeout: .now() + seconds + 2) == .timedOut {
-            timedOut.set()
-            try? handle.close()
-            try? errHandle.close()
-            process.waitUntilExit()
+
+        switch outcome {
+        case .timedOut:
             return .failure(.timedOut)
-        }
-        process.waitUntilExit()
-        killer.cancel()
-        let data = box.value
-        if timedOut.isSet { return .failure(.timedOut) }
-        guard process.terminationStatus == 0 else {
-            _ = errDone.wait(timeout: .now() + 1)
-            let text = String(decoding: errBox.value.suffix(4096), as: UTF8.self)
-            if process.terminationStatus == 2,
-               text.contains("invalid choice") || text.contains("unknown command") {
-                return .failure(.commandMissing)
+        case .finished(let stdout, let stderr, let code):
+            guard code == 0 else {
+                let text = String(decoding: stderr.suffix(EngineSessionConstants.stderrTailLimit), as: UTF8.self)
+                if code == 2, text.contains("invalid choice") || text.contains("unknown command") {
+                    return .failure(.commandMissing)
+                }
+                let last = text.split(whereSeparator: \.isNewline).last.map { String($0.prefix(200)) }
+                return .failure(.failed("exit code \(code)" + (last.map { ": \($0)" } ?? "")))
             }
-            let last = text.split(whereSeparator: \.isNewline).last.map { String($0.prefix(200)) }
-            return .failure(.failed(
-                "exit code \(process.terminationStatus)" + (last.map { ": \($0)" } ?? "")))
+            return EngineModelList.decode(stdout)
         }
-        return EngineModelList.decode(data)
+    }
+
+    private enum Outcome: Sendable {
+        case finished(stdout: Data, stderr: Data, code: Int32)
+        case timedOut
+    }
+
+    /// Everything a pipe delivers until EOF, and a way to stop reading early.
+    private static func collect(_ handle: FileHandle) -> (Task<Data, Never>, @Sendable () -> Void) {
+        let (chunks, continuation) = AsyncStream<Data>.makeStream()
+        handle.readabilityHandler = { h in
+            let data = h.availableData
+            if data.isEmpty {
+                h.readabilityHandler = nil
+                try? h.close()
+                continuation.finish()
+            } else {
+                continuation.yield(data)
+            }
+        }
+        let task = Task {
+            var all = Data()
+            for await chunk in chunks { all.append(chunk) }
+            return all
+        }
+        let end: @Sendable () -> Void = {
+            handle.readabilityHandler = nil
+            try? handle.close()
+            continuation.finish()
+        }
+        return (task, end)
     }
 }
