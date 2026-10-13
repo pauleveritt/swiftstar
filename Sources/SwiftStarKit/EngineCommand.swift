@@ -14,14 +14,9 @@ public enum EngineCommand {
         source: URL, modelID: String? = nil, contextSize: Int? = nil
     ) -> [String] {
         var args = ["tui", "--ndjson", "--source", source.path, "--commit", "HEAD"]
-        if let id = trimmedModelID(modelID) { args += ["--model-id", id] }
+        if let id = modelID?.trimmedOrNil { args += ["--model-id", id] }
         if let n = contextSize, n > 0 { args += ["--context-size", String(n)] }
         return args
-    }
-
-    private static func trimmedModelID(_ id: String?) -> String? {
-        guard let t = id?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
-        return t
     }
 
     /// Looks for the engine executable: the settings path, then each `PATH`
@@ -81,7 +76,7 @@ public struct EngineExit: Equatable, Sendable {
         }
         // The session directory has its own row after the exit message.
         let cleaned = stderrTail.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("Session artifacts:") }
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix(EngineSessionConstants.sessionArtifactsMarker) }
             .joined(separator: "\n")
         let tail = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
         let lastLine = cleaned.split(whereSeparator: \.isNewline)

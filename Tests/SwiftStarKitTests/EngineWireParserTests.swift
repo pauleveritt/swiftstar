@@ -164,7 +164,8 @@ struct EngineWireParserTests {
     }
 
     @Test func statusReportIsOneReadableLine() {
-        var p = Self.ready()
+        var p = EngineWireParser(locale: Locale(identifier: "en_US"))
+        _ = p.parse(#"{"kind":"ready","protocol":1}"#)
         let e = p.parse(Self.event(
             #""kind":"status_report","model_id":"ds4-flash","context_used":1956,"context_size":65536,"gpu_allocated_bytes":10737418240,"gpu_budget_bytes":21474836480,"prompts":3,"where":null"#))
         guard case .notice(let t) = e else { Issue.record("expected notice"); return }

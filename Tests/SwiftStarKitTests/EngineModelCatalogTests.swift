@@ -133,7 +133,8 @@ struct EngineModelCatalogTests {
     @Test func contextMenuListsMeasuredAndRoundSizes() throws {
         let list = try Self.sample()
         let items = ContextMenu.items(
-            list: list, modelID: "laguna-xs-2.1", settingsContext: 20000, loaded: 20000)
+            list: list, modelID: "laguna-xs-2.1", settingsContext: 20000, loaded: 20000,
+            locale: Locale(identifier: "en_US"))
         #expect(items.first?.title == "Engine default (65,536)")
         #expect(items.first?.value == 0)
         let sizes = items.dropFirst().map(\.value)

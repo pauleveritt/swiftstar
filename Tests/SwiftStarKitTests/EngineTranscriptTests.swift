@@ -260,7 +260,7 @@ struct EngineTranscriptSurfaceTests {
 
     @Test func summaryJoinsDurationAndContext() {
         let a = EngineAnswer(text: "hi", contextUsed: 420, contextSize: 8192, durationMs: 1234)
-        #expect(a.summary == "1.2s · ctx 420 / 8,192")
+        #expect(a.summary(locale: Locale(identifier: "en_US")) == "1.2s · ctx 420 / 8,192")
     }
 
     @Test func summaryIsNilWithNoFields() {
@@ -357,6 +357,11 @@ struct EngineToolCardFormattingTests {
     @Test func headerTextIsOpAloneWithNoPath() {
         #expect(card(op: "bash", path: nil).headerText == "bash")
         #expect(card(op: "bash", path: "").headerText == "bash")
+    }
+
+    @Test func answerSummaryUsesDuration() {
+        let a = EngineAnswer(text: "x", contextUsed: nil, contextSize: nil, durationMs: 75_000)
+        #expect(a.summary(locale: Locale(identifier: "en_US")) == "75s")
     }
 
     @Test func metadataLineRunningHasNoDuration() {

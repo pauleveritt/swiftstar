@@ -3,8 +3,11 @@ import Foundation
 /// Decodes one line of `ds4-dogfood tui --ndjson` stdout into an `EngineEvent`.
 public struct EngineWireParser: Sendable {
     private var sawReady = false
+    private let locale: Locale
 
-    public init() {}
+    public init(locale: Locale = .current) {
+        self.locale = locale
+    }
 
     public mutating func parse(_ line: String) -> EngineEvent {
         guard let data = line.data(using: .utf8),
@@ -39,7 +42,7 @@ public struct EngineWireParser: Sendable {
             guard let event = object["event"] as? [String: Any],
                   let eventKind = event["kind"] as? String
             else { return .ignored }
-            return Self.decode(event, kind: eventKind)
+            return Self.decode(event, kind: eventKind, locale: locale)
         default:
             // ready (again), diagnostic, stopping, quitting, unknown.
             return .ignored
@@ -54,7 +57,7 @@ public struct EngineWireParser: Sendable {
         return .notice("Engine output: \(line.prefix(200))")
     }
 
-    private static func decode(_ e: [String: Any], kind: String) -> EngineEvent {
+    private static func decode(_ e: [String: Any], kind: String, locale: Locale) -> EngineEvent {
         switch kind {
         case "session":
             return .session(EngineSessionInfo(
@@ -139,7 +142,7 @@ public struct EngineWireParser: Sendable {
             let path = e["path"] as? String
             return .notice(path.map { "Exported to \($0)" } ?? "Exported")
         case "status_report":
-            return .notice(statusLine(e))
+            return .notice(Self.statusLine(e, locale: locale))
         case "help", "models":
             return .notice(text(e, kind: kind))
         case _ where kind.hasSuffix("_refused"):
@@ -172,7 +175,7 @@ public struct EngineWireParser: Sendable {
     }
 
     /// One readable line from the `status_report` payload.
-    private static func statusLine(_ e: [String: Any]) -> String {
+    private static func statusLine(_ e: [String: Any], locale: Locale) -> String {
         var parts: [String] = []
         if let id = e["model_id"] as? String { parts.append(id) }
         if let used = int(e["context_used"]) {
@@ -183,16 +186,12 @@ public struct EngineWireParser: Sendable {
             }
         }
         if let a = int64(e["gpu_allocated_bytes"]) {
-            var s = "GPU \(gib(a))"
-            if let b = int64(e["gpu_budget_bytes"]) { s += " / \(gib(b))" }
+            var s = "GPU \(MetricsFormatting.gib(bytes: a, locale: locale))"
+            if let b = int64(e["gpu_budget_bytes"]) { s += " / \(MetricsFormatting.gib(bytes: b, locale: locale))" }
             parts.append(s)
         }
         if let n = int(e["prompts"]) { parts.append("\(n) prompts") }
         return parts.isEmpty ? "status" : "Status: " + parts.joined(separator: " · ")
-    }
-
-    private static func gib(_ bytes: Int64) -> String {
-        String(format: "%.1f GiB", Double(bytes) / 1_073_741_824)
     }
 
     private static func tool(_ e: [String: Any]) -> EngineTool {

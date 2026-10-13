@@ -131,13 +131,16 @@ public struct EngineAnswer: Equatable, Sendable {
 
     /// The small telemetry line shown under an answer: duration and/or
     /// context usage, joined, or nil if neither is present.
-    public var summary: String? {
+    public var summary: String? { summary(locale: .current) }
+
+    public func summary(locale: Locale) -> String? {
         var parts: [String] = []
         if let ms = durationMs, ms.isFinite, ms >= 0 {
-            parts.append(String(format: "%.1fs", ms / 1000))
+            parts.append(MetricsFormatting.duration(seconds: ms / 1000))
         }
         if let contextUsed, let contextSize {
-            parts.append("ctx \(contextUsed.formatted()) / \(contextSize.formatted())")
+            parts.append("ctx \(MetricsFormatting.number(contextUsed, locale: locale)) / "
+                + MetricsFormatting.number(contextSize, locale: locale))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }

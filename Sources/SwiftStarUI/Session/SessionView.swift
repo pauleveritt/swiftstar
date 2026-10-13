@@ -43,7 +43,7 @@ struct SessionView: View {
         .alert("Custom context size", isPresented: $askingContext) {
             TextField("Tokens", text: $entry)
             Button("Use") {
-                if let n = Int(entry.trimmingCharacters(in: .whitespaces)), n > 0 {
+                if let n = entry.trimmedOrNil.flatMap({ Int($0) }), n > 0 {
                     controller.select(contextSize: n)
                 }
             }

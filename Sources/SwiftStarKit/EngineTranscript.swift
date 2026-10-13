@@ -40,14 +40,9 @@ public struct EngineToolCard: Equatable, Sendable {
         case false?: parts.append("failed")
         }
         if let ms = durationMs, ms.isFinite, ms >= 0 {
-            parts.append(Self.duration(ms / 1000))
+            parts.append(MetricsFormatting.duration(seconds: ms / 1000))
         }
         return parts.joined(separator: " · ")
-    }
-
-    private static func duration(_ seconds: Double) -> String {
-        if seconds < 10 { return String(format: "%.1fs", seconds) }
-        return String(format: "%.0fs", seconds)
     }
 
     /// SF Symbol name for the tool's op.

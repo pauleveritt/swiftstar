@@ -18,8 +18,8 @@ struct InspectorView: View {
                                 diameter: 30)
                         }
                         VStack(alignment: .leading, spacing: 10) {
-                            metricRow("Used", value: state.contextUsed.map { $0.formatted() } ?? "—")
-                            metricRow("Window", value: state.contextSize.map { $0.formatted() } ?? "—")
+                            metricRow("Used", value: state.contextUsed.map { MetricsFormatting.number($0) } ?? "—")
+                            metricRow("Window", value: state.contextSize.map { MetricsFormatting.number($0) } ?? "—")
                         }
                     }
                 }
@@ -36,7 +36,7 @@ struct InspectorView: View {
                     Text("GPU memory").font(.headline)
                     metricRow("Allocated", value: MetricsFormatting.bytes(state.gpuAllocatedBytes))
                     metricRow("Budget", value: MetricsFormatting.bytes(state.gpuBudgetBytes))
-                    metricRow("Plan", value: state.planGiB.map { String(format: "%.1f GiB", $0) } ?? "—")
+                    metricRow("Plan", value: state.planGiB.map { MetricsFormatting.gib($0) } ?? "—")
                 }
                 .inspectorCard()
             }

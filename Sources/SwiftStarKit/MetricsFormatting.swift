@@ -12,9 +12,30 @@ public enum MetricsFormatting {
         value.map { $0.formatted(.byteCount(style: .memory)) } ?? "—"
     }
 
-    public static func contextTooltip(used: Int, size: Int) -> String {
+    public static func contextTooltip(used: Int, size: Int, locale: Locale = .current) -> String {
         let percent = Double(used) / Double(size) * 100
         return String(format: "Context window: %@ of %@ tokens (%.0f%% used).",
-                      used.formatted(), size.formatted(), percent)
+                      number(used, locale: locale), number(size, locale: locale), percent)
+    }
+
+    /// A count with the locale's grouping ("8,192", "8.192").
+    public static func number(_ n: Int, locale: Locale = .current) -> String {
+        n.formatted(.number.locale(locale))
+    }
+
+    /// A size in GiB, one decimal, in the locale's notation.
+    public static func gib(_ value: Double, locale: Locale = .current) -> String {
+        value.formatted(.number.precision(.fractionLength(1)).locale(locale)) + " GiB"
+    }
+
+    public static func gib(bytes: Int64, locale: Locale = .current) -> String {
+        gib(Double(bytes) / 1_073_741_824, locale: locale)
+    }
+
+    /// One style for every duration: tenths under ten seconds, whole seconds
+    /// from there ("1.8s", "75s").
+    public static func duration(seconds: Double) -> String {
+        let tenths = (seconds * 10).rounded() / 10
+        return tenths < 10 ? String(format: "%.1fs", tenths) : String(format: "%.0fs", tenths)
     }
 }

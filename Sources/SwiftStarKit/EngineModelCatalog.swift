@@ -133,11 +133,7 @@ public struct MenuChoice<Value: Equatable & Sendable>: Equatable, Sendable {
 }
 
 private func trimmed(_ s: String?) -> String {
-    s?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-}
-
-private func grouped(_ n: Int) -> String {
-    n.formatted(.number.locale(Locale(identifier: "en_US")))
+    s?.trimmedOrNil ?? ""
 }
 
 /// What a model-menu pick does (EN.1, D3).
@@ -207,8 +203,10 @@ public enum ContextMenu {
     /// measured size (up to 65,536 without measurements). `settingsContext`
     /// <= 0 means engine default. `loaded` is shown only in the fallback.
     public static func items(
-        list: EngineModelList?, modelID: String?, settingsContext: Int, loaded: Int?
+        list: EngineModelList?, modelID: String?, settingsContext: Int, loaded: Int?,
+        locale: Locale = .current
     ) -> [MenuChoice<Int>] {
+        let grouped = { (n: Int) in MetricsFormatting.number(n, locale: locale) }
         let id = trimmed(modelID).isEmpty ? list?.defaultModelID : trimmed(modelID)
         let model = id.flatMap { list?.model(id: $0) }
         let measured = model?.measuredContexts ?? []
@@ -222,7 +220,7 @@ public enum ContextMenu {
         if list == nil, let loaded, loaded > 0 { sizes.insert(loaded) }
         for size in sizes.sorted() {
             let plan = measured.first { $0.context == size }
-            let title = plan.map { "\(grouped(size)) (\(String(format: "%.1f", $0.planGiB)) GiB)" }
+            let title = plan.map { "\(grouped(size)) (\(MetricsFormatting.gib($0.planGiB, locale: locale)))" }
                 ?? grouped(size)
             out.append(MenuChoice(title: title, value: size, isChecked: size == settingsContext))
         }

@@ -120,7 +120,7 @@ public final class EngineController {
     /// restarts fresh as before.
     func select(modelID id: String) {
         guard canChoose else { return }
-        let id = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = id.trimmedOrNil ?? ""
         guard id != modelID else { return }
         if !id.isEmpty, ModelMenu.selectionAction(phase: model.phase) == .sendModelCommand {
             send("/model \(id)")

@@ -80,7 +80,7 @@ struct ComposerView: View {
     }
 
     private var trimmedInput: String {
-        input.trimmingCharacters(in: .whitespacesAndNewlines)
+        input.trimmedOrNil ?? ""
     }
 
     private func send() {
