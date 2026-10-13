@@ -51,6 +51,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
 | SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6d, 6a, 6b and 6c done 2026-10-13: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md), [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md), [6b](docs/superpowers/plans/2026-10-13-su6b-session-card.md), [6c](docs/superpowers/plans/2026-10-13-su6c-remembering.md). The punch list below waits |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | 7a done 2026-10-13: a sidebar of this project's conversations; clicking one resumes it. [Spec](docs/superpowers/specs/2026-10-13-su7a-sessions-and-resume-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-su7a-sessions-and-resume.md). Next 7b (switching); more than one window (7c) waits on the engine |
+| SU.8 | Prompt history | ↑/↓ in the composer steps through earlier prompts | not brainstormed |
 
 ### SU.6 punch list
 
@@ -64,6 +65,8 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
     the engine never sends
 - **Native look:** Liquid Glass affordances; `NativeTooltip` checked against
   plain `.help`.
+  - toolbar buttons sit tight against their borders; match Xcode's padding
+    (`SessionToolbar`, after 7b lands)
 - **Left from SU.5a** (each plan's Result):
   - rate, duration, the status line and the ctx label ignore the locale; the
     inspector mixes GB and GiB
