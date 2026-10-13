@@ -3,48 +3,39 @@ import Testing
 @testable import SwiftStarKit
 
 struct TranscriptFontScaleTests {
-    @Test func fourAscendingSizes() {
+    /// fourAscendingSizes, defaultIsThirdSlotNextToLargest.
+    @Test func scale() {
         #expect(TranscriptFontScale.sizes == [12, 14, 16, 20])
-    }
-
-    @Test func defaultIsThirdSlotNextToLargest() {
         #expect(TranscriptFontScale.defaultSize == 16)
-        #expect(TranscriptFontScale.sizes[2] == TranscriptFontScale.defaultSize)
-        #expect(TranscriptFontScale.sizes[3] == 20)  // the largest
     }
 
-    @Test func clampKeepsValidSizes() {
-        #expect(TranscriptFontScale.clamp(16) == 16)
-        #expect(TranscriptFontScale.clamp(14) == 14)
-        #expect(TranscriptFontScale.clamp(20) == 20)
+    struct ClampCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let size: Int
+        let clamped: Int
     }
 
-    @Test func clampPullsOutOfRangeToNearestSlot() {
-        #expect(TranscriptFontScale.clamp(0) == 12)
-        #expect(TranscriptFontScale.clamp(100) == 20)
-        #expect(TranscriptFontScale.clamp(13) == 12)  // equidistant from 12 and 14 → smaller
-        #expect(TranscriptFontScale.clamp(17) == 16)  // 1 from 16, 3 from 20 → 16
-    }
+    static let clampCases: [ClampCase] = [
+        .init(testDescription: "clampKeepsValidSizes (12)", size: 12, clamped: 12),
+        .init(testDescription: "clampKeepsValidSizes (14)", size: 14, clamped: 14),
+        .init(testDescription: "clampKeepsValidSizes (16)", size: 16, clamped: 16),
+        .init(testDescription: "clampKeepsValidSizes (20)", size: 20, clamped: 20),
+        .init(testDescription: "clampPullsOutOfRangeToNearestSlot (0)", size: 0, clamped: 12),
+        .init(testDescription: "clampPullsOutOfRangeToNearestSlot (100)", size: 100, clamped: 20),
+        .init(testDescription: "clampPullsOutOfRangeToNearestSlot (13, tie → smaller)", size: 13, clamped: 12),
+        .init(testDescription: "clampPullsOutOfRangeToNearestSlot (17, nearer 16)", size: 17, clamped: 16),
+        .init(testDescription: "clampTiesResolveToSmallerSize (15)", size: 15, clamped: 14),
+        // Nothing between 18 and 20 rounds down to 16 except the tie at 18.
+        .init(testDescription: "clampReachesTheLargestSlotFromBelow (19)", size: 19, clamped: 20),
+        .init(testDescription: "clampReachesTheLargestSlotFromBelow (21)", size: 21, clamped: 20),
+        // 18 was the largest slot before the scale widened. The tie rule lands
+        // it on 16: a user who had picked the old maximum reopens at the
+        // default, not the new maximum. Pinned deliberately.
+        .init(testDescription: "storedOldLargestDemotesToDefault (18)", size: 18, clamped: 16),
+    ]
 
-    @Test func clampTiesResolveToSmallerSize() {
-        // 15 is equidistant from 14 and 16; ties resolve to the smaller size.
-        #expect(TranscriptFontScale.clamp(15) == 14)
-    }
-
-    @Test func clampReachesTheLargestSlotFromBelow() {
-        // The gap above 16 is now 4 pt, not 2 — nothing between 18 and 20
-        // rounds down. Pins the new largest slot as reachable by the clamp,
-        // which [12, 14, 16, 18] could not express.
-        #expect(TranscriptFontScale.clamp(19) == 20)
-        #expect(TranscriptFontScale.clamp(21) == 20)
-    }
-
-    @Test func storedOldLargestDemotesToDefault() {
-        // 18 was the largest slot before the scale widened. It is now
-        // equidistant from 16 and 20, so the tie rule lands it on 16: a user
-        // who had picked the old maximum reopens at the default, not at the
-        // new maximum. Pinned deliberately — silent, and the tie rule's doing.
-        #expect(TranscriptFontScale.clamp(18) == 16)
+    @Test(arguments: clampCases) func clamp(_ c: ClampCase) {
+        #expect(TranscriptFontScale.clamp(c.size) == c.clamped)
     }
 
     @Test func fontSlotRoundTrip() {

@@ -3,60 +3,44 @@ import Testing
 @testable import SwiftStarKit
 
 struct MarkdownPreprocessTests {
-    // MARK: deLaTeXed
-
-    @Test func stripsLatexWrappers() {
-        #expect(MarkdownPreprocess.deLaTeXed(#"\[x^2\]"#) == "x^2")
-        #expect(MarkdownPreprocess.deLaTeXed(#"\(a\)"#) == "a")
-        #expect(MarkdownPreprocess.deLaTeXed("$$b$$") == "b")
+    struct ProseCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let input: String
+        let output: String
     }
 
-    @Test func mapsCommonMacros() {
-        #expect(MarkdownPreprocess.deLaTeXed(#"\boxed{42}"#) == "**42**")
-        #expect(MarkdownPreprocess.deLaTeXed(#"\text{hi}"#) == "hi")
-        #expect(MarkdownPreprocess.deLaTeXed(#"\frac{1}{2}"#) == "1/2")
-        #expect(MarkdownPreprocess.deLaTeXed(#"a \times b"#) == "a × b")
-        #expect(MarkdownPreprocess.deLaTeXed(#"\rightarrow"#) == "→")
-    }
+    static let proseCases: [ProseCase] = [
+        .init(testDescription: "stripsLatexWrappers (display)", input: #"\[x^2\]"#, output: "x^2"),
+        .init(testDescription: "stripsLatexWrappers (inline)", input: #"\(a\)"#, output: "a"),
+        .init(testDescription: "stripsLatexWrappers (dollars)", input: "$$b$$", output: "b"),
+        .init(testDescription: "mapsCommonMacros (boxed)", input: #"\boxed{42}"#, output: "**42**"),
+        .init(testDescription: "mapsCommonMacros (text)", input: #"\text{hi}"#, output: "hi"),
+        .init(testDescription: "mapsCommonMacros (frac)", input: #"\frac{1}{2}"#, output: "1/2"),
+        .init(testDescription: "mapsCommonMacros (times)", input: #"a \times b"#, output: "a × b"),
+        .init(testDescription: "mapsCommonMacros (arrow)", input: #"\rightarrow"#, output: "→"),
+        .init(testDescription: "proseStillDeLaTeXed", input: #"\(x \to y\)"#, output: "x → y"),
+        .init(testDescription: "proseStillDeLaTeXed (around a fence)",
+              input: "a $$b$$ then\n```\n$$\n```\nand \\pi", output: "a b then\n```\n$$\n```\nand π"),
+        .init(testDescription: "unknownMacrosPassThrough", input: #"\foo{bar}"#, output: #"\foo{bar}"#),
+        .init(testDescription: "loneBacktickDoesNotPairAcrossParagraphs",
+              input: "Press the ` key, then $$x$$.\n\nRun `echo $$` now.",
+              output: "Press the ` key, then x.\n\nRun `echo $$` now."),
+    ]
 
-    @Test func codeIsNotDeLaTeXed() {
-        let fenced = "```sh\necho $$\ngrep '\\(a\\)' x \\to y\n```"
-        #expect(MarkdownPreprocess.deLaTeXed(fenced) == fenced)
-        let tilde = "~~~\n$$ \\pi\n~~~"
-        #expect(MarkdownPreprocess.deLaTeXed(tilde) == tilde)
-    }
-
-    @Test func inlineCodeIsNotDeLaTeXed() {
-        #expect(MarkdownPreprocess.deLaTeXed("run `echo $$` now") == "run `echo $$` now")
-    }
-
-    @Test func proseStillDeLaTeXed() {
-        #expect(MarkdownPreprocess.deLaTeXed(#"\(x \to y\)"#) == "x → y")
-        #expect(MarkdownPreprocess.deLaTeXed("a $$b$$ then\n```\n$$\n```\nand \\pi")
-            == "a b then\n```\n$$\n```\nand π")
-    }
-
-    @Test func unknownMacrosPassThrough() {
-        #expect(MarkdownPreprocess.deLaTeXed(#"\foo{bar}"#) == #"\foo{bar}"#)
+    @Test(arguments: proseCases) func prose(_ c: ProseCase) {
+        #expect(MarkdownPreprocess.deLaTeXed(c.input) == c.output)
     }
 
     // Final review of 5a1: CommonMark fence and code-span rules.
-    @Test func longerFenceHoldsAnInnerFence() {
-        let md = "````md\n```sh\necho $$\n```\n````"
+    @Test(arguments: [
+        "```sh\necho $$\ngrep '\\(a\\)' x \\to y\n```",   // codeIsNotDeLaTeXed
+        "~~~\n$$ \\pi\n~~~",                               // codeIsNotDeLaTeXed (tilde)
+        "run `echo $$` now",                               // inlineCodeIsNotDeLaTeXed
+        "````md\n```sh\necho $$\n```\n````",               // longerFenceHoldsAnInnerFence
+        "````\n```\n$$x$$\n````",                          // longerFenceHoldsAnInnerFence (bare inner fence)
+        "```\n``` not a close\necho $$\n```",              // fenceClosesOnlyOnABareLine
+        "run ``echo $$`` now",                             // doubleBacktickSpanIsCode
+    ]) func codeIsVerbatim(_ md: String) {
         #expect(MarkdownPreprocess.deLaTeXed(md) == md)
-    }
-
-    @Test func fenceClosesOnlyOnABareLine() {
-        let md = "```\n``` not a close\necho $$\n```"
-        #expect(MarkdownPreprocess.deLaTeXed(md) == md)
-    }
-
-    @Test func doubleBacktickSpanIsCode() {
-        #expect(MarkdownPreprocess.deLaTeXed("run ``echo $$`` now") == "run ``echo $$`` now")
-    }
-
-    @Test func loneBacktickDoesNotPairAcrossParagraphs() {
-        let md = "Press the ` key, then $$x$$.\n\nRun `echo $$` now."
-        #expect(MarkdownPreprocess.deLaTeXed(md) == "Press the ` key, then x.\n\nRun `echo $$` now.")
     }
 }
