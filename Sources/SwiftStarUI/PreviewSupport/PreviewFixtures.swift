@@ -12,7 +12,9 @@ extension EngineController {
     /// A running session, mid-conversation: one answered turn with a tool
     /// call, metrics populated, awaiting the next prompt.
     static var previewRunning: EngineController {
-        EngineController(model: runningModel(withGPU: true))
+        EngineController(
+            model: runningModel(withGPU: true), conversations: .preview,
+            workspace: URL(fileURLWithPath: "/Users/example/projects/swiftstar"))
     }
 
     /// The running session without GPU metrics, as before the engine's first
@@ -46,7 +48,9 @@ extension EngineController {
             text: "`SessionView` renders the transcript, composer, and status bar for one engine session.",
             contextUsed: 512, contextSize: 8192, durationMs: 1830)))
         // Session 20261013-154825's first checkpoint, after its 944-token cache hit.
-        model.apply(.pause(PauseMetrics(prefillTokens: 1146, prefillMs: 1084, evalCount: 64, evalMs: 980)))
+        model.apply(.pause(PauseMetrics(
+            prefillTokens: 1146, prefillMs: 1084, evalCount: 64, evalMs: 980,
+            capturePath: "/Users/example/.local/state/ds4-engine/sessions/20261013-121126-swiftstar/run-1.partial.json")))
         if withGPU {
             model.apply(.memory(EngineMemory(allocatedBytes: 6_400_000_000, budgetBytes: 21_000_000_000, planGiB: 6.0)))
         }
@@ -119,5 +123,28 @@ extension EngineTranscript {
                 rewoundTo: 1, filesChanged: 0, contextUsed: 1071),
             divider: "Rewound to prompt 1")
         return t
+    }
+}
+
+extension [Conversation] {
+    /// Three conversations for the sidebar: the second is the running one,
+    /// the third can't be resumed.
+    static var preview: [Conversation] {
+        let now = Date()
+        return [
+            Conversation(
+                id: "20261013-123136-swiftstar", title: "Hello", updated: now.addingTimeInterval(-12 * 60),
+                modelID: "qwen3.8-flash-next", resumable: true, problems: [],
+                sessionIDs: ["20261013-123136-swiftstar", "20261013-122439-swiftstar"]),
+            Conversation(
+                id: "20261013-121126-swiftstar",
+                title: "Answer in one short sentence, without tools: what is 2 + 2?",
+                updated: now.addingTimeInterval(-40 * 60), modelID: "qwen3.8-27b", resumable: true, problems: [],
+                sessionIDs: ["20261013-121126-swiftstar", "20261013-121116-swiftstar"]),
+            Conversation(
+                id: "20261003-203830-swiftstar", title: "Untitled", updated: now.addingTimeInterval(-10 * 86_400),
+                modelID: "laguna-xs-2.1", resumable: false, problems: ["no receipt", "no capture"],
+                sessionIDs: ["20261003-203830-swiftstar"]),
+        ]
     }
 }

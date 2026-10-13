@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** SU.7, or a last SU.6 part for its remaining punch list (6a–6d are done).
+- **Next:** SU.7b (switching projects), or a last SU.6 part for its remaining punch list.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -29,7 +29,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
 | SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
 | SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6d, 6a, 6b and 6c done 2026-10-13: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md), [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md), [6b](docs/superpowers/plans/2026-10-13-su6b-session-card.md), [6c](docs/superpowers/plans/2026-10-13-su6c-remembering.md). The punch list below waits |
-| SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
+| SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | 7a done 2026-10-13: a sidebar of this project's conversations; clicking one resumes it. [Spec](docs/superpowers/specs/2026-10-13-su7a-sessions-and-resume-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-su7a-sessions-and-resume.md). Next 7b (switching); more than one window (7c) waits on the engine |
 
 ### SU.6 punch list
 

@@ -196,10 +196,11 @@ public final class EngineController {
     /// Preview/test fixture construction: starts from a given model state,
     /// skipping `init()`'s `UserDefaults` reads and the live catalog-reload
     /// observer (previews don't restart a session).
-    init(model: EngineSessionModel) {
+    init(model: EngineSessionModel, conversations: [Conversation] = [], workspace: URL? = nil) {
         self.graces = .standard
         self.model = model
-        workspace = nil
+        self.conversations = conversations
+        self.workspace = workspace
         modelID = ""
         contextSize = 0
         recentWorkspaces = []

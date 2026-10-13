@@ -309,55 +309,37 @@ Python fake engine.
 - Modify: `ROADMAP.md`:
   - the SU.7 row reads "7a done", with links
   - Backlog: the Front-end "session picker" item closes, if one remains
-- Modify: this plan, adding `## Result`
+- Modify: this plan, adding `## Result
 
-**Interfaces:**
-- `struct ConversationList: View` reads `EngineController` from the
-  environment.
-  - **The list:** `List(selection:)` bound to a local selection, which
-    starts at `currentConversationID`.
-  - **Choosing a row:** when `resumeNeedsConfirmation`, an
-    `.alert("End the running turn and resume?")` comes first. Then
-    `Task { await controller.resume(c) }`.
-  - **A row:** a `VStack` holding the title (`.lineLimit(1)`) and the
-    `Conversations.subtitle` (`.secondary`, `.caption`). A row that isn't
-    resumable is dimmed with `.foregroundStyle(.tertiary)`, and its `.help`
-    gives its problems or the copy line.
-  - **The toolbar:** a "New Conversation" button, ⌘N, that calls
-    `newConversation()`.
-  - **The empty state:** `ContentUnavailableView`, with "No conversations
-    yet in `<leafName>`".
-- **`MainView`:** `NavigationSplitView(columnVisibility:)` holds
-  `ConversationList` and `SessionView`, plus the existing `.inspector`.
-  The visibility is stored under `sidebarVisible`.
+**Commits:** `186505e`..this one, on `main`. Suites: 110 fast and 56
+integration.
 
-- [ ] **Step 1: Write the failing test.** Extend `rawValuesMatchToday`
-  with `sidebarVisible`. It fails because the case is missing. The views
-  themselves are checked by rendering, as in the earlier SU cycles.
-- [ ] **Step 2: Build the views and the fixtures.** Previews:
-  - `ConversationList`: "Conversations" (the three fixture rows, the
-    second one current), "Empty" and "No workspace"
-  - `MainView`: "Running", with the sidebar
-- [ ] **Step 3: Render every preview in `ConversationList.swift` and
-  `MainView.swift`, and look at each.** Check that:
-  - the titles are truncated to one line
-  - the subtitles read "… ago · model"
-  - the row that can't be resumed is dimmed
-  - the current row is selected
-  - the sidebar sits left of the transcript, and the inspector stays
-    available
-- [ ] **Step 4: Close.**
-  - Write `## Result`: commits, what diverged, the break checks, and the
-    previews.
-  - Update the ROADMAP SU.7 row and `## Now` (next is 7b), and add any
-    Backlog changes.
-  - Run `just lint-docs`.
-  - Run `just test` and `just integration`; both must pass, and a full
-    run must leave no orphaned fake (`ps -axo ppid,args | grep fake-ds4-dogfood | awk '$1==1'`
-    prints nothing).
-- [ ] **Step 5: Commit** with the message
-  `SU.7a Task 4: the conversation sidebar; close 7a`.
+**Break checks:** each broken line failed its test, then passed once
+restored.
+- **Grouping:** returning every entry, or titling from the head, fails
+  the group table.
+- **Loader:** dropping `--limit` fails the argv test.
+- **Controller:** dropping the stale-root guard, the already-current guard
+  or the reload after exit each fails its test.
+- **The extraction:** the model-list loader's five tests passed unchanged,
+  which is its proof.
 
-## Result
+**Previews:** these were rendered and looked at:
+- `ConversationList`: "Conversations", "Empty" and "No workspace"
+- `MainView`'s "Running"
 
-*Written at close.*
+**Diverged:**
+- **The sidebar row is built inline in the `List` closure.** As a `View`
+  type or a `@ViewBuilder` method it crashed SwiftUI's outline list in
+  previews (`TableViewListCore_Mac2.swift:5538`). This reproduced every
+  time. It isn't caused by `.help`, `.selectionDisabled`, row height or
+  the subtitle. The real app wasn't tested.
+- **The subtitle reads "12m ago · model"** (`RelativeDateTimeFormatter`'s
+  abbreviated style). The spec's example said "12 min ago".
+- **The fake's `resumed` event** names the session passed to `--resume`,
+  as the engine does.
+- **`currentSessionID`** keeps the resumed-from id, so the highlight holds
+  during a resumed session.
+- **The refused-resume hint** reads its id from `pendingRelaunch`.
+- **Also:** `newConversation()` is `restart()`, and `select(workspace:)`
+  clears the list before reloading.
