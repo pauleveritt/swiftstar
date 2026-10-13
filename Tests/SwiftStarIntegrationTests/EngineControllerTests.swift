@@ -470,6 +470,10 @@ struct EngineControllerTests {
             #expect(argvLines(f.spawns).count == 2)
             controller.select(modelID: "qwen3.8-flash-next")
             #expect(!controller.transcript.rows.contains(.system("A model switch is already pending.")))
+            // This fake ignores quit and SIGTERM: wait out the SIGKILL, or it
+            // outlives the test run.
+            await controller.quit()
+            try? await Task.sleep(for: .seconds(3))
         }
     }
 }

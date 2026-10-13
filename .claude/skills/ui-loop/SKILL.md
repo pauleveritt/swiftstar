@@ -40,8 +40,8 @@ testing.
 ## Previews and fixtures
 
 - Views that read `EngineController` get it from a trait:
-  `#Preview("Running", traits: .runningSession)`. Traits: `.idleSession`,
-  `.runningSession`, `.runningSessionNoGPU` (`PreviewSupport/PreviewTraits.swift`).
+  `#Preview("Running", traits: .runningSession)`. Traits: `.idleSession` and
+  `.runningSession` (`PreviewSupport/PreviewTraits.swift`).
   Never `.environment(EngineController.preview…)` directly.
 - A trait's controller is shared by reference across previews. A preview
   that mutates it builds its own `EngineController(model:)` in its body.

@@ -222,3 +222,40 @@ is pinned by the existing `EngineTranscriptTests` close tests.
   `python3 Tools/record-engine-fixture.py /usr/bin/false . tool-rejected /tmp/x.ndjson`:
   no `/tmp/x.ndjson` is left behind.
 - [ ] Run `just lint-docs` and both tiers. Write the Result. Commit.
+
+## Result
+
+**Commits:** `ccda8f1`..this close, on `main`. Suite: 185 fast, 45
+integration, zero build warnings.
+
+**Diverged:**
+- `source` is nil before the first start, so Quick Look has no base until a
+  session starts. The app starts one at launch.
+- Two 5a1 minors were taken in Task 3: the unreachable quit guard, and a
+  home for `trimmedOrNil` (`Foundation+SwiftStar.swift`).
+- The stale-model notice reads "isn't offered by the engine", so it also
+  fits a typo.
+- Why `treatAllWarnings(as: .error)` let the six `#Preview` warnings
+  through is still unexplained; they are fixed.
+- The GPU-toggle flips can only be seen on the live canvas, since
+  `RenderPreview` shows the first frame.
+
+**Final review fixes:**
+- The `ui-loop` skill no longer lists the deleted `.runningSessionNoGPU`
+  trait.
+- `restartAfterQuitBoundIsSkippedButStartWorks` now ends its
+  SIGTERM-immune fake. It was the source of one orphaned `fake-ds4-dogfood`
+  per integration run (15 had accumulated and were killed). A full run now
+  leaves none.
+
+**Deferred minors** (for 5b or SU.6):
+- the self-test exercises Highlightr and SwiftMath only, not Litext or
+  MarkdownView
+- the recorder can keep a new `resumed.ndjson` beside an old
+  `relaunch-rewind.ndjson`
+- the recorder leaves a `.tmp` on an exception
+- `clamp`'s doc comment sits on `slot(for:)`
+- two comments still describe the toolbar font
+- 5a1's open minors: rate and duration locale, the loader's timing, the
+  "Relaunch skipped" test, controller-level `willStart`, indented code, and
+  the GB/GiB mix
