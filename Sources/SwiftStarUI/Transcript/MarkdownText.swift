@@ -36,8 +36,7 @@ public struct MarkdownText: View {
         // re-typesets the prose live (a size change rebuilds the theme and
         // re-parses — see `MarkdownNSText.updateNSView`).
         MarkdownNSText(
-            markdown: MarkdownPreprocess.stripTaggedBlocks(
-                MarkdownPreprocess.deLaTeXed(source)),
+            markdown: MarkdownPreprocess.deLaTeXed(source),
             fontSize: transcriptFontSize)
     }
 }

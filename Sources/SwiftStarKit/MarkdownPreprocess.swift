@@ -8,8 +8,46 @@ import Foundation
 public enum MarkdownPreprocess {
     /// LaTeX cleanup so the model's math reads as text rather than raw source.
     /// Strips wrappers and maps common symbols — not a TeX engine; unknown
-    /// macros pass through.
+    /// macros pass through. Code is left exactly as written: fenced blocks
+    /// (```` ``` ```` or `~~~`) and inline code spans are not touched, so
+    /// `echo $$` or `grep '\(a\)'` survive.
     public static func deLaTeXed(_ s: String) -> String {
+        var out: [String] = []
+        var prose: [String] = []
+        var fence: String?
+        func flush() {
+            guard !prose.isEmpty else { return }
+            out.append(outsideInlineCode(prose.joined(separator: "\n")))
+            prose = []
+        }
+        for line in s.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let open = fence {
+                out.append(line)
+                if trimmed.hasPrefix(open) { fence = nil }
+            } else if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                flush()
+                fence = String(trimmed.prefix(3))
+                out.append(line)
+            } else {
+                prose.append(line)
+            }
+        }
+        flush()
+        return out.joined(separator: "\n")
+    }
+
+    /// Applies `prose(_:)` to the text between inline code spans. An unclosed
+    /// backtick is literal text, as in CommonMark.
+    private static func outsideInlineCode(_ s: String) -> String {
+        let parts = s.components(separatedBy: "`")
+        let closedSpans = parts.count % 2 == 1 ? parts.count : parts.count - 1
+        return parts.enumerated().map { i, part in
+            i % 2 == 1 && i < closedSpans ? part : prose(part)
+        }.joined(separator: "`")
+    }
+
+    private static func prose(_ s: String) -> String {
         var t = s
         for d in ["\\[", "\\]", "\\(", "\\)", "$$"] { t = t.replacingOccurrences(of: d, with: "") }
         t = t.replacingOccurrences(
@@ -31,52 +69,4 @@ public enum MarkdownPreprocess {
         }
         return t
     }
-
-    /// Tags stripped from answer content: tool plumbing and reasoning tags
-    /// (reasoning arrives separately via the `think` wire events and renders in
-    /// the disclosure, so inline `<thinking>`/`<think>` in content is redundant).
-    private static let strippedTags: Set<String> = [
-        "tool_call", "tool_response", "tool_result", "thinking", "think",
-    ]
-
-    /// Drop whole `<tag>…</tag>` blocks for tags in `strippedTags` — both
-    /// multi-line blocks and a single line that opens and closes inline. Tags
-    /// are only recognized when the line *starts* with the tag, which is how
-    /// the engine emits them; unrelated `<` text in prose is left untouched. An
-    /// unterminated block (e.g. mid-stream) stays hidden until it closes.
-    public static func stripTaggedBlocks(_ s: String) -> String {
-        var out: [String] = []
-        var lines = s.components(separatedBy: .newlines)[...]
-        while let line = lines.first {
-            lines = lines.dropFirst()
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.hasPrefix("<"), let tag = extractOpeningTag(trimmed),
-                strippedTags.contains(tag)
-            else {
-                out.append(line)
-                continue
-            }
-            if trimmed.contains("</\(tag)>") { continue }  // inline open+close → drop this line only
-            while let next = lines.first,
-                extractClosingTag(next.trimmingCharacters(in: .whitespaces)) != tag
-            {
-                lines = lines.dropFirst()
-            }
-            lines = lines.dropFirst()  // consume the closing tag line (no-op at EOF)
-        }
-        return out.joined(separator: "\n")
-    }
-
-    private static func extractOpeningTag(_ s: String) -> String? {
-        guard s.hasPrefix("<"), !s.hasPrefix("</"), s.hasSuffix(">") else { return nil }
-        let name = s.dropFirst().dropLast().prefix { $0.isLetter || $0 == "_" }
-        return name.isEmpty ? nil : String(name)
-    }
-
-    private static func extractClosingTag(_ s: String) -> String? {
-        guard s.hasPrefix("</"), s.hasSuffix(">") else { return nil }
-        let name = s.dropFirst(2).dropLast().prefix { $0.isLetter || $0 == "_" }
-        return name.isEmpty ? nil : String(name)
-    }
-
 }

@@ -19,27 +19,24 @@ struct MarkdownPreprocessTests {
         #expect(MarkdownPreprocess.deLaTeXed(#"\rightarrow"#) == "→")
     }
 
+    @Test func codeIsNotDeLaTeXed() {
+        let fenced = "```sh\necho $$\ngrep '\\(a\\)' x \\to y\n```"
+        #expect(MarkdownPreprocess.deLaTeXed(fenced) == fenced)
+        let tilde = "~~~\n$$ \\pi\n~~~"
+        #expect(MarkdownPreprocess.deLaTeXed(tilde) == tilde)
+    }
+
+    @Test func inlineCodeIsNotDeLaTeXed() {
+        #expect(MarkdownPreprocess.deLaTeXed("run `echo $$` now") == "run `echo $$` now")
+    }
+
+    @Test func proseStillDeLaTeXed() {
+        #expect(MarkdownPreprocess.deLaTeXed(#"\(x \to y\)"#) == "x → y")
+        #expect(MarkdownPreprocess.deLaTeXed("a $$b$$ then\n```\n$$\n```\nand \\pi")
+            == "a b then\n```\n$$\n```\nand π")
+    }
+
     @Test func unknownMacrosPassThrough() {
         #expect(MarkdownPreprocess.deLaTeXed(#"\foo{bar}"#) == #"\foo{bar}"#)
-    }
-
-    // MARK: stripTaggedBlocks
-
-    @Test func stripsMultilineTaggedBlock() {
-        let input = "before\n<thinking>\nsecret reasoning\n</thinking>\nafter"
-        #expect(MarkdownPreprocess.stripTaggedBlocks(input) == "before\nafter")
-    }
-
-    @Test func stripsInlineTaggedLine() {
-        let input = "text\n<tool_call>pkg(foo)</tool_call>\nmore"
-        #expect(MarkdownPreprocess.stripTaggedBlocks(input) == "text\nmore")
-    }
-
-    @Test func leavesProseWithAngleBracketsAlone() {
-        #expect(MarkdownPreprocess.stripTaggedBlocks("a < b and c > d") == "a < b and c > d")
-    }
-
-    @Test func unterminatedBlockStaysHidden() {
-        #expect(MarkdownPreprocess.stripTaggedBlocks("<thinking>\nopen") == "")
     }
 }
