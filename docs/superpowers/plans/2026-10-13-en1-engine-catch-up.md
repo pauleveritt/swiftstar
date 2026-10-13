@@ -383,8 +383,11 @@ The live check found `start()` didn't wait for an in-flight model-list load.
 **Live 2026-10-13:** with `laguna-xs-2.1` saved, the built app cleared it,
 spawned without `--model-id`, ran `qwen3.8-27b`, and quit with no orphan.
 Not seen: the notice (no screen access); `staleModelClearedBeforeSpawn` pins
-it. **Owed by the owner, in the GUI:** `/rewind 1` (also queued behind a busy
-turn) and a mid-session model-menu switch.
+it. **Relaunch, live through `EngineController` on the 27B** (a throwaway
+test, no window clicks): `/rewind 1` rebuilt to one turn, and a mid-session
+model pick relaunched on `qwen3.8-flash-next` with the files kept. A second
+`/rewind 1` in the rewound session failed upstream: the engine relaunched
+`--rewind-to 0` and resumed two turns, one already rewound away.
 **Deferred minors** (for SU.5): a 10 s test; no notice when a relaunch is
 abandoned at the quit bound; no Kit test of `model_refused` or
 `resume_refused`; the "Other model" alert copy; the recorder overwriting its

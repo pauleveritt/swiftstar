@@ -7,8 +7,6 @@
 
 ## Now
 
-- **EN.1 is in:** two live GUI checks are owed by the owner, `/rewind 1` and a
-  mid-session model-menu switch (see its row).
 - **Next:** SU.5 (plan 5a code, then 5b tests), then SU.6 and SU.7.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
@@ -19,7 +17,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 
 | # | Cycle | Direction | Status |
 |---|---|---|---|
-| EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | done 2026-10-13 except two live GUI checks (owner): `/rewind 1` and a mid-session model switch. [spec](docs/superpowers/specs/2026-10-13-en1-engine-catch-up-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-en1-engine-catch-up.md) |
+| EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | done 2026-10-13: live on the 27B, the stale model, `/rewind 1` and a model switch worked through the controller (no window clicks). [spec](docs/superpowers/specs/2026-10-13-en1-engine-catch-up-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-en1-engine-catch-up.md) |
 
 ## Phase SU: SwiftUI
 
@@ -96,6 +94,13 @@ there.
 - **Prefix-cache hits count as prefilled tokens.** This inflates the
   per-pause prefill rate (`operator_telemetry.py:100-113`).
 - **A `files --json` command,** for the `@` picker above.
+- **A second `/rewind` in a rewound session goes wrong** (live, 2026-10-13,
+  sessions `20261013-121126` and `-121133`). In a session resumed with
+  `--rewind-to 1` (one turn), `/rewind 1` was refused with `--rewind-to 0`
+  ("after prompt 0"). The relaunch then resumed two turns, one of them the
+  turn the first rewind removed, and dropped the newest. SwiftStar showed
+  exactly what the engine sent. Seen with the `/rewind` queued behind a busy
+  turn; the unqueued case wasn't tried.
 - **Watch, not a request: the Satyrn rename.** `ds4-dogfood` and the
   `~/.local/state/ds4-engine` paths may be renamed. SwiftStar would need to
   change `EngineCommand.executableName`, and probing both names is the
