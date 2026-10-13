@@ -2,7 +2,8 @@ import Foundation
 
 /// Decodes one line of `ds4-dogfood tui --ndjson` stdout into an `EngineEvent`.
 public struct EngineWireParser: Sendable {
-    private var sawReady = false
+    /// The handshake has been accepted.
+    public private(set) var sawReady = false
     private let locale: Locale
 
     public init(locale: Locale = .current) {

@@ -36,7 +36,8 @@ struct EngineSessionTests {
         for (k, v) in extra { env[k] = v }
         let session = EngineSession(
             executable: Self.fake, arguments: [], environment: env, workingDirectory: workingDirectory,
-            stopGrace: grace ?? .seconds(10), termGrace: grace ?? .seconds(5), killGrace: grace ?? .seconds(10))
+            stopGrace: grace ?? EngineGraces.standard.stop, termGrace: grace ?? EngineGraces.standard.term,
+            killGrace: grace ?? EngineGraces.standard.kill)
         let recorder = Recorder()
         session.onEvent = { recorder.events.append($0) }
         session.onExit = { recorder.exits.append(($0, $1)) }
@@ -181,6 +182,35 @@ struct EngineSessionTests {
         #expect(interrupted != nil && interrupted! < secondAwaiting!)
         session.quit()
         #expect(await wait { rec.exit != nil })
+    }
+
+    /// Audit B3: a grandchild that inherited stdout (a tool's `sleep &`) keeps
+    /// the pipe open after the engine exits; the exit must still be reported.
+    @Test func exitReportedWhenGrandchildHoldsPipe() async throws {
+        let dir = FileManager.default.temporaryDirectory
+        let script = dir.appendingPathComponent("b3-\(UUID().uuidString).sh").path
+        let pidFile = dir.appendingPathComponent("b3-\(UUID().uuidString).pid").path
+        defer {
+            if let pid = (try? String(contentsOfFile: pidFile, encoding: .utf8)).flatMap({ Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }) {
+                kill(pid, SIGKILL)
+            }
+            for p in [script, pidFile] { try? FileManager.default.removeItem(atPath: p) }
+        }
+        try """
+        #!/bin/sh
+        echo '{"kind":"ready","protocol":1}'
+        sleep 30 &
+        echo $! > \(pidFile)
+        exit 0
+        """.write(toFile: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
+        let session = EngineSession(executable: script, arguments: [], drainLimit: .milliseconds(500))
+        let rec = Recorder()
+        session.onEvent = { rec.events.append($0) }
+        session.onExit = { rec.exits.append(($0, $1)) }
+        try session.start()
+        #expect(await wait(5) { rec.exit != nil })
+        #expect(rec.exit?.code == 0)
     }
 
     @Test func badHandshakeTerminates() async throws {

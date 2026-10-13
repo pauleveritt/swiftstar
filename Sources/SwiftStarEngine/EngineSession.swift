@@ -28,8 +28,6 @@ public final class EngineSession {
     /// True from a successful `start()` until the process has exited.
     public var isRunning: Bool { process != nil && !exited }
 
-    private static let stderrTailLimit = 4096
-
     private let executable: String
     private let arguments: [String]
     private let environment: [String: String]?
@@ -39,7 +37,6 @@ public final class EngineSession {
     private var process: Process?
     private var stdin: FileHandle?
     private var parser = EngineWireParser()
-    private var sawReady = false
     private var failedProtocol = false
     private var stderrTail = Data()
 
@@ -49,6 +46,9 @@ public final class EngineSession {
     private var stderrDone = false
     private var exitFired = false
     private var exitReason: Process.TerminationReason = .exit
+    /// The read side of stdout and stderr, so a drain that runs out of time
+    /// can end both line loops.
+    private var drains: [(FileHandle, AsyncStream<Data>.Continuation)] = []
 
     /// True from the first `.prompt` until the next `.awaitingInput`, `.turnEnded` or `.closed`.
     private var inTurn = false
@@ -59,13 +59,17 @@ public final class EngineSession {
     private let stopGrace: Duration
     private let termGrace: Duration
     private let killGrace: Duration
+    /// After the process exits, how long its pipes may stay open (a
+    /// grandchild that inherited them) before the exit is reported anyway.
+    private let drainLimit: Duration
 
     public init(
         executable: String, arguments: [String],
         environment: [String: String]? = nil, workingDirectory: URL? = nil,
-        stopGrace: Duration = .seconds(10), termGrace: Duration = .seconds(5),
-        killGrace: Duration = .seconds(10)
+        stopGrace: Duration = EngineGraces.standard.stop, termGrace: Duration = EngineGraces.standard.term,
+        killGrace: Duration = EngineGraces.standard.kill, drainLimit: Duration = .seconds(2)
     ) {
+        self.drainLimit = drainLimit
         self.stopGrace = stopGrace
         self.termGrace = termGrace
         self.killGrace = killGrace
@@ -113,10 +117,11 @@ public final class EngineSession {
         // two concurrent `.bytes` readers (stdout and stderr here) can starve
         // each other — the quiet one's blocking read holds the actor while
         // the busy one's data sits unread. Confirmed by thread-sampling a
-        // real stall and reproduced outside any test harness; see the P32
-        // Backlog entry and docs/superpowers/specs/2026-10-04-p32-structure-cleanup-design.md.
-        let outBytes = Self.byteStream(from: stdoutPipe.fileHandleForReading)
-        let errBytes = Self.byteStream(from: stderrPipe.fileHandleForReading)
+        // real stall and reproduced outside any test harness; see
+        // docs/superpowers/specs/2026-10-04-p32-structure-cleanup-design.md.
+        let (outBytes, outEnd) = Self.byteStream(from: stdoutPipe.fileHandleForReading)
+        let (errBytes, errEnd) = Self.byteStream(from: stderrPipe.fileHandleForReading)
+        drains = [(stdoutPipe.fileHandleForReading, outEnd), (stderrPipe.fileHandleForReading, errEnd)]
         Task { @MainActor [weak self] in
             for await line in outBytes.lines { self?.consumeStdoutLine(line) }
             self?.stdoutReachedEOF()
@@ -129,7 +134,9 @@ public final class EngineSession {
 
     /// Bytes of a pipe as they arrive, via `readabilityHandler` (non-blocking,
     /// independent per pipe) rather than `FileHandle.bytes` (see `start()`).
-    private static func byteStream(from handle: FileHandle) -> ChunkBytes {
+    private static func byteStream(
+        from handle: FileHandle
+    ) -> (ChunkBytes, AsyncStream<Data>.Continuation) {
         let (stream, continuation) = AsyncStream<Data>.makeStream()
         handle.readabilityHandler = { h in
             let data = h.availableData
@@ -141,7 +148,7 @@ public final class EngineSession {
                 continuation.yield(data)
             }
         }
-        return ChunkBytes(chunks: stream)
+        return (ChunkBytes(chunks: stream), continuation)
     }
 
     /// Flattens a stream of `Data` chunks into a byte sequence, so Foundation's
@@ -168,7 +175,6 @@ public final class EngineSession {
     /// Dropping a still-running session must not orphan the engine (model and
     /// GPU memory): close stdin, then terminate.
     isolated deinit {
-        quitTask?.cancel()
         try? stdin?.close()
         if let process, process.isRunning { process.terminate() }
     }
@@ -197,26 +203,17 @@ public final class EngineSession {
         quitTask = Task { @MainActor [self] in await escalate(after: grace) }
     }
 
+    /// SIGTERM after `grace`, SIGKILL `killGrace` later. The exit cancels
+    /// this task, which ends the sleep at once.
     private func escalate(after grace: Duration) async {
-        if await waitUntil(grace, { false }) { return }
-        guard !exited, let process, process.isRunning else { return }
+        try? await Task.sleep(for: grace)
+        guard !Task.isCancelled, !exited, let process, process.isRunning else { return }
         terminated = true
         process.terminate()
-        if await waitUntil(killGrace, { false }) { return }
-        guard !exited, let process = self.process, process.isRunning else { return }
+        try? await Task.sleep(for: killGrace)
+        guard !Task.isCancelled, !exited, let process = self.process, process.isRunning else { return }
         forced = true
         kill(process.processIdentifier, SIGKILL)
-    }
-
-    /// Polls until `condition` holds or the process has exited (true), or the
-    /// duration elapses (false). Cancellation (set on exit) ends it at once.
-    private func waitUntil(_ duration: Duration, _ condition: () -> Bool) async -> Bool {
-        let deadline = ContinuousClock.now + duration
-        while !exited, !Task.isCancelled, !condition() {
-            if ContinuousClock.now >= deadline { return false }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return true
     }
 
     // MARK: - Private
@@ -244,8 +241,6 @@ public final class EngineSession {
         switch event {
         case .ignored:
             return
-        case .ready:
-            sawReady = true
         case .prompt:
             inTurn = true
         case .awaitingInput, .turnEnded:
@@ -268,14 +263,14 @@ public final class EngineSession {
 
     private func consumeStderrLine(_ line: String) {
         stderrTail.append(Data((line + "\n").utf8))
-        if stderrTail.count > Self.stderrTailLimit {
-            stderrTail = Data(stderrTail.suffix(Self.stderrTailLimit))
+        if stderrTail.count > EngineSessionConstants.stderrTailLimit {
+            stderrTail = Data(stderrTail.suffix(EngineSessionConstants.stderrTailLimit))
         }
         noteStderrLine(line)
     }
 
     private func noteStderrLine(_ line: String) {
-        let marker = "Session artifacts:"
+        let marker = EngineSessionConstants.sessionArtifactsMarker
         guard sessionDirectory == nil, let range = line.range(of: marker) else { return }
         let path = line[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty else { return }
@@ -306,6 +301,23 @@ public final class EngineSession {
         exitReason = reason
         quitTask?.cancel()
         finishIfComplete()
+        guard !exitFired else { return }
+        Task { @MainActor [weak self, drainLimit] in
+            try? await Task.sleep(for: drainLimit)
+            self?.endDrains()
+        }
+    }
+
+    /// The process is gone but a pipe is still open (a grandchild holds it):
+    /// stop reading, which ends the line loops and so reports the exit.
+    private func endDrains() {
+        guard !exitFired else { return }
+        for (handle, continuation) in drains {
+            handle.readabilityHandler = nil
+            try? handle.close()
+            continuation.finish()
+        }
+        drains = []
     }
 
     private func finishIfComplete() {
@@ -315,7 +327,7 @@ public final class EngineSession {
         stdin = nil
         process = nil
         let exit = EngineExit.describe(
-            code: exitStatus, stderrTail: String(decoding: stderrTail, as: UTF8.self), sawReady: sawReady,
+            code: exitStatus, stderrTail: String(decoding: stderrTail, as: UTF8.self), sawReady: parser.sawReady,
             reason: exitReason == .uncaughtSignal ? .signal : .exit, forced: forced, terminated: terminated,
             afterProtocolError: failedProtocol)
         quitTask = nil
