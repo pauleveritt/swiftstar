@@ -186,6 +186,51 @@ struct EngineAnalysisTests {
         #expect(m.analysis != nil)
     }
 
+    /// Final review, Important 1: a fork that fails says the main session is
+    /// untouched and how to resume it.
+    @Test func failedForkNamesTheMainSession() {
+        var m = idle()
+        let fork = m.beginAnalysis(report: "R", source: Self.source)!
+        m.didExit(EngineExit(code: 0, message: "ended"), directory: nil)
+        m.didRelaunch(fork)
+        m.didExit(EngineExit(code: 2, message: "refused"), directory: nil)
+        #expect(m.transcript.rows.contains {
+            if case .system(let s) = $0 { s.contains("20261013-112927-swiftstar") && s.contains("unchanged") } else { false } })
+    }
+
+    /// Final review, Important 2: `/resume` refused without a relaunch puts
+    /// the analysis back, so Done can be tried again.
+    @Test func refusedReturnKeepsAnalyzing() {
+        var m = forked()
+        _ = m.takeAnalysisPrompt()
+        m.markAnalysisReturning()
+        m.apply(.refused("session 20261013-112927-swiftstar cannot be resumed"))
+        guard case .analyzing(_, _, _, true)? = m.analysis?.stage else {
+            Issue.record("not analyzing: \(String(describing: m.analysis))"); return
+        }
+        #expect(m.analysisDoneCommand != nil)
+    }
+
+    /// Final review, Important 4: the banner waits for the fork, and Done is
+    /// offered only when it would act.
+    @Test func bannerOnlyOnceForkedAndDoneOnlyWhenIdle() {
+        var m = idle()
+        let fork = m.beginAnalysis(report: "R", source: Self.source)!
+        #expect(!m.showsAnalysisBanner)
+        m.didRelaunch(fork)
+        m.apply(.ready)
+        m.apply(resumed(turns: 1))
+        #expect(m.showsAnalysisBanner)
+        m.apply(.awaitingInput)
+        let p = m.takeAnalysisPrompt()!
+        _ = m.send(p.text, shown: p.shown)
+        m.apply(.prompt(p.text))
+        #expect(!m.canFinishAnalysis)
+        m.apply(.answer(EngineAnswer(text: "ok", contextUsed: 10, contextSize: 100, durationMs: 1)))
+        m.apply(.awaitingInput)
+        #expect(m.canFinishAnalysis)
+    }
+
     @Test func sendShownText() {
         var m = idle()
         let sent = m.send("long", shown: "short")

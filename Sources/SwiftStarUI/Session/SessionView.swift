@@ -13,8 +13,8 @@ struct SessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if controller.analysis != nil {
-                AnalysisBanner(done: controller.doneAnalyzing)
+            if controller.model.showsAnalysisBanner {
+                AnalysisBanner(canFinish: controller.model.canFinishAnalysis, done: controller.doneAnalyzing)
                 Divider()
             }
             TranscriptView(

@@ -381,6 +381,10 @@ deleted), two rounds of Analyze → answer → follow-up → Done in one session
 Not done here: clicking through the built app, and `/last` in a new Claude
 Code session. Both are the owner's.
 
+**Final review (Fable), fixed RED→GREEN:** a failed fork now names the
+untouched main session; a refused `/resume` returns to analyzing; Done is
+disabled unless it would act; the banner waits for the fork; Done lost Esc.
+
 **Findings for AN:**
 - **After a return, the report covers only the current directory.** Round
   2's main session (`164144`) had resumed from `164101`, so its report had

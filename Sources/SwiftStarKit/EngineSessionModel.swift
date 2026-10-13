@@ -129,9 +129,22 @@ public struct EngineSessionModel: Equatable, Sendable {
     }
 
     public mutating func markAnalysisReturning() {
-        guard let main = analysis?.main, analysisDoneCommand != nil else { return }
-        analysis = EngineAnalysis(stage: .returning(main: main))
+        guard case .analyzing(let main, let firstRow, let report, _)? = analysis?.stage,
+              analysisDoneCommand != nil
+        else { return }
+        analysis = EngineAnalysis(stage: .returning(main: main, firstRow: firstRow, report: report))
     }
+
+    /// The banner shows once the fork is up, until the return lands.
+    public var showsAnalysisBanner: Bool {
+        switch analysis?.stage {
+        case .analyzing?, .returning?: true
+        case .forking?, nil: false
+        }
+    }
+
+    /// Done would act now.
+    public var canFinishAnalysis: Bool { analysisDoneCommand != nil }
 
     public var composer: EngineComposer {
         EngineComposer.state(phase: phase, transcript: transcript)
@@ -182,6 +195,13 @@ public struct EngineSessionModel: Equatable, Sendable {
                 sessionDirectory = URL(fileURLWithPath: path).deletingLastPathComponent()
             }
             transcript.apply(event)
+        case .refused:
+            // Done's `/resume` refused without a relaunch: still in the fork.
+            if case .returning(let main, let firstRow, let report)? = analysis?.stage {
+                analysis = EngineAnalysis(stage: .analyzing(
+                    main: main, firstRow: firstRow, report: report, promptSent: true))
+            }
+            transcript.apply(event)
         default:
             transcript.apply(event)
         }
@@ -217,13 +237,20 @@ public struct EngineSessionModel: Equatable, Sendable {
         // Forking and returning begin by quitting the running session; that
         // exit comes before the relaunch starts and is expected. An exit
         // after it (the new process failed) or while analyzing ends it.
+        var failedFrom: URL?
         switch analysis?.stage {
         case .forking?, .returning?:
-            if pendingRelaunch != nil { analysis = nil }
+            if pendingRelaunch != nil {
+                failedFrom = analysis?.main
+                analysis = nil
+            }
         default:
             analysis = nil
         }
         transcript.end()
+        defer {
+            if let failedFrom { transcript.appendSystem(EngineAnalysis.mainUnchanged(failedFrom)) }
+        }
         transcript.appendSystem(exit.message)
         if let directory {
             transcript.appendSystem(

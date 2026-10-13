@@ -9,16 +9,23 @@ public struct EngineAnalysis: Equatable, Sendable {
         case forking(main: URL, report: String)
         /// In the fork. `firstRow` is where the analysis's own rows begin.
         case analyzing(main: URL, firstRow: Int, report: String, promptSent: Bool)
-        /// Done was sent; the main session is being resumed.
-        case returning(main: URL)
+        /// Done was sent; the main session is being resumed. The fork's rows
+        /// are kept in case the engine refuses (`analyzing` again).
+        case returning(main: URL, firstRow: Int, report: String)
     }
 
     public var stage: Stage
 
     public var main: URL {
         switch stage {
-        case .forking(let main, _), .analyzing(let main, _, _, _), .returning(let main): main
+        case .forking(let main, _), .analyzing(let main, _, _, _), .returning(let main, _, _): main
         }
+    }
+
+    /// Said when the fork or the return fails: the main session is untouched.
+    public static func mainUnchanged(_ main: URL) -> String {
+        "The main session \(main.lastPathComponent) is unchanged. Resume it with: "
+            + "ds4-dogfood tui --resume \(main.lastPathComponent)"
     }
 
     /// Where the analysis's rows begin, once the fork is up.

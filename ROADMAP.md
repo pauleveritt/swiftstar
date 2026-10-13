@@ -32,6 +32,14 @@ useful into ds4-engine. [Spec](docs/superpowers/specs/2026-10-13-an-session-anal
 | AN.3 | Remedies | Suggest and apply fixes from the flags, applied after Done in the main session | not brainstormed |
 | AN.4 | Into ds4-engine | `ds4-dogfood last [--session] [--json]` takes the script, tests and fixture; the app's `reportArgv` switches to it | opens on the owner's call, once the flag rules and summary rows stop changing |
 
+AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
+- **The report follows `resumed_from`.** After one Analyze and Done, the
+  main session is a new directory, and a second Analyze reported "no flagged
+  steps" for a session whose earlier turns had one (live, 2026-10-13).
+- **The report card's wide tables clip** at narrow widths (seen at 560 pt).
+- **A resumed-then-answered fixture,** so Done's return can be tested over
+  the fake engine.
+
 ## Phase SU: SwiftUI
 
 | # | Cycle | Direction | Status |
