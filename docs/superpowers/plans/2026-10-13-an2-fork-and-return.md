@@ -329,4 +329,19 @@ Most likely to bite first:
 
 ## Result
 
-Not started.
+**Task 1, the loop live (2026-10-13, `qwen3.8-27b`, a stdlib `--ndjson`
+driver): passed every line of the revision's §3.4.**
+- **Main** `20261013-161559-session-last`: two prompts, then quit. Its
+  `conversation.kv` was 280 MB.
+- **Fork** (P1's argv) `-161605`:
+  - `resumed.turns` were the main's two
+  - `input` in **2.4 s**; the first prompt's `sync_ms` was **356**
+  - `/resume 20261013-161559-session-last` was refused with `relaunch`:
+    `restart_argv` with `--ndjson`
+- **Return** (that argv):
+  - `input` in **2.6 s**; `resumed.turns` were the main's two only, without
+    the fork's question
+  - the first prompt's `sync_ms` was **372**
+  - the main `conversation.kv` existed before, during and after
+- This was at small context. At 42k a resume with state measured 4.5 s and
+  `sync_ms` 393 (first attempt's Result).
