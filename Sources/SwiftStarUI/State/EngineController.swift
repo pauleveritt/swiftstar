@@ -34,6 +34,9 @@ public final class EngineController {
     @ObservationIgnored private var catalogNote: String?
     @ObservationIgnored private var noteGate = CatalogNoteGate()
     @ObservationIgnored private var catalogCacheKey: CatalogCacheKey?
+    /// The model-list load for `catalogCacheKey`, kept so a caller that finds
+    /// the key already set (a load in flight) can wait for its result.
+    @ObservationIgnored private var catalogLoad: Task<Void, Never>?
     @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
     /// Set only by `init(model:)`: fixture controllers neither load the catalog
     /// nor start an engine, so a preview never spawns `ds4-dogfood`.
@@ -167,7 +170,12 @@ public final class EngineController {
     func loadCatalogIfNeeded() async {
         guard !isFixture else { return }
         guard let path = resolveExecutablePath() else { return }
-        guard catalogCacheKey(forPath: path) != catalogCacheKey else { return }
+        guard catalogCacheKey(forPath: path) != catalogCacheKey else {
+            // Loaded, or loading (the defaults observer can start a load at
+            // launch, before the session's start asks): wait for it.
+            await catalogLoad?.value
+            return
+        }
         await loadCatalog()
     }
 
@@ -177,6 +185,12 @@ public final class EngineController {
         guard let path = resolveExecutablePath() else { return }
         let key = catalogCacheKey(forPath: path)
         catalogCacheKey = key
+        let load = Task { await self.fetchCatalog(path: path, key: key) }
+        catalogLoad = load
+        await load.value
+    }
+
+    private func fetchCatalog(path: String, key: CatalogCacheKey) async {
         let result = await EngineModelCatalogLoader.load(executable: path)
         guard key == catalogCacheKey else { return }
         switch result {

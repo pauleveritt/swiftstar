@@ -92,12 +92,15 @@ struct EngineControllerTests {
     /// `models` is what `models --json` prints; nil exits 2 as an engine
     /// without the command does, so a start never waits out the loader's
     /// timeout.
-    private func writeSessionFake(to scriptPath: String, argvLogPath: String, models: String? = nil) throws {
-        let modelsBranch = models.map { "sys.stdout.write(\(String(reflecting: $0))); sys.exit(0)" }
+    private func writeSessionFake(
+        to scriptPath: String, argvLogPath: String, models: String? = nil, modelsDelay: Double = 0
+    ) throws {
+        let modelsBranch = models.map {
+            "time.sleep(\(modelsDelay)); sys.stdout.write(\(String(reflecting: $0))); sys.exit(0)" }
             ?? "sys.exit(2)"
         let script = """
         #!/usr/bin/env python3
-        import json, sys
+        import json, sys, time
         if sys.argv[1:2] == ["models"]:
             \(modelsBranch)
         with open(\(String(reflecting: argvLogPath)), "a") as f:
@@ -172,6 +175,27 @@ struct EngineControllerTests {
             #expect(UserDefaults.standard.string(forKey: DefaultsKey.modelID.rawValue) == "")
             #expect(controller.transcript.rows.contains(
                 .system("laguna-xs-2.1 is no longer offered; using the engine default")))
+            await controller.quit()
+        }
+    }
+
+    /// Found live (EN.1 Task 7): at launch a defaults change makes the
+    /// observer start a model-list load first; start() must wait for that
+    /// load, not see its cache key and start with no list.
+    @Test func staleModelClearedWhenCatalogLoadInFlight() async throws {
+        let script = tempPath("session"), log = tempPath("argv")
+        defer { for p in [script, log] { try? FileManager.default.removeItem(atPath: p) } }
+        try writeSessionFake(to: script, argvLogPath: log,
+                             models: try String(contentsOf: Self.realModels, encoding: .utf8), modelsDelay: 0.5)
+        await withDefaults(executable: script, modelID: "laguna-xs-2.1") {
+            let controller = EngineController()
+            controller.workspace = FileManager.default.temporaryDirectory
+            let inFlight = Task { await controller.loadCatalog() }
+            try? await Task.sleep(for: .milliseconds(50))
+            await controller.start()
+            await poll { controller.phase == .running }
+            #expect(argvLines(log).first?.contains("--model-id") == false)
+            await inFlight.value
             await controller.quit()
         }
     }
