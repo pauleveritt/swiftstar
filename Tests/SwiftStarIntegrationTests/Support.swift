@@ -50,7 +50,7 @@ func tempPath(_ name: String) -> String {
 struct DefaultsScope {
     private let saved: [(DefaultsKey, Any?)]
 
-    init(_ values: [DefaultsKey: String?]) {
+    init(_ values: [DefaultsKey: Any?]) {
         let defaults = UserDefaults.standard
         saved = values.keys.map { ($0, defaults.object(forKey: $0.rawValue)) }
         for (key, value) in values {

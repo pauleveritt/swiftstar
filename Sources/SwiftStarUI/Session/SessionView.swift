@@ -33,6 +33,16 @@ struct SessionView: View {
             if controller.phase == .idle { await controller.start() }
             else { await controller.loadCatalogIfNeeded() }
         }
+        // No usable workspace (SU.6c, D1): ask for one, and start in it.
+        .onChange(of: controller.wantsFolder) { _, wants in
+            guard wants else { return }
+            if let url = WorkspacePicker.run(from: controller.workspace) {
+                controller.select(workspace: url)
+                Task { await controller.start() }
+            } else {
+                controller.folderPickerDismissed()
+            }
+        }
         .alert("Other model", isPresented: $askingModel) {
             TextField("Model id", text: $entry)
             Button("Use") { controller.select(modelID: entry) }

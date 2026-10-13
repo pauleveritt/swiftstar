@@ -180,6 +180,44 @@ struct EngineControllerTests {
         await controller.quit()
     }
 
+    // MARK: SU.6c, D1: no usable workspace
+
+    /// A temporary folder with a `.git` directory: a usable workspace.
+    private func tempRepo() throws -> String {
+        let path = tempPath("repo")
+        try FileManager.default.createDirectory(atPath: path + "/.git", withIntermediateDirectories: true)
+        return path
+    }
+
+    @Test func missingWorkspaceFallsBackToRecent() throws {
+        let repo = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        let gone = tempPath("gone")
+        let defaults = DefaultsScope([.workspace: gone, .recentWorkspaces: [gone, repo]])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        #expect(controller.workspace?.path == repo)
+        #expect(UserDefaults.standard.string(forKey: DefaultsKey.workspace.rawValue) == repo)
+    }
+
+    @Test func noWorkspaceDoesNotSpawn() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: tempPath("gone"),
+                                      .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = EngineController()
+        #expect(controller.workspace == nil)
+        await controller.start()
+        #expect(f.spawnArgv.isEmpty)
+        #expect(controller.wantsFolder)
+        #expect(controller.phase == .idle)
+        let asked = controller.transcript.rows.contains { row in
+            if case .system(let s) = row { s.hasSuffix("Choose a folder in a git repository to start.") } else { false }
+        }
+        #expect(asked)
+    }
+
     /// A started controller whose session is idle at its first `input`.
     private func running(_ f: FakeEngine, graces: EngineGraces = .standard) async -> EngineController {
         let controller = EngineController(graces: graces)

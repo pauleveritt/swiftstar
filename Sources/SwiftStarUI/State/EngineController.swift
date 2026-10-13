@@ -26,6 +26,13 @@ public final class EngineController {
         }
     }
 
+    /// `start()` found no usable workspace: the view opens the folder picker
+    /// (SU.6c, D1). Reset by a folder choice or `folderPickerDismissed()`.
+    private(set) var wantsFolder = false
+    /// Why the workspace isn't the saved one, or why there is none; shown at
+    /// the next start.
+    @ObservationIgnored private var workspaceNote: String?
+
     /// The Settings choices the toolbar menus own ("" / 0 = engine default).
     private(set) var modelID: String
     private(set) var contextSize: Int
@@ -67,7 +74,13 @@ public final class EngineController {
         modelID = defaults.string(forKey: DefaultsKey.modelID.rawValue) ?? ""
         contextSize = defaults.integer(forKey: DefaultsKey.contextSize.rawValue)
         recentWorkspaces = defaults.stringArray(forKey: DefaultsKey.recentWorkspaces.rawValue) ?? []
-        workspace = Self.defaultWorkspace()
+        let choice = WorkspaceChoice.resolve(
+            saved: defaults.string(forKey: DefaultsKey.workspace.rawValue),
+            recents: recentWorkspaces, checkout: Self.checkout(), isUsable: WorkspaceChoice.isUsable)
+        workspace = choice.workspace
+        // `@Observable` makes `workspace` computed, so its `didSet` runs here
+        // too and saves a fallback.
+        workspaceNote = choice.notice
         seenExecutableSetting = defaults.string(forKey: DefaultsKey.executable.rawValue)
         // Reload the model list when Settings names another engine.
         defaultsObserver = NotificationCenter.default.addObserver(
@@ -102,15 +115,16 @@ public final class EngineController {
         isFixture = true
     }
 
-    /// The last chosen folder, else the checkout the app runs from, else home.
-    private static func defaultWorkspace() -> URL {
-        if let dir = UserDefaults.standard.string(forKey: DefaultsKey.workspace.rawValue), !dir.isEmpty {
-            return URL(fileURLWithPath: dir)
-        }
+    /// The checkout the app runs from, if any: anchored to the executable,
+    /// never the launch directory's guess.
+    private static func checkout() -> URL? {
         let anchor = Bundle.main.executableURL?.deletingLastPathComponent()
             ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        return ProjectRoot.locate(anchor: anchor) ?? FileManager.default.homeDirectoryForCurrentUser
+        return ProjectRoot.locate(anchor: anchor)
     }
+
+    /// The folder picker closed without a choice.
+    func folderPickerDismissed() { wantsFolder = false }
 
     /// Choosing a value that differs from the current one writes Settings and,
     /// while a session runs, restarts it; the menu choice is the confirmation.
@@ -124,6 +138,8 @@ public final class EngineController {
         let list = RecentWorkspaces.updated(recentWorkspaces, adding: url.path)
         recentWorkspaces = list
         UserDefaults.standard.set(list, forKey: DefaultsKey.recentWorkspaces.rawValue)
+        wantsFolder = false
+        workspaceNote = nil
         guard url.standardizedFileURL.path != workspace?.standardizedFileURL.path else { return }
         workspace = url
         restartIfRunning()
@@ -260,6 +276,12 @@ public final class EngineController {
     func start(relaunch: EngineRelaunch? = nil) async {
         let override = relaunch?.argv
         guard !isFixture, !isActive, !isTerminating else { return }
+        guard let folder = workspace else {
+            // No usable folder (SU.6c, D1): say why and ask; spawn nothing.
+            model.apply(.notice(workspaceNote ?? "Choose a folder in a git repository to start."))
+            wantsFolder = true
+            return
+        }
         var notice: String?
         if override == nil {
             // "Starting…" while the model list loads; a second Start sees an
@@ -283,7 +305,6 @@ public final class EngineController {
             return
         }
 
-        let folder = workspace ?? FileManager.default.homeDirectoryForCurrentUser
         let source = ProjectRoot.locate(anchor: folder) ?? folder
         self.source = source
 
@@ -309,6 +330,7 @@ public final class EngineController {
         // session must not carry into this one.
         quitBoundFired = false
         pendingModelCommand = nil
+        if let note = workspaceNote { model.apply(.notice(note)); workspaceNote = nil }
         if let notice { model.apply(.notice(notice)) }
         showCatalogNote()
         do {
