@@ -149,5 +149,49 @@ class FlagTests(unittest.TestCase):
         self.assertEqual(rules(sl.flags([p], [])), [])
 
 
+def checkpoint(seq, prefill_tokens, sync_ms, eval_count=0, eval_ms=0.0, turn=0):
+    return {"kind": "checkpoint", "seq": seq, "turn": turn, "snapshot": {
+        "prefill_tokens": prefill_tokens, "sync_ms": sync_ms, "eval_count": eval_count, "eval_ms": eval_ms}}
+
+
+class SummaryTests(unittest.TestCase):
+    def setUp(self):
+        self.session = sl.load(FIXTURE)
+        self.prompts = sl.steps(self.session)
+
+    def test_per_pause_rates_are_deltas(self):
+        rates = sl.pause_rates([checkpoint(1, 955, 1950.4), checkpoint(2, 1000, 2744.5)])
+        self.assertAlmostEqual(rates[1].prefill_tps, 45 / 794.1 * 1000, places=1)
+        self.assertLess(rates[1].prefill_tps, 100)  # the cumulative average would be ~364
+
+    def test_zero_delta_has_no_rate(self):
+        rates = sl.pause_rates([checkpoint(1, 955, 1950.4), checkpoint(2, 1000, 1950.4)])
+        self.assertIsNone(rates[1].prefill_tps)
+
+    def test_no_new_tokens_has_no_rate(self):
+        rates = sl.pause_rates([checkpoint(1, 955, 1950.4), checkpoint(2, 955, 1990.0)])
+        self.assertIsNone(rates[1].prefill_tps)
+
+    def test_123136_pause_rates(self):
+        rates = sl.pause_rates(self.session.events)
+        self.assertEqual(len(rates), 23)
+        self.assertAlmostEqual(rates[0].prefill_tps, 955 / 1950.416958 * 1000, places=1)
+
+    def test_123136_summary(self):
+        rows = sl.summary(self.session, self.prompts)
+        self.assertEqual(list(rows), ["Time", "Context and speed", "Work", "Ending", "Health"])
+        self.assertIn("1,021 → 7,300", rows["Context and speed"])
+        self.assertIn("read 10, edit 4, ls 3, grep 2, run 1", rows["Work"])
+        self.assertIn("rejected: run (unknown-tool)", rows["Work"])
+        self.assertNotIn("host_results", rows["Work"])
+
+    def test_123136_signals(self):
+        signals = sl.signals(self.session, self.prompts)
+        self.assertEqual(signals["loop_guards"]["already_shown"], 2)
+        self.assertEqual(signals["syncs_under_1ms"], 19)
+        self.assertEqual(signals["host_results_steps"], 16)
+        self.assertEqual(signals["result_bytes"], (8997, 8997))
+
+
 if __name__ == "__main__":
     unittest.main()
