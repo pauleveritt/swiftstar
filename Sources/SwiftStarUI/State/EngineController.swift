@@ -38,6 +38,11 @@ public final class EngineController {
     /// the key already set (a load in flight) can wait for its result.
     @ObservationIgnored private var catalogLoad: Task<Void, Never>?
     @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
+    /// The Settings executable string the observer last saw: other defaults
+    /// writes (font size, inspector, the menus' own) change nothing here.
+    @ObservationIgnored private var seenExecutableSetting: String?
+    /// A `/model` sent and not yet relaunched or refused.
+    @ObservationIgnored private var pendingModelCommand: String?
     /// Set only by `init(model:)`: fixture controllers neither load the catalog
     /// nor start an engine, so a preview never spawns `ds4-dogfood`.
     @ObservationIgnored private var isFixture = false
@@ -49,35 +54,43 @@ public final class EngineController {
     /// The safety bound fired for the current quit; later joiners return at once.
     @ObservationIgnored private var quitBoundFired = false
 
-    private static let stopGrace: Duration = .seconds(10)
-    private static let termGrace: Duration = .seconds(5)
-    private static let killGrace: Duration = .seconds(10)
-    /// Only reached if even SIGKILL fails to end the engine.
-    private static let quitSafetyBound: Duration = stopGrace + termGrace + killGrace + .seconds(5)
+    /// Quit's escalation; `safetyBound` is only reached if even SIGKILL fails.
+    @ObservationIgnored private let graces: EngineGraces
     @ObservationIgnored private var quitWaiters: [CheckedContinuation<Void, Never>] = []
 
-    public init() {
+    public init(graces: EngineGraces = .standard) {
+        self.graces = graces
         let defaults = UserDefaults.standard
         modelID = defaults.string(forKey: DefaultsKey.modelID.rawValue) ?? ""
         contextSize = defaults.integer(forKey: DefaultsKey.contextSize.rawValue)
         recentWorkspaces = defaults.stringArray(forKey: DefaultsKey.recentWorkspaces.rawValue) ?? []
         workspace = Self.defaultWorkspace()
-        // Reload the model list when Settings changes the engine path.
+        seenExecutableSetting = defaults.string(forKey: DefaultsKey.executable.rawValue)
+        // Reload the model list when Settings names another engine.
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, let path = self.resolveExecutablePath() else { return }
-                guard self.catalogCacheKey(forPath: path) != self.catalogCacheKey else { return }
+                guard let self else { return }
+                let setting = UserDefaults.standard.string(forKey: DefaultsKey.executable.rawValue)
+                guard setting != self.seenExecutableSetting else { return }
+                self.seenExecutableSetting = setting
+                guard let path = self.resolveExecutablePath(),
+                      self.catalogCacheKey(forPath: path) != self.catalogCacheKey else { return }
                 Task { await self.loadCatalog() }
             }
         }
+    }
+
+    isolated deinit {
+        if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
     }
 
     /// Preview/test fixture construction: starts from a given model state,
     /// skipping `init()`'s `UserDefaults` reads and the live catalog-reload
     /// observer (previews don't restart a session).
     init(model: EngineSessionModel) {
+        self.graces = .standard
         self.model = model
         workspace = nil
         modelID = ""
@@ -99,7 +112,7 @@ public final class EngineController {
     /// Choosing a value that differs from the current one writes Settings and,
     /// while a session runs, restarts it; the menu choice is the confirmation.
     /// Ignored while a session starts or quits, and when nothing changes.
-    private var canChoose: Bool {
+    var canChoose: Bool {
         !isTerminating && model.phase != .starting && model.phase != .quitting
     }
 
@@ -123,6 +136,11 @@ public final class EngineController {
         let id = id.trimmedOrNil ?? ""
         guard id != modelID else { return }
         if !id.isEmpty, ModelMenu.selectionAction(phase: model.phase) == .sendModelCommand {
+            guard pendingModelCommand == nil else {
+                model.apply(.notice("A model switch is already pending."))
+                return
+            }
+            pendingModelCommand = id
             send("/model \(id)")
             return
         }
@@ -145,15 +163,18 @@ public final class EngineController {
         Task { await restart() }
     }
 
-    private func resolveExecutablePath() -> String? {
-        let settingsPath = UserDefaults.standard.string(forKey: DefaultsKey.executable.rawValue)
-        if case .found(let path) = EngineCommand.resolveExecutable(
-            settingsPath: settingsPath,
+    /// The engine executable: the Settings path, then `PATH`, then
+    /// `~/.local/bin` (`EngineCommand.resolveExecutable`).
+    private func resolveExecutable() -> EngineResolution {
+        EngineCommand.resolveExecutable(
+            settingsPath: UserDefaults.standard.string(forKey: DefaultsKey.executable.rawValue),
             pathEnv: ProcessInfo.processInfo.environment["PATH"],
             home: FileManager.default.homeDirectoryForCurrentUser,
-            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) }) {
-            return path
-        }
+            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) })
+    }
+
+    private func resolveExecutablePath() -> String? {
+        if case .found(let path) = resolveExecutable() { return path }
         return nil
     }
 
@@ -234,8 +255,11 @@ public final class EngineController {
         guard !isFixture, !isActive, !isTerminating else { return }
         var notice: String?
         if override == nil {
+            // "Starting…" while the model list loads; a second Start sees an
+            // active phase and returns.
+            model.willStart()
             await loadCatalogIfNeeded()
-            guard !isActive, !isTerminating else { return }
+            guard !isTerminating, model.phase == .starting, session == nil else { return }
             let checked = ModelMenu.validated(saved: modelID, list: catalog)
             if checked.modelID != modelID {
                 modelID = checked.modelID
@@ -243,14 +267,8 @@ public final class EngineController {
             }
             notice = checked.notice
         }
-        let settingsPath = UserDefaults.standard.string(forKey: DefaultsKey.executable.rawValue)
-        let resolution = EngineCommand.resolveExecutable(
-            settingsPath: settingsPath,
-            pathEnv: ProcessInfo.processInfo.environment["PATH"],
-            home: FileManager.default.homeDirectoryForCurrentUser,
-            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) })
         let executable: String
-        switch resolution {
+        switch resolveExecutable() {
         case .found(let path):
             executable = path
         case .notFound(let searched):
@@ -267,9 +285,17 @@ public final class EngineController {
                 source: source,
                 modelID: modelID, contextSize: contextSize),
             workingDirectory: source,
-            stopGrace: Self.stopGrace, termGrace: Self.termGrace, killGrace: Self.killGrace)
-        session.onEvent = { [weak self] event in self?.handle(event) }
-        session.onExit = { [weak self] exit, directory in self?.handleExit(exit, directory) }
+            stopGrace: graces.stop, termGrace: graces.term, killGrace: graces.kill)
+        // A session the safety bound gave up on may still exit or speak
+        // later; only the current session's events and exit count.
+        session.onEvent = { [weak self, weak session] event in
+            guard let self, let session, self.session === session else { return }
+            self.handle(event)
+        }
+        session.onExit = { [weak self, weak session] exit, directory in
+            guard let self, let session, self.session === session else { return }
+            self.handleExit(exit, directory)
+        }
         if let relaunch { model.didRelaunch(relaunch) } else { model.didStart() }
         if let notice { model.apply(.notice(notice)) }
         showCatalogNote()
@@ -284,7 +310,11 @@ public final class EngineController {
 
     private func handle(_ event: EngineEvent) {
         model.apply(event)
-        if case .relaunch(let r) = event { Task { await relaunch(r) } }
+        switch event {
+        case .relaunch(let r): Task { await relaunch(r) }
+        case .refused: pendingModelCommand = nil
+        default: break
+        }
     }
 
     /// The engine's TUI.34 contract: end this session, then start the
@@ -293,7 +323,12 @@ public final class EngineController {
     func relaunch(_ r: EngineRelaunch) async {
         guard !isTerminating else { return }
         await quit()
-        guard !isTerminating, !isActive else { return }
+        pendingModelCommand = nil
+        guard !isTerminating else { return }
+        guard !quitBoundFired, !isActive else {
+            model.apply(.notice("Relaunch skipped: the engine did not exit."))
+            return
+        }
         if r.kind == .model, let id = r.modelID {
             modelID = id
             UserDefaults.standard.set(id, forKey: DefaultsKey.modelID.rawValue)
@@ -330,11 +365,19 @@ public final class EngineController {
             quitGeneration += 1
             quitBoundFired = false
             let generation = quitGeneration
-            Task { [weak self] in
-                try? await Task.sleep(for: Self.quitSafetyBound)
+            Task { [weak self, graces] in
+                try? await Task.sleep(for: graces.safetyBound)
                 // The bound releases only the quit it was started for.
                 guard let self, self.quitGeneration == generation else { return }
                 self.quitBoundFired = true
+                // End the session here: its exit may never come, and the
+                // phase must not stay "quitting" with Start disabled.
+                if self.session != nil {
+                    self.session = nil
+                    self.model.didExit(EngineExit(
+                        code: -1, message: "the engine did not exit after quit; it may still be running"),
+                        directory: nil)
+                }
                 self.resumeQuitWaiters()
             }
         }
@@ -350,6 +393,7 @@ public final class EngineController {
 
     private func handleExit(_ exit: EngineExit, _ directory: URL?) {
         session = nil
+        pendingModelCommand = nil
         model.didExit(exit, directory: directory)
         quitGeneration += 1
         resumeQuitWaiters()

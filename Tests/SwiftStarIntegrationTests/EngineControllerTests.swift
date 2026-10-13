@@ -224,9 +224,13 @@ struct EngineControllerTests {
     /// this file): replays tool-read, resumes from resumed.ndjson, logs each
     /// spawn's argv and each stdin line. `refuseResume` makes the relaunched
     /// start exit 2 before `ready`.
-    private func writeFakeWrapper(to path: String, spawnLog: String, inputLog: String, refuseResume: Bool = false) throws {
+    private func writeFakeWrapper(
+        to path: String, spawnLog: String, inputLog: String, refuseResume: Bool = false,
+        extra: [String: String] = [:]
+    ) throws {
         let f = Self.fixtures
-        let refuse = refuseResume ? #"case "$*" in *--resume*) export FAKE_ENGINE_REFUSE=1;; esac"# : ""
+        var refuse = refuseResume ? #"case "$*" in *--resume*) export FAKE_ENGINE_REFUSE=1;; esac"# : ""
+        for (k, v) in extra.sorted(by: { $0.key < $1.key }) { refuse += "\nexport \(k)=\(v)" }
         let script = """
         #!/bin/sh
         export FAKE_ENGINE_FIXTURE=\(f.appendingPathComponent("tool-read.ndjson").path)
@@ -247,15 +251,16 @@ struct EngineControllerTests {
         var paths: [String] { [script, spawns, inputs] }
     }
 
-    private func fake(refuseResume: Bool = false) throws -> Fake {
+    private func fake(refuseResume: Bool = false, extra: [String: String] = [:]) throws -> Fake {
         let f = Fake(script: tempPath("wrapper"), spawns: tempPath("spawns"), inputs: tempPath("inputs"))
-        try writeFakeWrapper(to: f.script, spawnLog: f.spawns, inputLog: f.inputs, refuseResume: refuseResume)
+        try writeFakeWrapper(
+            to: f.script, spawnLog: f.spawns, inputLog: f.inputs, refuseResume: refuseResume, extra: extra)
         return f
     }
 
     /// A started controller whose session is idle at its first `input`.
-    private func running(_ f: Fake) async -> EngineController {
-        let controller = EngineController()
+    private func running(_ f: Fake, graces: EngineGraces = .standard) async -> EngineController {
+        let controller = EngineController(graces: graces)
         controller.workspace = FileManager.default.temporaryDirectory
         await controller.start()
         await poll { controller.phase == .running && controller.composer.canSend && !controller.transcript.isBusy
@@ -358,6 +363,72 @@ struct EngineControllerTests {
             }
             try? await Task.sleep(for: .milliseconds(300))
             #expect(argvLines(f.spawns).count == 1)
+        }
+    }
+
+    // MARK: SU.5a1 Task 6
+
+    /// Audit B4: when even the safety bound passes, the session is ended, so
+    /// the app is not left at "Ending…" with Start disabled.
+    @Test func quitBoundEndsTheSession() async throws {
+        let f = try fake(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
+        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
+        await withDefaults(executable: f.script, modelID: nil) {
+            let graces = EngineGraces(
+                stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(3), safetyBound: .milliseconds(500))
+            let controller = await running(f, graces: graces)
+            await controller.quit()
+            await poll(timeout: .seconds(2)) { if case .ended = controller.phase { true } else { false } }
+            guard case .ended(let exit) = controller.phase else { Issue.record("phase \(controller.phase)"); return }
+            #expect(exit.message == "the engine did not exit after quit; it may still be running")
+            #expect(!controller.isActive)
+            try? await Task.sleep(for: .seconds(4))  // the old session's SIGKILL lands; nothing changes
+            #expect(controller.transcript.rows.last == .system(exit.message))
+        }
+    }
+
+    @Test func fixtureStartStaysIdle() async {
+        let controller = EngineController.previewIdle
+        await controller.start()
+        #expect(controller.phase == .idle)
+    }
+
+    /// The observer reloads the model list when Settings names another
+    /// engine, and not on the controller's (or anyone's) other writes.
+    @Test func catalogReloadsOnlyForANewExecutable() async throws {
+        let a = tempPath("engine-a"), aLog = tempPath("calls-a"), b = tempPath("engine-b"), bLog = tempPath("calls-b")
+        defer { for p in [a, aLog, b, bLog] { try? FileManager.default.removeItem(atPath: p) } }
+        try writeFakeEngine(to: a, callLogPath: aLog)
+        try writeFakeEngine(to: b, callLogPath: bLog)
+        await withDefaults(executable: a, modelID: nil) {
+            let controller = EngineController()
+            await controller.loadCatalogIfNeeded()
+            controller.select(modelID: "x")
+            controller.select(contextSize: 4096)
+            try? await Task.sleep(for: .milliseconds(300))
+            #expect(callCount(aLog) == 1)
+            UserDefaults.standard.set(b, forKey: DefaultsKey.executable.rawValue)
+            await poll { callCount(bLog) == 1 }
+            #expect(callCount(bLog) == 1)
+            UserDefaults.standard.removeObject(forKey: DefaultsKey.contextSize.rawValue)
+        }
+    }
+
+    @Test func secondModelPickWhilePendingIsRefused() async throws {
+        let f = try fake()
+        defer { for p in f.paths { try? FileManager.default.removeItem(atPath: p) } }
+        await withDefaults(executable: f.script, modelID: nil) {
+            let controller = await running(f)
+            controller.select(modelID: "qwen3.8-flash-next")
+            controller.select(modelID: "qwen3.8-27b")
+            #expect(controller.transcript.rows.contains(.system("A model switch is already pending.")))
+            await poll(timeout: .seconds(15)) { argvLines(f.spawns).count == 2 && controller.transcript.isAwaitingInput }
+            let prompts = ((try? String(contentsOfFile: f.inputs, encoding: .utf8)) ?? "")
+                .split(separator: "\n")
+                .compactMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
+                .compactMap { $0["text"] as? String }
+            #expect(prompts.filter { $0.hasPrefix("/model") } == ["/model qwen3.8-flash-next"])
+            await controller.quit()
         }
     }
 }

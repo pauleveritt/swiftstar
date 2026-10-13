@@ -49,7 +49,7 @@ struct SessionToolbar: ToolbarContent {
     private func menuButton(_ menu: some View) -> some View {
         menu
             .font(.system(size: transcriptFontSize))
-            .disabled(controller.phase == .starting || controller.phase == .quitting)
+            .disabled(!controller.canChoose)
     }
 
     private func menuLabel(_ text: String, icon: String? = nil) -> some View {

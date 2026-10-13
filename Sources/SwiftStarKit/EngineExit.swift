@@ -12,6 +12,11 @@ public struct EngineExit: Equatable, Sendable {
     public let code: Int32
     public let message: String
 
+    public init(code: Int32, message: String) {
+        self.code = code
+        self.message = message
+    }
+
     /// `forced` means SwiftStar itself escalated to SIGKILL after the quit
     /// timed out; `terminated` that it sent SIGTERM (not escalated further);
     /// `afterProtocolError` that it ended the engine because the wire broke

@@ -87,6 +87,12 @@ public struct EngineSessionModel: Equatable, Sendable {
         phase = .starting
     }
 
+    /// A start has begun but nothing is spawned yet (the model list is still
+    /// loading): the composer reads "Starting…"; the transcript is untouched.
+    public mutating func willStart() {
+        phase = .starting
+    }
+
     public mutating func didNotFind(searched: [String]) {
         phase = .notFound(searched)
     }

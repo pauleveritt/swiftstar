@@ -51,6 +51,13 @@ struct EngineSessionModelTests {
         #expect(m.sessionDirectory?.path == "/tmp/s1")
     }
 
+    @Test func willStartShowsStarting() {
+        var m = EngineSessionModel()
+        m.willStart()
+        #expect(m.phase == .starting)
+        #expect(m.composer.label == "Starting…")
+    }
+
     @Test func readyMovesToRunning() {
         var m = EngineSessionModel()
         m.didStart()
