@@ -15,7 +15,6 @@ public final class EngineController {
     var metrics: EngineMetricsState { model.metrics }
     var phase: EngineSessionPhase { model.phase }
     var composer: EngineComposer { model.composer }
-    var sessionDirectory: URL? { model.sessionDirectory }
     public var isActive: Bool { model.phase.isActive }
     /// The git root the current or last session worked from (its `--source`),
     /// kept after the session ends so its tool cards still resolve.
@@ -35,7 +34,8 @@ public final class EngineController {
     /// `models --json` (the menus then use their fallbacks).
     private(set) var catalog: EngineModelList?
     @ObservationIgnored private var catalogNote: String?
-    @ObservationIgnored private var noteGate = CatalogNoteGate()
+    /// Engine paths whose "Model list unavailable" note was shown: once each.
+    @ObservationIgnored private var notedPaths: Set<String> = []
     @ObservationIgnored private var catalogCacheKey: CatalogCacheKey?
     /// The model-list load for `catalogCacheKey`, kept so a caller that finds
     /// the key already set (a load in flight) can wait for its result.
@@ -232,7 +232,7 @@ public final class EngineController {
 
     private func showCatalogNote() {
         guard let note = catalogNote, let path = catalogCacheKey?.path,
-              noteGate.claim(path: path) else { return }
+              notedPaths.insert(path).inserted else { return }
         model.apply(.notice(note))
     }
 
@@ -393,7 +393,6 @@ public final class EngineController {
                 self.resumeQuitWaiters()
             }
         }
-        if quitBoundFired { return }
         await withCheckedContinuation { quitWaiters.append($0) }
     }
 

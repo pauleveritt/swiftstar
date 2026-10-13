@@ -28,7 +28,7 @@ extension EngineController {
         // the preview and this fixture's state is lost.
         model.didStart()
         model.apply(.ready)
-        model.apply(.session(EngineSessionInfo(id: "preview", modelID: "qwen3.8-27b", contextSize: 8192)))
+        model.apply(.session(EngineSessionInfo(modelID: "qwen3.8-27b", contextSize: 8192)))
         _ = model.send("Summarize SessionView.swift")
         model.apply(.prompt("Summarize SessionView.swift"))
         let tool = EngineTool(op: "read", path: "Sources/SwiftStarUI/Session/SessionView.swift")

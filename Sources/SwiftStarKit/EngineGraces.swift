@@ -1,6 +1,5 @@
 import Foundation
 
-
 /// How long a quit waits at each step before escalating: after `stop`, after
 /// SIGTERM, after SIGKILL. `safetyBound` is when the app stops waiting
 /// altogether, so app quit can never hang.
@@ -26,13 +25,4 @@ public enum EngineSessionConstants {
     public static let stderrTailLimit = 4096
     /// The stderr line that names the session directory.
     public static let sessionArtifactsMarker = "Session artifacts:"
-}
-
-extension String {
-    /// The string with surrounding whitespace and newlines removed, or nil
-    /// when nothing is left.
-    public var trimmedOrNil: String? {
-        let t = trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
-    }
 }

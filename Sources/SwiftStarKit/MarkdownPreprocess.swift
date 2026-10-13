@@ -1,10 +1,7 @@
 import Foundation
 
-/// Renderer-agnostic markdown preparation, ported from the DS4 Control agent
-/// window (provenance: `MarkdownText.swift`/`AgentItemView.swift` in the
-/// agent-mode worktree; facts cross, code does not). The view layer runs these
-/// before handing text to the renderer; being pure, they are tested here in
-/// Kit rather than in the view target.
+/// Renderer-agnostic markdown preparation, run by the view before it hands text
+/// to the renderer. Pure, so it is tested here in Kit.
 public enum MarkdownPreprocess {
     /// LaTeX cleanup so the model's math reads as text rather than raw source.
     /// Strips wrappers and maps common symbols — not a TeX engine; unknown

@@ -77,7 +77,6 @@ public struct EngineSessionModel: Equatable, Sendable {
     public private(set) var phase: EngineSessionPhase = .idle
     public private(set) var transcript = EngineTranscript()
     public private(set) var metrics = EngineMetricsState()
-    public private(set) var sessionDirectory: URL?
     /// The relaunch the controller is running (`didRelaunch`), used for the
     /// divider when `.resumed` arrives. Not set by a `.relaunch` event: when
     /// two refusals arrive, only the one actually run may name the divider.
@@ -93,7 +92,6 @@ public struct EngineSessionModel: Equatable, Sendable {
     public mutating func didStart() {
         transcript = EngineTranscript()
         metrics = EngineMetricsState()
-        sessionDirectory = nil
         pendingRelaunch = nil
         phase = .starting
     }
@@ -134,7 +132,6 @@ public struct EngineSessionModel: Equatable, Sendable {
     }
 
     public mutating func didExit(_ exit: EngineExit, directory: URL?) {
-        sessionDirectory = directory
         transcript.end()
         transcript.appendSystem(exit.message)
         if let directory {

@@ -19,10 +19,8 @@ import MarkdownView
 import SwiftUI
 import SwiftStarKit
 
-/// Renders a complete (non-streaming) markdown string. Used for finished
-/// assistant bubbles and the thinking disclosure. Streaming is safe too: the
-/// transcript coalesces deltas in place, so this view re-renders on each
-/// mutation (no separate streaming variant needed).
+/// Renders one complete markdown string: an answer, a narration or a thinking
+/// disclosure. Rows arrive whole (the engine reports per pause, not per token).
 public struct MarkdownText: View {
     let source: String
     @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat

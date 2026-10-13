@@ -48,7 +48,6 @@ struct EngineSessionModelTests {
         m.didRelaunch(EngineRelaunch(kind: .rewind, argv: ["tui", "--ndjson"], reason: ""))
         #expect(m.transcript.rows == before)
         #expect(m.phase == .starting)
-        #expect(m.sessionDirectory?.path == "/tmp/s1")
     }
 
     @Test func willStartShowsStarting() {

@@ -3,11 +3,10 @@ import Testing
 @testable import SwiftStarUI
 import SwiftStarKit
 
-/// Drives `EngineController` directly (first coverage it has ever had — it
-/// lives in the `SwiftStarUI` library target, which neither test target
-/// depended on before P30). Mutates `UserDefaults.standard` (the real, persistent domain — there
-/// is no isolated suite here), so kept serialized and every touched key is
-/// saved, reset to a known value before use, and restored afterward.
+/// Drives `EngineController` directly. Mutates `UserDefaults.standard` (the
+/// real, persistent domain; there is no isolated suite here), so the suite is
+/// serialized and every touched key is saved, reset to a known value before
+/// use, and restored afterward.
 @MainActor
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct EngineControllerTests {

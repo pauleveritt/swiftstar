@@ -33,7 +33,7 @@ struct EngineMetricsTests {
     // Payload: session event carries context_size (fixtures/engine/tool-read.ndjson line 3).
     @Test func sessionEventSetsWindow() {
         var s = EngineMetricsState()
-        EngineMetricsReducer.reduce(&s, .session(EngineSessionInfo(id: "s", modelID: "m", contextSize: 20000)))
+        EngineMetricsReducer.reduce(&s, .session(EngineSessionInfo(modelID: "m", contextSize: 20000)))
         #expect(s.contextSize == 20000)
         #expect(s.contextUsed == nil)
     }

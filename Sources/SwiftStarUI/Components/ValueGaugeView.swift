@@ -13,8 +13,8 @@ extension Severity {
 }
 
 /// 3/4-arc ring gauge (270° sweep, gap at the bottom, rounded caps),
-/// severity-colored — ported from the DS4 Control agent window's status bar.
-/// A bare ring with no label; callers rely on `.help()` for that instead.
+/// severity-colored. A bare ring with no label: callers add one, with
+/// `.accessibilityLabel` and a tooltip.
 struct ValueGaugeView: View {
     let fraction: Double  // 0.0 – 1.0
     let trackColor: Color

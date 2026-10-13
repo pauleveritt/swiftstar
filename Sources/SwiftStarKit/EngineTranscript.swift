@@ -103,7 +103,6 @@ public struct EngineTranscript: Equatable, Sendable {
     /// Subset of pending rows the engine reported as queued.
     public private(set) var queuedUserRows: Set<Int> = []
 
-    public var canStop: Bool { isBusy }
     public var pendingUserCount: Int { pendingUserRows.count }
 
     public func isPending(rowAt index: Int) -> Bool { pendingUserRows.contains(index) }
@@ -204,7 +203,7 @@ public struct EngineTranscript: Equatable, Sendable {
             rows.append(outcome == "answered" ? .system(text) : .error(text))
         case .queued:
             markPendingQueued()
-        case .steering(let applied, _):
+        case .steering(let applied):
             clearPending()
             rows.append(.system(applied ? "Queued message delivered" : "Queued message not confirmed"))
         case .notice(let t):
@@ -219,12 +218,7 @@ public struct EngineTranscript: Equatable, Sendable {
         case .session(let info):
             session = info
         case .closed:
-            clearPending()
-            session = nil
-            loadingText = nil
-            isBusy = false
-            isGenerating = false
-            isAwaitingInput = false
+            end()
         case .ready, .pause, .memory, .protocolError, .ignored:
             break
         }

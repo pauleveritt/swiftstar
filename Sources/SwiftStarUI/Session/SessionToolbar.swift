@@ -95,7 +95,7 @@ struct SessionToolbar: ToolbarContent {
             if !controller.recentWorkspaces.isEmpty { Divider() }
             Button("Choose Folder…", action: pickWorkspace)
         } label: {
-            menuLabel(controller.workspace.map(PathAbbreviation.leafName) ?? "Choose folder", icon: "folder")
+            menuLabel(controller.workspace?.leafName ?? "Choose folder", icon: "folder")
         }
         .menuStyle(.borderlessButton)
         .help("Workspace: its git repository is the engine's source. Choosing another restarts a running session.")

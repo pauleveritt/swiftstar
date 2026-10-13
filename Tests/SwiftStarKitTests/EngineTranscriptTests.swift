@@ -104,11 +104,11 @@ struct EngineTranscriptTests {
     @Test func stopDisabledWhenAwaitingInput() {
         var t = EngineTranscript()
         t.apply(.awaitingInput)
-        #expect(!t.canStop)
+        #expect(!t.isBusy)
         t.appendUser("hi")
-        #expect(!t.canStop)
+        #expect(!t.isBusy)
         t.apply(.prompt("hi"))
-        #expect(t.canStop)
+        #expect(t.isBusy)
     }
 
     @Test func interruptedAddsStoppedRow() throws {
@@ -133,14 +133,14 @@ struct EngineTranscriptPendingTests {
     @Test func stopDisabledWhileQueued() {
         var t = EngineTranscript()
         t.appendUser("x")
-        #expect(!t.canStop)
+        #expect(!t.isBusy)
     }
 
     @Test func busyStartsOnPromptEvent() {
         var t = EngineTranscript()
         t.appendUser("x")
         t.apply(.prompt("x"))
-        #expect(t.canStop)
+        #expect(t.isBusy)
         #expect(t.pendingUserCount == 0)
     }
 
@@ -184,7 +184,7 @@ struct EngineTranscriptPendingTests {
         var t = EngineTranscript()
         t.apply(.prompt("x"))
         t.apply(.error("queue full"))
-        #expect(t.canStop)
+        #expect(t.isBusy)
     }
 
     @Test func closedAndRefusedClearPending() {
@@ -229,11 +229,11 @@ struct EngineTranscriptPendingTests {
         t.appendUser("a")
         t.appendUser("b")
         t.apply(.queued(count: 2))
-        t.apply(.steering(applied: true, text: "a\n\nb"))
+        t.apply(.steering(applied: true))
         #expect(t.pendingUserCount == 0)
         #expect(t.queuedUserRows.isEmpty)
         #expect(t.rows.last == .system("Queued message delivered"))
-        t.apply(.steering(applied: false, text: nil))
+        t.apply(.steering(applied: false))
         #expect(t.rows.last == .system("Queued message not confirmed"))
     }
 }

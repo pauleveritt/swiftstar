@@ -110,29 +110,29 @@ struct EngineCommandTests {
     }
 
     private let src = URL(fileURLWithPath: "/tmp/r")
-    private let p28 = ["tui", "--ndjson", "--source", "/tmp/r", "--commit", "HEAD"]
+    private let baseArgv = ["tui", "--ndjson", "--source", "/tmp/r", "--commit", "HEAD"]
 
-    @Test func emptySettingsKeepP28Argv() {
-        #expect(EngineCommand.arguments(source: src, modelID: "", contextSize: 0) == p28)
+    @Test func emptySettingsKeepTheBaseArgv() {
+        #expect(EngineCommand.arguments(source: src, modelID: "", contextSize: 0) == baseArgv)
     }
 
     @Test func modelIDAppended() {
         #expect(EngineCommand.arguments(source: src, modelID: "qwen3.8-flash-next")
-                == p28 + ["--model-id", "qwen3.8-flash-next"])
+                == baseArgv + ["--model-id", "qwen3.8-flash-next"])
     }
 
     @Test func contextAppended() {
         #expect(EngineCommand.arguments(source: src, contextSize: 20000)
-                == p28 + ["--context-size", "20000"])
+                == baseArgv + ["--context-size", "20000"])
     }
 
     @Test func bothInOrder() {
         #expect(EngineCommand.arguments(source: src, modelID: "m", contextSize: 8192)
-                == p28 + ["--model-id", "m", "--context-size", "8192"])
+                == baseArgv + ["--model-id", "m", "--context-size", "8192"])
     }
 
     @Test func whitespaceIDAndNonPositiveContextIgnored() {
-        #expect(EngineCommand.arguments(source: src, modelID: "  ", contextSize: -1) == p28)
+        #expect(EngineCommand.arguments(source: src, modelID: "  ", contextSize: -1) == baseArgv)
     }
 
     @Test func sessionArtifactsLineIsStripped() {

@@ -8,7 +8,7 @@ public enum EngineResolution: Equatable, Sendable {
 public enum EngineCommand {
     public static let executableName = "ds4-dogfood"
 
-    /// The P28 argv, plus `--model-id` / `--context-size` when set. A blank
+    /// The engine's argv, plus `--model-id` / `--context-size` when set. A blank
     /// model id or a non-positive context size means "engine default".
     public static func arguments(
         source: URL, modelID: String? = nil, contextSize: Int? = nil

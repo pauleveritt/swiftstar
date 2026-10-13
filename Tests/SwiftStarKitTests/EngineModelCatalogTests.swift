@@ -183,14 +183,6 @@ struct EngineModelCatalogTests {
         #expect(items.map(\.disabledReason) == [nil, "folder not found"])
     }
 
-    @Test func noteGateClaimsOncePerPath() {
-        var gate = CatalogNoteGate()
-        let first = gate.claim(path: "/a/ds4-dogfood")
-        let again = gate.claim(path: "/a/ds4-dogfood")
-        let other = gate.claim(path: "/b/ds4-dogfood")
-        #expect(first && !again && other)
-    }
-
     @Test func cacheKeySamePathSameMtimeIsEqual() {
         let date = Date(timeIntervalSince1970: 1000)
         #expect(

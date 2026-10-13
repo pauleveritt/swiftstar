@@ -175,12 +175,10 @@ public struct EngineMemory: Equatable, Sendable {
 }
 
 public struct EngineSessionInfo: Equatable, Sendable {
-    public let id: String
     public let modelID: String?
     public let contextSize: Int?
 
-    public init(id: String, modelID: String?, contextSize: Int?) {
-        self.id = id
+    public init(modelID: String?, contextSize: Int?) {
         self.modelID = modelID
         self.contextSize = contextSize
     }
@@ -208,7 +206,7 @@ public enum EngineEvent: Equatable, Sendable {
     /// A prompt was queued behind the running turn (`count` now pending).
     case queued(count: Int)
     /// A queued message was (not) confirmed delivered after a tool resume.
-    case steering(applied: Bool, text: String?)
+    case steering(applied: Bool)
     case notice(String)
     case refused(String)
     /// A refusal that carries a `relaunch` argv the front-end acts on.

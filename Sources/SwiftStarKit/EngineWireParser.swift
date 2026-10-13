@@ -62,7 +62,6 @@ public struct EngineWireParser: Sendable {
         switch kind {
         case "session":
             return .session(EngineSessionInfo(
-                id: e["session_id"] as? String ?? "",
                 modelID: e["model_id"] as? String,
                 contextSize: int(e["context_size"])))
         case "prompt":
@@ -113,7 +112,7 @@ public struct EngineWireParser: Sendable {
         case "terminal":
             return .turnEnded(outcome: e["outcome"] as? String ?? "unknown")
         case "steering_applied", "steering_unconfirmed":
-            return .steering(applied: kind == "steering_applied", text: e["text"] as? String)
+            return .steering(applied: kind == "steering_applied")
         case "mentions":
             let attached = e["attached"] as? [String] ?? []
             let missing = e["missing"] as? [String] ?? []

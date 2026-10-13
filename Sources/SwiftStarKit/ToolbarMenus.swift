@@ -145,7 +145,7 @@ public enum RecentWorkspaces {
     ) -> [MenuChoice<String>] {
         list.map { path in
             MenuChoice(
-                title: PathAbbreviation.leafName(URL(fileURLWithPath: path)), value: path,
+                title: URL(fileURLWithPath: path).leafName, value: path,
                 isChecked: path == current,
                 disabledReason: exists(path) ? nil : "folder not found")
         }

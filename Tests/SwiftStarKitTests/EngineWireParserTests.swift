@@ -199,9 +199,9 @@ struct EngineWireParserTests {
     @Test func steeringDecodesBothKinds() {
         var p = Self.ready()
         #expect(p.parse(Self.event(#""kind":"steering_applied","text":"also do x""#))
-            == .steering(applied: true, text: "also do x"))
+            == .steering(applied: true))
         #expect(p.parse(Self.event(#""kind":"steering_unconfirmed","text":"also do x""#))
-            == .steering(applied: false, text: "also do x"))
+            == .steering(applied: false))
     }
 
     // Payload: tui_cli.py:789-793 `observer.emit("mentions", attached=[...], missing=[...])`.

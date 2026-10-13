@@ -118,16 +118,6 @@ public struct EngineModelList: Decodable, Equatable, Sendable {
 }
 
 
-/// The "Model list unavailable" note is shown once per engine path, however
-/// many loads, starts or restarts follow.
-public struct CatalogNoteGate: Sendable {
-    private var noted: Set<String> = []
-    public init() {}
-
-    /// True the first time `path` is claimed.
-    public mutating func claim(path: String) -> Bool { noted.insert(path).inserted }
-}
-
 /// Identifies one load of the catalog: the engine path and, when known, its
 /// file's modification date. An engine upgraded in place (same path, new
 /// binary) changes `modifiedAt`, so it compares unequal to the prior key —
