@@ -10,6 +10,20 @@ struct EngineCommandTests {
                 == ["tui", "--ndjson", "--source", "/tmp/r", "--commit", "HEAD"])
     }
 
+    /// AN.2 P1: `restart_argv`'s shape for a start with no extra flags.
+    @Test func forkArgumentsAreExact() {
+        #expect(EngineCommand.forkArguments(
+            sessionDirectory: URL(fileURLWithPath: "/s/main"), source: URL(fileURLWithPath: "/tmp/r"))
+                == ["tui", "--resume", "/s/main", "--source", "/tmp/r", "--ndjson"])
+    }
+
+    @Test func reportArgumentsAreExact() {
+        let (exe, args) = EngineCommand.reportArguments(
+            script: URL(fileURLWithPath: "/b/session_last.py"), sessionDirectory: URL(fileURLWithPath: "/s/x"))
+        #expect(exe == "/usr/bin/python3")
+        #expect(args == ["-I", "-B", "/b/session_last.py", "--session", "/s/x"])
+    }
+
     @Test func settingsPathWins() {
         let r = EngineCommand.resolveExecutable(
             settingsPath: "/opt/ds4", pathEnv: "/a:/b", home: home,

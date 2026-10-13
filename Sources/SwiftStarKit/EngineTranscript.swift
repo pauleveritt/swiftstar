@@ -81,6 +81,8 @@ public enum TranscriptRow: Equatable, Sendable {
     case error(String)
     /// Marks where a relaunch rebuilt the transcript.
     case divider(String)
+    /// A session report (AN.2), Markdown, shown as a card.
+    case report(String)
 }
 
 /// Pure fold of `EngineEvent`s into transcript rows and busy flags.
@@ -138,6 +140,10 @@ public struct EngineTranscript: Equatable, Sendable {
 
     public mutating func appendSystem(_ text: String) {
         rows.append(.system(text))
+    }
+
+    public mutating func appendReport(_ markdown: String) {
+        rows.append(.report(markdown))
     }
 
     /// Replaces every row with `divider` and the resumed turns (a relaunch

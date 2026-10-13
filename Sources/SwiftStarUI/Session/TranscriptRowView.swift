@@ -45,6 +45,9 @@ struct TranscriptRowView: View {
                 .font(.system(size: transcriptFontSize))
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
+        case .report(let markdown):
+            MarkdownText(markdown)
+                .frame(maxWidth: .infinity, alignment: .leading)
         case .divider(let text):
             HStack(spacing: 8) {
                 VStack { Divider() }.frame(minWidth: 16)

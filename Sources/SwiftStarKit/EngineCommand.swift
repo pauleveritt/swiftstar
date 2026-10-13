@@ -35,6 +35,20 @@ public enum EngineCommand {
         return .notFound(searched: candidates)
     }
 
+    /// Resumes `sessionDirectory` as a new session: an analysis fork (AN.2).
+    /// The shape of ds4-engine's `restart_argv` for a start with no extra
+    /// flags, as `arguments(source:)` makes (`tui_cli.py:412-416` at
+    /// `5451cd7d`); the model and context size are the resumed session's.
+    public static func forkArguments(sessionDirectory: URL, source: URL) -> [String] {
+        ["tui", "--resume", sessionDirectory.path, "--source", source.path, "--ndjson"]
+    }
+
+    /// The session report (AN.1's `session_last.py`) for one session. At
+    /// AN.4 this becomes `ds4-dogfood last --session`.
+    public static func reportArguments(script: URL, sessionDirectory: URL) -> (executable: String, arguments: [String]) {
+        ("/usr/bin/python3", ["-I", "-B", script.path, "--session", sessionDirectory.path])
+    }
+
     /// The shell command that takes a finished session's changes.
     public static func applyCommand(sessionDirectory: URL) -> String {
         "\(executableName) apply \(sessionDirectory.lastPathComponent)"

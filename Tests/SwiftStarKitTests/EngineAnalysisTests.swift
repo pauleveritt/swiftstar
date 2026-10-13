@@ -1,0 +1,183 @@
+import Testing
+import Foundation
+@testable import SwiftStarKit
+
+/// AN.2: the session directory, and the analysis's fork, prompt and return.
+struct EngineAnalysisTests {
+    private static let main = URL(fileURLWithPath: "/s/20261013-112927-swiftstar")
+    private static let source = URL(fileURLWithPath: "/repo")
+
+    private func pause(capture: String? = "/s/20261013-112927-swiftstar/run-1.partial.json") -> EngineEvent {
+        .pause(PauseMetrics(prefillTokens: 10, prefillMs: 5, evalCount: 1, evalMs: 5, capturePath: capture))
+    }
+
+    private func answer(_ m: inout EngineSessionModel, _ text: String) {
+        _ = m.send(text)
+        m.apply(.prompt(text))
+        m.apply(pause())
+        m.apply(.answer(EngineAnswer(text: "ok", contextUsed: 10, contextSize: 100, durationMs: 1)))
+        m.apply(.awaitingInput)
+    }
+
+    /// Running, idle at `input`, with `n` answered prompts and a directory.
+    private func idle(prompts n: Int = 1) -> EngineSessionModel {
+        var m = EngineSessionModel()
+        m.didStart()
+        m.apply(.ready)
+        m.apply(.awaitingInput)
+        for i in 0..<n { answer(&m, "p\(i)") }
+        return m
+    }
+
+    private func resumed(turns n: Int) -> EngineEvent {
+        .resumed(EngineResumed(
+            sessionID: Self.main.lastPathComponent,
+            turns: (0..<n).map { .init(prompt: "p\($0)", answer: "ok", stopped: false) },
+            rewoundTo: nil, filesChanged: nil, contextUsed: nil))
+    }
+
+    /// Idle in the fork, at `input`, before the analysis prompt is taken.
+    private func forked() -> EngineSessionModel {
+        var m = idle(prompts: 2)
+        let r = m.beginAnalysis(report: "R", source: Self.source)!
+        m.didRelaunch(r)
+        m.apply(.ready)
+        m.apply(resumed(turns: 2))
+        m.apply(.awaitingInput)
+        return m
+    }
+
+    @Test func directoryFromFirstCheckpoint() throws {
+        var m = EngineSessionModel()
+        m.didStart()
+        for e in try EngineTranscriptTests.events(fromFixture: "tool-read.ndjson") { m.apply(e) }
+        #expect(m.sessionDirectory?.lastPathComponent == "20261013-112927-swiftstar")
+    }
+
+    @Test func relaunchClearsDirectory() {
+        var m = idle()
+        #expect(m.sessionDirectory != nil)
+        m.didRelaunch(EngineRelaunch(kind: .rewind, argv: ["tui"], reason: ""))
+        #expect(m.sessionDirectory == nil)
+    }
+
+    @Test func canAnalyzeWhenIdleWithDirectory() {
+        #expect(idle().canAnalyze)
+    }
+
+    @Test func cannotAnalyzeWhileBusy() {
+        var m = idle()
+        _ = m.send("more")
+        m.apply(.prompt("more"))
+        #expect(!m.canAnalyze)
+    }
+
+    @Test func cannotAnalyzeWithQueuedPrompt() {
+        var m = idle()
+        _ = m.send("queued")
+        #expect(!m.canAnalyze)
+    }
+
+    @Test func cannotAnalyzeWithoutDirectory() {
+        var m = EngineSessionModel()
+        m.didStart()
+        m.apply(.ready)
+        m.apply(.awaitingInput)
+        #expect(!m.canAnalyze)
+    }
+
+    @Test func beginAnalysisReturnsForkRelaunch() {
+        var m = idle()
+        let r = m.beginAnalysis(report: "R", source: Self.source)
+        #expect(r?.kind == .resume)
+        #expect(r?.argv == ["tui", "--resume", Self.main.path, "--source", "/repo", "--ndjson"])
+        guard case .forking(let main, let report)? = m.analysis?.stage else {
+            Issue.record("not forking: \(String(describing: m.analysis))"); return
+        }
+        #expect(main.path == Self.main.path)
+        #expect(report == "R")
+        #expect(m.transcript.rows.last == .system("Starting analysis…"))
+        let again = m.beginAnalysis(report: "R", source: Self.source)
+        #expect(again == nil)
+    }
+
+    @Test func forkResumedStartsAnalyzing() {
+        let m = forked()
+        #expect(m.transcript.rows.first == .divider("Analysis — a copy of this session"))
+        guard case .analyzing(let main, _, _, let sent)? = m.analysis?.stage else {
+            Issue.record("not analyzing: \(String(describing: m.analysis))"); return
+        }
+        #expect(main.path == Self.main.path)
+        #expect(!sent)
+    }
+
+    @Test func analysisPromptOnceAtInput() {
+        var m = idle(prompts: 2)
+        m.didRelaunch(m.beginAnalysis(report: "R", source: Self.source)!)
+        m.apply(.ready)
+        m.apply(resumed(turns: 2))
+        let early = m.takeAnalysisPrompt()
+        #expect(early == nil)  // not at input yet
+        m.apply(.awaitingInput)
+        let p = m.takeAnalysisPrompt()
+        #expect(p?.text.contains("R") == true)
+        #expect(p?.text.contains("Explain each flagged step") == true)
+        #expect(p?.shown == "Analyze the session report above")
+        #expect(m.transcript.rows.last == .report("R"))
+        let twice = m.takeAnalysisPrompt()
+        #expect(twice == nil)
+    }
+
+    @Test func doneResumesMain() {
+        var m = forked()
+        _ = m.takeAnalysisPrompt()
+        #expect(m.analysisDoneCommand == "/resume 20261013-112927-swiftstar")
+    }
+
+    @Test func doneOnlyOnceAndOnlyIdle() {
+        var m = forked()
+        let p = m.takeAnalysisPrompt()!
+        _ = m.send(p.text, shown: p.shown)
+        m.apply(.prompt(p.text))
+        #expect(m.analysisDoneCommand == nil)  // busy
+        m.apply(.answer(EngineAnswer(text: "ok", contextUsed: 10, contextSize: 100, durationMs: 1)))
+        m.apply(.awaitingInput)
+        #expect(m.analysisDoneCommand != nil)
+        m.markAnalysisReturning()
+        #expect(m.analysisDoneCommand == nil)
+    }
+
+    @Test func returnResumedEndsAnalysis() {
+        var m = forked()
+        _ = m.takeAnalysisPrompt()
+        m.markAnalysisReturning()
+        m.didRelaunch(EngineRelaunch(kind: .resume, argv: ["tui"], reason: ""))
+        m.apply(.ready)
+        m.apply(resumed(turns: 3))
+        #expect(m.transcript.rows.first == .divider("Analysis ended — back at prompt 3"))
+        #expect(m.analysis == nil)
+    }
+
+    @Test func otherRelaunchEndsAnalysis() {
+        var m = forked()
+        m.didRelaunch(EngineRelaunch(kind: .model, argv: ["tui", "--model-id", "x"], reason: ""))
+        m.apply(.ready)
+        m.apply(resumed(turns: 2))
+        #expect(m.transcript.rows.first == .divider("Switched to x: new conversation, files kept"))
+        #expect(m.analysis == nil)
+    }
+
+    @Test func exitWhileForkingEndsAnalysis() {
+        var m = idle()
+        m.didRelaunch(m.beginAnalysis(report: "R", source: Self.source)!)
+        m.didExit(EngineExit(code: 2, message: "refused"), directory: nil)
+        #expect(m.analysis == nil)
+    }
+
+    @Test func sendShownText() {
+        var m = idle()
+        let sent = m.send("long", shown: "short")
+        #expect(sent)
+        #expect(m.transcript.rows.last == .user("short"))
+    }
+}

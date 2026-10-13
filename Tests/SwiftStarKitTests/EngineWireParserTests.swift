@@ -34,6 +34,22 @@ struct EngineWireParserTests {
             text: "Tool error: unknown tool: list_files")])
     }
 
+    /// AN.2: the checkpoint's snapshot names the session's capture, so the
+    /// app learns the session directory mid-session.
+    @Test func pauseCarriesCapturePath() throws {
+        let paths = try Self.events(fromFixture: "tool-read.ndjson").compactMap { e -> String? in
+            if case .pause(let m) = e { m.capturePath } else { nil }
+        }
+        #expect(paths.first?.hasSuffix(".partial.json") == true)
+    }
+
+    @Test func pauseWithoutCapturePath() {
+        var p = Self.ready()
+        let e = p.parse(Self.event(#""kind":"checkpoint","snapshot":{"eval_count":8}"#))
+        guard case .pause(let m) = e else { Issue.record("not a pause: \(e)"); return }
+        #expect(m.capturePath == nil)
+    }
+
     @Test func refusedStillRefused() {
         var p = Self.ready()
         #expect(p.parse(Self.event(#""kind":"rewind_refused","reason":"no earlier prompt""#))

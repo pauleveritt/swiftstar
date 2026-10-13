@@ -81,8 +81,57 @@ public struct EngineSessionModel: Equatable, Sendable {
     /// divider when `.resumed` arrives. Not set by a `.relaunch` event: when
     /// two refusals arrive, only the one actually run may name the divider.
     public private(set) var pendingRelaunch: EngineRelaunch?
+    /// This session's directory, from the first checkpoint's capture path;
+    /// a relaunch is a new session, so it starts unknown again.
+    public private(set) var sessionDirectory: URL?
+    /// An analysis in progress (AN.2), from Analyze until Done's return.
+    public private(set) var analysis: EngineAnalysis?
 
     public init() {}
+
+    /// Analyze is offered: idle at `input`, nothing pending, the directory
+    /// known, and no analysis already under way.
+    public var canAnalyze: Bool {
+        phase == .running && !transcript.isBusy && transcript.isAwaitingInput
+            && transcript.pendingUserCount == 0 && sessionDirectory != nil && analysis == nil
+    }
+
+    /// Starts an analysis of this session: returns the relaunch that resumes
+    /// it as a fork, or nil when Analyze isn't offered.
+    public mutating func beginAnalysis(report: String, source: URL) -> EngineRelaunch? {
+        guard canAnalyze, let main = sessionDirectory else { return nil }
+        analysis = EngineAnalysis(stage: .forking(main: main, report: report))
+        transcript.appendSystem(EngineAnalysis.forkingNotice)
+        return EngineRelaunch(
+            kind: .resume,
+            argv: EngineCommand.forkArguments(sessionDirectory: main, source: source),
+            reason: "analysis")
+    }
+
+    /// The analysis prompt, once, when the fork is at `input`; it also adds
+    /// the report card.
+    public mutating func takeAnalysisPrompt() -> (text: String, shown: String)? {
+        guard case .analyzing(let main, let firstRow, let report, false)? = analysis?.stage,
+              phase == .running, transcript.isAwaitingInput, !transcript.isBusy
+        else { return nil }
+        transcript.appendReport(report)
+        analysis = EngineAnalysis(stage: .analyzing(main: main, firstRow: firstRow, report: report, promptSent: true))
+        return (EngineAnalysis.prompt(report: report), EngineAnalysis.promptShown)
+    }
+
+    /// Done's command, when the fork is idle: resume the main session.
+    public var analysisDoneCommand: String? {
+        guard case .analyzing(let main, _, _, _)? = analysis?.stage,
+              phase == .running, !transcript.isBusy, transcript.isAwaitingInput,
+              transcript.pendingUserCount == 0
+        else { return nil }
+        return "/resume \(main.lastPathComponent)"
+    }
+
+    public mutating func markAnalysisReturning() {
+        guard let main = analysis?.main, analysisDoneCommand != nil else { return }
+        analysis = EngineAnalysis(stage: .returning(main: main))
+    }
 
     public var composer: EngineComposer {
         EngineComposer.state(phase: phase, transcript: transcript)
@@ -93,6 +142,8 @@ public struct EngineSessionModel: Equatable, Sendable {
         transcript = EngineTranscript()
         metrics = EngineMetricsState()
         pendingRelaunch = nil
+        sessionDirectory = nil
+        analysis = nil
         phase = .starting
     }
 
@@ -103,6 +154,7 @@ public struct EngineSessionModel: Equatable, Sendable {
         transcript.end()
         metrics = EngineMetricsState()
         pendingRelaunch = relaunch
+        sessionDirectory = nil
         phase = .starting
     }
 
@@ -123,15 +175,46 @@ public struct EngineSessionModel: Equatable, Sendable {
         }
         switch event {
         case .resumed(let r):
-            transcript.rebuild(from: r, divider: r.divider(after: pendingRelaunch))
+            transcript.rebuild(from: r, divider: divider(for: r))
             pendingRelaunch = nil
+        case .pause(let m):
+            if sessionDirectory == nil, let path = m.capturePath {
+                sessionDirectory = URL(fileURLWithPath: path).deletingLastPathComponent()
+            }
+            transcript.apply(event)
         default:
             transcript.apply(event)
         }
         EngineMetricsReducer.reduce(&metrics, event)
     }
 
+    /// A rebuild's divider, and the analysis's next stage: the fork's
+    /// `resumed` starts it, the return's ends it, and any other ends it with
+    /// that relaunch's own divider.
+    private mutating func divider(for r: EngineResumed) -> String {
+        switch analysis?.stage {
+        case .forking(let main, let report)?:
+            analysis = EngineAnalysis(stage: .analyzing(
+                main: main, firstRow: 1 + rowCount(of: r), report: report, promptSent: false))
+            return EngineAnalysis.forkDivider
+        case .returning?:
+            analysis = nil
+            return EngineAnalysis.returnDivider(prompts: r.turns.count)
+        default:
+            analysis = nil
+            return r.divider(after: pendingRelaunch)
+        }
+    }
+
+    /// The rows `rebuild` makes for `r`'s turns, after its divider.
+    private func rowCount(of r: EngineResumed) -> Int {
+        var t = EngineTranscript()
+        t.rebuild(from: r, divider: "")
+        return t.rows.count - 1
+    }
+
     public mutating func didExit(_ exit: EngineExit, directory: URL?) {
+        analysis = nil
         transcript.end()
         transcript.appendSystem(exit.message)
         if let directory {
@@ -146,9 +229,10 @@ public struct EngineSessionModel: Equatable, Sendable {
     }
 
     /// Records the prompt as a pending row; false means nothing may be sent.
-    public mutating func send(_ text: String) -> Bool {
+    /// `shown` is the bubble's text when it differs from what the engine gets.
+    public mutating func send(_ text: String, shown: String? = nil) -> Bool {
         guard phase == .running else { return false }
-        transcript.appendUser(text)
+        transcript.appendUser(shown ?? text)
         return true
     }
 }

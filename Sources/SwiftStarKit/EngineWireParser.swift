@@ -100,7 +100,8 @@ public struct EngineWireParser: Sendable {
                 prefillTokens: int(snap["prefill_tokens"]),
                 prefillMs: double(snap["sync_ms"]),
                 evalCount: evalCount,
-                evalMs: double(snap["eval_ms"])))
+                evalMs: double(snap["eval_ms"]),
+                capturePath: snap["capture_path"] as? String))
         case "memory":
             let plan = e["engine_plan"] as? [String: Any]
             return .memory(EngineMemory(
