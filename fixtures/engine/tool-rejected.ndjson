@@ -1,0 +1,2 @@
+{"kind": "ready", "protocol": 1}
+{"kind": "event", "event": {"schema_version": 1, "kind": "tool_rejected", "turn": 0, "name": "list_files", "reason": "unknown-tool", "path": null, "text": "Tool error: unknown tool: list_files"}}

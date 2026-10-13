@@ -21,7 +21,7 @@ struct EngineTranscriptTests {
         t.appendUser("go")
         for e in try Self.events(fromFixture: "tool-read.ndjson") { t.apply(e) }
         let cs = cards(t)
-        #expect(cs.count == 2)
+        #expect(cs.count == 1)
         #expect(cs.allSatisfy { $0.ok == true && $0.result != nil })
         #expect(t.rows.filter { if case .answer = $0 { true } else { false } }.count == 1)
         #expect(!t.isBusy && !t.isGenerating && !t.isAwaitingInput)
@@ -35,7 +35,7 @@ struct EngineTranscriptTests {
             t.apply(e)
             if case .session = e {
                 sawSession = true
-                #expect(t.session?.modelID == "laguna-xs-2.1")
+                #expect(t.session?.modelID == "qwen3.8-27b")
                 #expect(t.session?.contextSize == 20000)
             }
         }

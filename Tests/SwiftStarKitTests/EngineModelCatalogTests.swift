@@ -31,13 +31,13 @@ struct EngineModelCatalogTests {
         // decoder treats the first as version 1 and falls back for the second.
         let url = Self.sampleURL.deletingLastPathComponent().appendingPathComponent("models-real.json")
         let list = try EngineModelList.decode(Data(contentsOf: url)).get()
-        #expect(list.models.count == 4)
+        #expect(list.models.count == 3)
         #expect(list.defaultModelID == nil)
         #expect(list.savedModelID == nil)
-        #expect(list.model(id: "laguna-xs-2.1")?.defaultContext == 65536)
+        #expect(list.model(id: "qwen3.8-27b")?.defaultContext == 131072)
         let items = ModelMenu.items(list: list, settingsID: "", loadedID: nil)
         #expect(items.first { $0.value == "qwen3.8-flash-next-q2" }?.disabledReason == "not on this Mac")
-        #expect(items.first { $0.value == "laguna-xs-2.1" }?.disabledReason == nil)
+        #expect(items.first { $0.value == "qwen3.8-27b" }?.disabledReason == nil)
     }
 
     @Test func ignoresUnknownKeys() throws {

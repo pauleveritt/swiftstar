@@ -56,13 +56,13 @@ test:
 integration:
     SWIFTSTAR_INTEGRATION=1 swift test
 
-# Live tier: record one engine fixture (tool-read, stop or error) from the
-# real `ds4-dogfood tui --ndjson` into fixtures/engine/. Needs ds4-engine and
-# real weights. BROKEN until EN.1: the recorder still passes the removed
-# laguna-xs-2.1 model. See fixtures/engine/provenance.md for the re-record
-# rule and what each fixture must contain.
-capture SCENARIO:
-    Tools/record-engine-fixture.py "${DS4_DOGFOOD:-ds4-dogfood}" "$PWD" {{SCENARIO}} fixtures/engine/{{SCENARIO}}.ndjson
+# Live tier: record one engine fixture (tool-read, stop, error,
+# relaunch-rewind or tool-rejected) from the real `ds4-dogfood tui --ndjson`
+# into fixtures/engine/. Needs ds4-engine and real weights for MODEL. See
+# fixtures/engine/provenance.md for the re-record rule and what each
+# fixture must contain.
+capture SCENARIO SEED="7" MODEL="qwen3.8-27b":
+    Tools/record-engine-fixture.py "${DS4_DOGFOOD:-ds4-dogfood}" "$PWD" {{SCENARIO}} fixtures/engine/{{SCENARIO}}.ndjson {{SEED}} {{MODEL}}
 
 # Assemble .build/SwiftStar.app (release build + Info.plist + icon)
 app:

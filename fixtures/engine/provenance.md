@@ -4,51 +4,53 @@ Raw stdout of `ds4-dogfood tui --ndjson`, one JSON object per line, exactly
 as `EngineWireParser` reads it. Recorded by `Tools/record-engine-fixture.py`
 (`just capture <scenario>`).
 
-- **Recorded:** 2026-09-28
-- **ds4-engine:** `9d96bee0` (local checkout, editable build with
-  `--features bindings,engine`)
-- **Model:** `laguna-xs-2.1` (`~/models/Laguna-XS-2.1-Q4_K_M.gguf`),
-  context 20,000, `--seed 7`
+- **Recorded:** 2026-10-13 (EN.1)
+- **ds4-engine:** `5451cd7d` (its own `.venv/bin/ds4-dogfood`, an editable
+  build)
+- **Model:** `qwen3.8-27b`, context 20,000, `--seed 7`; state and config in
+  a throwaway `XDG_STATE_HOME`/`XDG_CONFIG_HOME`
 - **Machine:** Apple M5 Max, 128 GiB, macOS 26 (Darwin 27.0, the kernel
   version — not the marketing name)
-- **Source:** this repository at `HEAD` of branch
-  `worktree-ds4-engine-subprocess` (P28)
+- **Source:** this repository at `main` (`88bf1b2`)
 
 | File | Scenario | What it must contain |
 | --- | --- | --- |
 | `tool-read.ndjson` | one prompt that reads `Package.swift` | ≥1 `tool_result` with `op` `read`, one `answer` |
 | `stop.ndjson` | long prompt, `stop` after the first `tool_result` | `stopping`, an `interrupted` event, no `answer` |
 | `error.ndjson` | `{"kind":"bogus"}` at the first `input` | one `{"kind":"error"}` line, then a clean quit |
+| `relaunch-rewind.ndjson` | two prompts, then `/rewind 1` | `rewind_refused` with a `relaunch` argv that starts `tui` and ends `--ndjson` |
+| `resumed.ndjson` | that `relaunch` argv, run as is | `session` with `rewound_to` 1, then `resumed` with one turn |
 
 `fake-ds4-dogfood` (the integration-tier stand-in) replays these files.
 
-**Hand-written, not recorded** (refusal cases a real engine won't produce on
+**Narration and answer on the 27B (EN.1, D4).** In `tool-read.ndjson` the
+`narration` (line 26) is the full, formatted reply, and `answer` (line 27)
+is `finish`'s one-sentence summary of it. They don't repeat each other's
+text, so nothing is dropped; how to present the pair is an SU.6 question.
+
+**Hand-written, not recorded** (cases a real engine won't produce on
 demand):
 
 | File | What it is |
 | --- | --- |
 | `bad-handshake.ndjson` | a first line that isn't `ready` (`{"kind":"input"}`) |
 | `garbage-after-ready.ndjson` | `ready`, then a line that isn't JSON, then `input` |
+| `tool-rejected.ndjson` | `ready`, then one `tool_rejected` event copied from ds4-engine `docs/tui.md:1748`. The 27B wouldn't call a missing tool (seeds 1–6), nor trip the loop guard with three identical reads (seeds 1–6), on 2026-10-13 |
 | `models.json` | the richer catalog shape; see below |
 
-**Re-record rule:** re-record all three whenever a ds4-engine change reaches
-the wire. That covers a `--ndjson` `protocol` or telemetry `schema_version`
-bump, and also payload changes the relay forwards untouched: new event
-kinds, new or dropped fields, a changed model lineup. Check the "must
-contain" column by hand. A `tool-read` recording with no tool call is a
-model miss, not a wire change: re-record with another seed.
-
-**Stale as of 2026-10-13.** ds4-engine `5451cd7d` removed `laguna-xs-2.1`, so
-`just capture` (which still passes it) exits 2, and these recordings predate
-`tool_rejected` at its current frequency, `session.dflash`, `candidate_ready`
-and `prefix_cache`. EN.1 owes the fix and a recapture on `qwen3.8-27b`
-(`docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md` §1).
+**Re-record rule:** re-record the recorded files whenever a ds4-engine change
+reaches the wire. That covers a `--ndjson` `protocol` or telemetry
+`schema_version` bump, and also payload changes the relay forwards
+untouched: new event kinds, new or dropped fields, a changed model lineup.
+Check the "must contain" column by hand. A `tool-read` recording with no
+tool call is a model miss, not a wire change: re-record with another seed.
 
 ## `models-real.json` and `models.json`
 
 `models-real.json` is a verbatim capture of `ds4-dogfood models --json`
-(ds4-engine `main` at `409267a9`, run on the owner's Mac, 2026-10-04); home
-paths were anonymised to `/Users/example/`. This replaces a 2026-09-29 capture
+(ds4-engine `main` at `5451cd7d`, run on the owner's Mac, 2026-10-13); home
+paths were anonymised to `/Users/example/`. The lineup is `qwen3.8-27b`,
+`qwen3.8-flash-next` and `qwen3.8-flash-next-q2`. This replaces a 2026-09-29 capture
 from commit `4c432171` ("TUI.33"), a `feat/models-json` branch state that
 never reached `main` in that shape: the version that actually shipped (TUI.35,
 `e5823e81`) sends no `schema_version`, `default_model_id`, `saved_model_id`,
@@ -63,6 +65,4 @@ forward-looking shape (per-model flag `runs_in_tui`, `family`,
 that shape if ds4-engine adds it later: a model that doesn't fit, one not
 usable in the TUI, unknown keys. Re-capture `models-real.json` if ds4-engine
 starts sending `schema_version` again, or bumps it, or changes its model
-lineup. It changed at `5451cd7d`: the list is now `qwen3.8-27b`,
-`qwen3.8-flash-next` and `qwen3.8-flash-next-q2`, so this capture is owed
-by EN.1.
+lineup.

@@ -51,7 +51,7 @@ struct EngineWireParserTests {
         let results = events.compactMap { e -> EngineToolResult? in
             if case .toolResult(let r) = e { return r } else { return nil }
         }
-        #expect(results.count == 2)
+        #expect(results.count == 1)
         for r in results {
             #expect(r.tool.op == "read")
             #expect(r.tool.path == "Package.swift")
