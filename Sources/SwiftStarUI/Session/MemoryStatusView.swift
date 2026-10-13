@@ -25,7 +25,6 @@ struct MemoryStatusView: View {
         .accessibilityElement()
         .accessibilityLabel("GPU memory")
         .accessibilityValue(tooltip)
-        .nativeTooltip(tooltip)
     }
 }
 
