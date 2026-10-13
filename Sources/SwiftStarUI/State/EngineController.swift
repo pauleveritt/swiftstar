@@ -110,10 +110,19 @@ public final class EngineController {
         restartIfRunning()
     }
 
+    /// While a session runs, a model pick goes through the engine's `/model`,
+    /// which relaunches with the same files and a new conversation; the
+    /// relaunch saves the choice (EN.1, D3). Otherwise the pick is saved for
+    /// the next start. "Engine default" ("") has no `/model` form, so it
+    /// restarts fresh as before.
     func select(modelID id: String) {
         guard canChoose else { return }
         let id = id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard id != modelID else { return }
+        if !id.isEmpty, ModelMenu.selectionAction(phase: model.phase) == .sendModelCommand {
+            send("/model \(id)")
+            return
+        }
         modelID = id
         UserDefaults.standard.set(id, forKey: DefaultsKey.modelID.rawValue)
         restartIfRunning()
@@ -243,7 +252,7 @@ public final class EngineController {
                 modelID: modelID, contextSize: contextSize),
             workingDirectory: source,
             stopGrace: Self.stopGrace, termGrace: Self.termGrace, killGrace: Self.killGrace)
-        session.onEvent = { [weak self] event in self?.model.apply(event) }
+        session.onEvent = { [weak self] event in self?.handle(event) }
         session.onExit = { [weak self] exit, directory in self?.handleExit(exit, directory) }
         model.didStart()
         if let notice { model.apply(.notice(notice)) }
@@ -255,6 +264,25 @@ public final class EngineController {
             model.didExit(EngineExit.launchFailure(
                 path: executable, reason: error.localizedDescription), directory: nil)
         }
+    }
+
+    private func handle(_ event: EngineEvent) {
+        model.apply(event)
+        if case .relaunch(let r) = event { Task { await relaunch(r) } }
+    }
+
+    /// The engine's TUI.34 contract: end this session, then start the
+    /// executable with `relaunch` exactly as given (no `--commit`, nothing
+    /// added). A `/model` relaunch saves its model, so the toolbar agrees.
+    func relaunch(_ r: EngineRelaunch) async {
+        guard !isTerminating else { return }
+        await quit()
+        guard !isTerminating, !isActive else { return }
+        if r.kind == .model, let id = r.modelID {
+            modelID = id
+            UserDefaults.standard.set(id, forKey: DefaultsKey.modelID.rawValue)
+        }
+        await start(arguments: r.argv)
     }
 
     func send(_ text: String) {

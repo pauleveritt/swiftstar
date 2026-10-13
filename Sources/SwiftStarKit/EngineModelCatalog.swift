@@ -140,7 +140,21 @@ private func grouped(_ n: Int) -> String {
     n.formatted(.number.locale(Locale(identifier: "en_US")))
 }
 
+/// What a model-menu pick does (EN.1, D3).
+public enum ModelMenuAction: Equatable, Sendable {
+    /// Send `/model ID` and honour the relaunch: new conversation, files kept.
+    case sendModelCommand
+    /// Save the choice; the next (or a restarted) session starts with it.
+    case restart
+}
+
 public enum ModelMenu {
+    /// A pick while a session runs goes through the engine's `/model`; any
+    /// other phase just saves it for a fresh start.
+    public static func selectionAction(phase: EngineSessionPhase) -> ModelMenuAction {
+        phase == .running ? .sendModelCommand : .restart
+    }
+
     /// The model id to start with: a saved id the engine's list no longer
     /// offers is cleared, with a notice saying so (as the engine does for its
     /// own config.toml). Without a list the saved id is kept.

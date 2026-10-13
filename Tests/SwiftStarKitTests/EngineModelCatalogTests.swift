@@ -38,6 +38,14 @@ struct EngineModelCatalogTests {
         #expect(r.modelID == "laguna-xs-2.1" && r.notice == nil)
     }
 
+    @Test func selectionActionPerPhase() {
+        #expect(ModelMenu.selectionAction(phase: .running) == .sendModelCommand)
+        for phase: EngineSessionPhase in [.idle, .starting, .quitting, .notFound([]),
+                                          .ended(EngineExit(code: 0, message: "done"))] {
+            #expect(ModelMenu.selectionAction(phase: phase) == .restart)
+        }
+    }
+
     @Test func decodesSampleList() throws {
         let list = try Self.sample()
         #expect(list.defaultModelID == "laguna-xs-2.1")

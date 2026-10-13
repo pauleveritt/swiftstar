@@ -19,7 +19,12 @@ FAKE_ENGINE_EXIT_STDERR (extra stderr line written just before exit),
 FAKE_ENGINE_REFUSE, FAKE_ENGINE_IGNORE_QUIT, FAKE_ENGINE_IGNORE_SIGTERM (SIG_IGN),
 FAKE_ENGINE_LOAD_MS (0), FAKE_ENGINE_LOG, FAKE_ENGINE_PIDFILE (written in
 every mode, including `models`), FAKE_ENGINE_ARGV_LOG (write argv, one per
-line, at start).
+line, at start), FAKE_ENGINE_SPAWN_LOG (append argv as one JSON array per
+`tui` spawn, for tests that see more than one), FAKE_ENGINE_RESUME_FIXTURE
+(replayed instead of FAKE_ENGINE_FIXTURE when started with `--resume`).
+A prompt of `/rewind N` or `/model ID` while idle is refused as the relay
+does since TUI.34 (`rewind_refused`/`model_refused` carrying `relaunch`,
+the shape of fixtures/engine/relaunch-rewind.ndjson), then `input` again.
 `models --json` mode (argv[1] == "models"): prints the FAKE_ENGINE_MODELS file, or
 exits 2 with "boom" when FAKE_ENGINE_MODELS_FAIL=1, or with over 5 KiB of filler then
 "the real last line" when FAKE_ENGINE_MODELS_HUGE_STDERR=1, or with argparse's "invalid
@@ -79,6 +84,10 @@ if sys.argv[1:2] == ["models"]:
         sys.stdout.write(f.read())
     sys.exit(0)
 
+if env.get("FAKE_ENGINE_SPAWN_LOG") and sys.argv[1:2] == ["tui"]:
+    with open(env["FAKE_ENGINE_SPAWN_LOG"], "a") as f:
+        f.write(json.dumps(sys.argv[1:]) + "\n")
+
 if env.get("FAKE_ENGINE_REFUSE") == "1":
     sys.stderr.write("ds4-dogfood tui: error: no model on this Mac\n")
     sys.stderr.flush()
@@ -89,7 +98,10 @@ exit_code = int(env.get("FAKE_ENGINE_EXIT", "0"))
 ignore_quit = env.get("FAKE_ENGINE_IGNORE_QUIT") == "1"
 load_ms = int(env.get("FAKE_ENGINE_LOAD_MS", "0"))
 log_path = env.get("FAKE_ENGINE_LOG")
-with open(env["FAKE_ENGINE_FIXTURE"]) as f:
+fixture_path = env["FAKE_ENGINE_FIXTURE"]
+if "--resume" in sys.argv and env.get("FAKE_ENGINE_RESUME_FIXTURE"):
+    fixture_path = env["FAKE_ENGINE_RESUME_FIXTURE"]
+with open(fixture_path) as f:
     fixture = [ln.rstrip("\n") for ln in f if ln.strip()]
 
 inbox = queue.Queue()
@@ -243,6 +255,11 @@ def reach_pause(already_emitted_input=False):
         return
     if pending:
         text = pending.pop(0)
+        if relaunch_refusal(text.strip()):
+            # A queued `/rewind` or `/model` is refused when it is dequeued,
+            # as the engine does; the refusal emits the next `input`.
+            accepting = True
+            return
         turn_running = True
         start_turn(text, announce=True)
         return
@@ -283,6 +300,8 @@ def handle(kind, text):
         if quitting:
             emit('{"kind": "error", "text": "the session is quitting"}')
             return False
+        if accepting and relaunch_refusal(prompt_text.strip()):
+            return False
         if accepting:
             accepting = False
             turn_running = True
@@ -303,6 +322,28 @@ def handle(kind, text):
         return True
     emit(json.dumps({"kind": "error", "text": "unknown kind '%s'; expected prompt, stop or quit" % kind}))
     return False
+
+
+def relaunch_refusal(command):
+    """`/rewind N` or `/model ID`: refused with the `relaunch` argv the
+    front-end restarts with (TUI.34), then `input` again. Anything else is
+    an ordinary prompt."""
+    words = command.split()
+    if len(words) != 2 or words[0] not in ("/rewind", "/model"):
+        return False
+    source = sys.argv[sys.argv.index("--source") + 1] if "--source" in sys.argv else "."
+    argv = ["tui", "--resume", "/tmp/fake-ds4-session", "--source", source]
+    if words[0] == "/rewind":
+        kind, goal = "rewind_refused", "go back to after prompt %s" % words[1]
+        argv += ["--rewind-to", words[1]]
+    else:
+        kind, goal = "model_refused", "switch to %s" % words[1]
+        argv += ["--model-id", words[1], "--new-conversation"]
+    argv.append("--ndjson")
+    reason = "the frontend restarts ds4-dogfood with this event's relaunch arguments to " + goal
+    emit(json.dumps({"kind": "event", "event": {"kind": kind, "reason": reason, "relaunch": argv}}))
+    emit('{"kind": "input"}')
+    return True
 
 
 def interrupt():
