@@ -239,7 +239,17 @@ class OutputTests(unittest.TestCase):
 
     def test_no_flags_names_checks(self):
         report = dict(sl.report(sl.load(FIXTURE)), flags=[])
-        self.assertIn("no flagged steps (checked F1, F2, F3, U1, U2)", sl.markdown(report))
+        self.assertIn("no flagged steps (checked F1, F2, F3, U1, U2, R1)", sl.markdown(report))
+
+    def test_slow_sync_flagged(self):
+        events = [checkpoint(1, 37764, 242274.0)]
+        found = [f for f in sl.flags([prompt()], events) if f.rule == "R1"]
+        self.assertEqual(len(found), 1)
+        self.assertIn("37,764", found[0].evidence)
+
+    def test_fast_sync_not_flagged(self):
+        events = [checkpoint(1, 41949, 393.0)]
+        self.assertEqual([f for f in sl.flags([prompt()], events) if f.rule == "R1"], [])
 
     def test_markdown_cell_escaping(self):
         self.assertEqual(sl.cell("a|b\nc"), r"a\|b c")

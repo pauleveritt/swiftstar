@@ -157,7 +157,10 @@ GUARD_MARKERS = {
     "call_cycle": "Tool error: not run. Your last",
 }
 
-CHECKS = ("F1", "F2", "F3", "U1", "U2")
+CHECKS = ("F1", "F2", "F3", "U1", "U2", "R1")
+# R1: one pause's prefill took longer than this. A full refill of 37,764
+# tokens after a rewind took 242 s on the 27B (AN.2's first attempt).
+SLOW_SYNC_MS = 10_000
 BOOKKEEPING = "host_results"
 WRITES = ("edit", "write")
 SEARCHES = ("grep", "ls")
@@ -183,11 +186,14 @@ def _guard(text: str) -> str | None:
 
 def flags(prompts: list[Prompt], events: list[dict]) -> list[Flag]:
     """Each step gets at most one flag, in the order U1, F1, U2: a loop
-    refusal fails, but the engine refused it as waste. F2 and F3 flag a
+    refusal fails, but the engine refused it as waste. F2, F3 and R1 flag a
     prompt."""
     found: list[Flag] = []
     seen: set[tuple] = set()  # (name, args) since the path was last written
+    slow = _slow_syncs(events)
     for p in prompts:
+        for tokens, ms in slow.get(p.index, []):
+            found.append(Flag(p.index, None, "R1", f"prefill {tokens:,} tokens in {ms / 1000:.1f} s"))
         for s in p.steps:
             t = s.tool
             if t is None or t.get("name") == BOOKKEEPING:
@@ -217,6 +223,20 @@ def flags(prompts: list[Prompt], events: list[dict]) -> list[Flag]:
         if not p.answered:
             found.append(Flag(p.index, None, "F3", "no answer"))
     return found
+
+
+def _slow_syncs(events: list[dict]) -> dict[int, list[tuple[int, float]]]:
+    """Pauses whose own prefill (the delta of the session-cumulative
+    `sync_ms`) took over `SLOW_SYNC_MS`, by prompt, as (tokens, ms)."""
+    slow: dict[int, list[tuple[int, float]]] = {}
+    last_tokens, last_ms = 0, 0.0
+    for e in _of(events, "checkpoint"):
+        snap = e.get("snapshot") or {}
+        tokens, ms = snap.get("prefill_tokens") or 0, snap.get("sync_ms") or 0.0
+        if ms - last_ms > SLOW_SYNC_MS:
+            slow.setdefault(e.get("turn", 0), []).append((tokens - last_tokens, ms - last_ms))
+        last_tokens, last_ms = tokens, ms
+    return slow
 
 
 def guard_mismatch(found: list[Flag], loop_guards: dict) -> str | None:
