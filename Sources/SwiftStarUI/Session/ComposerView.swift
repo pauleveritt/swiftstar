@@ -22,46 +22,44 @@ struct ComposerView: View {
                     Spacer()
                 }
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                let analyzing = controller.analysis != nil
-                TextField(analyzing ? EngineAnalysis.composerPlaceholder : "Ask about this project…", text: $input, axis: .vertical)
-                    .font(.system(size: transcriptFontSize))
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...15)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .focused($inputFocused)
-                    .background(Color(nsColor: .textBackgroundColor))
-                    // The analysis tint sits over the field's own background.
-                    .overlay(analyzing ? Color.accentColor.opacity(0.12).allowsHitTesting(false) : nil)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
-                    )
-                    .onSubmit { send() }
-                    .disabled(!composerState.canSend)
-                let button = composerState.button(forInput: input)
-                let showsStop = button == .stop
-                Button {
-                    if showsStop {
-                        controller.stop()
-                    } else {
-                        send()
+            GlassEffectContainer {
+                HStack(alignment: .bottom, spacing: 8) {
+                    let analyzing = controller.analysis != nil
+                    TextField(analyzing ? EngineAnalysis.composerPlaceholder : "Ask about this project…", text: $input, axis: .vertical)
+                        .font(.system(size: transcriptFontSize))
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...15)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .focused($inputFocused)
+                        // Analyzing tints the glass itself; at full strength the
+                        // tint turns the field solid and hides the placeholder.
+                        .glassEffect(analyzing ? .regular.tint(.accentColor.opacity(0.25)) : .regular,
+                                     in: .rect(cornerRadius: 20))
+                        .onSubmit { send() }
+                        .disabled(!composerState.canSend)
+                    let button = composerState.button(forInput: input)
+                    let showsStop = button == .stop
+                    Button {
+                        if showsStop {
+                            controller.stop()
+                        } else {
+                            send()
+                        }
+                    } label: {
+                        Image(systemName: showsStop ? "stop.fill" : "arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                            .symbolEffect(.variableColor.iterative, isActive: showsStop)
+                            .frame(width: 24, height: 24)
                     }
-                } label: {
-                    Image(systemName: showsStop ? "stop.circle.fill" : "arrow.up.circle.fill")
-                        .font(.system(size: 28))
-                        .symbolEffect(.variableColor.iterative, isActive: showsStop)
-                        .foregroundStyle(showsStop ? .red : .accentColor)
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.circle)
+                    .tint(showsStop ? .red : .accentColor)
+                    // Icon-only, and the icon carries the whole meaning — the label
+                    // has to move with the state or VoiceOver announces nothing.
+                    .accessibilityLabel(showsStop ? "Stop generating" : "Send message")
+                    .disabled(button == .send(enabled: false))
                 }
-                .buttonStyle(.plain)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-                // Icon-only, and the icon carries the whole meaning — the label
-                // has to move with the state or VoiceOver announces nothing.
-                .accessibilityLabel(showsStop ? "Stop generating" : "Send message")
-                .disabled(button == .send(enabled: false))
             }
         }
         .padding(.horizontal, 12)
