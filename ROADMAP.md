@@ -7,8 +7,8 @@
 
 ## Now
 
-- **Next: EN.1**, the catch-up to ds4-engine `5451cd7d`. It is not specced
-  yet. Until it lands, a stale saved model stops a session from starting;
+- **Next: EN.1**, the catch-up to ds4-engine `5451cd7d`. Its spec is written
+  and awaiting review. Until it lands, a stale saved model stops a session from starting;
   pick a model from the toolbar menu to get past it.
 - **Then:** SU.5 (plan 5a code, then 5b tests), SU.6, SU.7.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
@@ -20,7 +20,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 
 | # | Cycle | Direction | Status |
 |---|---|---|---|
-| EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | next, not specced. Scope: [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md). Done when a session starts with the stale setting still saved and both test tiers pass |
+| EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | spec written 2026-10-13, awaiting owner review: [spec](docs/superpowers/specs/2026-10-13-en1-engine-catch-up-design.md), from [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md). The recordings need the GPU first |
 
 ## Phase SU: SwiftUI
 
