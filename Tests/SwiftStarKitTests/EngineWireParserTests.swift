@@ -40,6 +40,35 @@ struct EngineWireParserTests {
             == .refused("no earlier prompt"))
     }
 
+    @Test func rewindRefusedWithRelaunchDecodes() throws {
+        let relaunches = try Self.events(fromFixture: "relaunch-rewind.ndjson").compactMap { e -> EngineRelaunch? in
+            if case .relaunch(let r) = e { r } else { nil }
+        }
+        #expect(relaunches.count == 1)
+        let r = try #require(relaunches.first)
+        #expect(r.kind == .rewind)
+        #expect(r.argv.first == "tui" && r.argv.last == "--ndjson")
+        #expect(!r.argv.contains("--commit"))
+    }
+
+    @Test func resumedFixtureDecodes() throws {
+        let resumed = try Self.events(fromFixture: "resumed.ndjson").compactMap { e -> EngineResumed? in
+            if case .resumed(let r) = e { r } else { nil }
+        }
+        let r = try #require(resumed.first)
+        #expect(r.turns.count == 1)
+        #expect(r.rewoundTo == 1)
+        #expect(r.turns.first?.answer == "2 + 2 equals 4.")
+    }
+
+    @Test func relaunchModelIdFromArgv() {
+        let r = EngineRelaunch(kind: .model, argv: [
+            "tui", "--resume", "/s", "--model-id", "qwen3.8-flash-next", "--new-conversation", "--ndjson"],
+            reason: "")
+        #expect(r.modelID == "qwen3.8-flash-next")
+        #expect(EngineRelaunch(kind: .rewind, argv: ["tui", "--ndjson"], reason: "").modelID == nil)
+    }
+
     @Test func firstLineMustBeReady() {
         var p = EngineWireParser()
         guard case .protocolError(let m) = p.parse(#"{"kind":"input"}"#) else {

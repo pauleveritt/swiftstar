@@ -44,6 +44,17 @@ struct TranscriptRowView: View {
                 .font(.system(size: transcriptFontSize))
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
+        case .divider(let text):
+            HStack(spacing: 8) {
+                VStack { Divider() }.frame(minWidth: 16)
+                Text(text)
+                    .font(.system(size: transcriptFontSize * 0.85, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .layoutPriority(1)
+                VStack { Divider() }.frame(minWidth: 16)
+            }
+            .padding(.vertical, 4)
         }
     }
 }
@@ -68,4 +79,22 @@ struct TranscriptRowView: View {
         queued: false, workspace: nil)
         .padding()
         .frame(width: 420)
+}
+
+#Preview("Rebuilt after rewind") {
+    VStack(alignment: .leading, spacing: 12) {
+        ForEach(Array(EngineTranscript.previewRewound.rows.enumerated()), id: \.offset) { _, row in
+            TranscriptRowView(row: row, queued: false, workspace: nil)
+        }
+    }
+    .padding()
+    .frame(width: 420, alignment: .leading)
+}
+
+#Preview("Switched model") {
+    TranscriptRowView(
+        row: .divider("Switched to qwen3.8-flash-next: new conversation, files kept"),
+        queued: false, workspace: nil)
+        .padding()
+        .frame(width: 420, alignment: .leading)
 }

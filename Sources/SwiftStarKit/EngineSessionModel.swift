@@ -57,6 +57,9 @@ public struct EngineSessionModel: Equatable, Sendable {
     public private(set) var transcript = EngineTranscript()
     public private(set) var metrics = EngineMetricsState()
     public private(set) var sessionDirectory: URL?
+    /// The relaunch in progress: set by `.relaunch`, kept across the quit and
+    /// `didStart()`, and used for the divider when `.resumed` arrives.
+    public private(set) var pendingRelaunch: EngineRelaunch?
 
     public init() {}
 
@@ -76,19 +79,21 @@ public struct EngineSessionModel: Equatable, Sendable {
         phase = .notFound(searched)
     }
 
-    /// The process could not be launched at all.
-    public mutating func didFailToLaunch(_ exit: EngineExit) {
-        transcript.end()
-        transcript.appendSystem(exit.message)
-        phase = .ended(exit)
-    }
-
     public mutating func apply(_ event: EngineEvent) {
         if case .ready = event, phase == .starting { phase = .running }
         if case .protocolError(let message) = event {
             transcript.appendSystem("Protocol error: \(message)")
         }
-        transcript.apply(event)
+        switch event {
+        case .relaunch(let r):
+            pendingRelaunch = r
+            transcript.apply(event)
+        case .resumed(let r):
+            transcript.rebuild(from: r, divider: r.divider(after: pendingRelaunch))
+            pendingRelaunch = nil
+        default:
+            transcript.apply(event)
+        }
         EngineMetricsReducer.reduce(&metrics, event)
     }
 

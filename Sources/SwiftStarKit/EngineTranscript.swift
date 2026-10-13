@@ -73,12 +73,15 @@ public enum TranscriptRow: Equatable, Sendable {
     case answer(EngineAnswer)
     case system(String)
     case error(String)
+    /// Marks where a relaunch rebuilt the transcript.
+    case divider(String)
 }
 
 /// Pure fold of `EngineEvent`s into transcript rows and busy flags.
 ///
 /// Invariant: `rows` is append-only (rows are never removed or reordered),
-/// which the index-based `pendingUserRows`/`queuedUserRows` rely on.
+/// which the index-based `pendingUserRows`/`queuedUserRows` rely on — except
+/// `rebuild(from:divider:)`, which replaces every row and clears both sets.
 public struct EngineTranscript: Equatable, Sendable {
     public private(set) var rows: [TranscriptRow] = []
     public private(set) var isBusy = false
@@ -130,6 +133,22 @@ public struct EngineTranscript: Equatable, Sendable {
 
     public mutating func appendSystem(_ text: String) {
         rows.append(.system(text))
+    }
+
+    /// Replaces every row with `divider` and the resumed turns (a relaunch
+    /// is truthful only if the screen shows what the engine kept).
+    public mutating func rebuild(from resumed: EngineResumed, divider: String) {
+        clearPending()
+        rows = [.divider(divider)]
+        for turn in resumed.turns {
+            rows.append(.user(turn.prompt))
+            if turn.stopped {
+                rows.append(.system("Stopped."))
+            } else if let answer = turn.answer, !answer.isEmpty {
+                rows.append(.answer(EngineAnswer(
+                    text: answer, contextUsed: nil, contextSize: nil, durationMs: nil)))
+            }
+        }
     }
 
     public mutating func apply(_ event: EngineEvent) {
@@ -187,6 +206,10 @@ public struct EngineTranscript: Equatable, Sendable {
         case .refused(let t), .error(let t):
             clearPending()
             rows.append(.error(t))
+        case .relaunch:
+            clearPending()
+        case .resumed(let r):
+            rebuild(from: r, divider: r.divider(after: nil))
         case .session(let info):
             session = info
         case .closed:

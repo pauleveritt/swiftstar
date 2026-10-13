@@ -282,6 +282,44 @@ struct EngineToolCardFormattingTests {
         EngineToolCard(tool: EngineTool(op: op, path: path), ok: ok, durationMs: durationMs)
     }
 
+    private func resumed(_ turns: [EngineResumed.Turn], rewoundTo: Int? = nil) -> EngineResumed {
+        EngineResumed(sessionID: "s1", turns: turns, rewoundTo: rewoundTo, filesChanged: 0, contextUsed: nil)
+    }
+
+    @Test func dividerTextPerKind() {
+        let r = resumed([], rewoundTo: 2)
+        #expect(r.divider(after: EngineRelaunch(kind: .rewind, argv: [], reason: "")) == "Rewound to prompt 2")
+        #expect(r.divider(after: EngineRelaunch(kind: .model, argv: ["--model-id", "m"], reason: ""))
+            == "Switched to m: new conversation, files kept")
+        #expect(r.divider(after: EngineRelaunch(kind: .resume, argv: [], reason: "")) == "Resumed session s1")
+        #expect(r.divider(after: nil) == "Resumed session s1")
+    }
+
+    @Test func resumedReplacesRows() {
+        var t = EngineTranscript()
+        t.appendUser("a"); t.apply(.notice("n")); t.apply(.narration("x")); t.appendSystem("y"); t.appendUser("/rewind 1")
+        t.apply(.resumed(resumed([.init(prompt: "p", answer: "q", stopped: false)], rewoundTo: 1)))
+        #expect(t.rows.count == 3)
+        #expect(t.rows.first == .divider("Resumed session s1"))
+        #expect(t.rows[1] == .user("p"))
+        guard case .answer(let a) = t.rows[2] else { Issue.record("no answer row"); return }
+        #expect(a.text == "q")
+        #expect(t.pendingUserCount == 0)
+    }
+
+    @Test func resumedWithNoTurnsShowsDividerOnly() {
+        var t = EngineTranscript()
+        t.appendUser("hi")
+        t.apply(.resumed(resumed([])))
+        #expect(t.rows == [.divider("Resumed session s1")])
+    }
+
+    @Test func stoppedTurnShowsStopped() {
+        var t = EngineTranscript()
+        t.apply(.resumed(resumed([.init(prompt: "p", answer: nil, stopped: true)])))
+        #expect(Array(t.rows.dropFirst()) == [.user("p"), .system("Stopped.")])
+    }
+
     @Test func declinedCardText() {
         var t = EngineTranscript()
         t.apply(.toolRejected(EngineToolRejection(

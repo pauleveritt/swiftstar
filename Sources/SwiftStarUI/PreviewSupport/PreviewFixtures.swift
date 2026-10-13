@@ -28,10 +28,10 @@ extension EngineController {
         // the preview and this fixture's state is lost.
         model.didStart()
         model.apply(.ready)
-        model.apply(.session(EngineSessionInfo(id: "preview", modelID: "laguna-xs-2.1", contextSize: 8192)))
+        model.apply(.session(EngineSessionInfo(id: "preview", modelID: "qwen3.8-27b", contextSize: 8192)))
         _ = model.send("Summarize SessionView.swift")
         model.apply(.prompt("Summarize SessionView.swift"))
-        let tool = EngineTool(op: "read", path: "Sources/SwiftStarUI/SessionView.swift")
+        let tool = EngineTool(op: "read", path: "Sources/SwiftStarUI/Session/SessionView.swift")
         model.apply(.toolStart(tool))
         model.apply(.toolEnd(tool, ok: true, durationMs: 420))
         model.apply(.toolResult(EngineToolResult(
@@ -58,15 +58,15 @@ extension EngineMetricsState {
 
 extension EngineToolCard {
     static var previewRunning: EngineToolCard {
-        EngineToolCard(tool: EngineTool(op: "read", path: "Sources/SwiftStarUI/SessionView.swift"))
+        EngineToolCard(tool: EngineTool(op: "read", path: "Sources/SwiftStarUI/Session/SessionView.swift"))
     }
 
     static var previewSucceeded: EngineToolCard {
         EngineToolCard(
-            tool: EngineTool(op: "read", path: "Sources/SwiftStarUI/SessionView.swift"),
+            tool: EngineTool(op: "read", path: "Sources/SwiftStarUI/Session/SessionView.swift"),
             ok: true, durationMs: 420,
             result: EngineToolResult(
-                tool: EngineTool(op: "read", path: "Sources/SwiftStarUI/SessionView.swift"),
+                tool: EngineTool(op: "read", path: "Sources/SwiftStarUI/Session/SessionView.swift"),
                 preview: "struct SessionView: View {\n    @Environment(EngineController.self) private var controller",
                 truncated: true))
     }
@@ -97,5 +97,21 @@ enum PreviewDefaults {
         let defaults = UserDefaults(suiteName: "SwiftStarPreview.largeFont") ?? .standard
         defaults.set(TranscriptFontScale.sizes.last, forKey: DefaultsKey.transcriptFontSize.rawValue)
         return defaults
+    }
+}
+
+extension EngineTranscript {
+    /// After `/rewind 1`: the divider, then the one turn the engine kept
+    /// (the shape of `fixtures/engine/resumed.ndjson`).
+    static var previewRewound: EngineTranscript {
+        var t = EngineTranscript()
+        t.rebuild(
+            from: EngineResumed(
+                sessionID: "20261013-113020-swiftstar",
+                turns: [.init(prompt: "Answer in one short sentence, without tools: what is 2 + 2?",
+                              answer: "2 + 2 equals 4.", stopped: false)],
+                rewoundTo: 1, filesChanged: 0, contextUsed: 1071),
+            divider: "Rewound to prompt 1")
+        return t
     }
 }

@@ -10,6 +10,16 @@ struct EngineSessionModelTests {
         return m
     }
 
+    @Test func pendingRelaunchSurvivesDidStart() {
+        var m = running()
+        m.apply(.relaunch(EngineRelaunch(kind: .rewind, argv: ["tui", "--ndjson"], reason: "")))
+        m.didStart()
+        m.apply(.ready)
+        m.apply(.resumed(EngineResumed(sessionID: "s", turns: [], rewoundTo: 1, filesChanged: nil, contextUsed: nil)))
+        #expect(m.transcript.rows.first == .divider("Rewound to prompt 1"))
+        #expect(m.pendingRelaunch == nil)
+    }
+
     @Test func readyMovesToRunning() {
         var m = EngineSessionModel()
         m.didStart()
@@ -116,7 +126,7 @@ struct EngineSessionModelTests {
         m.didStart()
         let exit = EngineExit.launchFailure(path: "/x/ds4", reason: "no such file")
         #expect(exit.message == "could not launch /x/ds4: no such file")
-        m.didFailToLaunch(exit)
+        m.didExit(exit, directory: nil)
         #expect(m.phase == .ended(exit))
         #expect(!m.transcript.isBusy)
         #expect(m.transcript.loadingText == nil)

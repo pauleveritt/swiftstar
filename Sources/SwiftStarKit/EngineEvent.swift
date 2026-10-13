@@ -49,6 +49,70 @@ public struct EngineToolRejection: Equatable, Sendable {
     }
 }
 
+/// A `/resume`, `/model` or `/rewind` the engine won't do in place under
+/// `--ndjson` (TUI.34): the front-end quits, then starts the executable with
+/// `argv` exactly as given.
+public struct EngineRelaunch: Equatable, Sendable {
+    public enum Kind: Equatable, Sendable { case resume, model, rewind }
+    public let kind: Kind
+    public let argv: [String]
+    public let reason: String
+
+    public init(kind: Kind, argv: [String], reason: String) {
+        self.kind = kind
+        self.argv = argv
+        self.reason = reason
+    }
+
+    /// The value after `--model-id` in `argv`, if any (`/model` sets one).
+    public var modelID: String? {
+        guard let i = argv.firstIndex(of: "--model-id"), i + 1 < argv.count else { return nil }
+        return argv[i + 1]
+    }
+}
+
+/// What a relaunched (resumed) process reports before its first `input`:
+/// the turns the conversation holds, up to a rewind's snapshot.
+public struct EngineResumed: Equatable, Sendable {
+    public struct Turn: Equatable, Sendable {
+        public let prompt: String
+        public let answer: String?
+        public let stopped: Bool
+
+        public init(prompt: String, answer: String?, stopped: Bool) {
+            self.prompt = prompt
+            self.answer = answer
+            self.stopped = stopped
+        }
+    }
+
+    public let sessionID: String
+    public let turns: [Turn]
+    public let rewoundTo: Int?
+    public let filesChanged: Int?
+    public let contextUsed: Int?
+
+    public init(sessionID: String, turns: [Turn], rewoundTo: Int?, filesChanged: Int?, contextUsed: Int?) {
+        self.sessionID = sessionID
+        self.turns = turns
+        self.rewoundTo = rewoundTo
+        self.filesChanged = filesChanged
+        self.contextUsed = contextUsed
+    }
+
+    /// The divider above the rebuilt transcript, by what caused the relaunch.
+    public func divider(after relaunch: EngineRelaunch?) -> String {
+        switch relaunch?.kind {
+        case .rewind?:
+            return "Rewound to prompt \(rewoundTo.map(String.init) ?? "?")"
+        case .model?:
+            return "Switched to \(relaunch?.modelID ?? "another model"): new conversation, files kept"
+        case .resume?, nil:
+            return "Resumed session \(sessionID)"
+        }
+    }
+}
+
 public struct EngineAnswer: Equatable, Sendable {
     public let text: String
     public let contextUsed: Int?
@@ -144,6 +208,10 @@ public enum EngineEvent: Equatable, Sendable {
     case steering(applied: Bool, text: String?)
     case notice(String)
     case refused(String)
+    /// A refusal that carries a `relaunch` argv the front-end acts on.
+    case relaunch(EngineRelaunch)
+    /// The relaunched process's conversation so far.
+    case resumed(EngineResumed)
     case awaitingInput
     case error(String)
     case closed(capturePath: String?)

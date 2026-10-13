@@ -252,8 +252,8 @@ public final class EngineController {
             try session.start()
             self.session = session
         } catch {
-            model.didFailToLaunch(EngineExit.launchFailure(
-                path: executable, reason: error.localizedDescription))
+            model.didExit(EngineExit.launchFailure(
+                path: executable, reason: error.localizedDescription), directory: nil)
         }
     }
 

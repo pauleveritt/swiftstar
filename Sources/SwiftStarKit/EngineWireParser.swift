@@ -143,7 +143,29 @@ public struct EngineWireParser: Sendable {
         case "help", "models":
             return .notice(text(e, kind: kind))
         case _ where kind.hasSuffix("_refused"):
+            let relaunchKind: EngineRelaunch.Kind? = switch kind {
+            case "resume_refused": .resume
+            case "model_refused": .model
+            case "rewind_refused": .rewind
+            default: nil
+            }
+            if let relaunchKind, let argv = e["relaunch"] as? [String], !argv.isEmpty {
+                return .relaunch(EngineRelaunch(kind: relaunchKind, argv: argv, reason: text(e, kind: kind)))
+            }
             return .refused(text(e, kind: kind))
+        case "resumed":
+            let turns = (e["turns"] as? [[String: Any]] ?? []).map {
+                EngineResumed.Turn(
+                    prompt: $0["prompt"] as? String ?? "",
+                    answer: $0["answer"] as? String,
+                    stopped: $0["stopped"] as? Bool ?? false)
+            }
+            return .resumed(EngineResumed(
+                sessionID: e["session"] as? String ?? "",
+                turns: turns,
+                rewoundTo: int(e["rewound_to"]),
+                filesChanged: int(e["files_changed"]),
+                contextUsed: int(e["context_used"])))
         default:
             return .ignored
         }
