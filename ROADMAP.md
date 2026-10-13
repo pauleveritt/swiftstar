@@ -28,17 +28,16 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
 | SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
-| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | in progress: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md) and [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md) ([spec](docs/superpowers/specs/2026-10-13-su6a-what-you-read-design.md)) done 2026-10-13. Next: 6b (engine information) or 6c (remembering) |
+| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | in progress: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md), [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md) and [6b](docs/superpowers/plans/2026-10-13-su6b-session-card.md) done 2026-10-13. Next: 6c (remembering) |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
 
 ### SU.6 punch list
 
-- **Metrics:**
-  - per-pause deltas, with the cumulative rate labelled "session avg"
-  - a prefill rate that leaves out prefix-cache tokens
+- **Metrics:** label Throughput's averages "session avg", since the engine's
+  counters run over the whole process (SU.6b). Per-pause and per-prompt
+  rates belong to phase AN's report.
 - **Engine information worth showing:**
-  - DFlash and start-up timings: `session.dflash`, `prefix_cache`,
-    `candidate_ready`
+  - start-up timings: `candidate_ready`, `index_primed`
   - the engine's stderr start notices
   - model sizes from `plan_gib` and `size_bytes`; drop the catalog fields
     the engine never sends
@@ -93,7 +92,8 @@ there.
 - **`models --json` sends no `default_model_id`.** So "Engine default"
   can't name the model it means.
 - **Prefix-cache hits count as prefilled tokens.** This inflates the
-  per-pause prefill rate (`operator_telemetry.py:100-113`).
+  per-pause prefill rate (`operator_telemetry.py:100-113`). SwiftStar works
+  around it since SU.6b by leaving a hit's tokens out of Prefill avg.
 - **A `files --json` command,** for the `@` picker above.
 - **A second `/rewind` in a rewound session goes wrong** (live, 2026-10-13,
   sessions `20261013-121126` and `-121133`). In a session resumed with

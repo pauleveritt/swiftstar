@@ -162,4 +162,33 @@ It uses the existing `metricRow` and `inspectorCard()`.
 
 ## Result
 
-*Written at close.*
+**Commits:** `b94b481`..this one, on `main`. Suites: 98 fast and 39
+integration, all passing.
+
+**Break checks:** each new test failed against one broken line, then
+passed once it was restored.
+- Without the hit subtraction, `prefixHitLeavesCachedTokensOut` fails.
+- Without the reset on `.session`, `newSessionDropsTheCorrection` fails.
+- Decoding `dflash` from the wrong key fails `toolReadFixtureDecodes`.
+
+**Previews:** these were rendered and looked at:
+- Inspector "Running": the card shows the model, "On" with its reason, the
+  drafter file, and "hit · 944 tokens in 20 ms"; Prefill avg is 189.8 tok/s
+- StatusBar "Running" and "No GPU metrics"
+- SessionView "Running"
+- MainView "Running"
+
+**Diverged:**
+- `prefixCacheLine` takes a `locale:` parameter, defaulting to the current
+  locale, so the test can pin en_US.
+- A hit-corrected token count of 0 or less keeps the prior rate. This
+  applies only to the corrected prefill, not to the shared rate guard.
+- **The preview fixture's pause changed:**
+  - **Before:** 512 tokens in 210 ms. With the cache hit added, that is
+    fewer tokens than the hit's 944, so Prefill avg showed "—".
+  - **After:** session `154825`'s real first checkpoint, 1146 tokens in
+    1084 ms.
+  - **Why this was the fixture's fault:** live counters always include the
+    prefix.
+- The punch list's "per-pause deltas" item was rewritten as a "session avg"
+  label. Per-pause and per-prompt rates belong to phase AN.

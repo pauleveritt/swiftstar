@@ -6,8 +6,27 @@ struct InspectorView: View {
 
     var body: some View {
         let state = engine.metrics
+        let session = engine.transcript.session
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Session").font(.headline)
+                    metricRow("Model", value: session?.modelID ?? "—")
+                    metricRow("DFlash", value: session?.dflash.map { $0.on ? "On" : "Off" } ?? "—")
+                    if let dflash = session?.dflash {
+                        // The engine's reason, word for word (SU.6b, D2).
+                        Text(dflash.reason)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                        if dflash.on, let drafter = dflash.drafter {
+                            metricRow("Drafter", value: URL(fileURLWithPath: drafter).lastPathComponent)
+                        }
+                    }
+                    metricRow("Prefix cache", value: state.prefixCache.map { MetricsFormatting.prefixCacheLine($0) } ?? "—")
+                }
+                .inspectorCard()
+
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Context").font(.headline)
                     HStack(spacing: 10) {
