@@ -362,8 +362,7 @@ sessions are `20261013-153202`, `-153218` and `-153456`, all suffixed
 the `.partial.json` capture, and `session_last.py --session` exited 0 with
 both prompts, outcome `in-progress`, and no warning.
 
-**Gate 3:** the first `/rewind 1`, at `ctx_used` 1,332, rebuilt in 2.8 s.
-The large case is measured below.
+**Gate 3:** a first `/rewind 1` at `ctx_used` 1,332 rebuilt in 2.8 s.
 
 **Gate 1, a second rewind in a rewound session: failed.**
 - In session `153202`: "one", an `ls`, "three". `/rewind 1` gave `153218`
@@ -372,15 +371,10 @@ The large case is measured below.
   "one" and the `ls`. Got (`153456`): `rewound_to 0`, divider "Rewound to
   prompt 0", and `resumed.turns` "one", the `ls` **and "three"**, a prompt
   the first rewind had removed. The read prompt was dropped, as it should be.
-- This matches EN.1's finding, there with the `/rewind` queued behind a busy
-  turn; here it was sent idle, so queueing is not the cause.
-- **No hang, corrected.** The test reported 600 s without settling. Its
-  wait was wrong, not the engine: it waited for the count of dividers to
-  grow, but a rebuild *replaces* the rows with one divider. `153456`'s
-  events end `candidate_ready` (2.3 s), `memory`, `where`, as `153218`'s do
-  before a prompt, so the engine was most likely idle at `input` (not
-  logged, so inferred). No lock or second engine was involved: ds4-engine
-  has none, and `native.log` shows a normal load.
+- As in EN.1, but sent idle here, so queueing is not the cause.
+- **No hang, corrected.** The test's wait counted dividers, but a rebuild
+  *replaces* the rows with one divider. `153456` ended at `candidate_ready`,
+  so it was most likely idle at `input`. No lock was involved.
 
 **A first rewind at large context, measured after (sessions `154825` →
 `155435`):**
@@ -390,9 +384,16 @@ The large case is measured below.
 - The next prompt took **243 s**: one sync prefilled 37,764 tokens in
   242.3 s, about 156 tok/s, with no `prefix_cache` event. The same prompt
   again took 1.5 s.
-- So a rewind refills the whole restored conversation, at about 8× the
-  owner's 30 s line at 37k.
+- A rewind refills the whole conversation: 8× the owner's 30 s line.
 
-**For AN:** Done can't be built on `/rewind`. Repeated rewind is wrong, and
-a rewind refills from scratch, paid at the next prompt. Filed upstream with
-the owner's approval.
+**Resume with saved state, measured after:** `tui --ndjson --resume
+…154825…` (its 2.9 GB `conversation.kv` present) reached `input` in 4.5 s.
+The first prompt then took 1.4 s: 41,949 tokens, with `sync_ms` 393. Rewind
+refills because `rewind/<n>` keeps no `.kv` (`E/src/ds4_engine/tui_cli.py:144-158`),
+and state is loaded only from beside the restored file
+(`E/crates/ds4-native/src/bindings.rs:920`).
+
+**For AN:** Done can't be built on today's `/rewind`: repeated rewind is
+wrong ([ds4-engine#219](https://github.com/pauleveritt/ds4-engine/issues/219)),
+and a rewind refills from scratch. A rewind that kept the state would cost
+about 4.5 s.
