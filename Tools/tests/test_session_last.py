@@ -79,6 +79,21 @@ class LoadTests(unittest.TestCase):
         self.assertEqual([p.answered for p in prompts], [True, False])
         self.assertEqual(rules(sl.flags(prompts, [])), [(None, "F3")])
 
+    def test_schema_17_accepted(self):
+        with Copy() as d:
+            Copy.edit_json(d / CAPTURE, lambda c: c.update(schema_version=17))
+            self.assertEqual(sl.load(d).warnings, [])
+
+    def test_schema_17_without_loop_guards_skips_guard_check(self):
+        """Schema 17 has no `loop_guards` (added in 18): the U1 steps stay
+        flagged, but no "found 2, counted 0" warning is made up."""
+        with Copy() as d:
+            Copy.edit_json(d / CAPTURE, lambda c: (c.update(schema_version=17), c.pop("loop_guards")))
+            r = sl.report(sl.load(d))
+        self.assertEqual(r["warnings"], [])
+        self.assertEqual([f["rule"] for f in r["flags"]].count("U1"), 2)
+        self.assertIsNone(r["signals"]["loop_guards"])
+
     def test_schema_19_accepted(self):
         with Copy() as d:
             Copy.edit_json(d / CAPTURE, lambda c: c.update(schema_version=19))

@@ -1,13 +1,18 @@
 ---
 description: Report on the newest ds4-engine session for this repo (flagged steps, time, context and speed), with no model digging
-argument-hint: "[--session DIR] [--json]"
+argument-hint: "[--session DIR] [--json] [a question about the session]"
 allowed-tools: Bash(just last:*)
 ---
 
-Run `just last $ARGUMENTS` and show its output exactly as printed, with no
-commentary before it.
+The user typed: `$ARGUMENTS`
 
-Then wait for the user's follow-up. Answer from the report first. Open the
+Split that into flags and a question. Flags are `--session DIR` and `--json`;
+everything else is a question about the session, not an argument. Run
+`just last` with the flags only (none is fine) and show its output exactly as
+printed, with no commentary before it.
+
+If there was a question, answer it next, from the report. Otherwise wait for
+the user's follow-up. Answer from the report first. Open the
 session's files (`operator-events.jsonl`, `receipt.json`, the `run-*.json`
 capture in the directory the report names) only for the steps or rows the
 user asks about, and read just those parts. Don't reconstruct the telemetry

@@ -21,8 +21,9 @@ from pathlib import Path
 
 # The schema versions this was written against. Another version warns, and
 # the report is still attempted. Capture 19 only adds the `speculation`
-# record (ds4-engine crates/ds4-capture/src/lib.rs:1395-1407), unread here.
-CAPTURE_SCHEMAS = (18, 19)
+# record (ds4-engine crates/ds4-capture/src/lib.rs:1395-1407), unread here;
+# 17 has no `loop_guards` (18 added it), so its guard check is skipped.
+CAPTURE_SCHEMAS = (17, 18, 19)
 EVENTS_SCHEMA = 1
 
 
@@ -381,7 +382,7 @@ def signals(session: Session, prompts: list[Prompt]) -> dict[str, object]:
     tools = _tools(prompts)
     start = next(iter(_of(ev, "session")), {})
     return {
-        "loop_guards": cap.get("loop_guards") or {},
+        "loop_guards": cap.get("loop_guards"),  # None before schema 18
         "constraint": {k: constraint.get(k) for k in ("masked_token_count", "removed_probability_mass", "forbidden_argmax")},
         "think_inert_openers": cap.get("think_inert_openers"),
         "citation_corrections": sum(len(e.get("citation_corrections") or []) for e in _of(ev, "answer")),
@@ -410,7 +411,8 @@ def report(session: Session) -> dict:
     start = next(iter(_of(session.events, "session")), {})
     resumed = next(iter(_of(session.events, "resumed")), {})
     warnings = list(session.warnings)
-    if (mismatch := guard_mismatch(found, session.capture.get("loop_guards") or {})) is not None:
+    guards = session.capture.get("loop_guards")
+    if guards is not None and (mismatch := guard_mismatch(found, guards)) is not None:
         warnings.append(f"guard notices against loop_guards: {mismatch}")
     return {
         "header": {
