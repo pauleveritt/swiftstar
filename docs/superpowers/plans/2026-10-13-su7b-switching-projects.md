@@ -361,37 +361,37 @@ and the Python fake engine.
 
 ## Result
 
-**Commits:** `ec160f8`..this one, on `main`. Suites: 139 fast and 75
+**Commits:** `ec160f8`..this one, on `main`. Suites: 139 fast and 78
 integration.
 
 **Break checks:** each broken line failed its test, then passed restored.
 - **Kit:** taking the newest row even if it can't be resumed; comparing raw
   paths, not resolved ones; dropping "folder not found" from a row title.
 - **Loader:** dropping `--all`.
-- **Controller:**
-  - dropping the mid-turn branch
-  - letting a resuming switch restart first, which fails on the last
-    spawn's arguments: the restart takes the resume's place
+- **Controller:** dropping the mid-turn branch; letting a resuming switch
+  restart first (it fails on the last spawn's arguments).
 
-**Previews**, rendered and unchanged: `SessionView`'s four, plus
-`SessionToolbar`'s and `MainView`'s "Running".
+**Previews**, rendered and unchanged: `SessionView`'s four (its "Running"
+again after the fixes), plus `SessionToolbar`'s and `MainView`'s "Running".
+
+**Final review fixes**, each failing first: "Switch" confirms the alert's
+own request (`confirmSwitchTakesThePresentedRequest`); the current folder
+mid-turn doesn't ask (`switchToTheCurrentFolderMidTurnDoesNotAsk`); a
+performed switch clears a waiting one (`performingASwitchClearsAPendingOne`);
+"Clear Menu" reads a cheap `hasRecents` (`clearRecentsEmptiesTheList`).
 
 **Diverged:**
-- **`SessionListLoader.loadAll`:** a separate entry point, not spec §3's
-  `all:` flag.
+- **`SessionListLoader.loadAll`,** not spec §3's `all:` flag.
 - **Row titles are built in Kit** (`RecentProject.menuTitle`,
   `resumeTitle`; `menuTitlesReadAsSpecified`), shared by all three menus.
   The resume item uses the label's shortened title.
 - **The reload is its own `.task`; `RecentProjectsTests` aren't a table.**
-- **`SwiftStar` depends on `SwiftStarKit`,** as member-import visibility
-  requires.
-- **The generation counter has no test.**
+- **`SwiftStar` depends on `SwiftStarKit`; the counter has no test.**
 - **Two full integration runs failed** in `exitReportedWhenGrandchildHoldsPipe`,
   which this cycle didn't touch: the exit wasn't seen within 5 s.
   - Those runs took 62–74 s, not about 30 s, while Xcode rendered previews
     and a `ds4-candidate` engine worktree was open.
-  - It passed 3 times alone and in two later full runs, and at Task 3's
-    commit.
+  - It passed 3 times alone and in later full runs; it's in the Backlog.
 
 **For the owner to check live:** the folder menu, Open Recent with "Clear
 Menu", the Dock menu, the mid-turn confirmation, and both resume paths.

@@ -154,6 +154,10 @@ public final class EngineController {
         allSessions = entries
     }
 
+    /// Whether there's a Recent list to clear: cheap, unlike `recentProjects`,
+    /// for the menu bar's commands, which rebuild often (final review).
+    public var hasRecents: Bool { !recentWorkspaces.isEmpty }
+
     /// File › Open Recent › Clear Menu. The current workspace stays.
     public func clearRecents() {
         recentWorkspaces = []
@@ -281,6 +285,11 @@ public final class EngineController {
     /// Ignored while a session starts or quits.
     public func requestSwitch(to folder: URL, resuming conversation: Conversation? = nil) {
         guard canChoose else { return }
+        // The current folder isn't a switch: don't ask to end the turn for it.
+        if conversation == nil, folder.standardizedFileURL.path == workspace?.standardizedFileURL.path {
+            remember(folder)
+            return
+        }
         let request = ProjectSwitch(folder: folder, resuming: conversation)
         if transcript.isBusy {
             pendingSwitch = request
@@ -294,6 +303,12 @@ public final class EngineController {
 
     public func confirmSwitch() {
         guard let request = pendingSwitch else { return }
+        confirmSwitch(request)
+    }
+
+    /// The alert's "Switch", with the request it presented: it holds even if
+    /// the alert's binding cleared `pendingSwitch` first (final review).
+    public func confirmSwitch(_ request: ProjectSwitch) {
         pendingSwitch = nil
         perform(request)
     }
@@ -304,6 +319,8 @@ public final class EngineController {
     /// workspace without restarting, so the resume is the only spawn.
     private func perform(_ request: ProjectSwitch) {
         guard canChoose else { return }
+        // A switch made another way supersedes one still waiting to be confirmed.
+        pendingSwitch = nil
         guard let conversation = request.resuming else {
             select(workspace: request.folder)
             return

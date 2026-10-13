@@ -148,6 +148,10 @@ found by the [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-an
   runner's `UserDefaults` domain (seen in SU.6c, alongside `session-last`).
   *Reopens if parallel runs become routine. The fix is a per-run defaults
   suite, injected into `EngineController`.*
+- **`exitReportedWhenGrandchildHoldsPipe` failed twice under load (SU.7b).**
+  The exit wasn't seen within 5 s, against a 500 ms drain limit, in slow
+  full runs. It passed alone and in later runs. *Reopens if it fails again:
+  look at exit reporting under load, not the bound.*
 - **SU.1's window-close-quits live check covered idle only, not mid-turn.**
   The `quit()` mid-turn path is unit-tested. *Reopens when the GPU is free
   for a live run.*

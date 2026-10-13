@@ -25,7 +25,7 @@ struct SwiftStarApp: App {
                     RecentProjectRows(controller: engine)
                     Divider()
                     Button("Clear Menu") { engine.clearRecents() }
-                        .disabled(engine.recentProjects.isEmpty)
+                        .disabled(!engine.hasRecents)
                 }
             }
             // SU.6c, D2: the last session's apply command, one click away.

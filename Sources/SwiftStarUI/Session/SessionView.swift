@@ -77,15 +77,18 @@ struct SessionView: View {
             Text("Type a context size in tokens. A running session restarts.")
         }
         // A project switch asked for mid-turn (SU.7b, D3).
+        // "Switch" confirms the request the alert presented, so it holds
+        // whichever order SwiftUI resets the binding and runs the action in.
         .alert(
             "End the running turn and switch to \(controller.pendingSwitch?.folder.leafName ?? "another project")?",
             isPresented: Binding(
-                get: { controller.pendingSwitch != nil }, set: { if !$0 { controller.cancelSwitch() } })
-        ) {
-            Button("Switch") { controller.confirmSwitch() }
+                get: { controller.pendingSwitch != nil }, set: { if !$0 { controller.cancelSwitch() } }),
+            presenting: controller.pendingSwitch
+        ) { request in
+            Button("Switch") { controller.confirmSwitch(request) }
             Button("Cancel", role: .cancel) { controller.cancelSwitch() }
-        } message: {
-            if let title = controller.pendingSwitch?.resuming?.title { Text(title) }
+        } message: { request in
+            if let title = request.resuming?.title { Text(title) }
         }
     }
 }
