@@ -23,6 +23,10 @@ struct EngineTranscriptTests {
         #expect(cs.count == 1)
         #expect(cs.allSatisfy { $0.ok == true && $0.result != nil })
         #expect(t.rows.filter { if case .answer = $0 { true } else { false } }.count == 1)
+        // SU.6a: the 27B's narration is the reply; nothing is left as a narration row.
+        #expect(!t.rows.contains { if case .narration = $0 { true } else { false } })
+        let reply = t.rows.compactMap { if case .answer(_, let r) = $0 { r } else { nil } }.first
+        #expect(reply?.hasPrefix("`Package.swift` declares") == true)
         #expect(!t.isBusy && !t.isGenerating && !t.isAwaitingInput)
     }
 
@@ -199,7 +203,7 @@ struct EngineTranscriptTests {
         #expect(t.rows.count == 3)
         #expect(t.rows.first == .divider("Resumed session s1"))
         #expect(t.rows[1] == .user("p"))
-        guard case .answer(let a) = t.rows[2] else { Issue.record("no answer row"); return }
+        guard case .answer(let a, _) = t.rows[2] else { Issue.record("no answer row"); return }
         #expect(a.text == "q")
         #expect(t.pendingUserCount == 0)
     }
@@ -285,6 +289,64 @@ struct EngineTranscriptTests {
         var t = EngineTranscript()
         t.apply(.answer(c.answer))
         #expect(t.rows.last == c.row)
+    }
+
+    // MARK: a narration absorbs its turn's answer (SU.6a)
+
+    private static func ans(_ text: String) -> EngineAnswer {
+        EngineAnswer(text: text, contextUsed: nil, contextSize: nil, durationMs: nil)
+    }
+
+    private static let readTool = EngineTool(op: "read", path: "a.swift")
+    private static let readCard = EngineToolCard(tool: readTool, ok: true, durationMs: 5)
+
+    struct AbsorbCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        /// Applied after `appendUser("go")`.
+        let events: [EngineEvent]
+        /// The rows after `.user("go")`.
+        let rows: [TranscriptRow]
+    }
+
+    static let absorbCases: [AbsorbCase] = [
+        .init(testDescription: "narrationBecomesTheAnswerBody",
+              events: [.narration("full reply"), .answer(ans("short"))],
+              rows: [.answer(ans("short"), reply: "full reply")]),
+        .init(testDescription: "equalTextsShowOnce",
+              events: [.narration("same\n"), .answer(ans(" same"))],
+              rows: [.answer(ans(" same"), reply: nil)]),
+        .init(testDescription: "toolBetweenBlocksTheMerge",
+              events: [.narration("plan"), .toolStart(readTool), .toolEnd(readTool, ok: true, durationMs: 5),
+                       .answer(ans("done"))],
+              rows: [.narration("plan"), .tool(readCard), .answer(ans("done"), reply: nil)]),
+        .init(testDescription: "onlyTheLastNarrationMerges",
+              events: [.narration("plan"), .toolStart(readTool), .toolEnd(readTool, ok: true, durationMs: 5),
+                       .narration("reply"), .answer(ans("done"))],
+              rows: [.narration("plan"), .tool(readCard), .answer(ans("done"), reply: "reply")]),
+        .init(testDescription: "stoppedTurnKeepsNarration",
+              events: [.narration("partial"), .interrupted(contextUsed: nil, contextSize: nil)],
+              rows: [.narration("partial"), .system("Stopped.")]),
+        .init(testDescription: "emptyAnswerKeepsNarration",
+              events: [.narration("partial"), .answer(ans(""))],
+              rows: [.narration("partial"), .error("No answer — the model stopped without answering")]),
+    ]
+
+    @Test(arguments: absorbCases) func absorb(_ c: AbsorbCase) {
+        var t = EngineTranscript()
+        t.appendUser("go")
+        for e in c.events { t.apply(e) }
+        #expect(t.rows == [.user("go")] + c.rows)
+    }
+
+    @Test func promptBetweenNarrationAndAnswerStaysPending() {
+        var t = EngineTranscript()
+        t.appendUser("go")
+        t.apply(.prompt("go"))
+        t.apply(.narration("full reply"))
+        t.appendUser("more")
+        t.apply(.answer(Self.ans("short")))
+        #expect(t.rows == [.user("go"), .answer(Self.ans("short"), reply: "full reply"), .user("more")])
+        #expect(t.isPending(rowAt: 2))
     }
 
     struct SummaryCase: Sendable, CustomTestStringConvertible {

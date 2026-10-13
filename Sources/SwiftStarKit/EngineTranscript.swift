@@ -76,7 +76,9 @@ public enum TranscriptRow: Equatable, Sendable {
     case narration(String)
     case thinking(String)
     case tool(EngineToolCard)
-    case answer(EngineAnswer)
+    /// `reply` is the narration this answer absorbed: on the 27B the full
+    /// reply, while the answer's own text is `finish`'s summary (SU.6a).
+    case answer(EngineAnswer, reply: String? = nil)
     case system(String)
     case error(String)
     /// Marks where a relaunch rebuilt the transcript.
@@ -85,8 +87,9 @@ public enum TranscriptRow: Equatable, Sendable {
 
 /// Pure fold of `EngineEvent`s into transcript rows and busy flags.
 ///
-/// Invariant: `rows` is append-only (rows are never removed or reordered),
-/// which the index-based `pendingUserRows`/`queuedUserRows` rely on — except
+/// Invariant: rows are never removed or reordered (a narration row may
+/// absorb its turn's answer in place), which the index-based
+/// `pendingUserRows`/`queuedUserRows` rely on — except
 /// `rebuild(from:divider:)`, which replaces every row and clears both sets.
 public struct EngineTranscript: Equatable, Sendable {
     public private(set) var rows: [TranscriptRow] = []
@@ -194,7 +197,7 @@ public struct EngineTranscript: Equatable, Sendable {
                 rows.append(.error(a.reason.map { "No answer: \($0)" }
                     ?? "No answer — the model stopped without answering"))
             } else {
-                rows.append(.answer(a))
+                absorbOrAppend(a)
             }
         case .interrupted:
             rows.append(.system("Stopped."))
@@ -222,6 +225,19 @@ public struct EngineTranscript: Equatable, Sendable {
         case .ready, .pause, .memory, .protocolError, .ignored:
             break
         }
+    }
+
+    /// The latest row that isn't a user prompt, if it's a narration, becomes
+    /// the answer in place (a prompt sent mid-turn stays after it); equal
+    /// texts collapse to the answer alone. Otherwise the answer is appended.
+    private mutating func absorbOrAppend(_ a: EngineAnswer) {
+        guard let i = rows.lastIndex(where: { if case .user = $0 { false } else { true } }),
+              case .narration(let n) = rows[i] else {
+            rows.append(.answer(a))
+            return
+        }
+        let same = n.trimmingCharacters(in: .whitespacesAndNewlines) == a.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        rows[i] = .answer(a, reply: same ? nil : n)
     }
 
     private mutating func fillLastCard(

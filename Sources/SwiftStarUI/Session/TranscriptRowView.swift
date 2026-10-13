@@ -19,9 +19,16 @@ struct TranscriptRowView: View {
         case .narration(let text):
             MarkdownText(text)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        case .answer(let answer):
+        case .answer(let answer, let reply):
             VStack(alignment: .leading, spacing: 4) {
-                MarkdownText(answer.text)
+                MarkdownText(reply ?? answer.text)
+                if reply != nil {
+                    // The 27B's `finish` summary, under the full reply (SU.6a).
+                    Text("Summary: \(answer.text)")
+                        .font(.system(size: transcriptFontSize - 2))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
                 if let line = answer.summary {
                     // Engine telemetry, styled small and secondary so it never
                     // reads as part of the answer.
@@ -74,9 +81,11 @@ struct TranscriptRowView: View {
 
 #Preview("Answer with summary") {
     TranscriptRowView(
-        row: .answer(EngineAnswer(
-            text: "`SessionView` renders the transcript, composer, and status bar for one engine session.",
-            contextUsed: 512, contextSize: 8192, durationMs: 1830)),
+        row: .answer(
+            EngineAnswer(
+                text: "Six targets: three libraries, one executable, two test targets.",
+                contextUsed: 512, contextSize: 8192, durationMs: 1830),
+            reply: "`Package.swift` declares **six targets**:\n\n1. `SwiftStarKit`\n2. `SwiftStarEngine`\n3. `SwiftStarUI`"),
         queued: false, source: nil)
         .padding()
         .frame(width: 420)
