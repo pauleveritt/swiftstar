@@ -8,6 +8,8 @@
 ## Now
 
 - **Next:** SU.5b (test consolidation; plan not written), then SU.6 and SU.7.
+- **In flight:** [AN.2](#phase-an-analyze), Analyze and Done (plan not
+  written).
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -18,6 +20,18 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | # | Cycle | Direction | Status |
 |---|---|---|---|
 | EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | done 2026-10-13: live on the 27B, the stale model, `/rewind 1` and a model switch worked through the controller (no window clicks). [spec](docs/superpowers/specs/2026-10-13-en1-engine-catch-up-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-en1-engine-catch-up.md) |
+
+## Phase AN: Analyze
+
+Learn which session telemetry matters by reading it, then move what proved
+useful into ds4-engine. [Spec](docs/superpowers/specs/2026-10-13-an-session-analysis-design.md).
+
+| # | Cycle | Direction | Status |
+|---|---|---|---|
+| AN.1 | The report | `just last` and `/last`: the newest session's failed and useless steps, time, per-pause rates and raw signals, from the session directory with no model call | done 2026-10-13: [plan and Result](docs/superpowers/plans/2026-10-13-an1-session-report.md) |
+| AN.2 | Analyze and Done | An Analyze link on the last answer adds the report as a card and asks the model about it; Done sends `/rewind` back to before the analysis | not started; gated on the repeated-rewind bug, reading a live (`.partial.json`) session, and timing Done's refill (spec §3.4) |
+| AN.3 | Remedies | Suggest and apply fixes from the flags, applied after Done in the main session | not brainstormed |
+| AN.4 | Into ds4-engine | `ds4-dogfood last [--session] [--json]` takes the script, tests and fixture; the app's `reportArgv` switches to it | opens on the owner's call, once the flag rules and summary rows stop changing |
 
 ## Phase SU: SwiftUI
 

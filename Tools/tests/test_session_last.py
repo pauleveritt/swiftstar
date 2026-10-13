@@ -3,6 +3,7 @@
 No subprocess and no network: `newest_session` takes an injected runner.
 """
 
+import io
 import json
 import shutil
 import sys
@@ -191,6 +192,77 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(signals["syncs_under_1ms"], 19)
         self.assertEqual(signals["host_results_steps"], 16)
         self.assertEqual(signals["result_bytes"], (8997, 8997))
+
+
+class Ran:
+    """What a fake `subprocess.run` returns."""
+
+    def __init__(self, stdout, returncode=0):
+        self.stdout, self.returncode, self.stderr = stdout, returncode, ""
+
+
+def run_main(*argv):
+    out, err = io.StringIO(), io.StringIO()
+    code = sl.main(list(argv), stdout=out, stderr=err)
+    return code, out.getvalue(), err.getvalue()
+
+
+class OutputTests(unittest.TestCase):
+    def test_markdown_lists_flags_first(self):
+        md = sl.markdown(sl.report(sl.load(FIXTURE)))
+        self.assertLess(md.index("| 1 | 17 |"), md.index("| Time |"))
+        self.assertGreater(md.index("### Signals"), md.index("| Health |"))
+
+    def test_no_flags_names_checks(self):
+        report = dict(sl.report(sl.load(FIXTURE)), flags=[])
+        self.assertIn("no flagged steps (checked F1, F2, F3, U1, U2)", sl.markdown(report))
+
+    def test_markdown_cell_escaping(self):
+        self.assertEqual(sl.cell("a|b\nc"), r"a\|b c")
+        self.assertEqual(sl.cell(r"a\|b"), r"a\\\|b")
+
+    def test_main_session_path(self):
+        code, out, err = run_main("--session", str(FIXTURE))
+        self.assertEqual(code, 0, err)
+        self.assertTrue(out.startswith("**last**: 20261013-123136-swiftstar"), out[:80])
+
+    def test_main_json(self):
+        code, out, _ = run_main("--session", str(FIXTURE), "--json")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(json.loads(out)["flags"]), 3)
+
+    def test_main_missing_capture_exit1(self):
+        with Copy() as d:
+            (d / CAPTURE).unlink()
+            code, out, err = run_main("--session", str(d))
+        self.assertEqual(code, 1)
+        self.assertIn(CAPTURE, err)
+        self.assertEqual(out, "")
+
+    def test_receipt_without_capture_reports_header(self):
+        with Copy() as d:
+            (d / CAPTURE).unlink()
+            Copy.edit_json(d / "receipt.json", lambda r: r.update(capture_path=None, capture_status="missing"))
+            code, out, err = run_main("--session", str(d))
+        self.assertEqual(code, 0, err)
+        self.assertTrue(out.startswith("**last**: 20261013-123136-swiftstar"))
+        self.assertIn("capture_status missing", out)
+        self.assertIn("no prompts", out)
+
+    def test_newest_from_sessions_json(self):
+        calls = []
+
+        def run(argv, **kw):
+            calls.append(argv)
+            return Ran(json.dumps([{"path": "/s/x"}]))
+
+        self.assertEqual(sl.newest_session(Path("/repo"), run=run, executable="ds4"), Path("/s/x"))
+        self.assertEqual(calls[0], ["ds4", "sessions", "--json", "--source", "/repo", "--limit", "1"])
+
+    def test_newest_none_names_command(self):
+        with self.assertRaises(sl.LoadError) as caught:
+            sl.newest_session(Path("/repo"), run=lambda argv, **kw: Ran("[]"), executable="ds4")
+        self.assertIn("sessions --json", str(caught.exception))
 
 
 if __name__ == "__main__":

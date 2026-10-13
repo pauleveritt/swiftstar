@@ -44,6 +44,11 @@ install-hooks:
     git config core.hooksPath .githooks
     @echo "pre-commit will now run 'just lint-docs' on every commit."
 
+# The newest ds4-engine session of this repository as a report: flagged
+# steps, summary, signals (AN.1). `--session DIR` picks one; `--json`.
+last *ARGS:
+    python3 -I -B Sources/SwiftStarEngine/Resources/session_last.py {{ARGS}}
+
 # The session report's tests (AN.1), against fixtures/sessions. -B keeps
 # __pycache__ out of the SwiftStarEngine target, where SwiftPM would warn.
 test-tools:

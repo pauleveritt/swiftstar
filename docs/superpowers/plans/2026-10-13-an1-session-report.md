@@ -287,4 +287,72 @@ Most likely to bite first:
 
 ## Result
 
-Not started.
+Done 2026-10-13 on branch `session-last`, executed inline. Commits:
+`81141b9` (Task 1), `259d032` (Task 2), `c5c5b7e` (Task 3), and Task 4's
+closing commit. Tests: `just test-tools` 33/33; `just test` (185 Kit) and
+`just integration` (45) pass; `swift build` has no warnings with the resource
+declared.
+
+**Every test was shown to fail** under a one-line break of what it pins,
+applied and reverted by a scratch helper (32 breaks; each test failed). The
+breaks, by kind:
+- **load:** never closing a prompt on an answer step; reading the receipt's
+  absolute `capture_path`; dropping the schema warning; returning an empty
+  capture for a missing file; always appending a trailing prompt
+- **flags:** dropping F1; adding an edit to `seen` instead of clearing the
+  path; changing a guard marker's text; never reporting a mismatch;
+  `result_ok is None` for F1; disabling U2; inverting F3 and F2's checks;
+  flagging `host_results`
+- **rates and rows:** not advancing the previous checkpoint; dropping the
+  `ms > 0` or `tokens > 0` guard; counting `closed` as a pause; unformatted
+  context numbers; counting `host_results` as a tool; a 0.001 ms sync
+  threshold; counting every tool as `host_results`
+- **output:** the summary before the flags; "no flagged steps" with no
+  checks; not doubling backslashes, or not folding newlines; a wrong id;
+  dropping flags from the JSON, or printing Markdown for `--json`; errors
+  to stdout; the last listed session's parent; a "no session" message
+  without its command; raising on a receipt with no capture
+
+**Diverged from the plan:**
+- The fixture directory is `fixtures/sessions/20261013-123136-swiftstar/`,
+  not `123136/`: the report's id is the directory name.
+- `newest_session` passes `--source <cwd>` and lets the engine find the git
+  root, rather than finding it first; `just` runs recipes from the repo
+  root, so this is the same.
+- **Two tests added from live output:**
+  - `test_no_new_tokens_has_no_rate`: a pause with sync time but no new
+    prefill tokens showed as "slowest prefill 0". It now has no rate.
+  - `test_receipt_without_capture_reports_header`: session
+    `20261013-121133` was rewound to 0 and never reached the model. Its
+    receipt has `capture_path` null and `capture_status` "missing". It now
+    reports its header, a warning and empty rows; a named capture that is
+    absent still exits 1.
+
+**Live checks:**
+- `just last` from the main checkout printed 123136: header, three flags
+  (step 17 F1 `unknown tool: run`, steps 36 and 37 U1 `already_shown`),
+  summary, signals.
+- From this worktree, `just last` exits 1: "no session found for
+  …/session-last (… sessions --json --source …/session-last --limit 1)".
+  The engine files sessions by git root, and a worktree is its own.
+- `just last --session …/20261013-121133-swiftstar` prints `rewound to 0`
+  and the no-capture warning.
+- `just last --session …/20261013-122439-swiftstar --json` parses with
+  `python3 -m json.tool`.
+- `/last` in Claude Code: **not run.** The command file was created after
+  this session started. The owner checks it in a new session.
+
+**Findings for AN, from the first reports:**
+- **The slowest prefill is a small one.** In 123136 it is 57 tok/s at seq
+  22, a 45-token prefill whose time is mostly fixed cost. "Slowest" may want
+  a token floor once more sessions have been read.
+- **Tool time is ~0.** 19 tools took 0.0 s in all, against 1 m 19 s of
+  model time. In this engine the model is the whole cost, so the Time row's
+  split may not be worth its space.
+- **Signals that didn't move in 123136:**
+  - `constraint` and `think_inert_openers` were 0
+  - `citation_corrections` were 0
+  - there was one prefix-cache miss
+  - `result_bytes` shown equalled the total
+
+  Several more sessions are needed before any signal is dropped.

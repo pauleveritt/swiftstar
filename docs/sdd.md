@@ -69,6 +69,7 @@ There is no CI. Every tier is run by hand.
   - `EN` is the engine contract: one cycle per ds4-engine landing that
     SwiftStar catches up to.
   - `SU` is SwiftUI.
+  - `AN` is Analyze: reading session telemetry, on its way into ds4-engine.
   - Phase `P` (P0–P32) is closed; see `docs/history.md`.
 
 `just lint-docs` checks the cell caps and the plans' line limit. The

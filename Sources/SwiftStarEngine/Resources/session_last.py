@@ -7,9 +7,15 @@ this moves into ds4-engine as `ds4-dogfood last` once its rows settle (AN.4).
 
 from __future__ import annotations
 
+import argparse
 import collections
 import json
+import os
+import re
+import shutil
 import statistics
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,10 +77,15 @@ def load(directory: Path) -> Session:
     the directory, so a moved directory still loads."""
     directory = Path(directory)
     receipt = _json(directory / "receipt.json")
+    warnings = []
     name = Path(receipt.get("capture_path") or "").name
-    if not name:
-        raise LoadError(f"{directory / 'receipt.json'} names no capture")
-    capture = _json(directory / name)
+    if name:
+        capture = _json(directory / name)
+    else:
+        # The engine writes no capture for a session that never reached the
+        # model (`capture_status` "missing"), such as one rewound to 0.
+        capture = {"schema_version": CAPTURE_SCHEMA, "turns": [], "user_turns": []}
+        warnings.append(f"no capture (capture_status {receipt.get('capture_status')}): the model was never run")
     events = []
     for line in _read(directory / "operator-events.jsonl").splitlines():
         try:
@@ -83,7 +94,6 @@ def load(directory: Path) -> Session:
             break  # a torn last line
     diff_path = directory / "candidate.diff"
     diff = _read(diff_path) if diff_path.exists() else ""
-    warnings = []
     if capture.get("schema_version") != CAPTURE_SCHEMA:
         warnings.append(f"capture schema_version {capture.get('schema_version')}, written for {CAPTURE_SCHEMA}")
     versions = {e.get("schema_version") for e in events} - {EVENTS_SCHEMA}
@@ -335,3 +345,127 @@ def signals(session: Session, prompts: list[Prompt]) -> dict[str, object]:
         "host_results_steps": sum(1 for t in tools if t.get("name") == BOOKKEEPING),
         "result_bytes": (sum(t.get("bytes_total") or 0 for t in tools), sum(t.get("bytes_shown") or 0 for t in tools)),
     }
+
+
+def _did(step: Step | None) -> str:
+    if step is None:
+        return "prompt"
+    if step.tool is None:
+        return "answer"
+    args = _args(step.tool)
+    return f"{step.tool.get('name')} {args.get('path') or args.get('pattern') or ''}".rstrip()
+
+
+def report(session: Session) -> dict:
+    """Everything the Markdown shows, as plain data (`--json`)."""
+    prompts = steps(session)
+    by_index = {s.index: s for p in prompts for s in p.steps}
+    found = flags(prompts, session.events)
+    start = next(iter(_of(session.events, "session")), {})
+    resumed = next(iter(_of(session.events, "resumed")), {})
+    warnings = list(session.warnings)
+    if (mismatch := guard_mismatch(found, session.capture.get("loop_guards") or {})) is not None:
+        warnings.append(f"guard notices against loop_guards: {mismatch}")
+    return {
+        "header": {
+            "id": session.directory.name,
+            "path": str(session.directory),
+            "model": start.get("model_id"),
+            "context_size": start.get("context_size"),
+            "wall_ms": max((e.get("elapsed_ms") or 0 for e in session.events), default=None),
+            "outcome": session.capture.get("outcome"),
+            "resumed_from": Path(start["resumed_from"]).name if start.get("resumed_from") else None,
+            "rewound_to": resumed.get("rewound_to"),
+        },
+        "flags": [
+            dict(prompt=f.prompt, step=f.step, rule=f.rule, evidence=f.evidence,
+                 did=_did(by_index.get(f.step) if f.step is not None else None))
+            for f in found
+        ],
+        "checks": list(CHECKS),
+        "summary": summary(session, prompts),
+        "signals": signals(session, prompts),
+        "warnings": warnings,
+    }
+
+
+def cell(text: str, limit: int = 200) -> str:
+    """One table cell: whitespace runs with a newline become a space and `|`
+    is escaped, with the backslashes before it doubled first, so `a\\|b`
+    can't split the row either (mellum-worker's `cell()`)."""
+    text = re.sub(r"\s*\r?\n\s*", " ", str(text)).strip()
+    if len(text) > limit:
+        text = text[: limit - 1] + "…"
+    return re.sub(r"(\\*)\|", lambda m: m.group(1) * 2 + "\\|", text)
+
+
+def markdown(r: dict) -> str:
+    h = r["header"]
+    head = f"**last**: {h['id']}, {h['model'] or '—'}, ctx {h['context_size'] or 0:,}, {_secs(h['wall_ms'])}, {h['outcome'] or '—'}"
+    if h.get("resumed_from"):
+        head += f", resumed from {h['resumed_from']}"
+    if h.get("rewound_to") is not None:
+        head += f", rewound to {h['rewound_to']}"
+    lines = [head, ""]
+    lines += [f"> warning: {w}" for w in r["warnings"]]
+    if r["warnings"]:
+        lines.append("")
+    lines.append("### Flagged steps")
+    lines.append("")
+    if r["flags"]:
+        lines += ["| Prompt | Step | Did | Rule | Evidence |", "|---|---|---|---|---|"]
+        for f in r["flags"]:
+            step = "—" if f["step"] is None else f["step"]
+            lines.append(f"| {f['prompt']} | {step} | {cell(f['did'])} | {f['rule']} | {cell(f['evidence'])} |")
+    else:
+        lines.append(f"no flagged steps (checked {', '.join(r['checks'])})")
+    lines += ["", "### Summary", "", "| Row | Value |", "|---|---|"]
+    lines += [f"| {k} | {cell(v, 400)} |" for k, v in r["summary"].items()]
+    lines += ["", "### Signals", ""]
+    lines += [f"- {k}: {json.dumps(v)}" for k, v in r["signals"].items()]
+    return "\n".join(lines) + "\n"
+
+
+def _dogfood() -> str:
+    found = os.environ.get("DS4_DOGFOOD") or shutil.which("ds4-dogfood")
+    local = Path.home() / ".local/bin/ds4-dogfood"
+    return found or (str(local) if local.exists() else "ds4-dogfood")
+
+
+def newest_session(source: Path, run=subprocess.run, executable: str | None = None) -> Path:
+    """The newest session of the repository holding `source`, by the engine's
+    own rule (`ds4-dogfood sessions`)."""
+    argv = [executable or _dogfood(), "sessions", "--json", "--source", str(source), "--limit", "1"]
+    shown = " ".join(argv)
+    try:
+        done = run(argv, capture_output=True, text=True)
+    except OSError as e:
+        raise LoadError(f"cannot run {shown}: {e.strerror}") from None
+    if done.returncode != 0:
+        raise LoadError(f"{shown} failed: {(done.stderr or '').strip()[-300:]}")
+    try:
+        listed = json.loads(done.stdout)
+    except json.JSONDecodeError:
+        raise LoadError(f"{shown} did not print JSON") from None
+    if not listed:
+        raise LoadError(f"no session found for {source} ({shown})")
+    return Path(listed[0]["path"])
+
+
+def main(argv: list[str] | None = None, stdout=sys.stdout, stderr=sys.stderr) -> int:
+    parser = argparse.ArgumentParser(prog="session_last.py", description=__doc__.split("\n\n")[0])
+    parser.add_argument("--session", type=Path, help="a session directory (default: the newest for this repository)")
+    parser.add_argument("--json", action="store_true", help="the report as JSON")
+    args = parser.parse_args(argv)
+    try:
+        directory = args.session or newest_session(Path.cwd())
+        r = report(load(directory))
+    except LoadError as e:
+        print(f"last: {e}", file=stderr)
+        return 1
+    stdout.write(json.dumps(r, indent=1) + "\n" if args.json else markdown(r))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
