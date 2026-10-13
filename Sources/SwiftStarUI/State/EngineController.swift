@@ -60,9 +60,10 @@ public final class EngineController {
     /// Roots whose "Session list unavailable" note was shown: once each.
     @ObservationIgnored private var notedSessionListRoots: Set<String> = []
 
-    /// The conversation the current session belongs to, if it's listed.
+    /// The conversation the running session belongs to, if it's listed;
+    /// nil once it has ended, so that conversation can be resumed again.
     var currentConversationID: String? {
-        guard let id = model.currentSessionID else { return nil }
+        guard isActive, let id = model.currentSessionID else { return nil }
         return conversations.first { $0.sessionIDs.contains(id) }?.id
     }
 

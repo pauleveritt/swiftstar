@@ -105,8 +105,12 @@ public struct Conversation: Identifiable, Equatable, Sendable {
 
 public enum Conversations {
     /// One row per chain head (an entry nothing listed resumed from), titled
-    /// by the oldest listed entry's first prompt, newest first.
-    public static func group(_ entries: [EngineSessionEntry]) -> [Conversation] {
+    /// by the oldest listed entry's first prompt, newest first. A session
+    /// that can't be resumed and has no prompt (a resume opened and left) is
+    /// dropped first, so the session it resumed stays its chain's head and
+    /// stays resumable.
+    public static func group(_ all: [EngineSessionEntry]) -> [Conversation] {
+        let entries = all.filter { $0.resumable != false || ($0.prompts ?? 0) > 0 }
         let byPath = Dictionary(entries.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
         let parents = Set(entries.compactMap(\.resumedFrom))
         let rows = entries.filter { !parents.contains($0.path) }.map { head -> Conversation in

@@ -332,6 +332,28 @@ struct EngineControllerTests {
         await controller.quit()
     }
 
+    /// Final review: after Quit nothing is current, so the conversation just
+    /// ended can be resumed again.
+    @Test func endedConversationCanBeResumedAgain() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        await controller.reloadConversations()
+        let c = resumable
+        await controller.resume(c)
+        let resumed = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(resumed)
+        await controller.quit()
+        #expect(controller.currentConversationID == nil)
+        await controller.resume(c)
+        let again = await eventually(within: .seconds(10)) { f.spawnArgv.count == 3 }
+        #expect(again)
+        await controller.quit()
+    }
+
     @Test func resumeIgnoredWhileStarting() async throws {
         let f = try FakeEngine(extra: ["FAKE_ENGINE_MODELS_SLEEP_MS": "500"])
         defer { f.remove() }

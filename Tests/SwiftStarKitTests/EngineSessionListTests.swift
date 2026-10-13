@@ -11,8 +11,8 @@ struct EngineSessionListTests {
     private static func date(_ s: String) -> Date? { EngineSessionEntry.parseUpdated(s) }
 
     private static func entry(_ id: String, from: String? = nil, first: String? = nil, updated: String? = nil,
-                              model: String? = nil, resumable: Bool? = true) -> EngineSessionEntry {
-        EngineSessionEntry(id: id, path: "/s/\(id)", modelID: model, updated: updated.flatMap(date),
+                              model: String? = nil, resumable: Bool? = true, prompts: Int? = nil) -> EngineSessionEntry {
+        EngineSessionEntry(id: id, path: "/s/\(id)", modelID: model, updated: updated.flatMap(date), prompts: prompts,
                            firstPrompt: first, resumedFrom: from.map { "/s/\($0)" }, resumable: resumable)
     }
 
@@ -24,8 +24,12 @@ struct EngineSessionListTests {
     }
 
     @Test func groupsTheCapture() throws {
+        // Final review: sessions with no prompt that can't be resumed (a
+        // resume opened and left) are dropped, so their parents stay rows.
         let rows = Conversations.group(try Self.fixture())
-        #expect(rows.count == 7)
+        #expect(rows.map(\.id) == ["20261013-123136-swiftstar", "20261013-121126-swiftstar"])
+        let allResumable = rows.allSatisfy(\.resumable)
+        #expect(allResumable)
         let three = try #require(rows.first { $0.id == "20261013-123136-swiftstar" })
         #expect(three.sessionIDs == ["20261013-123136-swiftstar", "20261013-122439-swiftstar", "20261013-122106-swiftstar"])
         #expect(three.title == "Hello")
@@ -90,6 +94,10 @@ struct EngineSessionListTests {
             entry("x", first: "no date"), entry("a", first: "old", updated: "2026-10-13T10:00:00"),
             entry("b", first: "new", updated: "2026-10-13T12:00:00"),
         ], rows: ["b: new", "a: old", "x: no date"]),
+        .init(testDescription: "emptyPeekIsDropped (its parent stays the row)", entries: [
+            entry("b", from: "a", first: "", updated: "2026-10-13T12:00:00", resumable: false, prompts: 0),
+            entry("a", first: "work", updated: "2026-10-13T11:00:00", prompts: 2),
+        ], rows: ["a: work"]),
         .init(testDescription: "cycle (the walk stops)", entries: [
             entry("c", from: "b", first: "C", updated: "2026-10-13T12:00:00"),
             entry("b", from: "a", first: "B", updated: "2026-10-13T11:00:00"),

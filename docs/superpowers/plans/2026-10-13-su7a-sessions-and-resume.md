@@ -343,3 +343,13 @@ restored.
 - **The refused-resume hint** reads its id from `pendingRelaunch`.
 - **Also:** `newConversation()` is `restart()`, and `select(workspace:)`
   clears the list before reloading.
+
+**Final review fixes** (each test failed first, then passed):
+- **Peek sessions are dropped before grouping.** A session that can't be
+  resumed and has no prompt is what a resume opened and left. It became
+  its chain's head and greyed out a resumable conversation. Two such
+  chains are in the real data (`emptyPeekIsDropped`, `groupsTheCapture`).
+- **After a session ends, no conversation is current,** so the one just
+  quit can be resumed again (`endedConversationCanBeResumedAgain`).
+
+Suites after the fixes: 110 fast and 57 integration.
