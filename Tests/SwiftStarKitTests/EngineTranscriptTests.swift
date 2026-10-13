@@ -2,9 +2,17 @@ import Testing
 import Foundation
 @testable import SwiftStarKit
 
+// Dropped in SU.5b: stopDisabledWhileQueued (a strict subset of
+// stopDisabledWhenAwaitingInput) and busyStartsOnPromptEvent (covered by
+// the pending table's `.prompt` row and stopDisabledWhenAwaitingInput).
+
 struct EngineTranscriptTests {
     private func cards(_ t: EngineTranscript) -> [EngineToolCard] {
         t.rows.compactMap { if case .tool(let c) = $0 { c } else { nil } }
+    }
+
+    private func resumed(_ turns: [EngineResumed.Turn], rewoundTo: Int? = nil) -> EngineResumed {
+        EngineResumed(sessionID: "s1", turns: turns, rewoundTo: rewoundTo, filesChanged: 0, contextUsed: nil)
     }
 
     @Test func toolReadFixtureBuildsRows() throws {
@@ -118,22 +126,6 @@ struct EngineTranscriptTests {
         t.apply(.refused("r"))
         #expect(t.rows == [.system("h"), .error("r")])
     }
-}
-
-struct EngineTranscriptPendingTests {
-    @Test func stopDisabledWhileQueued() {
-        var t = EngineTranscript()
-        t.appendUser("x")
-        #expect(!t.isBusy)
-    }
-
-    @Test func busyStartsOnPromptEvent() {
-        var t = EngineTranscript()
-        t.appendUser("x")
-        t.apply(.prompt("x"))
-        #expect(t.isBusy)
-        #expect(t.pendingUserCount == 0)
-    }
 
     @Test func commandRowIsNotLeftPending() {
         var t = EngineTranscript()
@@ -142,23 +134,6 @@ struct EngineTranscriptPendingTests {
         t.apply(.awaitingInput)
         #expect(t.pendingUserCount == 0)
         #expect(!t.isPending(rowAt: 0))
-    }
-
-    @Test func pendingClearsOnError() {
-        var t = EngineTranscript()
-        t.appendUser("x")
-        #expect(t.isPending(rowAt: 0))
-        t.apply(.error("queue full"))
-        #expect(t.pendingUserCount == 0)
-        #expect(!t.isBusy)
-    }
-
-    @Test func pendingSurvivesLoadingAndGenerating() {
-        var t = EngineTranscript()
-        t.appendUser("x")
-        t.apply(.loading("mapping"))
-        t.apply(.generating(true))
-        #expect(t.isPending(rowAt: 0))
     }
 
     @Test func endClearsEverything() {
@@ -178,17 +153,6 @@ struct EngineTranscriptPendingTests {
         #expect(t.isBusy)
     }
 
-    @Test func closedAndRefusedClearPending() {
-        var a = EngineTranscript()
-        a.appendUser("x")
-        a.apply(.closed(capturePath: nil))
-        #expect(a.pendingUserCount == 0)
-        var b = EngineTranscript()
-        b.appendUser("x")
-        b.apply(.refused("no"))
-        #expect(b.pendingUserCount == 0)
-    }
-
     @Test func promptClearsSeveralPending() {
         var t = EngineTranscript()
         t.appendUser("a")
@@ -196,14 +160,6 @@ struct EngineTranscriptPendingTests {
         #expect(t.pendingUserCount == 2)
         t.apply(.prompt("a\n\nb"))
         #expect(t.pendingUserCount == 0)
-    }
-
-    @Test func pauseAndMemoryLeavePending() {
-        var t = EngineTranscript()
-        t.appendUser("a")
-        t.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1)))
-        t.apply(.memory(EngineMemory(allocatedBytes: 1, budgetBytes: 2, planGiB: nil)))
-        #expect(t.isPending(rowAt: 0))
     }
 
     @Test func queuedMarksPendingRow() {
@@ -227,37 +183,6 @@ struct EngineTranscriptPendingTests {
         t.apply(.steering(applied: false))
         #expect(t.rows.last == .system("Queued message not confirmed"))
     }
-}
-
-struct EngineTranscriptSurfaceTests {
-    @Test func emptyAnswerShowsReason() {
-        var t = EngineTranscript()
-        t.apply(.answer(EngineAnswer(text: "", contextUsed: 1, contextSize: 2, durationMs: nil, reason: "ran out of tokens")))
-        #expect(t.rows.last == .error("No answer: ran out of tokens"))
-    }
-
-    @Test func emptyAnswerWithoutReasonHasFallback() {
-        var t = EngineTranscript()
-        t.apply(.answer(EngineAnswer(text: "", contextUsed: nil, contextSize: nil, durationMs: nil)))
-        #expect(t.rows.last == .error("No answer — the model stopped without answering"))
-    }
-
-    @Test func nonEmptyAnswerStaysAnAnswer() {
-        var t = EngineTranscript()
-        let a = EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil)
-        t.apply(.answer(a))
-        #expect(t.rows.last == .answer(a))
-    }
-
-    @Test func summaryJoinsDurationAndContext() {
-        let a = EngineAnswer(text: "hi", contextUsed: 420, contextSize: 8192, durationMs: 1234)
-        #expect(a.summary(locale: Locale(identifier: "en_US")) == "1.2s · ctx 420 / 8,192")
-    }
-
-    @Test func summaryIsNilWithNoFields() {
-        let a = EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil)
-        #expect(a.summary == nil)
-    }
 
     @Test func terminalShowsOutcome() {
         var t = EngineTranscript()
@@ -265,25 +190,6 @@ struct EngineTranscriptSurfaceTests {
         #expect(t.rows.last == .error("Turn ended: tool-limit"))
         t.apply(.turnEnded(outcome: "answered"))
         #expect(t.rows.last == .system("Turn ended: answered"))
-    }
-}
-
-struct EngineToolCardFormattingTests {
-    private func card(op: String, path: String? = nil, ok: Bool? = nil, durationMs: Double? = nil) -> EngineToolCard {
-        EngineToolCard(tool: EngineTool(op: op, path: path), ok: ok, durationMs: durationMs)
-    }
-
-    private func resumed(_ turns: [EngineResumed.Turn], rewoundTo: Int? = nil) -> EngineResumed {
-        EngineResumed(sessionID: "s1", turns: turns, rewoundTo: rewoundTo, filesChanged: 0, contextUsed: nil)
-    }
-
-    @Test func dividerTextPerKind() {
-        let r = resumed([], rewoundTo: 2)
-        #expect(r.divider(after: EngineRelaunch(kind: .rewind, argv: [], reason: "")) == "Rewound to prompt 2")
-        #expect(r.divider(after: EngineRelaunch(kind: .model, argv: ["--model-id", "m"], reason: ""))
-            == "Switched to m: new conversation, files kept")
-        #expect(r.divider(after: EngineRelaunch(kind: .resume, argv: [], reason: "")) == "Resumed session s1")
-        #expect(r.divider(after: nil) == "Resumed session s1")
     }
 
     @Test func resumedReplacesRows() {
@@ -323,83 +229,194 @@ struct EngineToolCardFormattingTests {
         #expect(cards.last?.ok == nil && cards.last?.rejection != nil)
     }
 
-    @Test func declinedCardText() {
+    // MARK: which events clear the pending (not yet started) user rows
+
+    struct PendingCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let event: EngineEvent
+        let clears: Bool
+    }
+
+    static let pendingCases: [PendingCase] = [
+        .init(testDescription: "pendingClearsOnError", event: .error("queue full"), clears: true),
+        .init(testDescription: "closedAndRefusedClearPending (closed)", event: .closed(capturePath: nil), clears: true),
+        .init(testDescription: "closedAndRefusedClearPending (refused)", event: .refused("no"), clears: true),
+        .init(testDescription: "awaitingInput clears", event: .awaitingInput, clears: true),
+        .init(testDescription: "prompt clears", event: .prompt("x"), clears: true),
+        .init(testDescription: "steering clears", event: .steering(applied: true), clears: true),
+        .init(testDescription: "relaunch clears",
+              event: .relaunch(EngineRelaunch(kind: .rewind, argv: ["tui"], reason: "")), clears: true),
+        .init(testDescription: "pendingSurvivesLoadingAndGenerating (loading)", event: .loading("mapping"), clears: false),
+        .init(testDescription: "pendingSurvivesLoadingAndGenerating (generating)", event: .generating(true), clears: false),
+        .init(testDescription: "pauseAndMemoryLeavePending (pause)",
+              event: .pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1)), clears: false),
+        .init(testDescription: "pauseAndMemoryLeavePending (memory)",
+              event: .memory(EngineMemory(allocatedBytes: 1, budgetBytes: 2, planGiB: nil)), clears: false),
+    ]
+
+    @Test(arguments: pendingCases) func pending(_ c: PendingCase) {
         var t = EngineTranscript()
-        t.apply(.toolRejected(EngineToolRejection(
-            name: "read", reason: "repeated-call", path: nil, text: "repeated call")))
-        guard case .tool(let c)? = t.rows.last else { Issue.record("no card"); return }
-        #expect(c.headerText == "read")
-        #expect(c.metadataLine == "declined · repeated")
-        #expect(c.icon == "xmark.circle")
+        t.appendUser("x")
+        t.apply(c.event)
+        #expect(t.isPending(rowAt: 0) == !c.clears)
     }
 
-    @Test func declinedCardWithoutName() {
+    // MARK: answers
+
+    struct AnswerCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let answer: EngineAnswer
+        let row: TranscriptRow
+    }
+
+    static let answerCases: [AnswerCase] = [
+        .init(testDescription: "emptyAnswerShowsReason",
+              answer: EngineAnswer(text: "", contextUsed: 1, contextSize: 2, durationMs: nil, reason: "ran out of tokens"),
+              row: .error("No answer: ran out of tokens")),
+        .init(testDescription: "emptyAnswerWithoutReasonHasFallback",
+              answer: EngineAnswer(text: "", contextUsed: nil, contextSize: nil, durationMs: nil),
+              row: .error("No answer — the model stopped without answering")),
+        .init(testDescription: "nonEmptyAnswerStaysAnAnswer",
+              answer: EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil),
+              row: .answer(EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil))),
+    ]
+
+    @Test(arguments: answerCases) func answerRow(_ c: AnswerCase) {
         var t = EngineTranscript()
-        t.apply(.toolRejected(EngineToolRejection(name: "", reason: "malformed", path: nil, text: "bad call")))
-        guard case .tool(let c)? = t.rows.last else { Issue.record("no card"); return }
-        #expect(c.headerText == "a call")
-        #expect(c.metadataLine == "declined · malformed")
+        t.apply(.answer(c.answer))
+        #expect(t.rows.last == c.row)
     }
 
-    @Test func headerTextIncludesPathWhenPresent() {
-        #expect(card(op: "read", path: "a.swift").headerText == "read a.swift")
+    struct SummaryCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let answer: EngineAnswer
+        let summary: String?
     }
 
-    @Test func headerTextIsOpAloneWithNoPath() {
-        #expect(card(op: "bash", path: nil).headerText == "bash")
-        #expect(card(op: "bash", path: "").headerText == "bash")
+    static let summaryCases: [SummaryCase] = [
+        .init(testDescription: "summaryJoinsDurationAndContext",
+              answer: EngineAnswer(text: "hi", contextUsed: 420, contextSize: 8192, durationMs: 1234),
+              summary: "1.2s · ctx 420 / 8,192"),
+        .init(testDescription: "summaryIsNilWithNoFields",
+              answer: EngineAnswer(text: "hi", contextUsed: nil, contextSize: nil, durationMs: nil), summary: nil),
+        .init(testDescription: "answerSummaryUsesDuration",
+              answer: EngineAnswer(text: "x", contextUsed: nil, contextSize: nil, durationMs: 75_000), summary: "75s"),
+    ]
+
+    @Test(arguments: summaryCases) func answerSummary(_ c: SummaryCase) {
+        #expect(c.answer.summary(locale: Locale(identifier: "en_US")) == c.summary)
     }
 
-    @Test func answerSummaryUsesDuration() {
-        let a = EngineAnswer(text: "x", contextUsed: nil, contextSize: nil, durationMs: 75_000)
-        #expect(a.summary(locale: Locale(identifier: "en_US")) == "75s")
+    // MARK: tool card text
+
+    struct CardCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let card: EngineToolCard
+        let header: String
+        let metadata: String
+        let icon: String
     }
 
-    @Test func metadataLineRunningHasNoDuration() {
-        #expect(card(op: "read").metadataLine == "running")
+    private static func card(_ op: String, _ path: String? = nil, ok: Bool? = nil, ms: Double? = nil) -> EngineToolCard {
+        EngineToolCard(tool: EngineTool(op: op, path: path), ok: ok, durationMs: ms)
     }
 
-    @Test func metadataLineSucceededUnderTenSecondsUsesOneDecimal() {
-        #expect(card(op: "read", ok: true, durationMs: 1234).metadataLine == "succeeded · 1.2s")
+    /// The card a `tool_rejected` event appends, through the transcript.
+    private static func declined(_ name: String, _ reason: String) -> EngineToolCard {
+        var t = EngineTranscript()
+        t.apply(.toolRejected(EngineToolRejection(name: name, reason: reason, path: nil, text: "x")))
+        guard case .tool(let c)? = t.rows.last else { return card("<no card appended>") }
+        return c
     }
 
-    @Test func metadataLineFailedAtOrOverTenSecondsUsesNoDecimal() {
-        #expect(card(op: "read", ok: false, durationMs: 12_000).metadataLine == "failed · 12s")
+    static let cardCases: [CardCase] = [
+        .init(testDescription: "headerTextIncludesPathWhenPresent (metadataLineRunningHasNoDuration)",
+              card: card("read", "a.swift"), header: "read a.swift", metadata: "running", icon: "doc.text.magnifyingglass"),
+        .init(testDescription: "headerTextIsOpAloneWithNoPath (nil)", card: card("bash"),
+              header: "bash", metadata: "running", icon: "terminal"),
+        .init(testDescription: "headerTextIsOpAloneWithNoPath (empty)", card: card("bash", ""),
+              header: "bash", metadata: "running", icon: "terminal"),
+        .init(testDescription: "metadataLineSucceededUnderTenSecondsUsesOneDecimal", card: card("read", ok: true, ms: 1234),
+              header: "read", metadata: "succeeded · 1.2s", icon: "doc.text.magnifyingglass"),
+        .init(testDescription: "metadataLineFailedAtOrOverTenSecondsUsesNoDecimal", card: card("read", ok: false, ms: 12_000),
+              header: "read", metadata: "failed · 12s", icon: "doc.text.magnifyingglass"),
+        .init(testDescription: "metadataLineIgnoresNegativeOrNonFiniteDuration (negative)", card: card("read", ok: true, ms: -1),
+              header: "read", metadata: "succeeded", icon: "doc.text.magnifyingglass"),
+        .init(testDescription: "metadataLineIgnoresNegativeOrNonFiniteDuration (nan)", card: card("read", ok: true, ms: .nan),
+              header: "read", metadata: "succeeded", icon: "doc.text.magnifyingglass"),
+        .init(testDescription: "iconMatchesEachKnownOp (bash_status)", card: card("bash_status"),
+              header: "bash_status", metadata: "running", icon: "terminal"),
+        .init(testDescription: "iconMatchesEachKnownOp (bash_stop)", card: card("bash_stop"),
+              header: "bash_stop", metadata: "running", icon: "terminal"),
+        .init(testDescription: "iconMatchesEachKnownOp (write)", card: card("write"),
+              header: "write", metadata: "running", icon: "doc.badge.plus"),
+        .init(testDescription: "iconMatchesEachKnownOp (edit)", card: card("edit"),
+              header: "edit", metadata: "running", icon: "square.and.pencil"),
+        .init(testDescription: "iconMatchesEachKnownOp (ls)", card: card("ls"),
+              header: "ls", metadata: "running", icon: "folder"),
+        .init(testDescription: "iconMatchesEachKnownOp (more)", card: card("more"),
+              header: "more", metadata: "running", icon: "doc.text.magnifyingglass"),
+        .init(testDescription: "iconMatchesEachKnownOp (grep)", card: card("grep"),
+              header: "grep", metadata: "running", icon: "magnifyingglass"),
+        .init(testDescription: "iconMatchesEachKnownOp (unknown)", card: card("unknown-op"),
+              header: "unknown-op", metadata: "running", icon: "wrench.and.screwdriver"),
+        .init(testDescription: "declinedCardText", card: declined("read", "repeated-call"),
+              header: "read", metadata: "declined · repeated", icon: "xmark.circle"),
+        .init(testDescription: "declinedCardWithoutName", card: declined("", "malformed"),
+              header: "a call", metadata: "declined · malformed", icon: "xmark.circle"),
+    ]
+
+    @Test(arguments: cardCases) func cardText(_ c: CardCase) {
+        #expect(c.card.headerText == c.header)
+        #expect(c.card.metadataLine == c.metadata)
+        #expect(c.card.icon == c.icon)
     }
 
-    @Test func metadataLineIgnoresNegativeOrNonFiniteDuration() {
-        #expect(card(op: "read", ok: true, durationMs: -1).metadataLine == "succeeded")
-        #expect(card(op: "read", ok: true, durationMs: .nan).metadataLine == "succeeded")
+    // MARK: Quick Look file URLs
+
+    struct FileURLCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let path: String?
+        let source: String?
+        let expected: String?
     }
 
-    @Test func iconMatchesEachKnownOp() {
-        #expect(card(op: "bash").icon == "terminal")
-        #expect(card(op: "bash_status").icon == "terminal")
-        #expect(card(op: "bash_stop").icon == "terminal")
-        #expect(card(op: "write").icon == "doc.badge.plus")
-        #expect(card(op: "edit").icon == "square.and.pencil")
-        #expect(card(op: "ls").icon == "folder")
-        #expect(card(op: "read").icon == "doc.text.magnifyingglass")
-        #expect(card(op: "more").icon == "doc.text.magnifyingglass")
-        #expect(card(op: "grep").icon == "magnifyingglass")
-        #expect(card(op: "unknown-op").icon == "wrench.and.screwdriver")
+    static let fileURLCases: [FileURLCase] = [
+        .init(testDescription: "fileURLResolvesAgainstSource", path: "Sources/a.swift", source: "/r",
+              expected: "/r/Sources/a.swift"),
+        .init(testDescription: "fileURLResolvesAgainstSource (trailing slash)", path: "Sources/a.swift", source: "/r/",
+              expected: "/r/Sources/a.swift"),
+        .init(testDescription: "fileURLKeepsAbsolutePaths", path: "/etc/hosts", source: "/r", expected: "/etc/hosts"),
+        .init(testDescription: "fileURLNilWithoutPathOrSource (no path)", path: nil, source: "/r", expected: nil),
+        .init(testDescription: "fileURLNilWithoutPathOrSource (no source)", path: "a", source: nil, expected: nil),
+    ]
+
+    @Test(arguments: fileURLCases) func fileURL(_ c: FileURLCase) {
+        let card = EngineToolCard(tool: EngineTool(op: "read", path: c.path))
+        #expect(card.fileURL(source: c.source.map { URL(fileURLWithPath: $0) })?.path == c.expected)
     }
 
-    // MARK: SU.5a2 Task 2: Quick Look resolves against the source
+    // MARK: the divider over a rebuilt transcript
 
-    @Test func fileURLResolvesAgainstSource() {
-        let c = EngineToolCard(tool: EngineTool(op: "read", path: "Sources/a.swift"))
-        #expect(c.fileURL(source: URL(fileURLWithPath: "/r"))?.path == "/r/Sources/a.swift")
-        #expect(c.fileURL(source: URL(fileURLWithPath: "/r/"))?.path == "/r/Sources/a.swift")
+    struct DividerCase: Sendable, CustomTestStringConvertible {
+        let testDescription: String
+        let relaunch: EngineRelaunch?
+        let text: String
     }
 
-    @Test func fileURLKeepsAbsolutePaths() {
-        let c = EngineToolCard(tool: EngineTool(op: "read", path: "/etc/hosts"))
-        #expect(c.fileURL(source: URL(fileURLWithPath: "/r"))?.path == "/etc/hosts")
-    }
+    static let dividerCases: [DividerCase] = [
+        .init(testDescription: "dividerTextPerKind (rewind)",
+              relaunch: EngineRelaunch(kind: .rewind, argv: [], reason: ""), text: "Rewound to prompt 2"),
+        .init(testDescription: "dividerTextPerKind (model)",
+              relaunch: EngineRelaunch(kind: .model, argv: ["--model-id", "m"], reason: ""),
+              text: "Switched to m: new conversation, files kept"),
+        .init(testDescription: "dividerTextPerKind (resume)",
+              relaunch: EngineRelaunch(kind: .resume, argv: [], reason: ""), text: "Resumed session s1"),
+        .init(testDescription: "dividerTextPerKind (none)", relaunch: nil, text: "Resumed session s1"),
+    ]
 
-    @Test func fileURLNilWithoutPathOrSource() {
-        #expect(EngineToolCard(tool: EngineTool(op: "bash", path: nil)).fileURL(source: URL(fileURLWithPath: "/r")) == nil)
-        #expect(EngineToolCard(tool: EngineTool(op: "read", path: "a")).fileURL(source: nil) == nil)
+    @Test(arguments: dividerCases) func divider(_ c: DividerCase) {
+        let r = EngineResumed(sessionID: "s1", turns: [], rewoundTo: 2, filesChanged: 0, contextUsed: nil)
+        #expect(r.divider(after: c.relaunch) == c.text)
     }
 }
