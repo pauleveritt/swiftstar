@@ -53,9 +53,9 @@ that already cost incidents to learn. The line is drawn between **code** and
   much as the old behavior. Carry the incident as a sentence in the phase and
   let the fresh implementation write its own test.
 
-The inventory of what is available to garden — and the citation for each fact —
-is in `docs/harvest/`. That directory is **evidence, not source**, and it
-describes the pre-P28 engine as it was.
+The inventory of what was available to garden — and the citation for each fact —
+was `docs/harvest/`, now at the `docs-before-slim` tag (`docs/history.md`).
+It was **evidence, not source**, and it described the pre-P28 engine as it was.
 
 ## The finding that reframes this app
 
@@ -248,13 +248,13 @@ tangents go to the Backlog, never into the current phase.
 
 - Target **macOS 26+**, Swift 6 language mode, SwiftPM only — no Xcode project.
 - swift-testing for new tests, not XCTest.
-- Docs are Sphinx + MyST + Furo, built through `uv` (`just docs`,
-  `just watch-docs`). Python in this repository is the docs build, plus the
-  fixture recorder and the fake `ds4-dogfood` under `Tools/` and `fixtures/` (unlinted; the host
-  ruff configuration went with P28).
+- Docs are plain Markdown read in the repository; there is no docs site (P14
+  declined 2026-10-13). Python here is stdlib-only and unlinted: the fixture
+  recorder (`Tools/`), the fake `ds4-dogfood` (`fixtures/engine/`), and the
+  small inline fakes in `EngineControllerTests.swift`.
 - `ds4-dogfood` comes from ds4-engine, installed with `uv tool install`. A live
-  capture needs it on the machine and real weights on disk; it is never part of
-  CI.
+  capture needs it on the machine and real weights on disk. There is no CI;
+  `just test` and `just integration` are run by hand.
 
 ## Where to start
 

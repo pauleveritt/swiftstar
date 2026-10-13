@@ -24,8 +24,8 @@ terminal step. See [`ROADMAP.md`](ROADMAP.md) for current phase status.
 
 - [`BRIEF.md`](BRIEF.md) — the design. Read this first.
 - [`ROADMAP.md`](ROADMAP.md) — phases, backlog.
-- [`docs/harvest/`](docs/harvest/index.md) — what the predecessor projects
-  proved, kept as evidence rather than as source.
+- [`docs/history.md`](docs/history.md) — where the pre-P28 record lives (git
+  tags), and the phases P28–P32.
 - [`docs/sdd.md`](docs/sdd.md) — how work happens here.
 
 ## Requirements

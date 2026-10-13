@@ -1,13 +1,3 @@
-# Docs. The CI build is the strict `-W` one-shot; these are for working locally.
-
-# Rebuild the docs as you edit them, serving on http://127.0.0.1:8000
-watch-docs:
-    uv run --group docs sphinx-autobuild docs docs/_build/html
-
-# One-shot strict build -- the same gate CI runs
-docs:
-    uv run --group docs sphinx-build -W -b html docs docs/_build/html
-
 # Enforce docs/sdd.md's size caps: ROADMAP phase-table Direction/Status
 # cells, and current plan docs directly under docs/superpowers/plans/. Archived
 # plans live below that directory and are retained unchanged.

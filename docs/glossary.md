@@ -36,8 +36,8 @@ readable.
 
 ## Retired at P28
 
-Terms from the pre-P28 app. The machinery is gone; the words remain in
-`docs/superpowers/` and `docs/harvest/`, kept as written.
+Terms from the pre-P28 app. The machinery is gone; the words remain in the
+docs kept at the `docs-before-slim` tag (see [`history.md`](history.md)).
 
 | Old term | What it was | Now |
 |---|---|---|
