@@ -91,9 +91,13 @@ there.
   Look opens the checkout's copy, not the edited one.
 - **`models --json` sends no `default_model_id`.** So "Engine default"
   can't name the model it means.
-- **Prefix-cache hits count as prefilled tokens.** This inflates the
-  per-pause prefill rate (`operator_telemetry.py:100-113`). SwiftStar works
-  around it since SU.6b by leaving a hit's tokens out of Prefill avg.
+- **`prefill_tokens` isn't prefill.** It's the transcript length minus evals
+  (`operator_telemetry.py:101-113`), so tokens the engine didn't prefill
+  count as prefilled:
+  - A prefix-cache hit's tokens. Since SU.6b, SwiftStar leaves those out.
+  - A resumed conversation's loaded KV. Session `160812` read about 106,700
+    tok/s.
+  - After `/clear` or a compaction, the count collapses.
 - **A `files --json` command,** for the `@` picker above.
 - **A second `/rewind` in a rewound session goes wrong** (live, 2026-10-13,
   sessions `20261013-121126` and `-121133`). In a session resumed with

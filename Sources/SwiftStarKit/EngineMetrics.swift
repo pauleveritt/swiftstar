@@ -30,8 +30,12 @@ public enum EngineMetricsReducer {
     public static func reduce(_ state: inout EngineMetricsState, _ event: EngineEvent) {
         switch event {
         case .pause(let p):
-            // Checkpoint counters accumulate over the process, so a hit's
-            // tokens and load time stay in them until the next `.session`.
+            // `prefill_tokens` is the conversation's transcript length minus
+            // its evals (ds4-engine operator_telemetry.py:101-113), and
+            // `sync_ms` includes a hit's load, so both carry the hit until the
+            // next `.session` or `.prefixCache`. After `/clear` or a
+            // compaction the count stops meaning prefill; a corrected count of
+            // 0 or less keeps the prior rate rather than showing ~0.
             var tokens = p.prefillTokens, ms = p.prefillMs
             if let hit = state.prefixCache, hit.outcome == "hit" {
                 tokens = tokens.map { $0 - (hit.tokens ?? 0) }.flatMap { $0 > 0 ? $0 : nil }

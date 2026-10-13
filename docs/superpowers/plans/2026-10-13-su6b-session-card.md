@@ -63,6 +63,24 @@ app works around it.
   state directory, so the hit numbers come from session `154825`, cited in
   the test.
 
+**Corrected (final review, 2026-10-13).** Two claims above are wrong. D3's
+"counters accumulate over the whole engine process" and the Facts' "sent once
+per process" both fail in these cases:
+- **After `/clear` or a compaction:** the engine fills the system prefix
+  again and sends another `prefix_cache` (`operator.py:186-190`).
+- **`prefill_tokens`:** it isn't a process counter. It's the conversation's
+  transcript length minus its evals (`operator_telemetry.py:101-113`), so it
+  collapses after `/clear`.
+- **A resumed conversation:** it sends no `prefix_cache` and loads its KV
+  instead. Session `160812`, resumed from `154825`, shows 41,949 tokens in
+  393 ms, which reads as about 106,700 tok/s.
+
+Sessions `122106` and `123136` contain no `/clear` or resume, so they
+couldn't test the claim. The code stands:
+- the hit correction is right for the case it targets
+- after `/clear` it keeps the prior rate rather than showing about 0
+- the resume inflation needs the engine (ROADMAP, Engine requests)
+
 ## Tasks
 
 ### Task 1: Kit decodes DFlash and the prefix cache; the honest prefill rate

@@ -202,8 +202,10 @@ public struct EngineDFlash: Equatable, Sendable {
     }
 }
 
-/// The prompt-prefix cache's outcome, sent once per engine process on the
-/// first prompt. A hit's tokens are loaded, not prefilled.
+/// The prompt-prefix cache's outcome, sent whenever the engine fills the
+/// system prefix: the first prompt, and again after `/clear` or a compaction.
+/// A resumed conversation sends none. A hit's tokens are loaded, not
+/// prefilled.
 public struct EnginePrefixCache: Equatable, Sendable {
     /// "hit", "miss", or another word from the engine.
     public let outcome: String
