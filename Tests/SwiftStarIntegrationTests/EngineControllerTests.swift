@@ -233,6 +233,22 @@ struct EngineControllerTests {
         #expect(next.applyCommand == nil)  // that folder doesn't exist here
     }
 
+    /// Final review: applying during a session changes the checkout under
+    /// it (TUI.21 non-goal), so the menu item waits for the session to end.
+    @Test func copyApplyCommandWaitsForTheSessionToEnd() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let dir = tempPath("sessions") + "/20261013-000000-y"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .lastSessionDirectory: dir])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        #expect(!controller.canCopyApplyCommand)
+        await controller.quit()
+        #expect(controller.canCopyApplyCommand == (controller.applyCommand != nil))
+    }
+
     @Test func applyCommandNeedsAnExistingDirectory() throws {
         let dir = tempPath("sessions") + "/20261013-000000-x"
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)

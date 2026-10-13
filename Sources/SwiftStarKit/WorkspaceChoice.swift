@@ -22,13 +22,20 @@ public enum WorkspaceChoice {
         return (nil, "\(gone). \(choose)")
     }
 
-    /// The folder exists, is a directory, and sits in a git repository. The
-    /// existence check matters: `ProjectRoot.locate` walks up, so a deleted
-    /// worktree inside a repository would still find that repository.
+    /// The folder exists, is a directory, and sits in a git repository at any
+    /// depth, as the engine's own walk finds it (not `ProjectRoot`'s bounded
+    /// one). The existence check matters: a walk up from a deleted worktree
+    /// inside a repository would still find that repository.
     public static func isUsable(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue
         else { return false }
-        return ProjectRoot.locate(anchor: url) != nil
+        var dir = url.standardizedFileURL
+        while true {
+            if FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) { return true }
+            let parent = dir.deletingLastPathComponent()
+            if parent.path == dir.path { return false }
+            dir = parent
+        }
     }
 }

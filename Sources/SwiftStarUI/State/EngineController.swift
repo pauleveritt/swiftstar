@@ -40,14 +40,16 @@ public final class EngineController {
 
     /// Copies the last session's apply command and says so in the transcript.
     public func copyApplyCommand() {
-        guard let command = applyCommand else { return }
+        guard canCopyApplyCommand, let command = applyCommand else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(command, forType: .string)
         model.apply(.notice("Copied: \(command)"))
     }
 
-    /// Whether a last session's apply command can be copied (the menu item).
-    public var canCopyApplyCommand: Bool { applyCommand != nil }
+    /// Whether a last session's apply command can be copied (the menu item):
+    /// never while a session runs, since applying changes the checkout under
+    /// it (ds4-engine TUI.21's non-goal).
+    public var canCopyApplyCommand: Bool { !isActive && applyCommand != nil }
 
     /// `start()` found no usable workspace: the view opens the folder picker
     /// (SU.6c, D1). Reset by a folder choice or `folderPickerDismissed()`.

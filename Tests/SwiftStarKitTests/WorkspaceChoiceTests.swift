@@ -50,4 +50,16 @@ struct WorkspaceChoiceTests {
         #expect(!WorkspaceChoice.isUsable(missing))
         #expect(WorkspaceChoice.isUsable(root))
     }
+
+    /// Final review: the engine finds the repository from any depth, so a
+    /// folder deeper than `ProjectRoot.maxWalkDepth` is still usable.
+    @Test func deepFolderIsUsable() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ws-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        let deep = root.appendingPathComponent("a/b/c/d/e/f/g")
+        try FileManager.default.createDirectory(at: deep, withIntermediateDirectories: true)
+        #expect(ProjectRoot.locate(anchor: deep) == nil)  // the bounded walk stops short
+        #expect(WorkspaceChoice.isUsable(deep))
+    }
 }

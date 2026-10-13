@@ -208,3 +208,18 @@ were rendered and are unchanged. Their fixture controllers skip `init()`.
   another session ran integration tests in the `session-last` worktree.
   Both share the test runner's `UserDefaults` domain. A re-run on its own
   passed.
+
+**Final review fixes** (each test failed first, then passed):
+- **"Copy Apply Command" is disabled while a session runs.** Applying
+  changes the checkout under the running session. Straight after a
+  `/rewind`, it would also have copied the command for the session whose
+  edits had just been rewound away.
+  (`copyApplyCommandWaitsForTheSessionToEnd`)
+- **`isUsable` has no depth limit when it walks up,** like the engine's own
+  walk. A folder more than 5 levels below its repository root used to
+  start, and SU.6c had begun replacing it at launch. (`deepFolderIsUsable`)
+- **The no-folder picker's modal panel now runs on a later main-actor
+  turn,** not inside `.onChange`. There's nothing to unit-test here. It
+  still hasn't been tried in a live app.
+
+Suites after the fixes: 101 fast and 44 integration.

@@ -34,13 +34,17 @@ struct SessionView: View {
             else { await controller.loadCatalogIfNeeded() }
         }
         // No usable workspace (SU.6c, D1): ask for one, and start in it.
+        // The modal panel runs on a later main-actor turn, not inside
+        // SwiftUI's update of `.onChange` (final review).
         .onChange(of: controller.wantsFolder) { _, wants in
             guard wants else { return }
-            if let url = WorkspacePicker.run(from: controller.workspace) {
-                controller.select(workspace: url)
-                Task { await controller.start() }
-            } else {
-                controller.folderPickerDismissed()
+            Task { @MainActor in
+                if let url = WorkspacePicker.run(from: controller.workspace) {
+                    controller.select(workspace: url)
+                    await controller.start()
+                } else {
+                    controller.folderPickerDismissed()
+                }
             }
         }
         .alert("Other model", isPresented: $askingModel) {
