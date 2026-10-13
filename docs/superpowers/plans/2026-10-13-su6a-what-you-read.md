@@ -276,3 +276,11 @@ title, so the title is covered by `WindowTitle`'s test.
 - The window-title test is its own `WindowTitleTests` suite, in
   `FoundationExtensionTests.swift`.
 - `TranscriptRowView`'s comment-only change in Task 2 used Task 1's renders.
+
+**Final review fix:** a fence indented under a list item lost its code. The
+4-space marker was kept as indented code instead of opening a fence, so
+`echo $$` inside it was de-LaTeXed. Fences are now checked before indented
+code (`listItemFenceKeepsItsCode` failed first, then passed). Review Focus 4
+flips as a result: a lone indented fence marker now opens a fence, and if
+it's never closed the rest stays as written. That's D4's "leave it as
+written" direction (`indentedFenceMarkerOpensAFence`).

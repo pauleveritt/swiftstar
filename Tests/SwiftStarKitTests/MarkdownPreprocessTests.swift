@@ -25,9 +25,11 @@ struct MarkdownPreprocessTests {
         .init(testDescription: "loneBacktickDoesNotPairAcrossParagraphs",
               input: "Press the ` key, then $$x$$.\n\nRun `echo $$` now.",
               output: "Press the ` key, then x.\n\nRun `echo $$` now."),
-        // SU.6a: an indented fence marker is code; it opens no fence.
-        .init(testDescription: "indentedFenceMarkerOpensNoFence",
-              input: "Intro.\n\n    ```\n\nThen $$x$$.", output: "Intro.\n\n    ```\n\nThen x."),
+        // SU.6a final review: a fence indented under a list item is still a
+        // fence, so its code stays as written and the prose after converts.
+        .init(testDescription: "listItemFenceKeepsItsCode",
+              input: "1. Run:\n\n    ```\necho $$\n    ```\n\nThen $$x$$.",
+              output: "1. Run:\n\n    ```\necho $$\n    ```\n\nThen x."),
         // A lazy continuation (indented, straight after paragraph text) is prose.
         .init(testDescription: "indentedLazyContinuationIsProse", input: "Text\n    \\(x\\)", output: "Text\n    x"),
     ]
@@ -48,6 +50,9 @@ struct MarkdownPreprocessTests {
         "Intro.\n\n    echo $$\n    \\to y",               // indentedCodeAfterBlankLine (SU.6a)
         "\techo \\to y",                                  // tabIndentedCodeAtStart
         "- item\n\n    \\(a\\) stays",                     // indentedListParagraphKeptRaw (accepted trade-off)
+        // An indented fence marker opens a fence; unclosed, the rest stays as
+        // written (D4: when unsure, leave it). Replaced indentedFenceMarkerOpensNoFence.
+        "Intro.\n\n    ```\n\nThen $$x$$.",                 // indentedFenceMarkerOpensAFence
     ]) func codeIsVerbatim(_ md: String) {
         #expect(MarkdownPreprocess.deLaTeXed(md) == md)
     }

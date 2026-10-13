@@ -10,7 +10,8 @@ public enum MarkdownPreprocess {
     /// are not touched, so `echo $$` or `grep '\(a\)'` survive. An indented
     /// line counts as code after a blank line or more indented code; straight
     /// after paragraph text it's a lazy continuation and stays prose. An
-    /// indented paragraph inside a list item is kept raw too (SU.6a, D4).
+    /// indented paragraph inside a list item is kept raw too, and an indented
+    /// fence marker opens a fence, as under a list item (SU.6a, D4).
     public static func deLaTeXed(_ s: String) -> String {
         var out: [String] = []
         var prose: [String] = []
@@ -33,14 +34,16 @@ public enum MarkdownPreprocess {
                     fence = nil
                     afterBreak = true
                 }
-            } else if afterBreak, line.hasPrefix("    ") || line.hasPrefix("\t") {
-                flush()
-                out.append(line)
             } else if let run = fenceRun(trimmed) {
+                // Checked before indented code: models indent fences under
+                // list items, and their code must stay as written.
                 flush()
                 fence = run
                 out.append(line)
                 afterBreak = false
+            } else if afterBreak, line.hasPrefix("    ") || line.hasPrefix("\t") {
+                flush()
+                out.append(line)
             } else {
                 prose.append(line)
                 afterBreak = trimmed.isEmpty
