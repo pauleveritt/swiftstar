@@ -7,10 +7,9 @@
 
 ## Now
 
-- **Next: EN.1**, the catch-up to ds4-engine `5451cd7d`. Its spec is written
-  and awaiting review. Until it lands, a stale saved model stops a session from starting;
-  pick a model from the toolbar menu to get past it.
-- **Then:** SU.5 (plan 5a code, then 5b tests), SU.6, SU.7.
+- **EN.1 is in:** two live GUI checks are owed by the owner, `/rewind 1` and a
+  mid-session model-menu switch (see its row).
+- **Next:** SU.5 (plan 5a code, then 5b tests), then SU.6 and SU.7.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -20,7 +19,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 
 | # | Cycle | Direction | Status |
 |---|---|---|---|
-| EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | spec written 2026-10-13, awaiting owner review: [spec](docs/superpowers/specs/2026-10-13-en1-engine-catch-up-design.md), from [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md). The recordings need the GPU first |
+| EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | done 2026-10-13 except two live GUI checks (owner): `/rewind 1` and a mid-session model switch. [spec](docs/superpowers/specs/2026-10-13-en1-engine-catch-up-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-en1-engine-catch-up.md) |
 
 ## Phase SU: SwiftUI
 
@@ -30,7 +29,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | SU.2 | Testable view logic | Move view-adjacent logic into Kit, with tests | done 2026-10-03: [spec](docs/superpowers/specs/2026-10-03-su2-testable-view-logic-design.md), [plan](docs/superpowers/plans/2026-10-03-su2-testable-view-logic.md) |
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
-| SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | spec accepted 2026-10-13 and revised the same day: [spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md), [audit §2–§3](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md). Plan 5a (code) after EN.1, then 5b (tests) |
+| SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | spec accepted 2026-10-13 and revised the same day: [spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md), [audit §2–§3](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md). Plan 5a (code), then 5b (tests); also EN.1's deferred minors (its plan's Result) |
 | SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | not brainstormed |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | not brainstormed: [options](docs/superpowers/research/2026-10-04-project-focus-options.md). Resume works over `--ndjson` already ([audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md)); more than one window waits on the engine |
 
@@ -52,8 +51,12 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
   - the old "agent" wording ("Ask the agent…", the "Agent" title)
 - **Native look:** Liquid Glass affordances; `NativeTooltip` checked against
   plain `.help`.
+- **The 27B's two texts:** the narration is the full reply and `answer` is
+  `finish`'s one-line summary (EN.1, D4). Show the narration as the answer
+  body, with the summary under it.
 - **Remembering:** the apply command kept across sessions; a first-launch
-  workspace.
+  workspace, and a saved workspace that no longer exists (seen 2026-10-13: it
+  pointed at a deleted worktree, so every start was refused).
 
 ## Backlog
 

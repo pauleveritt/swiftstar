@@ -368,3 +368,25 @@ Most likely to bite first:
   - Record what was seen and what wasn't.
 - [ ] Write `## Result` (commits, divergences, what was descoped), close the
   EN.1 row, and point `## Now` at SU.5a. Run `just lint-docs`. Commit once.
+
+## Result
+
+**Commits** `eae4a83`..`ccefc16` on `main`: Tasks 1–5 and 7, a live-found
+race fix (`e0a4866`) and the final-review fixes (`ccefc16`). Suite: 163 fast,
+37 integration.
+**Diverged:** `tool-rejected.ndjson` is hand-written (no rejectable call from
+the 27B at seeds 1–6 with either prompt). Task 6 was skipped: D4 found the
+narration is the full reply and the answer its summary, so no repeats.
+`start(arguments:)` became `start(relaunch:)`. A relaunch now keeps the rows
+until `resumed` (`didRelaunch`), and the divider names the relaunch that ran.
+The live check found `start()` didn't wait for an in-flight model-list load.
+**Live 2026-10-13:** with `laguna-xs-2.1` saved, the built app cleared it,
+spawned without `--model-id`, ran `qwen3.8-27b`, and quit with no orphan.
+Not seen: the notice (no screen access); `staleModelClearedBeforeSpawn` pins
+it. **Owed by the owner, in the GUI:** `/rewind 1` (also queued behind a busy
+turn) and a mid-session model-menu switch.
+**Deferred minors** (ledger, for SU.5): a 10 s test; no notice when a relaunch
+is abandoned at the quit bound; no Kit test of `model_refused` or
+`resume_refused`; the "Other model" alert copy; the recorder overwriting its
+fixture before checking it; a second queued model pick dropped silently; no
+sign of activity while the launch waits for `models --json`.
