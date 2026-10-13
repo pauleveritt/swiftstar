@@ -1,8 +1,8 @@
 # Brief: SwiftStar
 
 **Read this first. Do not re-brainstorm the project.** The design in this file
-and in `ROADMAP.md` is settled. Brainstorm *within* a phase; do not reopen the
-phase list or the architecture.
+is settled. Brainstorm *within* a cycle; do not reopen the architecture. New
+work opens a named phase in `ROADMAP.md` (`docs/sdd.md`).
 
 **Reopened once, 2026-09-28** (directed by the owner): P28 cut SwiftStar over
 from its forked C engine to ds4-engine and rewrote this brief to match; the
@@ -17,45 +17,26 @@ and its "Revisions after the design review" section supersedes that spec's body.
 transcript, tool cards, per-pause metrics, stop, and quit.
 
 It does **no inference and runs no tools**. It spawns
-`ds4-dogfood tui --ndjson --source <project root> --commit HEAD` as a child
-process and renders the events that process writes. ds4-engine owns the model
+`ds4-dogfood tui --ndjson --source <project root> --commit HEAD`, adding
+`--model-id` and `--context-size` when the user picks them, as a child process
+and renders the events that process writes. ds4-engine owns the model
 and its memory plan, the tools, the candidate worktree, the session capture and
 the evals. SwiftStar owns the window.
 
 The app is a **regular windowed macOS application**: a dock icon, a real main
 window, and a standard `Settings` scene on ⌘,. It is not a menu-bar app, and it
-has no menu-bar presence at all. There is one surface, the Agent.
+has no menu-bar presence at all. There is one surface: the session window.
 
-## The relationship to DS4 Control
+## Background
 
-SwiftStar replaces **DS4 Control**, a menu-bar app in
-`~/projects/ds4-control` which is being retired. DS4 Control works. This is not
-a rescue. The rewrite exists because the app outgrew the menu bar, settings
-outgrew a sheet, the single target stopped being testable at its seams (its
-suite contains tests that assert on *source text*), and a measurement arrived
-that reframed the product (below).
-
-## Clean-room policy: gardened, not blind
-
-**This is a clean slate that gets gardened.** Clean-room means reimplementing
-without looking, and doing that here would mean re-earning, by incident, facts
-that already cost incidents to learn. The line is drawn between **code** and
-**facts**:
-
-- **Code does not cross.** No file, type, or function is copied from
-  `ds4-control`. Implementation is written fresh.
-- **Facts may cross, with a citation and a fresh test.** A constant, formula,
-  wire detail, or empirically discovered key may be transplanted *only* if the
-  phase that needs it records where it came from — a ds4-engine source
-  location, a committed fixture, or the run that measured it — and pins it with
-  a test written here.
-- **Tests do not cross either.** A transplanted test pins the old *shape* as
-  much as the old behavior. Carry the incident as a sentence in the phase and
-  let the fresh implementation write its own test.
-
-The inventory of what was available to garden — and the citation for each fact —
-was `docs/harvest/`, now at the `docs-before-slim` tag (`docs/history.md`).
-It was **evidence, not source**, and it described the pre-P28 engine as it was.
+SwiftStar replaced **DS4 Control**, a menu-bar app (`~/projects/ds4-control`)
+that worked but outgrew the menu bar, and whose single target could only be
+tested through assertions on source text. It was written clean-room but
+*gardened*: no code or tests crossed, while facts that cost incidents to learn
+did, each with a citation and a fresh test here. That rule still holds for any
+fact taken from ds4-engine: cite the source location, fixture or run, and pin
+it with a test. The pre-P28 harvest inventory is at the `docs-before-slim` tag
+([`docs/history.md`](docs/history.md)).
 
 ## The finding that reframes this app
 
@@ -112,7 +93,7 @@ process for the life of a session.
 
 ```text
 SwiftStar.app ──spawn──▶ ds4-dogfood tui --ndjson --source <root> --commit HEAD
-   EngineSession  ──stdin──▶ {"kind":"prompt"|"stop"|"quit"}, 0x03
+   EngineSession  ──stdin──▶ {"kind":"prompt"|"stop"|"quit"}
    EngineSession  ◀─stdout── ready / input / event / error / close / …
    EngineWireParser (pure) ─▶ EngineEvent ─▶ EngineTranscript, EngineMetricsReducer
 ```
@@ -134,25 +115,29 @@ SwiftStar.app ──spawn──▶ ds4-dogfood tui --ndjson --source <root> --co
   candidate worktree and records edits in the session's `candidate.diff`. When a
   session closes SwiftStar shows the session directory and the
   `ds4-dogfood apply <id>` command; applying stays a terminal step. There is no
-  Apply button, session picker or model chooser; each would be a later, separate
-  phase.
+  Apply button or session picker (resume is SU.7). Model and context size are
+  toolbar menus (P29.10): the model list comes from `ds4-dogfood models --json`,
+  and a choice restarts the session.
 - **The engine is installed by the user**, not bundled. SwiftStar resolves
   `ds4-dogfood` from the Settings path, then `PATH`, then
-  `~/.local/bin/ds4-dogfood`. Model, context size and capture directory are left
-  to ds4-engine's defaults. The engine needs a git repository; SwiftStar passes
-  the git root of the workspace folder the user picked.
+  `~/.local/bin/ds4-dogfood`. Model and context size default to the engine's
+  until the user picks one; the capture directory is always the engine's. The
+  engine needs a git repository; SwiftStar passes the git root of the
+  workspace folder the user picked.
 - **Process exit is mapped, not shown raw.** 0 orderly and clean; 1 ended
   without a clean answer (with the stderr tail) or failed; 2 the engine refused
   to start; 130 interrupted. The full mapping is in the spec's revisions.
 
 **Targets.** Four, and the split is what makes the suite fast:
 
-- **`SwiftStarKit`** — no SwiftUI, no IOKit, no `Process`. `EngineWireParser`,
-  `EngineEvent`, `EngineTranscript`, `EngineMetricsReducer`, `EngineCommand`
-  (executable resolution and argv). Functions of their inputs, tested in
-  milliseconds.
-- **`SwiftStarEngine`** — `Process` and pipes but no SwiftUI: `EngineSession`.
-  Testable in the integration tier.
+- **`SwiftStarKit`** — no SwiftUI, no IOKit, no `Process`. The wire
+  (`EngineWireParser`, `EngineEvent`), session state (`EngineSessionModel`,
+  `EngineTranscript`, `EngineMetricsReducer`), the argv and exit mapping
+  (`EngineCommand`, `EngineExit`), the model catalog and toolbar menus
+  (`EngineModelCatalog`), and formatting and small helpers (`MetricsFormatting`,
+  `ProjectRoot`, …). Functions of their inputs, tested in milliseconds.
+- **`SwiftStarEngine`** — `Process` and pipes but no SwiftUI: `EngineSession`
+  and `EngineModelCatalogLoader`. Testable in the integration tier.
 - **`SwiftStarUI`** — library: `EngineController`, the views, preview fixtures.
   A library and a product so Xcode can preview it: executable targets of a bare
   package can't be previewed, and Xcode makes schemes only per product.
@@ -176,7 +161,7 @@ detect — by design (owner decision, 2026-10-04), not an oversight to fix.
 `github.com/pauleveritt/ds4-engine`. This repository holds no ds4 C code, no
 submodule, and no `ds4-agent` wire dialect. The pre-P28 fork
 (`pauleveritt/ds4`, carried as `external/ds4`) and its patch set were retired by
-P28; the roadmap's Backlog names what was closed and where the ideas re-home.
+P28; `docs/history.md` says where that record lives.
 
 What SwiftStar depends on is the protocol, and the protocol is versioned by the
 `ready` handshake. Engine-side work — answer quality, tools, memory admission,
@@ -187,23 +172,29 @@ there, not patched here.
 
 Three tiers, and only one of them is allowed to be slow.
 
-| Tier | What runs | Speed | CI |
-|---|---|---|---|
-| **Fast** (default `swift test`) | `SwiftStarKit` against fixtures. No model, no network, no subprocess. | seconds | yes |
-| **Integration** (marked) | Real `Process`, real files, a fake `ds4-dogfood` replaying a fixture. | seconds | yes |
-| **Live capture** (`just capture SCENARIO`) | The real `ds4-dogfood tui --ndjson`, real weights, a fixed prompt. | minutes | never |
+| Tier | What runs | Speed |
+|---|---|---|
+| **Fast** (`just test`) | `SwiftStarKit` against fixtures. No model, no network, no subprocess. | seconds |
+| **Integration** (`just integration`) | Real `Process`, real files, a fake `ds4-dogfood` replaying a fixture. | seconds |
+| **Live capture** (`just capture SCENARIO`) | The real `ds4-dogfood tui --ndjson`, real weights, a fixed prompt. | minutes |
 
-**The fast tier's constraint is enforced mechanically**, by a tripwire
-(`FastTierGuard`) that fails the build when a default-tier test spawns a process
-or opens a socket.
+There is no CI; every tier is run by hand.
 
-**Fixtures are recorded from the real engine, never hand-authored.**
-`fixtures/engine/*.ndjson` is raw stdout of `ds4-dogfood tui --ndjson`, recorded
-by `just capture`, with a `provenance.md` naming the ds4-engine commit, model,
-context and machine. The fake `ds4-dogfood` (`fixtures/engine/fake-ds4-dogfood`)
-replays a fixture and honours `prompt`, `stop`, `quit`, `0x03` and stdin EOF. A
-hand-authored fake verifies your beliefs about the wire rather than the wire.
-**Every ds4-engine protocol change owes a recapture.**
+**The fast tier's constraint is enforced mechanically**, by a grep in
+`just test` that refuses `Process(`, `URLSession`, sockets and `posix_spawn` in
+`Tests/SwiftStarKitTests`.
+
+**Wire fixtures are recorded from the real engine.** `fixtures/engine/*.ndjson`
+is raw stdout of `ds4-dogfood tui --ndjson`, recorded by `just capture`, with a
+`provenance.md` naming the ds4-engine commit, model, context and machine. The
+exceptions are named there: two refusal fixtures (`bad-handshake`,
+`garbage-after-ready`) and `models.json` are hand-written, and some event
+payloads in tests are written from engine source until a recapture covers
+them. The fake `ds4-dogfood` (`fixtures/engine/fake-ds4-dogfood`) replays a
+fixture and honours `prompt`, `stop`, `quit` and stdin EOF. A hand-authored
+fake verifies your beliefs about the wire rather than the wire.
+**Every ds4-engine change that reaches the wire owes a recapture**, including
+payload changes the relay forwards untouched.
 
 **What the fake tier structurally cannot catch, stated so it is not
 forgotten:** line fragmentation at pipe-buffer boundaries, backpressure from a

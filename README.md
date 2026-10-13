@@ -13,14 +13,14 @@ worktree and the session capture.
 
 ## Status
 
-**A front-end for one ds4-engine session** (P28, complete 2026-09-28; design in
-[`docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md`](docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md)).
-Before P28 the app carried a forked C engine as a submodule, host-run tools, a
-subagent pool and two eval CLIs; P28 removes all of that, and the old text
-survives in git. Edits the engine makes land in the session's
-`candidate.diff`; SwiftStar shows the session directory and the
-`ds4-dogfood apply <id>` command when a session closes, and applying stays a
-terminal step. See [`ROADMAP.md`](ROADMAP.md) for current phase status.
+**A working front-end for one ds4-engine session.** It has a prompt, a
+transcript with tool cards, per-pause metrics, Stop and Quit, and toolbar
+menus for the folder, the model and the context size. Edits the engine makes
+land in the session's `candidate.diff`. When a session closes, SwiftStar shows
+the session directory and the `ds4-dogfood apply <id>` command; applying stays
+a terminal step. [`ROADMAP.md`](ROADMAP.md) has what's in flight. The cut-over
+that made it this (P28, 2026-09-28) is in
+[`docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md`](docs/superpowers/specs/2026-09-28-p28-ds4-engine-cutover-design.md).
 
 - [`BRIEF.md`](BRIEF.md) — the design. Read this first.
 - [`ROADMAP.md`](ROADMAP.md) — phases, backlog.
@@ -30,7 +30,8 @@ terminal step. See [`ROADMAP.md`](ROADMAP.md) for current phase status.
 
 ## Requirements
 
-macOS 26 or later, Apple silicon, Swift 6.2 (Xcode 26). Install ds4-engine
+macOS 26 or later, Apple silicon, Swift 6.2. UI work uses Xcode 27 for its
+previews and `RenderPreview` (see `CLAUDE.md`). Install ds4-engine
 yourself (`uv tool install` of its wheel) and have model weights on disk, as
 ds4-engine's own docs describe. SwiftStar finds `ds4-dogfood` from its
 Settings path, then `PATH`, then `~/.local/bin/ds4-dogfood`. The engine needs a
@@ -43,7 +44,7 @@ folder you choose.
 swift build
 just test             # fast tier
 just integration      # integration tier, against a fake engine
-just app              # build and launch the .app
+just app              # assemble .build/SwiftStar.app (then: open .build/SwiftStar.app)
 ```
 
 If `ds4-dogfood` isn't on `PATH` or in `~/.local/bin`, set its full path in
@@ -51,9 +52,9 @@ Settings before launching.
 
 ## Predecessors
 
-SwiftStar replaces **DS4 Control**, a menu-bar app that worked and is being
-retired. Implementation is written fresh; facts that cost incidents to learn
-cross with a citation and a new test. See `BRIEF.md`, "Clean-room policy."
+SwiftStar replaced **DS4 Control**, a menu-bar app that worked but outgrew
+the menu bar. Implementation was written fresh; facts that cost incidents to
+learn crossed with a citation and a new test. See `BRIEF.md`, "Background."
 
 ## License
 

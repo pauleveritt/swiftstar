@@ -97,7 +97,7 @@ Two traps, both checked 2026-10-04:
 
 ## Tests
 
-- `just test`: fast tier. `just integration`: also runs the 30 integration
+- `just test`: fast tier. `just integration`: also runs the integration
   tests, which a plain `swift test` (or Xcode's test tools) skips because
   they are env-gated. Run both through the shell.
 - Builds treat warnings as errors on our own targets.

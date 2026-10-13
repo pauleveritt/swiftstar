@@ -2,8 +2,8 @@
 
 The naming authority for SwiftStar's domain terms. Type names and UI copy must
 agree with this file; when they don't, the code is wrong, not the glossary.
-Code mappings are current as of the P28 cut-over (2026-09-28) and updated in
-the same commit that renames a symbol.
+Code mappings are updated in the same commit that renames a symbol; last
+checked against the source 2026-10-13.
 
 Since P28 SwiftStar is a front-end for one ds4-engine session. Most of the
 older vocabulary (orchestrate, dispatch, pool, variant, handoff packet) named
@@ -23,16 +23,16 @@ readable.
 | **session** | One held engine process: from spawn to `close`. There is one session at a time. | `EngineSession`, `EngineController`. |
 | **session directory** | The engine's capture directory for a session, under `~/.local/state/ds4-engine/sessions/`; the parent of `closed.capture_path`, else the `Session artifacts:` stderr line. | `EngineEvent.closed`. |
 | **candidate diff** | `candidate.diff` in the session directory: the edits the engine made in its own worktree. Nothing reaches the user's checkout until applied. | shown by the app, never applied by it. |
-| **apply** | `ds4-dogfood apply <id>`, run in a terminal, where `<id>` is the session directory's last path component. SwiftStar shows the command; it has no Apply button. | `EngineController`. |
+| **apply** | `ds4-dogfood apply <id>`, run in a terminal, where `<id>` is the session directory's last path component. SwiftStar shows the command; it has no Apply button. | `EngineCommand.applyCommand`, `EngineSessionModel`. |
 | **turn** | Prompt to `input`. The engine is busy for the whole turn, across native calls and tools. | `EngineTranscript`. |
 | **pause** | A `checkpoint` event: the engine stopped between native calls and reported a snapshot. The unit of metrics; there is no live throughput. | `PauseMetrics`, `EngineEvent.pause`. |
 | **prefill / generation tok/s** | `prefill_tokens / sync_ms` and `eval_count / eval_ms` from a pause's snapshot — both session-cumulative fields, so the computed rate is a running session average ("avg" in the UI), not the latest pause's instantaneous rate. A field the snapshot lacks yields no rate rather than zero, and never overwrites a rate already known. | `EngineMetricsReducer`. |
-| **context used** | Absolute tokens in context, from `answer` or `interrupted` (`session` sets only the window size, `context_size`). Thresholds anchor on this, never on a fraction of the window. | `EngineMetricsReducer`. |
-| **tool card** | The transcript's rendering of one tool call: `tool_start` (op, path), `tool_end` (status, duration), `tool_result` (kind, preview, truncated). | `EngineTranscript`, `AgentToolCardView`. |
+| **context used** | Absolute tokens in context, from `answer` or `interrupted` (`session` sets only the window size, `context_size`). Findings and quoted thresholds anchor on this; the context ring shows the fraction of the window. | `EngineMetricsReducer`, `Severity.ofContext`. |
+| **tool card** | The transcript's rendering of one tool call: `tool_start` (op, path), `tool_end` (status, duration), `tool_result` (kind, preview, truncated). | `EngineTranscript`, `EngineToolCard`, `ToolCardView`. |
 | **notice / refusal** | System row and error row for the engine's replies to slash commands (`help`, `status_report`, … and `apply_refused`, `resume_refused`, …). | `EngineEvent.notice`, `EngineEvent.refused`. |
 | **fixture** | Raw stdout of a real `ds4-dogfood tui --ndjson` run, committed under `fixtures/engine/` with a `provenance.md`. | `just capture SCENARIO`. |
 | **fake `ds4-dogfood`** | A small Python stand-in that replays a fixture and honours `prompt`, `stop`, `quit`, `0x03` and stdin EOF; the integration tier's engine. | `fixtures/engine/fake-ds4-dogfood`. |
-| **workspace** | The folder the user picks; its git root is passed as `--source`. A non-repository ends in the engine's exit-2 refusal. | `EngineCommand`. |
+| **workspace** | The folder the user picks; its git root is passed as `--source`. A non-repository ends in the engine's exit-2 refusal. | `ProjectRoot.locate`, `EngineCommand.arguments`. |
 
 ## Retired at P28
 

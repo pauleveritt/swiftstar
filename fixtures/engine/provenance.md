@@ -22,10 +22,27 @@ as `EngineWireParser` reads it. Recorded by `Tools/record-engine-fixture.py`
 
 `fake-ds4-dogfood` (the integration-tier stand-in) replays these files.
 
-**Re-record rule:** re-record all three whenever ds4-engine changes its
-`--ndjson` `protocol` or the telemetry `schema_version`, and check the
-"must contain" column by hand. A `tool-read` recording with no tool call is
-a model miss, not a wire change: re-record with another seed.
+**Hand-written, not recorded** (refusal cases a real engine won't produce on
+demand):
+
+| File | What it is |
+| --- | --- |
+| `bad-handshake.ndjson` | a first line that isn't `ready` (`{"kind":"input"}`) |
+| `garbage-after-ready.ndjson` | `ready`, then a line that isn't JSON, then `input` |
+| `models.json` | the richer catalog shape; see below |
+
+**Re-record rule:** re-record all three whenever a ds4-engine change reaches
+the wire. That covers a `--ndjson` `protocol` or telemetry `schema_version`
+bump, and also payload changes the relay forwards untouched: new event
+kinds, new or dropped fields, a changed model lineup. Check the "must
+contain" column by hand. A `tool-read` recording with no tool call is a
+model miss, not a wire change: re-record with another seed.
+
+**Stale as of 2026-10-13.** ds4-engine `5451cd7d` removed `laguna-xs-2.1`, so
+`just capture` (which still passes it) exits 2, and these recordings predate
+`tool_rejected` at its current frequency, `session.dflash`, `candidate_ready`
+and `prefix_cache`. EN.1 owes the fix and a recapture on `qwen3.8-27b`
+(`docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md` §1).
 
 ## `models-real.json` and `models.json`
 
@@ -45,4 +62,7 @@ forward-looking shape (per-model flag `runs_in_tui`, `family`,
 `measured_contexts`) to cover cases the real capture lacks and to exercise
 that shape if ds4-engine adds it later: a model that doesn't fit, one not
 usable in the TUI, unknown keys. Re-capture `models-real.json` if ds4-engine
-starts sending `schema_version` again, or bumps it.
+starts sending `schema_version` again, or bumps it, or changes its model
+lineup. It changed at `5451cd7d`: the list is now `qwen3.8-27b`,
+`qwen3.8-flash-next` and `qwen3.8-flash-next-q2`, so this capture is owed
+by EN.1.
