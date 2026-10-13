@@ -116,7 +116,7 @@ there.
   turn. **Seen again unqueued** (AN.2 gate 1, sessions `20261013-153218`
   and `-153456`, suffix `-session-last`): `rewound_to 0`, and the resumed
   turns included a prompt the first rewind had removed. This blocks AN.2's
-  Done.
+  Done. Filed as [ds4-engine#219](https://github.com/pauleveritt/ds4-engine/issues/219).
 - **Watch, not a request: the Satyrn rename.** `ds4-dogfood` and the
   `~/.local/state/ds4-engine` paths may be renamed. SwiftStar would need to
   change `EngineCommand.executableName`, and probing both names is the
