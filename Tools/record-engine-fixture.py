@@ -44,8 +44,10 @@ SCENARIOS = ("tool-read", "stop", "error", "relaunch-rewind", "tool-rejected")
 
 
 def run(exe, argv, env, out, on_line):
-    """Run `exe ARGV`, write its stdout to `out`, call `on_line(line, send)`
-    for each parsed line; return the exit code."""
+    """Run `exe ARGV`, write its stdout to `out + ".tmp"`, call
+    `on_line(line, send)` for each parsed line; return the exit code. The
+    caller keeps the recording (`keep`) or drops it, so a failed attempt
+    never overwrites a committed fixture."""
     proc = subprocess.Popen(
         [exe, *argv], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL, text=True, bufsize=1, env=env,
@@ -55,7 +57,7 @@ def run(exe, argv, env, out, on_line):
         proc.stdin.write(json.dumps(message) + "\n")
         proc.stdin.flush()
 
-    with open(out, "w") as sink:
+    with open(out + ".tmp", "w") as sink:
         for raw in proc.stdout:
             sink.write(raw)
             on_line(json.loads(raw), send)
@@ -106,21 +108,35 @@ def main() -> int:
     code = run(exe, argv, env, out, on_line)
     print(f"{scenario}: exit {code}, scratch {scratch}", file=sys.stderr)
     if scenario == "tool-rejected" and not state["rejected"]:
+        keep(out, False)
         print("tool-rejected: no tool_rejected event; try another seed", file=sys.stderr)
         return 3
     if scenario == "relaunch-rewind":
         if not state["relaunch"]:
+            keep(out, False)
             print("relaunch-rewind: no rewind_refused with relaunch", file=sys.stderr)
             return 3
-        resumed = Path(out).with_name("resumed.ndjson")
+        resumed = str(Path(out).with_name("resumed.ndjson"))
 
         def quit_at_input(line, send):
             if line.get("kind") == "input":
                 send({"kind": "quit"})
 
-        code = run(exe, state["relaunch"], env, resumed, quit_at_input)
-        print(f"resumed: exit {code}, argv {state['relaunch']}", file=sys.stderr)
+        resumed_code = run(exe, state["relaunch"], env, resumed, quit_at_input)
+        print(f"resumed: exit {resumed_code}, argv {state['relaunch']}", file=sys.stderr)
+        keep(resumed, resumed_code == 0)
+        code = code or resumed_code
+    keep(out, code == 0)
     return code
+
+
+def keep(out, ok):
+    """Move a finished recording into place, or drop it."""
+    tmp = Path(out + ".tmp")
+    if ok:
+        tmp.replace(out)
+    else:
+        tmp.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
