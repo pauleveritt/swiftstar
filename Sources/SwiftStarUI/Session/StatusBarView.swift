@@ -39,6 +39,7 @@ struct StatusBarView: View {
                     .accessibilityElement()
                     .accessibilityLabel("Context window")
                     .accessibilityValue(tooltip)
+                    .nativeTooltip(tooltip)
             }
         }
         .padding(.horizontal, 10)

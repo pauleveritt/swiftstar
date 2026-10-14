@@ -101,7 +101,8 @@ Done 2026-10-13 on `su-ui`, in three commits: Task 1 (`e4eb7e2`), Task 2
 (`88287ae`) and this close.
 
 **Suites:** `just test` (75 passed, integration skipped) and
-`just integration` (75 passed, 37.6 s), with no other test run going.
+`just integration` (139 and 75 passed, in its two test products), with
+no other test run going.
 
 **Previews:** `StatusBarView`'s "Running", "Idle" and "No GPU metrics" and
 `MemoryStatusView`'s "Half full" render unchanged. `ComposerView`'s four
@@ -118,8 +119,10 @@ with increased contrast. The placeholder reads in each.
   `.build/repositories` and `.build/checkouts` from the main checkout
   (same `Package.resolved`), then `swift build --skip-update`, worked.
 
-**Not seen in a preview,** for the owner's check in the running app:
-- the tooltips on the context ring and the GPU figures (a snapshot can't
-  hover; D1 says the bridge comes back for a widget whose tooltip fails)
-- Send enabled and the red Stop: the field's text is private `@State`
-  and no fixture runs a turn, so every preview shows Send disabled
+**The owner's check in the running app:**
+- **Tooltips: `.help` alone fails on the rings.** Hovering the GPU figures'
+  text showed the tooltip; hovering either ring showed none. Per D1, Task 1
+  is reverted, so both widgets have `NativeTooltip` and `.help` again. The
+  bridge's doc comment records the recheck.
+- **Send enabled and the red Stop look right.** No preview shows them: the
+  field's text is private `@State` and no fixture runs a turn.
