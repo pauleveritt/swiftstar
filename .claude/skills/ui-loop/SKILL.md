@@ -41,6 +41,9 @@ window chrome, splitters.
    It needs Screen Recording for Xcode (granted 2026-10-14).
 3. Switch back to `SwiftStarUI` before `RenderPreview`.
 
+Its console fills with CoreUI "unable to find a bundle" faults and `linkd`
+connection errors: noise from a bare executable, not failures.
+
 ## Layout
 
 `Sources/SwiftStarUI/` is in feature folders: `Session/` (the window's

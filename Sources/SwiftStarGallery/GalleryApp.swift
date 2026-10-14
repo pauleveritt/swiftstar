@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftStarUI
 
@@ -6,6 +7,7 @@ import SwiftStarUI
 /// menus. Its settings are its own defaults domain, by process name.
 @main
 struct GalleryApp: App {
+    @NSApplicationDelegateAdaptor(GalleryDelegate.self) private var delegate
     @State private var engine = EngineController.gallery()
 
     var body: some Scene {
@@ -21,4 +23,15 @@ struct GalleryApp: App {
             SettingsView()
         }
     }
+}
+
+/// A bare executable starts as a background app: no Dock icon, and its
+/// window stays behind Xcode. Like the app's delegate, come forward.
+final class GalleryDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate()
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
