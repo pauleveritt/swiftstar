@@ -132,3 +132,5 @@ first and highlighted.
   `.onSubmit` with the pop-up open is only seen there.
 - In the app, once: pick a file and send; the engine should attach it, and
   the line under the prompt should say so.
+
+**The owner's check, 2026-10-14:** "The @ filepicker worked."

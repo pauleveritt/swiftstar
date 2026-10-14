@@ -80,3 +80,30 @@ no `.tmp`.
 - SU.14's Result: the owner's check (the picker worked).
 - This plan gains `## Result`; `just lint-docs`, `just test`,
   `just integration`.
+
+## Result
+
+Done 2026-10-14 on `su-ui`, in four commits after the plan (`bfd8c69`):
+Task 1 (`d3d8660`), Task 2 (`5dde456`), Task 3 and this close.
+
+**Suites:** `just test` and `just integration`, and `just test-tools` (45),
+with no other test run going. Each task's tests were written first and
+failed on the old code: the German-locale and GPU tooltip cases; the
+runner at 1.37 s for a child that died at once, and at its full 10 s
+timeout with a grandchild on the pipe (now under 0.9 s and 2 s); the
+recorder's pairing and `.tmp` cases.
+
+**Previews:** `MemoryStatusView`'s two (new: "Against the plan", "No plan
+yet"), `InspectorView`'s two ("Narrow" now tall enough for every card),
+`StatusBarView`'s four and `SessionToolbar`'s.
+
+**Diverged:**
+- **D2 changed mid-cycle, by the owner:** actual against the engine's plan,
+  not against macOS's limit. A 107.5 GiB limit beside a model that should
+  stay under 30 GiB read as alarming; the limit is now the inspector's last
+  row, explained in the tooltip.
+- **The preview's plan is 9.4 GiB,** not 6.0, so the ring shows a part-full
+  plan rather than a full one.
+- **Xcode's preview pipeline flaked** ("already been invalidated") on three
+  renders, sequential this time, probably beside the owner's open canvas;
+  each rendered on a retry.

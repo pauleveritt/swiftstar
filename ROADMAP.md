@@ -48,7 +48,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
 | SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
-| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6a–6f done 2026-10-13, each with its plan and Result: `docs/superpowers/plans/2026-10-13-su6*.md`. The punch list below waits |
+| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6a–6f done 2026-10-13, 6g 2026-10-14, each with its plan and Result: `docs/superpowers/plans/*-su6*.md`. One item left, below |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | 7a and 7b done 2026-10-13: this project's conversations in a sidebar; switching asks first mid-turn; the Recent menus (toolbar, Open Recent, Dock) resume a project's newest conversation. Plans: [7a](docs/superpowers/plans/2026-10-13-su7a-sessions-and-resume.md), [7b](docs/superpowers/plans/2026-10-13-su7b-switching-projects.md). 7c (windows) waits on the engine |
 | SU.8 | Prompt history | ↑/↓ in the composer steps through earlier prompts | done 2026-10-13: this conversation's typed prompts, while the field is empty or unedited. [Plan and Result](docs/superpowers/plans/2026-10-13-su8-prompt-history.md) |
 | SU.9 | Font size | One setting scales every text in the window: 5 sizes, the middle the default; ⌘+ and ⌘− after 7b lands | done 2026-10-13: 14–24 pt, 18 the default, under a new key; the shortcuts wait in the punch list. [Plan and Result](docs/superpowers/plans/2026-10-13-su9-font-size.md) |
@@ -56,27 +56,16 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.11 | The conversation first | Toolbar menus with icons, the window titled and the list selected by the conversation, New Conversation in the list, even inspector type | done 2026-10-14, checked in the gallery: icons in every menu, the window titled by the conversation, its row listed and selected, New Conversation first in the list. [Plan and Result](docs/superpowers/plans/2026-10-14-su11-conversation-first.md) |
 | SU.12 | The gallery app | The real window and menus over fixtures, no engine, for checking toolbars and menus by screenshot | done 2026-10-14: `SwiftStarGallery` and `Tools/window-shot.sh`; the agent captures the real window. [Plan and Result](docs/superpowers/plans/2026-10-14-su12-gallery.md) |
 | SU.13 | Two leftovers | The memory widget's crash check, in a gallery Debug run (SU.3's leftover); the report card's wide tables at narrow widths (from AN.2) | done 2026-10-14: no crash in 41 flips; wide tables scroll with a scroller, via `pauleveritt/MarkdownView`. [Plan and Result](docs/superpowers/plans/2026-10-14-su13-two-leftovers.md) |
-| SU.14 | The `@` file picker | Typing `@` in the composer offers the workspace's files; choosing one inserts `@path`, which the engine expands; the `mentions` event shows what was attached | done 2026-10-14: `@` offers the workspace's files as the TUI ranks them; the engine attaches; an attached/missing line under the prompt. Owner checks open. [Plan and Result](docs/superpowers/plans/2026-10-14-su14-file-picker.md) |
+| SU.14 | The `@` file picker | Typing `@` in the composer offers the workspace's files; choosing one inserts `@path`, which the engine expands; the `mentions` event shows what was attached | done 2026-10-14: `@` offers the workspace's files as the TUI ranks them; the engine attaches; an attached/missing line under the prompt; the owner tried it. [Plan and Result](docs/superpowers/plans/2026-10-14-su14-file-picker.md) |
 
 ### SU.6 punch list
 
-- **Metrics:** the inspector's Throughput card still says "Prefill avg" and
-  "Generation avg" without "session"; the status bar's tooltip says it
-  (SU.10). Per-pause and per-prompt rates belong to phase AN's report.
-- **Engine information worth showing:**
+- **Engine information worth showing** (held back from SU.6g; needs a look
+  at what the engine sends):
   - start-up timings: `candidate_ready`, `index_primed`
   - the engine's stderr start notices
   - model sizes from `plan_gib` and `size_bytes`; drop the catalog fields
     the engine never sends
-- **Left from SU.5a** (each plan's Result):
-  - rate, duration, the status line and the ctx label ignore the locale; the
-    inspector mixes GB and GiB
-  - the model-list loader sleeps 1 s on every timeout, and waits out the
-    whole timeout when a grandchild holds its pipe
-  - the recorder can pair a new `resumed.ndjson` with an old
-    `relaunch-rewind.ndjson`, and leaves a `.tmp` on an exception
-  - `clamp`'s doc comment sits on `slot(for:)`; two comments still describe
-    the toolbar font
 
 ## Backlog
 
