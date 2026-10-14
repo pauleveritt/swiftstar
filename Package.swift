@@ -29,16 +29,19 @@ let package = Package(
     ],
     dependencies: [
         // Fork of Lakr233/MarkdownView (battle-tested in FlowDown), branched off
-        // the 3.9.1 revision FlowDown ships, with two DS4 patches on the
+        // the 3.9.1 revision FlowDown ships, with DS4 patches on the
         // `ds4-patches` branch: (1) code blocks reserve their actual rendered
         // height so they no longer overlap following text; (2) emphasis renders
-        // as italic instead of an orange underline. Pinned by revision for
-        // reproducible builds. Upstream: https://github.com/Lakr233/MarkdownView
-        // — re-base the patches when bumping. (Provenance: ds4-control's
-        // Package.swift; facts cross, code does not.)
+        // as italic instead of an orange underline; (3) wide tables show an
+        // auto-hiding horizontal scroller (SU.13). Pinned by revision for
+        // reproducible builds. Kept in pauleveritt/MarkdownView (forked from
+        // notatestuser/MarkdownView, 2026-10-14; nothing is pushed upstream).
+        // Upstream: https://github.com/Lakr233/MarkdownView — re-base the
+        // patches when bumping. (Provenance: ds4-control's Package.swift;
+        // facts cross, code does not.)
         .package(
-            url: "https://github.com/notatestuser/MarkdownView",
-            revision: "d83032f91844e5365f49a174d9940036790e434c"),
+            url: "https://github.com/pauleveritt/MarkdownView",
+            revision: "645c583978b64561e207e00d27d02a53de1d633a"),
     ],
     targets: [
         .target(name: "SwiftStarKit", swiftSettings: common),

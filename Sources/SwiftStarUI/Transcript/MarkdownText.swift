@@ -1,5 +1,5 @@
 // Markdown renderer for chat bubbles, backed by the Lakr233/MarkdownView fork
-// (notatestuser/MarkdownView, see Package.swift provenance). This is the ONLY
+// (pauleveritt/MarkdownView, see Package.swift provenance). This is the ONLY
 // file that imports the renderer — the dependency seam.
 //
 // We render through the library's raw AppKit `MarkdownTextView` wrapped in our

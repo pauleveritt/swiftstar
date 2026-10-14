@@ -1,5 +1,5 @@
 {
-  "originHash" : "fb42e0d680371c9a52733271c90300c636ab9bbaec51a9f7f88a031071b95279",
+  "originHash" : "8a30bfc63229956b5c70209374f11e4e985581a8f0f7fe9c419d59b0cfd90604",
   "pins" : [
     {
       "identity" : "highlightr",
@@ -31,9 +31,9 @@
     {
       "identity" : "markdownview",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/notatestuser/MarkdownView",
+      "location" : "https://github.com/pauleveritt/MarkdownView",
       "state" : {
-        "revision" : "d83032f91844e5365f49a174d9940036790e434c"
+        "revision" : "645c583978b64561e207e00d27d02a53de1d633a"
       }
     },
     {
@@ -41,8 +41,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swiftlang/swift-cmark",
       "state" : {
-        "revision" : "924936d0427cb25a61169739a7660230bffa6ea6",
-        "version" : "0.8.0"
+        "revision" : "08ddb528923cc1a6527e02b7a1aee9e516ca749a",
+        "version" : "0.9.0"
       }
     },
     {
@@ -50,8 +50,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-collections",
       "state" : {
-        "revision" : "a0cb0954ecb21e4e31b0070e6ed5674e8556685a",
-        "version" : "1.6.0"
+        "revision" : "35a1edcb8ebd2bfe251d587f0b69e62af28f508c",
+        "version" : "1.7.3"
       }
     },
     {

@@ -11,7 +11,10 @@ the fixture's GPU metrics on and off at launch when its `galleryFlipGPU`
 setting names a count, as the "GPU toggle" preview does. Fixture-only: the
 controller's new `replaceFixtureModel` ignores a real controller.
 
-**D2. The report card's tables:** waits on the owner's call (below).
+**D2. The report card's tables get a horizontal scroller,** patched into the
+Markdown fork, the owner's choice (2026-10-14). The fork moves to
+`pauleveritt/MarkdownView` (forked from `notatestuser/MarkdownView`);
+nothing is pushed upstream.
 
 ## Facts this rests on
 
@@ -33,7 +36,8 @@ controller's new `replaceFixtureModel` ignores a real controller.
 
 ### Task 2: the report card's tables
 
-Open, on the owner's call.
+**Files:** the fork's `TableView.swift`; `Package.swift` (URL and
+revision); `MarkdownText.swift`'s comment.
 
 ## Result
 
@@ -41,3 +45,16 @@ Open, on the owner's call.
 flips at 100 ms: no crash, nothing in the console. The 21st left GPU
 metrics off: the status bar's memory widget gone and the inspector's GPU
 memory at "—", so the flips ran. SU.3's leftover is closed.
+
+**Task 2, done 2026-10-14.** `pauleveritt/MarkdownView` was forked from
+`notatestuser/MarkdownView` at `d83032f`; its `ds4-patches` branch gained
+`645c583`, which turns on an auto-hiding horizontal scroller for tables.
+`Package.swift` pins it. Suites: `just test` and `just integration` (149
+and 78) on the new revision.
+
+**Not fully solved:** with macOS's overlay scrollers, an auto-hiding
+scroller shows only while scrolling. A wide table scrolls and shows its
+scroller then, but at rest still reads as clipped; the "Report card"
+preview looks as before. A stronger cue, flashing the scroller when a
+table first lays out wider than its view, is a further fork patch, left
+for the owner's call.
