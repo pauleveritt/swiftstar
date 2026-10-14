@@ -127,11 +127,7 @@ public struct EngineWireParser: Sendable {
         case "mentions":
             let attached = e["attached"] as? [String] ?? []
             let missing = e["missing"] as? [String] ?? []
-            if !missing.isEmpty {
-                let extra = attached.isEmpty ? "" : " (attached: \(attached.joined(separator: ", ")))"
-                return .refused("Not found: \(missing.joined(separator: ", "))\(extra)")
-            }
-            return attached.isEmpty ? .ignored : .notice("Attached: \(attached.joined(separator: ", "))")
+            return attached.isEmpty && missing.isEmpty ? .ignored : .mentions(attached: attached, missing: missing)
         case "compacting":
             return .notice("Compacting…")
         case "compacted":

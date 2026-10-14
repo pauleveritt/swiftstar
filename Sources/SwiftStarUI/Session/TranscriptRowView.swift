@@ -65,6 +65,8 @@ struct TranscriptRowView: View {
                 .textSelection(.enabled)
         case .report(let markdown):
             ReportCard(markdown: markdown)
+        case .mentions(let attached, let missing):
+            MentionsLine(attached: attached, missing: missing)
         case .divider(let text):
             HStack(spacing: 8) {
                 VStack { Divider() }.frame(minWidth: 16)
@@ -77,6 +79,31 @@ struct TranscriptRowView: View {
             }
             .padding(.vertical, 4)
         }
+    }
+}
+
+/// What a prompt's `@` mentions attached, small and secondary, and what they
+/// missed, in red (SU.14, D3); under the prompt bubble, on its side.
+private struct MentionsLine: View {
+    let attached: [String]
+    let missing: [String]
+    @Environment(\.fontSize) private var fontSize: CGFloat
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            if !attached.isEmpty {
+                Label("Attached \(attached.joined(separator: ", "))", systemImage: "paperclip")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(missing, id: \.self) { line in
+                Label(line, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+            }
+        }
+        .font(.scaled(.caption2, base: fontSize))
+        .multilineTextAlignment(.trailing)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
@@ -164,4 +191,15 @@ private struct ReportCard: View {
         queued: false, source: nil)
         .padding()
         .frame(width: 420, alignment: .leading)
+}
+
+#Preview("Mentions") {
+    VStack(spacing: 4) {
+        TranscriptRowView(row: .user("Compare @Package.swift and @README.md with @nope.swift"), queued: false, source: nil)
+        TranscriptRowView(
+            row: .mentions(attached: ["Package.swift", "README.md"], missing: ["nope.swift: no such file"]),
+            queued: false, source: nil)
+    }
+    .padding()
+    .frame(width: 600)
 }

@@ -251,6 +251,9 @@ public enum EngineEvent: Equatable, Sendable {
     case steering(applied: Bool)
     case notice(String)
     case refused(String)
+    /// The files a prompt's `@` mentions attached, and the ones it couldn't
+    /// ("name: reason"), SU.14.
+    case mentions(attached: [String], missing: [String])
     /// A refusal that carries a `relaunch` argv the front-end acts on.
     case relaunch(EngineRelaunch)
     /// The relaunched process's conversation so far.

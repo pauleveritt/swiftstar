@@ -85,6 +85,8 @@ public enum TranscriptRow: Equatable, Sendable {
     case divider(String)
     /// A session report (AN.2), Markdown, shown as a card.
     case report(String)
+    /// What a prompt's `@` mentions attached and missed, under it (SU.14).
+    case mentions(attached: [String], missing: [String])
 }
 
 /// Pure fold of `EngineEvent`s into transcript rows and busy flags.
@@ -217,6 +219,9 @@ public struct EngineTranscript: Equatable, Sendable {
             rows.append(.system(applied ? "Queued message delivered" : "Queued message not confirmed"))
         case .notice(let t):
             rows.append(.system(t))
+        case .mentions(let attached, let missing):
+            // Not a refusal: the prompt still goes to the model.
+            rows.append(.mentions(attached: attached, missing: missing))
         case .refused(let t), .error(let t):
             clearPending()
             rows.append(.error(t))
