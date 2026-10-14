@@ -87,3 +87,24 @@ nil.
 - `ROADMAP.md`: the SU.8 row becomes one line with this plan's link.
 - This plan gains `## Result`.
 - `just lint-docs`, `just test`, `just integration`.
+
+## Result
+
+Done 2026-10-13 on `su-ui`, in three commits: Task 1 (`6119607`), Task 2
+(`cb46ba3`) and this close.
+
+**Suites:** `just test` and `just integration` (146 and 75 passed, in its
+two test products; 7 of them new), with no other test run going. The new
+tests were written first and failed to build without `PromptHistory`.
+
+**Previews:** `ComposerView`'s four previews render unchanged.
+
+**Diverged:**
+- **A rewind can shrink the entries under a position,** so `up` clamps it.
+  No test covers that path.
+
+**For the owner's check in the app:** a preview can't take key presses.
+- send two prompts, then ↑ ↑ ↓ ↓
+- type a multi-line draft and check ↑ moves the cursor
+- where the cursor lands after a recall (start or end) is SwiftUI's
+  choice; it wasn't set
