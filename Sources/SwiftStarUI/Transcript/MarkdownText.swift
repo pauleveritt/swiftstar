@@ -23,7 +23,7 @@ import SwiftStarKit
 /// disclosure. Rows arrive whole (the engine reports per pause, not per token).
 struct MarkdownText: View {
     let source: String
-    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
+    @Environment(\.fontSize) private var fontSize: CGFloat
 
     init(_ source: String) { self.source = source }
 
@@ -35,7 +35,7 @@ struct MarkdownText: View {
         // re-parses — see `MarkdownNSText.updateNSView`).
         MarkdownNSText(
             markdown: MarkdownPreprocess.deLaTeXed(source),
-            fontSize: transcriptFontSize)
+            fontSize: fontSize)
     }
 }
 

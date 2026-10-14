@@ -6,7 +6,7 @@ import SwiftStarKit
 public struct MainView: View {
     @AppStorage(DefaultsKey.inspectorPresented.rawValue) private var inspectorPresented = false
     @AppStorage(DefaultsKey.sidebarVisible.rawValue) private var sidebarVisible = true
-    @AppStorage(DefaultsKey.transcriptFontSize.rawValue) private var fontSize = TranscriptFontScale.defaultSize
+    @AppStorage(DefaultsKey.fontSize.rawValue) private var fontSize = TranscriptFontScale.defaultSize
 
     public init() {}
 
@@ -26,7 +26,7 @@ public struct MainView: View {
         .frame(minWidth: 800, minHeight: 560)
         // The sidebar and the inspector sit outside SessionView, which sets
         // its own copy; both read the one setting (SU.9).
-        .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(fontSize)))
+        .environment(\.fontSize, CGFloat(TranscriptFontScale.clamp(fontSize)))
     }
 }
 

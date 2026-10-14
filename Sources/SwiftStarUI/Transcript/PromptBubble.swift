@@ -5,18 +5,18 @@ struct PromptBubble: View {
     let text: String
     /// The engine reported this prompt as queued.
     var queued = false
-    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
+    @Environment(\.fontSize) private var fontSize: CGFloat
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
             Spacer(minLength: 60)
             if queued {
                 Text("Queued")
-                    .font(.system(size: transcriptFontSize - 2))
+                    .font(.system(size: fontSize - 2))
                     .foregroundStyle(.secondary)
             }
             Text(text)
-                .font(.system(size: transcriptFontSize))
+                .font(.system(size: fontSize))
                 .foregroundStyle(Color(nsColor: .alternateSelectedControlTextColor))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)

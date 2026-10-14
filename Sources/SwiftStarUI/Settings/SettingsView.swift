@@ -3,7 +3,7 @@ import SwiftStarKit
 
 public struct SettingsView: View {
     @AppStorage(DefaultsKey.executable.rawValue) private var engineExecutable = ""
-    @AppStorage(DefaultsKey.transcriptFontSize.rawValue) private var transcriptFontSize = TranscriptFontScale.defaultSize
+    @AppStorage(DefaultsKey.fontSize.rawValue) private var fontSize = TranscriptFontScale.defaultSize
 
     public init() {}
 
@@ -39,12 +39,12 @@ public struct SettingsView: View {
 
     /// The slider's slot, mapped through `TranscriptFontScale` so the stored
     /// value is always a defined size.
-    private var fontSizeIndex: Int { TranscriptFontScale.slot(for: transcriptFontSize) }
+    private var fontSizeIndex: Int { TranscriptFontScale.slot(for: fontSize) }
 
     private var fontSliderValue: Binding<Double> {
         Binding(
             get: { Double(fontSizeIndex) },
-            set: { transcriptFontSize = TranscriptFontScale.size(forSlot: Int($0.rounded())) }
+            set: { fontSize = TranscriptFontScale.size(forSlot: Int($0.rounded())) }
         )
     }
 }

@@ -11,7 +11,7 @@ struct TranscriptRowView: View {
     let source: URL?
     /// Offered on the last answer when the session can be analyzed (AN.2).
     var analyze: (() -> Void)? = nil
-    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
+    @Environment(\.fontSize) private var fontSize: CGFloat
 
     var body: some View {
         switch row {
@@ -28,7 +28,7 @@ struct TranscriptRowView: View {
                 if reply != nil {
                     // The 27B's `finish` summary, under the full reply (SU.6a).
                     Text("Summary: \(answer.text)")
-                        .font(.system(size: transcriptFontSize - 2))
+                        .font(.system(size: fontSize - 2))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
@@ -37,7 +37,7 @@ struct TranscriptRowView: View {
                         // Engine telemetry, styled small and secondary so it never
                         // reads as part of the answer.
                         Text(line)
-                            .font(.scaled(.caption2, base: transcriptFontSize))
+                            .font(.scaled(.caption2, base: fontSize))
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                             .textSelection(.enabled)
@@ -45,7 +45,7 @@ struct TranscriptRowView: View {
                     if let analyze {
                         Button("Analyze", action: analyze)
                             .buttonStyle(.link)
-                            .font(.scaled(.caption2, base: transcriptFontSize))
+                            .font(.scaled(.caption2, base: fontSize))
                             .help("Report on this session, then ask about it in a copy")
                     }
                 }
@@ -55,12 +55,12 @@ struct TranscriptRowView: View {
             ToolCardView(card: card, source: source)
         case .system(let text):
             Text(text)
-                .font(.system(size: transcriptFontSize))
+                .font(.system(size: fontSize))
                 .foregroundStyle(.tertiary)
                 .textSelection(.enabled)
         case .error(let text):
             Text(text)
-                .font(.system(size: transcriptFontSize))
+                .font(.system(size: fontSize))
                 .foregroundStyle(.red)
                 .textSelection(.enabled)
         case .report(let markdown):
@@ -69,7 +69,7 @@ struct TranscriptRowView: View {
             HStack(spacing: 8) {
                 VStack { Divider() }.frame(minWidth: 16)
                 Text(text)
-                    .font(.system(size: transcriptFontSize * 0.85, weight: .medium))
+                    .font(.system(size: fontSize * 0.85, weight: .medium))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .layoutPriority(1)
@@ -84,13 +84,13 @@ struct TranscriptRowView: View {
 /// pasted to another agent for a deeper look.
 private struct ReportCard: View {
     let markdown: String
-    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
+    @Environment(\.fontSize) private var fontSize: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Label("Session report", systemImage: "doc.text.magnifyingglass")
-                    .font(.scaled(.caption, base: transcriptFontSize).weight(.semibold))
+                    .font(.scaled(.caption, base: fontSize).weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Copy Markdown") {
@@ -98,7 +98,7 @@ private struct ReportCard: View {
                     NSPasteboard.general.setString(markdown, forType: .string)
                 }
                 .buttonStyle(.link)
-                .font(.scaled(.caption, base: transcriptFontSize))
+                .font(.scaled(.caption, base: fontSize))
             }
             MarkdownText(markdown)
         }

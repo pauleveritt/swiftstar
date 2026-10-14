@@ -9,12 +9,12 @@ struct StatusBarView: View {
     /// session has ended).
     let composerLabel: String
     let metrics: EngineMetricsState
-    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
+    @Environment(\.fontSize) private var fontSize: CGFloat
 
     var body: some View {
         HStack(spacing: 8) {
             Text(statusText)
-                .font(.system(size: transcriptFontSize))
+                .font(.system(size: fontSize))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)

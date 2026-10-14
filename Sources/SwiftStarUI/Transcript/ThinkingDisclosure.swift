@@ -6,7 +6,7 @@ import SwiftUI
 struct ThinkingDisclosure: View {
     let text: String
     @State private var expanded = false
-    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
+    @Environment(\.fontSize) private var fontSize: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -15,10 +15,10 @@ struct ThinkingDisclosure: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: transcriptFontSize - 2))
+                        .font(.system(size: fontSize - 2))
                         .frame(width: 10)
                     Label("Thinking", systemImage: "brain")
-                        .font(.system(size: transcriptFontSize))
+                        .font(.system(size: fontSize))
                 }
                 .foregroundStyle(.secondary)
                 .contentShape(Rectangle())

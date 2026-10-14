@@ -10,7 +10,7 @@ struct SessionView: View {
     @State private var askingModel = false
     @State private var askingContext = false
     @State private var entry = ""
-    @AppStorage(DefaultsKey.transcriptFontSize.rawValue) private var transcriptFontSize = TranscriptFontScale.defaultSize
+    @AppStorage(DefaultsKey.fontSize.rawValue) private var fontSize = TranscriptFontScale.defaultSize
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,7 +34,7 @@ struct SessionView: View {
                 entry: $entry, inspectorPresented: $inspectorPresented)
         }
         // Applied after the toolbar so its items, too, sit below this value.
-        .environment(\.transcriptFontSize, CGFloat(TranscriptFontScale.clamp(transcriptFontSize)))
+        .environment(\.fontSize, CGFloat(TranscriptFontScale.clamp(fontSize)))
         // One task: the start waits for the model list, so a saved model the
         // engine dropped is cleared before the spawn (EN.1, D1).
         .task {

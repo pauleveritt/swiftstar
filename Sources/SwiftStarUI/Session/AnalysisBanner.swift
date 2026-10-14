@@ -8,14 +8,14 @@ struct AnalysisBanner: View {
     /// Done would act now (the fork is idle at `input`).
     let canFinish: Bool
     let done: () -> Void
-    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
+    @Environment(\.fontSize) private var fontSize: CGFloat
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass.circle.fill")
                 .foregroundStyle(.tint)
             Text(EngineAnalysis.banner)
-                .font(.system(size: transcriptFontSize * 0.9))
+                .font(.system(size: fontSize * 0.9))
             Spacer()
             Button("Done", action: done)
                 .disabled(!canFinish)

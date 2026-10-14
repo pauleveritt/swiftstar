@@ -105,7 +105,7 @@ enum PreviewDefaults {
     /// The transcript font at its largest slot.
     static var largeFont: UserDefaults {
         let defaults = UserDefaults(suiteName: "SwiftStarPreview.largeFont") ?? .standard
-        defaults.set(TranscriptFontScale.sizes.last, forKey: DefaultsKey.transcriptFontSize.rawValue)
+        defaults.set(TranscriptFontScale.sizes.last, forKey: DefaultsKey.fontSize.rawValue)
         return defaults
     }
 }

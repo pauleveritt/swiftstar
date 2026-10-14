@@ -8,7 +8,7 @@ struct ComposerView: View {
     @State private var input = ""
     @State private var history = PromptHistory()
     @FocusState private var inputFocused: Bool
-    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
+    @Environment(\.fontSize) private var fontSize: CGFloat
 
     private var composerState: EngineComposer { controller.composer }
 
@@ -17,7 +17,7 @@ struct ComposerView: View {
             if let notice = controller.phase.notFoundNotice {
                 HStack {
                     Text(notice)
-                        .font(.system(size: transcriptFontSize))
+                        .font(.system(size: fontSize))
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                     Spacer()
@@ -27,7 +27,7 @@ struct ComposerView: View {
                 HStack(alignment: .bottom, spacing: 8) {
                     let analyzing = controller.analysis != nil
                     TextField(analyzing ? EngineAnalysis.composerPlaceholder : "Ask about this project…", text: $input, axis: .vertical)
-                        .font(.system(size: transcriptFontSize))
+                        .font(.system(size: fontSize))
                         .textFieldStyle(.plain)
                         .lineLimit(1...15)
                         .padding(.horizontal, 12)

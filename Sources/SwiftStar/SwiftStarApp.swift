@@ -7,6 +7,7 @@ import SwiftStarUI
 struct SwiftStarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var engine = EngineController()
+    @AppStorage(DefaultsKey.fontSize.rawValue) private var fontSize = TranscriptFontScale.defaultSize
 
     var body: some Scene {
         // `Window`, not `WindowGroup`: a second window would spawn a second
@@ -19,6 +20,19 @@ struct SwiftStarApp: App {
         }
         .commands {
             ToolbarCommands()
+            // SU.6f: the font size, a slot at a time, as in Settings.
+            CommandGroup(after: .toolbar) {
+                Divider()
+                Button("Bigger") { fontSize = TranscriptFontScale.bigger(fontSize) ?? fontSize }
+                    .keyboardShortcut("+")
+                    .disabled(TranscriptFontScale.bigger(fontSize) == nil)
+                Button("Smaller") { fontSize = TranscriptFontScale.smaller(fontSize) ?? fontSize }
+                    .keyboardShortcut("-")
+                    .disabled(TranscriptFontScale.smaller(fontSize) == nil)
+                Button("Actual Size") { fontSize = TranscriptFontScale.defaultSize }
+                    .keyboardShortcut("0")
+                    .disabled(TranscriptFontScale.clamp(fontSize) == TranscriptFontScale.defaultSize)
+            }
             // SU.7b: the Recent projects, as in the toolbar's folder menu.
             CommandGroup(after: .newItem) {
                 Menu("Open Recent") {
