@@ -109,4 +109,21 @@ public enum FileMentions {
     public static func inSkippedDirectory(_ rel: String) -> Bool {
         rel.split(separator: "/").dropLast().contains { skipped(directory: String($0)) }
     }
+
+    /// The query Esc closed the picker for. It stays shut only until the
+    /// query changes, including to no query at all (SU.17, finding 5).
+    public struct Dismissal: Equatable, Sendable {
+        public private(set) var query: String?
+
+        public init() {}
+
+        public mutating func dismiss(_ query: String?) { self.query = query }
+
+        /// Called with every new active query; a different one ends the dismissal.
+        public mutating func observe(_ query: String?) {
+            if query != self.query { self.query = nil }
+        }
+
+        public func hides(_ query: String) -> Bool { query == self.query }
+    }
 }

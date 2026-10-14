@@ -49,14 +49,13 @@ struct ConversationList: View {
         .task { await controller.reloadConversations() }
         .alert("End the running turn and resume?", isPresented: Binding(
             get: { confirming != nil }, set: { if !$0 { confirming = nil } }
-        )) {
-            Button("Resume") {
-                if let c = confirming { Task { await controller.resume(c) } }
-                confirming = nil
-            }
-            Button("Cancel", role: .cancel) { confirming = nil }
-        } message: {
-            Text(confirming?.title ?? "")
+        ), presenting: confirming) { c in
+            // The alert's own copy of the conversation: the dismissal clears
+            // `confirming`, possibly before this action runs (SU.17, finding 6).
+            Button("Resume") { Task { await controller.resume(c) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { c in
+            Text(c.title)
         }
     }
 

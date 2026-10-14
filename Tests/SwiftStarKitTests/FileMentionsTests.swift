@@ -71,4 +71,19 @@ struct FileMentionsTests {
         #expect(t.rows.last == .mentions(attached: ["a.py"], missing: ["b.py: no such file"]))
         #expect(t.isPending(rowAt: 0))
     }
+
+    /// SU.17, review finding 5: Esc hides the query it was pressed on, and
+    /// only until the query changes. Type @sess, Esc, clear the field (or
+    /// send), type @sess again: the suggestions are back.
+    @Test func escHidesOnlyUntilTheQueryChanges() {
+        var dismissal = FileMentions.Dismissal()
+        dismissal.dismiss("sess")
+        #expect(dismissal.hides("sess"))
+        dismissal.observe(nil)          // the field cleared, or the prompt sent
+        dismissal.observe("sess")       // typed again
+        #expect(!dismissal.hides("sess"))
+        dismissal.dismiss("sess")
+        dismissal.observe("sesss")      // a changed word
+        #expect(!dismissal.hides("sesss"))
+    }
 }

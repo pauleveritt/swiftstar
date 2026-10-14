@@ -8,9 +8,9 @@ struct ComposerView: View {
     @State private var input: String
     @State private var history = PromptHistory()
     /// The `@` picker's highlighted row, and the query Esc closed it for
-    /// (SU.14): it stays shut until the `@word` changes.
+    /// (SU.14): it stays shut until the `@word` changes (SU.17).
     @State private var pick = 0
-    @State private var dismissedQuery: String?
+    @State private var dismissal = FileMentions.Dismissal()
     @FocusState private var inputFocused: Bool
     @Environment(\.fontSize) private var fontSize: CGFloat
 
@@ -21,7 +21,7 @@ struct ComposerView: View {
 
     private var mentionQuery: String? { FileMentions.activeQuery(in: input) }
     private var candidates: [String] {
-        guard let query = mentionQuery, query != dismissedQuery else { return [] }
+        guard let query = mentionQuery, !dismissal.hides(query) else { return [] }
         return FileMentions.match(query, in: controller.workspaceFiles)
     }
 
@@ -68,7 +68,7 @@ struct ComposerView: View {
                         .onKeyPress(.tab) { chooseHighlighted() }
                         .onKeyPress(.escape) {
                             guard !candidates.isEmpty else { return .ignored }
-                            dismissedQuery = mentionQuery
+                            dismissal.dismiss(mentionQuery)
                             return .handled
                         }
                         .onSubmit { send() }
@@ -99,7 +99,10 @@ struct ComposerView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .onChange(of: mentionQuery) { pick = 0 }
+        .onChange(of: mentionQuery) { _, query in
+            pick = 0
+            dismissal.observe(query)
+        }
         .task { inputFocused = true }
         .onChange(of: composerState.canStop) { _, stoppable in
             if !stoppable { inputFocused = true }
@@ -117,7 +120,6 @@ struct ComposerView: View {
 
     private func choose(_ path: String) {
         input = FileMentions.insert(path, into: input)
-        dismissedQuery = nil
     }
 
     private var promptEntries: [String] {
