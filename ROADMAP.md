@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** the owner's live check of SU.7b's menus and alert, then a last SU.6 part for its remaining punch list.
+- **Next:** the owner's live checks of SU.6f-SU.11 in the app (prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip) and of SU.7b's menus and alert; then the punch list's last item, engine information worth showing (not brainstormed).
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
