@@ -28,6 +28,19 @@ are green.
 - This is a bare SwiftPM package: `UpdateTargetBuildSetting` and
   `XcodeListTargets` don't work. Change settings in `Package.swift`.
 
+## The gallery: the real window, no engine
+
+`SwiftStarGallery` (its own scheme, SU.12) opens the real window and menus
+over the preview fixtures' running controller. It never starts the engine,
+so no GPU and no engine lock; its settings are its own defaults domain.
+Use it for anything the canvas can't vouch for: the toolbar, the menus,
+window chrome, splitters.
+
+1. `XcodeSwitchScheme` to `SwiftStarGallery`, then `RunProject`.
+2. `Tools/window-shot.sh SwiftStarGallery /tmp/gallery.png`, then read it.
+   It needs Screen Recording for Xcode (granted 2026-10-14).
+3. Switch back to `SwiftStarUI` before `RenderPreview`.
+
 ## Layout
 
 `Sources/SwiftStarUI/` is in feature folders: `Session/` (the window's
@@ -62,7 +75,7 @@ testing.
 - **The canvas lies about toolbars.** With the default menu style, previews
   showed the menus' text with native insets; the running app showed only
   the label's image, so the model and context menus were blank (SU.6f,
-  reverted). A toolbar change needs the owner's look in the app.
+  reverted). Check a toolbar change in the gallery (above).
 - Snapshot filenames contain a narrow no-break space before AM/PM; copy them
   with a glob, not a typed name.
 - To look at many renders at once, tile them into one image (a small AppKit

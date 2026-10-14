@@ -24,6 +24,8 @@ let package = Package(
         // Exists so Xcode generates a SwiftStarUI scheme for previews (no other consumer).
         .library(name: "SwiftStarUI", targets: ["SwiftStarUI"]),
         .executable(name: "SwiftStar", targets: ["SwiftStar"]),
+        // The real window over fixtures, no engine (SU.12): its own scheme.
+        .executable(name: "SwiftStarGallery", targets: ["SwiftStarGallery"]),
     ],
     dependencies: [
         // Fork of Lakr233/MarkdownView (battle-tested in FlowDown), branched off
@@ -66,6 +68,11 @@ let package = Package(
             // The icon is copied into the .app by Tools/make-app.sh, not
             // bundled as a SwiftPM resource (it shipped twice).
             exclude: ["Resources"],
+            swiftSettings: mainActor
+        ),
+        .executableTarget(
+            name: "SwiftStarGallery",
+            dependencies: ["SwiftStarUI"],
             swiftSettings: mainActor
         ),
         .testTarget(
