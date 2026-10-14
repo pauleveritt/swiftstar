@@ -20,6 +20,10 @@ public enum ProcessFailure: Error, Equatable {
 /// streams (as in `EngineSession`), the exit through `terminationHandler`,
 /// and a task group races them against the timeout.
 public enum ProcessRunner {
+    /// How long a finished child's pipes may keep delivering output (as
+    /// `EngineSession`'s drain limit).
+    static let drainLimit: Duration = .milliseconds(500)
+
     public static func run(
         executable: String, arguments: [String], timeout: Duration,
         environment: [String: String]? = nil
@@ -51,9 +55,17 @@ public enum ProcessRunner {
 
         let outcome = await withTaskGroup(of: Outcome.self) { group in
             group.addTask {
-                let stdout = await outData.value, stderr = await errData.value
                 var code: Int32 = -1
                 for await c in status { code = c }
+                // The child has exited; a grandchild may still hold a pipe
+                // (SU.6g, D4). Give the pipes `drainLimit` to finish, then
+                // stop reading, so it can't stretch the call to the timeout.
+                let drain = Task {
+                    try? await Task.sleep(for: drainLimit)
+                    for end in [outEnd, errEnd] { end() }
+                }
+                let stdout = await outData.value, stderr = await errData.value
+                drain.cancel()
                 return .finished(ProcessOutput(stdout: stdout, stderr: stderr, code: code))
             }
             group.addTask {
@@ -65,8 +77,12 @@ public enum ProcessRunner {
                 // Kill the child (SIGKILL a second later if it ignores
                 // SIGTERM), and stop reading a pipe a grandchild may hold,
                 // so the collector above can finish.
+                // Wait only as long as it takes to die (SU.6g, D4).
                 if process.isRunning { process.terminate() }
-                try? await Task.sleep(for: .seconds(1))
+                let deadline = ContinuousClock.now + .seconds(1)
+                while process.isRunning, ContinuousClock.now < deadline {
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
                 if process.isRunning { kill(process.processIdentifier, SIGKILL) }
                 for end in [outEnd, errEnd] { end() }
             }
