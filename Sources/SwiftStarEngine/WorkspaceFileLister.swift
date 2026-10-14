@@ -13,11 +13,19 @@ public enum WorkspaceFileLister {
         var files: [String] = []
         for rel in String(decoding: output.stdout, as: UTF8.self).split(separator: "\0").map(String.init) {
             guard !rel.isEmpty, !FileMentions.inSkippedDirectory(rel) else { continue }
-            let size = (try? FileManager.default.attributesOfItem(
-                atPath: root.appendingPathComponent(rel).path)[.size] as? Int) ?? nil
-            if FileMentions.wanted(rel, size: size) { files.append(rel) }
+            if FileMentions.wanted(rel, size: targetSize(root.appendingPathComponent(rel).path)) {
+                files.append(rel)
+            }
             if files.count >= FileMentions.maxFiles { break }
         }
         return files
+    }
+
+    /// The size of what `path` names, through any symlink, as the engine
+    /// reads it; nil for a dangling link or an unreadable file (SU.17,
+    /// finding 8). `attributesOfItem` would measure the link itself.
+    static func targetSize(_ path: String) -> Int? {
+        var info = stat()
+        return stat(path, &info) == 0 ? Int(info.st_size) : nil
     }
 }

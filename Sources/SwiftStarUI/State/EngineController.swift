@@ -303,7 +303,7 @@ public final class EngineController {
     private static func checkout() -> URL? {
         let anchor = Bundle.main.executableURL?.deletingLastPathComponent()
             ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        return ProjectRoot.locate(anchor: anchor)
+        return ProjectRoot.locate(anchor: anchor, maxDepth: ProjectRoot.executableWalkDepth)
     }
 
     /// The folder picker closed without a choice.
