@@ -36,7 +36,6 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 - **The report follows `resumed_from`.** After one Analyze and Done, the
   main session is a new directory, and a second Analyze reported "no flagged
   steps" for a session whose earlier turns had one (live, 2026-10-13).
-- **The report card's wide tables clip** at narrow widths (seen at 560 pt).
 - **A resumed-then-answered fixture,** so Done's return can be tested over
   the fake engine.
 
@@ -56,6 +55,8 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.10 | Status bar rates | The two token rates as steady numbers, explained by a tooltip | done 2026-10-14: prefill / generation as bare numbers in fixed slots; the tooltip names them as session averages. [Plan and Result](docs/superpowers/plans/2026-10-14-su10-status-rates.md) |
 | SU.11 | The conversation first | Toolbar menus with icons, the window titled and the list selected by the conversation, New Conversation in the list, even inspector type | done 2026-10-14, checked in the gallery: icons in every menu, the window titled by the conversation, its row listed and selected, New Conversation first in the list. [Plan and Result](docs/superpowers/plans/2026-10-14-su11-conversation-first.md) |
 | SU.12 | The gallery app | The real window and menus over fixtures, no engine, for checking toolbars and menus by screenshot | done 2026-10-14: `SwiftStarGallery` and `Tools/window-shot.sh`; the agent captures the real window. [Plan and Result](docs/superpowers/plans/2026-10-14-su12-gallery.md) |
+| SU.13 | Two leftovers | The memory widget's crash check, in a gallery Debug run (SU.3's leftover); the report card's wide tables at narrow widths (from AN.2) | not brainstormed |
+| SU.14 | The `@` file picker | Typing `@` in the composer offers the workspace's files; choosing one inserts `@path`, which the engine expands; the `mentions` event shows what was attached | not brainstormed |
 
 ### SU.6 punch list
 
@@ -86,10 +87,6 @@ Deferred, each with the condition that reopens it.
 - **An Apply button.** Applying stays a terminal step:
   `ds4-dogfood apply <id>`. *Reopens if copying that command becomes daily
   friction and the engine offers a machine-readable apply.*
-- **An `@` file picker.** The engine's picker lives only in its Textual
-  presenter, and the wire has no file list. *Reopens when typing `@path` by
-  hand becomes the friction. It needs an app-side listing or the engine
-  request below.*
 - **Token streaming.** The engine's seam is the pause, never a per-token
   callback. *Reopens only if ds4-engine changes that.*
 - **Packaging ds4-engine inside the `.app`.** Today the user installs it
@@ -99,9 +96,6 @@ Deferred, each with the condition that reopens it.
   adds a spawn-time tool-policy flag worth a Settings control.*
 - **The catalog loader's pid-reuse window.** There is a small window before
   SIGKILL in which the pid could be reused. *Reopens if seen live.*
-- **SU.3's leftover.** An Xcode Debug run with the memory widget toggling
-  is still unverified (its `start()` test landed in SU.5a1). *Reopens: the
-  crash, if a Debug run shows it.*
 
 ### Engine requests
 
@@ -119,7 +113,9 @@ there.
   - A resumed conversation's loaded KV. Session `160812` read about 106,700
     tok/s.
   - After `/clear` or a compaction, the count collapses.
-- **A `files --json` command,** for the `@` picker above.
+- **A `files --json` command,** for SU.14's picker. Not needed: the engine
+  expands `@path` in NDJSON prompts itself (`mentions.py`), so SwiftStar can
+  list files with `git ls-files` (checked at `5451cd7d`, 2026-10-14).
 - **A second `/rewind` in a rewound session goes wrong** (live, 2026-10-13,
   sessions `20261013-121126` and `-121133`). In a session resumed with
   `--rewind-to 1` (one turn), `/rewind 1` was refused with `--rewind-to 0`
