@@ -57,10 +57,17 @@ def run(exe, argv, env, out, on_line):
         proc.stdin.write(json.dumps(message) + "\n")
         proc.stdin.flush()
 
-    with open(out + ".tmp", "w") as sink:
-        for raw in proc.stdout:
-            sink.write(raw)
-            on_line(json.loads(raw), send)
+    try:
+        with open(out + ".tmp", "w") as sink:
+            for raw in proc.stdout:
+                sink.write(raw)
+                on_line(json.loads(raw), send)
+    except BaseException:
+        # A failed recording leaves nothing behind (SU.6g, D5).
+        proc.kill()
+        proc.wait()
+        Path(out + ".tmp").unlink(missing_ok=True)
+        raise
     return proc.wait()
 
 
@@ -124,10 +131,19 @@ def main() -> int:
 
         resumed_code = run(exe, state["relaunch"], env, resumed, quit_at_input)
         print(f"resumed: exit {resumed_code}, argv {state['relaunch']}", file=sys.stderr)
-        keep(resumed, resumed_code == 0)
-        code = code or resumed_code
+        settle_pair(out, resumed, code, resumed_code)
+        return code or resumed_code
     keep(out, code == 0)
     return code
+
+
+def settle_pair(out, resumed, code, resumed_code):
+    """Keep a relaunch-rewind recording and its resumed half together or not
+    at all (SU.6g, D5): one without the other pairs a new recording with an
+    old one."""
+    ok = code == 0 and resumed_code == 0
+    keep(out, ok)
+    keep(resumed, ok)
 
 
 def keep(out, ok):
