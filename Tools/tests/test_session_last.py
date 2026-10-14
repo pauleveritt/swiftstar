@@ -73,7 +73,7 @@ class LoadTests(unittest.TestCase):
         step after an answer stays with its prompt (live: 181635, 122439)."""
         turns = [{"tool": {"name": "ls", "args": [], "result_ok": True}}, {}, {"tool": {"name": "host_results", "args": []}}]
         user_turns = [{"text": "a", "turn_index": 0}, {"text": "b", "turn_index": 3}]
-        session = sl.Session(Path("x"), [], {}, {"turns": turns, "user_turns": user_turns}, "", [])
+        session = sl.Session(Path("x"), [], {"turns": turns, "user_turns": user_turns}, "", [])
         prompts = sl.steps(session)
         self.assertEqual([[s.index for s in p.steps] for p in prompts], [[0, 1, 2], []])
         self.assertEqual([p.answered for p in prompts], [True, False])
@@ -100,7 +100,7 @@ class LoadTests(unittest.TestCase):
             self.assertEqual(sl.load(d).warnings, [])
 
     def test_session_without_prompts(self):
-        session = sl.Session(directory=Path("x"), events=[], receipt={}, capture={"turns": [], "user_turns": []}, diff="", warnings=[])
+        session = sl.Session(directory=Path("x"), events=[], capture={"turns": [], "user_turns": []}, diff="", warnings=[])
         self.assertEqual(sl.steps(session), [])
 
 
@@ -110,10 +110,10 @@ def tool(name, ok=True, text="", **args):
 
 def prompt(*tools, answered=True, index=0):
     """One prompt from tool dicts; an answer step closes it when `answered`."""
-    steps = [sl.Step(i, index, t, None, 1) for i, t in enumerate(tools)]
+    steps = [sl.Step(i, index, t, None) for i, t in enumerate(tools)]
     if answered:
-        steps.append(sl.Step(len(steps), index, None, None, 1))
-    return sl.Prompt(index, "p", steps, answered)
+        steps.append(sl.Step(len(steps), index, None, None))
+    return sl.Prompt(index, steps, answered)
 
 
 def rules(flags):

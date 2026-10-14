@@ -184,15 +184,6 @@ struct EngineAnalysisTests {
         #expect(m.analysis == nil)
     }
 
-    /// The fork's process dies before `resumed`: the analysis ends.
-    @Test func exitWhileForkingEndsAnalysis() {
-        var m = idle()
-        let fork = m.beginAnalysis(report: "R", source: Self.source)!
-        m.didExit(EngineExit(code: 0, message: "ended"), directory: nil)  // the main session quits
-        m.didRelaunch(fork)
-        m.didExit(EngineExit(code: 2, message: "refused"), directory: nil)  // the fork fails
-        #expect(m.analysis == nil)
-    }
 
     /// The controller quits the main session before starting the fork: that
     /// exit must not end the analysis.
@@ -217,14 +208,16 @@ struct EngineAnalysisTests {
         #expect(m.transcript.rows.count == rows)
     }
 
-    /// Final review, Important 1: a fork that fails says the main session is
-    /// untouched and how to resume it.
-    @Test func failedForkNamesTheMainSession() {
+    /// The fork's process dies before `resumed`: the analysis ends, and
+    /// (final review, Important 1) says the main session is untouched and how
+    /// to resume it.
+    @Test func aFailedForkEndsTheAnalysisAndNamesTheMainSession() {
         var m = idle()
         let fork = m.beginAnalysis(report: "R", source: Self.source)!
-        m.didExit(EngineExit(code: 0, message: "ended"), directory: nil)
+        m.didExit(EngineExit(code: 0, message: "ended"), directory: nil)  // the main session quits
         m.didRelaunch(fork)
-        m.didExit(EngineExit(code: 2, message: "refused"), directory: nil)
+        m.didExit(EngineExit(code: 2, message: "refused"), directory: nil)  // the fork fails
+        #expect(m.analysis == nil)
         #expect(m.transcript.rows.contains {
             if case .system(let s) = $0 { s.contains("20261013-112927-swiftstar") && s.contains("unchanged") } else { false } })
     }

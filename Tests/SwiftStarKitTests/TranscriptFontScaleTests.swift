@@ -45,7 +45,6 @@ struct TranscriptFontScaleTests {
     /// The roles keep macOS's proportions to its 13 pt body.
     @Test func rolePoints() {
         func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 0.001 }
-        #expect(TranscriptFontScale.points(.headline, base: 18) == 18)
         #expect(near(TranscriptFontScale.points(.caption, base: 18), 14.4))
         #expect(near(TranscriptFontScale.points(.caption2, base: 18), 12.96))
         #expect(near(TranscriptFontScale.points(.caption, base: 14), 11.2))

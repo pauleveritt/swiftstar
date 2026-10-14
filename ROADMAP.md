@@ -59,7 +59,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.14 | The `@` file picker | Typing `@` in the composer offers the workspace's files; choosing one inserts `@path`, which the engine expands; the `mentions` event shows what was attached | done 2026-10-14: `@` offers the workspace's files as the TUI ranks them; the engine attaches; an attached/missing line under the prompt; the owner tried it. [Plan and Result](docs/superpowers/plans/2026-10-14-su14-file-picker.md) |
 | SU.15 | Colored code in tool cards | A tool card's result preview colored by its file's language, with the highlighter answers' code blocks already use; Markdown as colored raw text | done 2026-10-14: a card's result colored by its file's language, light and dark; Markdown as colored raw text. [Plan and Result](docs/superpowers/plans/2026-10-14-su15-colored-code.md) |
 | SU.16 | Files as links | Every file reference opens Quick Look and looks like a link: tool card headers (today a plain button), `@` attachments, paths in answers that name a real file; engine-worktree files via the receipt's `worktree_path` | not brainstormed |
-| SU.17 | The review's fixes | An external review of `main` at `6f1eac0`: nine correctness findings, smaller defects, cuts and stale docs | in progress: [plan](docs/superpowers/plans/2026-10-14-su17-review-fixes.md) |
+| SU.17 | The review's fixes | An external review of `main` at `6f1eac0`: nine correctness findings, smaller defects, cuts and stale docs | done 2026-10-14: [plan and Result](docs/superpowers/plans/2026-10-14-su17-review-fixes.md) |
 
 ### SU.6 punch list
 

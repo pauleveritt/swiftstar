@@ -13,14 +13,15 @@ struct StatusBarView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(statusText)
+            // The composer's label alone (it carries the exit message once ended).
+            Text(composerLabel)
                 .font(.system(size: fontSize))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .monospacedDigit()
                 .contentTransition(.numericText())
-                .animation(.default, value: statusText)
+                .animation(.default, value: composerLabel)
             Spacer(minLength: 12)
             if phase == .running {
                 RatesView(prefill: metrics.prefillTPS, generation: metrics.generationTPS)
@@ -49,9 +50,6 @@ struct StatusBarView: View {
         .padding(.trailing, 6)
         .padding(.vertical, 6)
     }
-
-    /// The composer's label alone (it carries the exit message once ended).
-    private var statusText: String { composerLabel }
 }
 
 /// The two session-average rates as bare numbers, prefill then generation

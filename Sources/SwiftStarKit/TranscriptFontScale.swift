@@ -44,7 +44,6 @@ public enum TranscriptFontScale {
     /// proportions to its 13 pt body.
     public static func points(_ role: TextRole, base: Double) -> Double {
         switch role {
-        case .headline: base
         case .caption: base * 0.8
         case .caption2: base * 0.72
         }
@@ -53,5 +52,5 @@ public enum TranscriptFontScale {
 
 /// The text styles that scale with the window's font size.
 public enum TextRole: Sendable {
-    case headline, caption, caption2
+    case caption, caption2
 }

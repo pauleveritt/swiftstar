@@ -115,9 +115,13 @@ SwiftStar.app ──spawn──▶ ds4-dogfood tui --ndjson --source <root> --co
   candidate worktree and records edits in the session's `candidate.diff`. When a
   session closes SwiftStar shows the session directory and the
   `ds4-dogfood apply <id>` command; applying stays a terminal step. There is no
-  Apply button or session picker (resume is SU.7). Model and context size are
-  toolbar menus (P29.10): the model list comes from `ds4-dogfood models --json`,
-  and a choice restarts the session.
+  Apply button. Earlier conversations are the sidebar's list, from
+  `ds4-dogfood sessions --json`; Resume relaunches with `--resume <id>`
+  (SU.7). Model and context size are toolbar menus (P29.10): the model list
+  comes from `ds4-dogfood models --json`. A model chosen mid-session is sent
+  as `/model <id>`, and the engine's relaunch starts a new conversation with
+  the files kept (EN.1); idle, a choice is saved for the next start. A
+  context size restarts the session. (Refreshed 2026-10-14, SU.17.)
 - **The engine is installed by the user**, not bundled. SwiftStar resolves
   `ds4-dogfood` from the Settings path, then `PATH`, then
   `~/.local/bin/ds4-dogfood`. Model and context size default to the engine's
@@ -128,7 +132,7 @@ SwiftStar.app ──spawn──▶ ds4-dogfood tui --ndjson --source <root> --co
   without a clean answer (with the stderr tail) or failed; 2 the engine refused
   to start; 130 interrupted. The full mapping is in the spec's revisions.
 
-**Targets.** Four, and the split is what makes the suite fast:
+**Targets.** Five, and the split is what makes the suite fast:
 
 - **`SwiftStarKit`** — no SwiftUI, no IOKit, no `Process`. The wire
   (`EngineWireParser`, `EngineEvent`), session state (`EngineSessionModel`,
@@ -136,13 +140,17 @@ SwiftStar.app ──spawn──▶ ds4-dogfood tui --ndjson --source <root> --co
   (`EngineCommand`, `EngineExit`), the model catalog and toolbar menus
   (`EngineModelCatalog`), and formatting and small helpers (`MetricsFormatting`,
   `ProjectRoot`, …). Functions of their inputs, tested in milliseconds.
-- **`SwiftStarEngine`** — `Process` and pipes but no SwiftUI: `EngineSession`
-  and `EngineModelCatalogLoader`. Testable in the integration tier.
+- **`SwiftStarEngine`** — `Process` and pipes but no SwiftUI: `EngineSession`,
+  `ProcessRunner` and what runs on it (the model, session-list and report
+  loaders, the `@` picker's `WorkspaceFileLister`). Testable in the
+  integration tier.
 - **`SwiftStarUI`** — library: `EngineController`, the views, preview fixtures.
   A library and a product so Xcode can preview it: executable targets of a bare
   package can't be previewed, and Xcode makes schemes only per product.
 - **`SwiftStar`** — the app: `@main`, `AppDelegate`, the icon resource. Thin,
   because the decisions live in Kit.
+- **`SwiftStarGallery`** — the real window and menus over the preview
+  fixtures, with no engine (SU.12): for what the canvas can't vouch for.
 
 **The rule that keeps the split honest: if a test wants to assert on source
 text, the thing it is testing is in the wrong target.**

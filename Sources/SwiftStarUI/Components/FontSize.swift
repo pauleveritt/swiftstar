@@ -11,8 +11,6 @@ extension Font {
     /// A smaller text style at its share of the window's font size (SU.9),
     /// in place of a fixed `.caption`-style size.
     static func scaled(_ role: TextRole, base: CGFloat, design: Font.Design = .default) -> Font {
-        let size = CGFloat(TranscriptFontScale.points(role, base: Double(base)))
-        let font = Font.system(size: size, design: design)
-        return role == .headline ? font.weight(.bold) : font
+        Font.system(size: CGFloat(TranscriptFontScale.points(role, base: Double(base))), design: design)
     }
 }

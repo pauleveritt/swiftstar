@@ -5,50 +5,49 @@ import Testing
 struct MetricsFormattingTests {
     // Dropped in SU.5b: bytesFormatsByteCount (it compared the formatter with itself).
 
-    enum Value: Sendable {
-        case rate(Double?), bytes(Int64?), number(Int, String), gib(Int64, String), duration(Double)
-        case rateIn(Double, String), rateNumberIn(Double, String), durationIn(Double, String), bytesIn(Int64, String)
+    // One table per function (SU.17), each with its locale, so no row
+    // depends on the machine's.
+    private static let en = Locale(identifier: "en_US"), de = Locale(identifier: "de_DE")
+
+    @Test(arguments: [
+        (12.34 as Double?, en, "12.3 tok/s"),
+        (nil, en, "—"),                         // rateIsEmDashForNil
+        (12.34, de, "12,3 tok/s"),
+    ]) func rate(_ value: Double?, _ locale: Locale, _ text: String) {
+        #expect(MetricsFormatting.rate(value, locale: locale) == text)
     }
 
-    struct FormatCase: Sendable, CustomTestStringConvertible {
-        let testDescription: String
-        let value: Value
-        let text: String
+    @Test(arguments: [(189.84, de, "189,8"), (189.84, en, "189.8")])
+    func rateNumber(_ value: Double, _ locale: Locale, _ text: String) {
+        #expect(MetricsFormatting.rateNumber(value, locale: locale) == text)
     }
 
-    static let formatCases: [FormatCase] = [
-        .init(testDescription: "rateFormatsOneDecimalWithUnit", value: .rate(12.34), text: "12.3 tok/s"),
-        .init(testDescription: "rateIsEmDashForNil", value: .rate(nil), text: "—"),
-        .init(testDescription: "bytesIsEmDashForNil", value: .bytes(nil), text: "—"),
-        .init(testDescription: "formattingFollowsLocale (number, de_DE)", value: .number(8192, "de_DE"), text: "8.192"),
-        .init(testDescription: "formattingFollowsLocale (number, en_US)", value: .number(8192, "en_US"), text: "8,192"),
-        .init(testDescription: "formattingFollowsLocale (GiB, de_DE)", value: .gib(6_442_450_944, "de_DE"),
-              text: "6,0 GiB"),
-        .init(testDescription: "formattingFollowsLocale (GiB, en_US)", value: .gib(6_442_450_944, "en_US"),
-              text: "6.0 GiB"),
-        .init(testDescription: "durationOneStyle (whole)", value: .duration(75), text: "75s"),
-        .init(testDescription: "durationOneStyle (one decimal)", value: .duration(1.83), text: "1.8s"),
-        .init(testDescription: "durationOneStyle (rounds up to whole)", value: .duration(9.96), text: "10s"),
-        // SU.6g, D2-D3: bytes in GiB like the engine's plan; decimals by locale.
-        .init(testDescription: "bytesAreGiB", value: .bytesIn(6_442_450_944, "en_US"), text: "6.0 GiB"),
-        .init(testDescription: "rateFollowsLocale (de_DE)", value: .rateIn(12.34, "de_DE"), text: "12,3 tok/s"),
-        .init(testDescription: "rateNumberFollowsLocale (de_DE)", value: .rateNumberIn(189.84, "de_DE"), text: "189,8"),
-        .init(testDescription: "durationFollowsLocale (de_DE)", value: .durationIn(1.83, "de_DE"), text: "1,8s"),
-    ]
+    // SU.6g, D2-D3: bytes in GiB like the engine's plan; decimals by locale.
+    @Test(arguments: [
+        (6_442_450_944 as Int64?, en, "6.0 GiB"),
+        (nil, en, "—"),                         // bytesIsEmDashForNil
+    ]) func bytes(_ value: Int64?, _ locale: Locale, _ text: String) {
+        #expect(MetricsFormatting.bytes(value, locale: locale) == text)
+    }
 
-    @Test(arguments: formatCases) func formats(_ c: FormatCase) {
-        let text = switch c.value {
-        case .rate(let v): MetricsFormatting.rate(v)
-        case .bytes(let v): MetricsFormatting.bytes(v)
-        case .number(let n, let id): MetricsFormatting.number(n, locale: Locale(identifier: id))
-        case .gib(let b, let id): MetricsFormatting.gib(bytes: b, locale: Locale(identifier: id))
-        case .duration(let s): MetricsFormatting.duration(seconds: s)
-        case .rateIn(let v, let id): MetricsFormatting.rate(v, locale: Locale(identifier: id))
-        case .rateNumberIn(let v, let id): MetricsFormatting.rateNumber(v, locale: Locale(identifier: id))
-        case .durationIn(let s, let id): MetricsFormatting.duration(seconds: s, locale: Locale(identifier: id))
-        case .bytesIn(let b, let id): MetricsFormatting.bytes(b, locale: Locale(identifier: id))
-        }
-        #expect(text == c.text)
+    @Test(arguments: [(Int64(6_442_450_944), de, "6,0 GiB"), (Int64(6_442_450_944), en, "6.0 GiB")])
+    func gib(_ value: Int64, _ locale: Locale, _ text: String) {
+        #expect(MetricsFormatting.gib(bytes: value, locale: locale) == text)
+    }
+
+    @Test(arguments: [(8192, de, "8.192"), (8192, en, "8,192")])
+    func number(_ value: Int, _ locale: Locale, _ text: String) {
+        #expect(MetricsFormatting.number(value, locale: locale) == text)
+    }
+
+    /// One style: tenths under ten seconds, whole seconds from there.
+    @Test(arguments: [
+        (75.0, en, "75s"),
+        (1.83, en, "1.8s"),
+        (9.96, en, "10s"),                     // rounds up to whole
+        (1.83, de, "1,8s"),
+    ]) func duration(_ seconds: Double, _ locale: Locale, _ text: String) {
+        #expect(MetricsFormatting.duration(seconds: seconds, locale: locale) == text)
     }
 
     // SU.6b: the Session card's prefix-cache line.

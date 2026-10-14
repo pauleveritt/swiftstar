@@ -57,3 +57,49 @@ Each task: tests first, shown failing; then the fix; `just test`.
 7. **Small items (D2)** and **the missed ideas (D4).**
 8. **Cuts and docs (D3).**
 9. **Close:** `ROADMAP.md`, `CHANGELOG.md`, `## Result`, both tiers.
+
+## Result
+
+Done 2026-10-14 on `su-ui`, in seven task commits after the plan
+(`f665b19`): Tasks 1–7 (`c65ff33`, `62a1728`, `4067150`, `3c6d31e`,
+`0ee36a5`, `c5ce1a6`, `0a5909e`), then Tasks 8 and 9 together.
+
+**Suites:** `just test` (170 Kit tests, 47 Python) and `just integration`
+(88), with no other test run going. Each new test was shown failing first:
+on today's code, with the fix undone, or by failing to build without the
+new API (`FileMentions.Dismissal`, `ProjectRoot`'s `maxDepth`,
+`.commandMissing`'s name, `run_resumed`).
+
+**Previews:** `ComposerView`'s "@ picker" and "Ready", `ConversationList`'s
+"Conversations", `StatusBarView`'s "Running", `MarkdownText`'s "Markdown":
+all as before.
+
+**Diverged:**
+- **Finding 2 keeps a fallback.** The plan had the checkpoint's directory
+  replace the resumed-from id. Replaced outright, nothing is current until
+  the new directory is listed, and a second Resume would spawn again
+  (`resumingTheCurrentConversationDoesNothing`). So the model keeps both,
+  own directory first (`EngineSessionModel.sessionIDs`), and
+  `Conversations.current` takes the first conversation holding either.
+- **Finding 3 keeps one bound.** Folders the user picks walk to the root
+  unbounded, as `isUsable` did; the executable's own walk keeps its 5
+  levels (`ProjectRoot.executableWalkDepth`), so an app run from elsewhere
+  doesn't adopt a repository above it. Unbounded, a scheme-less relative
+  URL's parents run `..` forever; the walk now starts from the absolute path.
+- **Finding 4 also needed `EngineExit`:** a forced exit read "after the quit
+  timed out" before anything else, so a protocol error's SIGKILL would have
+  lost its diagnosis.
+- **Finding 9:** when the quit hits its bound, the controller ends the
+  session before the relaunch is skipped, so a skipped return is abandoned
+  like a skipped fork, not sent back to analyzing.
+- **Finding 1's turn count is the user rows.** The fake engine replays one
+  turn, so the integration test covers a report that lands mid-turn (success
+  and failure); `theAnalysisTargetGoesStale` covers one that lands after it.
+- **Fixture persistence covers every write,** not only `workspace`: Clear
+  Recents, a model or context pick, the last session directory, through one
+  `persist` helper.
+- **`MetricsFormattingTests`' rows now name their locale;** two used the
+  machine's.
+- **A flake, once:** `exitReportedWhenGrandchildHoldsPipe` missed its 5 s
+  bound during a run that rebuilt everything; three runs alone and two of
+  the suite passed.

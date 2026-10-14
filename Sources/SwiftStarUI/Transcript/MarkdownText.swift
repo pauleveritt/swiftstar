@@ -39,9 +39,6 @@ struct MarkdownText: View {
     }
 }
 
-extension MarkdownText {
-}
-
 /// Code colored as answers' code blocks are (SU.15): the fork's highlighter,
 /// its Xcode-theme ranges as SwiftUI colors that follow light and dark. Here
 /// because this is the one file that imports the renderer. A nil language,

@@ -35,7 +35,6 @@ class LoadError(Exception):
 class Session:
     directory: Path
     events: list[dict]
-    receipt: dict
     capture: dict
     diff: str
     warnings: list[str]
@@ -49,13 +48,11 @@ class Step:
     prompt: int
     tool: dict | None
     context_used: int | None
-    tokens: int
 
 
 @dataclass
 class Prompt:
     index: int
-    text: str
     steps: list[Step]
     answered: bool
 
@@ -102,7 +99,7 @@ def load(directory: Path) -> Session:
     versions = {e.get("schema_version") for e in events} - {EVENTS_SCHEMA}
     if versions:
         warnings.append(f"events schema_version {sorted(map(str, versions))}, written for {EVENTS_SCHEMA}")
-    return Session(directory, events, receipt, capture, diff, warnings)
+    return Session(directory, events, capture, diff, warnings)
 
 
 def steps(session: Session) -> list[Prompt]:
@@ -115,35 +112,30 @@ def steps(session: Session) -> list[Prompt]:
     starts = [u.get("turn_index") for u in user_turns]
     if starts and all(isinstance(s, int) for s in starts):
         prompts = []
-        for i, (u, start) in enumerate(zip(user_turns, starts)):
+        for i, start in enumerate(starts):
             end = starts[i + 1] if i + 1 < len(starts) else len(turns)
             own = [_step(j, i, turns[j]) for j in range(start, min(end, len(turns)))]
-            prompts.append(Prompt(i, u.get("text", ""), own, any(s.tool is None for s in own)))
+            prompts.append(Prompt(i, own, any(s.tool is None for s in own)))
         return prompts
     return _by_answers(session)
 
 
 def _step(i: int, prompt: int, turn: dict) -> Step:
-    return Step(i, prompt, turn.get("tool"), turn.get("context_used"), len(turn.get("tokens") or []))
+    return Step(i, prompt, turn.get("tool"), turn.get("context_used"))
 
 
 def _by_answers(session: Session) -> list[Prompt]:
-    texts = [u.get("text", "") for u in session.capture.get("user_turns") or []]
     prompts: list[Prompt] = []
     current: list[Step] = []
     for i, turn in enumerate(session.capture.get("turns") or []):
         step = _step(i, len(prompts), turn)
         current.append(step)
         if step.tool is None:
-            prompts.append(Prompt(len(prompts), _text(texts, len(prompts)), current, True))
+            prompts.append(Prompt(len(prompts), current, True))
             current = []
     if current:
-        prompts.append(Prompt(len(prompts), _text(texts, len(prompts)), current, False))
+        prompts.append(Prompt(len(prompts), current, False))
     return prompts
-
-
-def _text(texts: list[str], i: int) -> str:
-    return texts[i] if i < len(texts) else ""
 
 
 # The engine's guard notices, as a tool result begins, by `loop_guards` kind
