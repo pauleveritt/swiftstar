@@ -94,6 +94,12 @@ Deferred, each with the condition that reopens it.
   to run the app without a terminal.*
 - **A shell toggle.** Tool policy is the engine's. *Reopens if ds4-engine
   adds a spawn-time tool-policy flag worth a Settings control.*
+- **The power throttle knob.** The P-era app had a power-saving switch:
+  on by default, it spawned the engine at `--power 70`, off at the
+  engine's 100, never for the SSD-streaming Laguna variants, which refuse
+  under 100 (`1ea864d`, `6af55c0`). `ds4-dogfood tui` has no such flag; its
+  migration table maps `--power` to none (`docs/tui.md`). *Reopens when
+  ds4-engine offers a throttle (filed 2026-10-14; the request is below).*
 - **The catalog loader's pid-reuse window.** There is a small window before
   SIGKILL in which the pid could be reused. *Reopens if seen live.*
 
@@ -106,6 +112,9 @@ there.
   Look opens the checkout's copy, not the edited one. *Found 2026-10-14:
   the session directory's `receipt.json` names it (`worktree_path`); SU.16
   can use that, so this request is no longer needed.*
+- **No power throttle.** The old engine's `--power` percent has no
+  `tui` equivalent, so SwiftStar can't offer its power-saving switch again
+  (the Front-end backlog's knob).
 - **`models --json` sends no `default_model_id`.** So "Engine default"
   can't name the model it means.
 - **`prefill_tokens` isn't prefill.** It's the transcript length minus evals
