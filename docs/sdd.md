@@ -23,8 +23,9 @@ the change.
    A plan stays under 400 lines; split the cycle if it won't.
 3. **Execute** test-first.
 4. **Close.** The plan gains `## Result`: its commits, what diverged and
-   what was descoped. The ROADMAP row shrinks to one line, and
-   `just lint-docs` passes. Fold all of that into the last task's commit.
+   what was descoped. The ROADMAP row shrinks to one line, anything a user
+   would notice gets a short line in [`CHANGELOG.md`](../CHANGELOG.md)
+   under Unreleased, and `just lint-docs` passes. Fold all of that into the last task's commit.
    There are no separate "Task N done" or "close" commits.
 
 **Research docs are optional.** An audit or investigation is an appendix to
