@@ -614,8 +614,11 @@ public final class EngineController {
     /// Analyze (AN.2): make the report from this session's directory, then
     /// resume the session as a fork to talk about it there.
     func analyze() async {
-        guard model.canAnalyze, let directory = model.sessionDirectory, let source else { return }
-        switch await reportLoader(directory) {
+        guard let target = model.analysisTarget, let source else { return }
+        let result = await reportLoader(target.directory)
+        // A report for a session that has moved on is dropped (SU.17, finding 1).
+        guard model.analysisTarget == target else { return }
+        switch result {
         case .failure(let failure):
             model.apply(.error("Analyze: \(failure.message)"))
         case .success(let report):
@@ -641,6 +644,7 @@ public final class EngineController {
         guard !isTerminating else { return }
         guard !quitBoundFired, !isActive else {
             model.apply(.notice("Relaunch skipped: the engine did not exit."))
+            model.abandonAnalysisTransition()
             return
         }
         if r.kind == .model, let id = r.modelID {

@@ -86,6 +86,23 @@ struct EngineAnalysisTests {
         #expect(!m.canAnalyze)
     }
 
+    /// SU.17, finding 1: what a report is made for goes stale with a new
+    /// turn, even once Analyze is offered again, and with another session.
+    @Test func theAnalysisTargetGoesStale() {
+        var m = idle()
+        let target = m.analysisTarget
+        #expect(target?.directory.lastPathComponent == Self.main.lastPathComponent)
+        answer(&m, "p1")
+        #expect(m.canAnalyze)
+        #expect(m.analysisTarget != nil && m.analysisTarget != target)
+        var other = idle()
+        other.didRelaunch(EngineRelaunch(kind: .rewind, argv: ["tui"], reason: ""))
+        other.apply(.ready)
+        other.apply(.awaitingInput)
+        other.apply(pause(capture: "/s/20261014-000000-other/run-1.partial.json"))
+        #expect(other.analysisTarget?.directory != target?.directory)
+    }
+
     @Test func beginAnalysisReturnsForkRelaunch() {
         var m = idle()
         let r = m.beginAnalysis(report: "R", source: Self.source)
@@ -184,6 +201,20 @@ struct EngineAnalysisTests {
         _ = m.beginAnalysis(report: "R", source: Self.source)
         m.didExit(EngineExit(code: 0, message: "ended"), directory: nil)
         #expect(m.analysis != nil)
+    }
+
+    /// SU.17, finding 9: the fork's relaunch is skipped, so the analysis is
+    /// abandoned, saying the main session is unchanged; once is enough.
+    @Test func aSkippedRelaunchAbandonsTheAnalysis() {
+        var m = idle()
+        _ = m.beginAnalysis(report: "R", source: Self.source)
+        m.didExit(EngineExit(code: -1, message: "did not exit"), directory: nil)
+        m.abandonAnalysisTransition()
+        #expect(m.analysis == nil)
+        #expect(m.transcript.rows.last == .system(EngineAnalysis.mainUnchanged(Self.main)))
+        let rows = m.transcript.rows.count
+        m.abandonAnalysisTransition()
+        #expect(m.transcript.rows.count == rows)
     }
 
     /// Final review, Important 1: a fork that fails says the main session is

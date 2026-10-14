@@ -111,6 +111,33 @@ public struct EngineSessionModel: Equatable, Sendable {
             && transcript.pendingUserCount == 0 && sessionDirectory != nil && analysis == nil
     }
 
+    /// What an Analyze report is made for: this session, at this many
+    /// prompts. Nil when Analyze isn't offered. The report takes a while; one
+    /// that comes back to a different target is stale (SU.17, finding 1).
+    public struct AnalysisTarget: Equatable, Sendable {
+        public let directory: URL
+        public let prompts: Int
+    }
+
+    public var analysisTarget: AnalysisTarget? {
+        guard canAnalyze, let sessionDirectory else { return nil }
+        let prompts = transcript.rows.count { if case .user = $0 { true } else { false } }
+        return AnalysisTarget(directory: sessionDirectory, prompts: prompts)
+    }
+
+    /// The controller skipped the relaunch a fork or return was waiting on
+    /// (its quit hit the safety bound): neither will happen, and the main
+    /// session is as it was (SU.17, finding 9).
+    public mutating func abandonAnalysisTransition() {
+        switch analysis?.stage {
+        case .forking?, .returning?:
+            if let main = analysis?.main { transcript.appendSystem(EngineAnalysis.mainUnchanged(main)) }
+            analysis = nil
+        case .analyzing?, nil:
+            break
+        }
+    }
+
     /// Starts an analysis of this session: returns the relaunch that resumes
     /// it as a fork, or nil when Analyze isn't offered.
     public mutating func beginAnalysis(report: String, source: URL) -> EngineRelaunch? {

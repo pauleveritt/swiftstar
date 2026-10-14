@@ -987,4 +987,57 @@ struct EngineControllerTests {
         #expect(controller.composer.canSend)
         await controller.quit()
     }
+
+    /// SU.17, finding 1: a report that arrives after the session moved on (a
+    /// new turn here) is dropped, success or failure; nothing forks.
+    @Test(arguments: [true, false]) func aStaleReportIsDropped(succeeds: Bool) async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await answered(f)
+        let release = AsyncStream<Void>.makeStream()
+        let entered = AsyncStream<Void>.makeStream()
+        controller.reportLoader = { _ in
+            entered.continuation.yield()
+            for await _ in release.stream { break }
+            return succeeds ? .success("R-STALE") : .failure(SessionReportFailure(message: "stale-boom"))
+        }
+        let analyzing = Task { await controller.analyze() }
+        for await _ in entered.stream { break }  // the report is being made
+        controller.send("Another question")
+        #expect(await eventually(within: .seconds(10)) { f.prompts.contains("Another question") })
+        release.continuation.yield()
+        await analyzing.value
+        #expect(f.spawnArgv.count == 1)
+        #expect(controller.model.analysis == nil)
+        #expect(!controller.transcript.rows.contains { row in
+            switch row {
+            case .report(let s), .error(let s), .system(let s): s.contains("STALE") || s.contains("stale-boom")
+                || s == EngineAnalysis.forkingNotice
+            default: false
+            }
+        })
+        await controller.quit()
+    }
+
+    /// SU.17, finding 9: Analyze's quit hits its bound, so the fork never
+    /// starts; the analysis is abandoned, saying the main session is unchanged.
+    @Test func aSkippedForkAbandonsTheAnalysis() async throws {
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"])
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let graces = EngineGraces(
+            stop: .milliseconds(100), term: .milliseconds(100), kill: .seconds(1), safetyBound: .milliseconds(400))
+        let controller = await running(f, graces: graces)
+        controller.send("Read a file")
+        await eventually(within: .seconds(10)) { controller.model.canAnalyze }
+        let main = try #require(controller.model.sessionDirectory)
+        controller.reportLoader = { _ in .success("R-REPORT") }
+        await controller.analyze()
+        #expect(f.spawnArgv.count == 1)
+        #expect(controller.model.analysis == nil)
+        #expect(controller.transcript.rows.last == .system(EngineAnalysis.mainUnchanged(main)))
+    }
 }
