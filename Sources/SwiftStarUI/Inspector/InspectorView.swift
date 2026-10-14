@@ -65,11 +65,23 @@ struct InspectorView: View {
         .frame(minWidth: 280, idealWidth: 320)
     }
 
+    /// Label and value on one line when they fit; otherwise the value goes
+    /// under its label, so a long one (a drafter file, the prefix cache
+    /// line) doesn't wrap into a column beside it at large font sizes.
     private func metricRow(_ title: String, value: String) -> some View {
-        HStack {
-            Text(title).font(.system(size: fontSize)).foregroundStyle(.secondary)
-            Spacer(minLength: 8)
-            Text(value).font(.system(size: fontSize, design: .monospaced))
+        let label = Text(title).font(.system(size: fontSize)).foregroundStyle(.secondary)
+        let shown = Text(value).font(.system(size: fontSize, design: .monospaced))
+        return ViewThatFits(in: .horizontal) {
+            HStack {
+                label
+                Spacer(minLength: 8)
+                shown.lineLimit(1)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                label
+                shown
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -85,4 +97,11 @@ private extension View {
 
 #Preview("Running", traits: .runningSession) {
     InspectorView()
+}
+
+// The owner's 2026-10-14 screenshot: at 18 pt and the inspector's minimum
+// width, the drafter and prefix-cache values wrapped beside their labels.
+#Preview("Narrow", traits: .runningSession) {
+    InspectorView()
+        .frame(width: 280, height: 560)
 }

@@ -123,3 +123,9 @@ seven. They were tiled into one image to compare.
 
 **For the owner in the app:** the first launch opens at 18 pt, because
 the key is new; the slider's other four sizes.
+
+**The owner's check, 2026-10-14:** at 18 pt the inspector's long values
+(the drafter file, the prefix cache line) wrapped into a column beside
+their labels. A row now uses `ViewThatFits`: label and value on one line
+when they fit, else the value under its label. A "Narrow" preview at
+280 pt shows it.
