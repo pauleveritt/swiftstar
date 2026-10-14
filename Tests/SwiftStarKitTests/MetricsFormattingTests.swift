@@ -7,6 +7,7 @@ struct MetricsFormattingTests {
 
     enum Value: Sendable {
         case rate(Double?), bytes(Int64?), number(Int, String), gib(Int64, String), duration(Double)
+        case rateIn(Double, String), rateNumberIn(Double, String), durationIn(Double, String), bytesIn(Int64, String)
     }
 
     struct FormatCase: Sendable, CustomTestStringConvertible {
@@ -28,6 +29,11 @@ struct MetricsFormattingTests {
         .init(testDescription: "durationOneStyle (whole)", value: .duration(75), text: "75s"),
         .init(testDescription: "durationOneStyle (one decimal)", value: .duration(1.83), text: "1.8s"),
         .init(testDescription: "durationOneStyle (rounds up to whole)", value: .duration(9.96), text: "10s"),
+        // SU.6g, D2-D3: bytes in GiB like the engine's plan; decimals by locale.
+        .init(testDescription: "bytesAreGiB", value: .bytesIn(6_442_450_944, "en_US"), text: "6.0 GiB"),
+        .init(testDescription: "rateFollowsLocale (de_DE)", value: .rateIn(12.34, "de_DE"), text: "12,3 tok/s"),
+        .init(testDescription: "rateNumberFollowsLocale (de_DE)", value: .rateNumberIn(189.84, "de_DE"), text: "189,8"),
+        .init(testDescription: "durationFollowsLocale (de_DE)", value: .durationIn(1.83, "de_DE"), text: "1,8s"),
     ]
 
     @Test(arguments: formatCases) func formats(_ c: FormatCase) {
@@ -37,6 +43,10 @@ struct MetricsFormattingTests {
         case .number(let n, let id): MetricsFormatting.number(n, locale: Locale(identifier: id))
         case .gib(let b, let id): MetricsFormatting.gib(bytes: b, locale: Locale(identifier: id))
         case .duration(let s): MetricsFormatting.duration(seconds: s)
+        case .rateIn(let v, let id): MetricsFormatting.rate(v, locale: Locale(identifier: id))
+        case .rateNumberIn(let v, let id): MetricsFormatting.rateNumber(v, locale: Locale(identifier: id))
+        case .durationIn(let s, let id): MetricsFormatting.duration(seconds: s, locale: Locale(identifier: id))
+        case .bytesIn(let b, let id): MetricsFormatting.bytes(b, locale: Locale(identifier: id))
         }
         #expect(text == c.text)
     }
@@ -76,5 +86,15 @@ struct MetricsFormattingTests {
         #expect(MetricsFormatting.ratesTooltip(prefill: m.prefillTPS, generation: m.generationTPS)
             == "Prefill 100.0 tok/s, generation 10.0 tok/s: averages over this session.")
         #expect(MetricsFormatting.rateSlot == "8888.8")
+    }
+
+    /// SU.6g, D2 (revised by the owner): actual against what the engine
+    /// planned for this model and context; macOS's limit only as context.
+    @Test func gpuTooltip() {
+        let en = Locale(identifier: "en_US")
+        #expect(MetricsFormatting.gpuTooltip(allocated: 6_442_450_944, planGiB: 26.07, limit: 115_448_000_000, locale: en)
+            == "GPU memory: 6.0 GiB allocated, of the 26.1 GiB the engine planned for this model and context. macOS lets the GPU use up to 107.5 GiB on this Mac.")
+        #expect(MetricsFormatting.gpuTooltip(allocated: 6_442_450_944, planGiB: nil, limit: 21_474_836_480, locale: en)
+            == "GPU memory: 6.0 GiB allocated. macOS lets the GPU use up to 20.0 GiB on this Mac.")
     }
 }

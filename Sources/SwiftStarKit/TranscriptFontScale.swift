@@ -8,9 +8,6 @@ public enum TranscriptFontScale {
     public static let sizes: [Int] = [14, 16, 18, 20, 24]
     public static let defaultSize: Int = 18
 
-    /// Clamps an arbitrary value to the nearest defined slot (a hand-edited or
-    /// stale UserDefaults value must not fall off the slider). Ties resolve to
-    /// the smaller size.
     /// The slider slot for a stored size (an out-of-range value takes its
     /// nearest slot).
     public static func slot(for size: Int) -> Int {
@@ -22,6 +19,9 @@ public enum TranscriptFontScale {
         sizes[max(0, min(sizes.count - 1, slot))]
     }
 
+    /// Clamps an arbitrary value to the nearest defined slot (a hand-edited or
+    /// stale UserDefaults value must not fall off the slider). Ties resolve to
+    /// the smaller size.
     public static func clamp(_ size: Int) -> Int {
         sizes.min { a, b in
             (abs(a - size), a) < (abs(b - size), b)

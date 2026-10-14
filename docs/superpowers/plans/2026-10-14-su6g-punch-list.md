@@ -10,12 +10,14 @@ its own decisions.
 **D1. Throughput says what it is.** The inspector's card is "Session
 averages", its rows "Prefill" and "Generation".
 
-**D2. GPU memory: "GPU limit", in GiB, explained.** The row "Budget"
-becomes "GPU limit"; both figures, here and in the status bar, are GiB, as
-the engine's plan and DFlash lines are; the tooltip says what each is:
-the engine's allocation, and the share of memory macOS recommends the GPU
-use on this Mac (Metal's `recommendedMaxWorkingSetSize`, which the engine
-plans against).
+**D2. GPU memory: actual against planned, in GiB.** Revised by the owner
+(2026-10-14): a 107.5 GiB limit beside a model that should stay under
+30 GiB reads as alarming. The status bar shows allocated over the engine's
+plan for this model and context (`engine_plan.total_gib`), and its ring
+fills against the plan; the inspector lists Allocated, Planned, then "GPU
+limit" (Metal's `recommendedMaxWorkingSetSize`, the share of memory macOS
+lets the GPU use, which the engine plans against). Before a plan arrives,
+the limit stands in, as now. All three in GiB, as the engine's plan is.
 
 **D3. Numbers follow the locale:** rates, durations and the context
 tooltip's percent, as counts and GiB already do.

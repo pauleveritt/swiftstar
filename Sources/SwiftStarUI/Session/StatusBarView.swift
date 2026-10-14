@@ -27,7 +27,7 @@ struct StatusBarView: View {
             }
             if let allocated = metrics.gpuAllocatedBytes,
                let budget = metrics.gpuBudgetBytes, budget > 0 {
-                MemoryStatusView(allocatedBytes: allocated, budgetBytes: budget)
+                MemoryStatusView(allocatedBytes: allocated, planGiB: metrics.planGiB, limitBytes: budget)
             }
             if let used = metrics.contextUsed,
                let size = metrics.contextSize, size > 0 {

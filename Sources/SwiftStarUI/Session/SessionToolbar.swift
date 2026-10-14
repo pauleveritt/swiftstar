@@ -46,8 +46,8 @@ struct SessionToolbar: ToolbarContent {
     /// different value restarts a running session, so all are disabled while
     /// one starts or quits.
     private func menuButton(_ menu: some View) -> some View {
-        // No `.font` here: toolbar menus ignore it (a 30 pt probe rendered
-        // unchanged in SU.4).
+        // No `.font` here: `.borderlessButton` toolbar menus ignore it (a
+        // 30 pt probe rendered unchanged in SU.4), and its label's padding.
         menu.disabled(!controller.canChoose)
     }
 
@@ -56,7 +56,7 @@ struct SessionToolbar: ToolbarContent {
             Image(systemName: icon)
             Text(text)
         }
-        // Keep the item at its natural width as the transcript font grows.
+        // Keep the item at its natural width as the font size grows.
         .fixedSize(horizontal: true, vertical: false)
         // `.borderlessButton` menus ignore the label's padding (SU.6f probes);
         // the leading icon gives every menu the same left inset (SU.11, D1).

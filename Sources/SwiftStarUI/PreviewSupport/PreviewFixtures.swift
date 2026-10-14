@@ -52,7 +52,7 @@ extension EngineController {
             prefillTokens: 1146, prefillMs: 1084, evalCount: 64, evalMs: 980,
             capturePath: "/Users/example/.local/state/ds4-engine/sessions/20261013-121126-swiftstar/run-1.partial.json")))
         if withGPU {
-            model.apply(.memory(EngineMemory(allocatedBytes: 6_400_000_000, budgetBytes: 21_000_000_000, planGiB: 6.0)))
+            model.apply(.memory(EngineMemory(allocatedBytes: 6_400_000_000, budgetBytes: 21_000_000_000, planGiB: 9.4)))
         }
         model.apply(.awaitingInput)
         return model

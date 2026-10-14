@@ -46,17 +46,19 @@ struct InspectorView: View {
                 .inspectorCard()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Throughput").font(.scaled(.caption, base: fontSize).bold())
-                    metricRow("Prefill avg", value: MetricsFormatting.rate(state.prefillTPS))
-                    metricRow("Generation avg", value: MetricsFormatting.rate(state.generationTPS))
+                    // SU.6g, D1: the engine's counters run over the session.
+                    Text("Session averages").font(.scaled(.caption, base: fontSize).bold())
+                    metricRow("Prefill", value: MetricsFormatting.rate(state.prefillTPS))
+                    metricRow("Generation", value: MetricsFormatting.rate(state.generationTPS))
                 }
                 .inspectorCard()
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("GPU memory").font(.scaled(.caption, base: fontSize).bold())
+                    // SU.6g, D2: actual against planned; macOS's limit last.
                     metricRow("Allocated", value: MetricsFormatting.bytes(state.gpuAllocatedBytes))
-                    metricRow("Budget", value: MetricsFormatting.bytes(state.gpuBudgetBytes))
-                    metricRow("Plan", value: state.planGiB.map { MetricsFormatting.gib($0) } ?? "—")
+                    metricRow("Planned", value: state.planGiB.map { MetricsFormatting.gib($0) } ?? "—")
+                    metricRow("GPU limit", value: MetricsFormatting.bytes(state.gpuBudgetBytes))
                 }
                 .inspectorCard()
             }
@@ -109,5 +111,5 @@ private extension View {
 // width, the drafter and prefix-cache values wrapped beside their labels.
 #Preview("Narrow", traits: .runningSession) {
     InspectorView()
-        .frame(width: 280, height: 560)
+        .frame(width: 280, height: 900)
 }

@@ -4,24 +4,43 @@ import Foundation
 /// composer's bottom status bar — kept in one place so the two readings
 /// never drift.
 public enum MetricsFormatting {
-    public static func rate(_ value: Double?) -> String {
-        value.map { String(format: "%.1f tok/s", $0) } ?? "—"
+    public static func rate(_ value: Double?, locale: Locale = .current) -> String {
+        value.map { "\(oneDecimal($0, locale: locale)) tok/s" } ?? "—"
     }
 
-    public static func bytes(_ value: Int64?) -> String {
-        value.map { $0.formatted(.byteCount(style: .memory)) } ?? "—"
+    /// A GPU figure in GiB, as the engine's plan is (SU.6g, D2).
+    public static func bytes(_ value: Int64?, locale: Locale = .current) -> String {
+        value.map { gib(bytes: $0, locale: locale) } ?? "—"
     }
 
     public static func contextTooltip(used: Int, size: Int, locale: Locale = .current) -> String {
-        let percent = Double(used) / Double(size) * 100
-        return String(format: "Context window: %@ of %@ tokens (%.0f%% used).",
-                      number(used, locale: locale), number(size, locale: locale), percent)
+        let percent = (Double(used) / Double(size) * 100).formatted(.number.precision(.fractionLength(0)).locale(locale))
+        return "Context window: \(number(used, locale: locale)) of \(number(size, locale: locale)) tokens (\(percent)% used)."
+    }
+
+    /// The GPU figures explained (SU.6g, D2): actual against the engine's
+    /// plan for this model and context, and macOS's limit as context only.
+    public static func gpuTooltip(allocated: Int64, planGiB: Double?, limit: Int64?, locale: Locale = .current) -> String {
+        var text = "GPU memory: \(gib(bytes: allocated, locale: locale)) allocated"
+        if let planGiB {
+            text += ", of the \(gib(planGiB, locale: locale)) the engine planned for this model and context."
+        } else {
+            text += "."
+        }
+        if let limit {
+            text += " macOS lets the GPU use up to \(gib(bytes: limit, locale: locale)) on this Mac."
+        }
+        return text
     }
 
     /// One of the status bar's two rates, bare: "189.8", or "—" before a
     /// measurement (SU.10).
-    public static func rateNumber(_ value: Double?) -> String {
-        value.map { String(format: "%.1f", $0) } ?? "—"
+    public static func rateNumber(_ value: Double?, locale: Locale = .current) -> String {
+        value.map { oneDecimal($0, locale: locale) } ?? "—"
+    }
+
+    private static func oneDecimal(_ value: Double, locale: Locale) -> String {
+        value.formatted(.number.precision(.fractionLength(1)).grouping(.never).locale(locale))
     }
 
     /// The widest number a status bar slot is sized for, so the rates hold
@@ -66,8 +85,9 @@ public enum MetricsFormatting {
 
     /// One style for every duration: tenths under ten seconds, whole seconds
     /// from there ("1.8s", "75s").
-    public static func duration(seconds: Double) -> String {
+    public static func duration(seconds: Double, locale: Locale = .current) -> String {
         let tenths = (seconds * 10).rounded() / 10
-        return tenths < 10 ? String(format: "%.1fs", tenths) : String(format: "%.0fs", tenths)
+        let digits = tenths < 10 ? 1 : 0
+        return tenths.formatted(.number.precision(.fractionLength(digits)).grouping(.never).locale(locale)) + "s"
     }
 }
