@@ -28,6 +28,18 @@ public enum TranscriptFontScale {
         } ?? defaultSize
     }
 
+    /// One slot up from `size`'s slot, or nil at the largest (View › Bigger).
+    public static func bigger(_ size: Int) -> Int? {
+        let slot = slot(for: size) + 1
+        return slot < sizes.count ? sizes[slot] : nil
+    }
+
+    /// One slot down from `size`'s slot, or nil at the smallest.
+    public static func smaller(_ size: Int) -> Int? {
+        let slot = slot(for: size) - 1
+        return slot >= 0 ? sizes[slot] : nil
+    }
+
     /// A smaller text's size for a body size `base`, in macOS's own
     /// proportions to its 13 pt body.
     public static func points(_ role: TextRole, base: Double) -> Double {

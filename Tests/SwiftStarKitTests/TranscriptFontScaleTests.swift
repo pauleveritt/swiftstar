@@ -50,4 +50,15 @@ struct TranscriptFontScaleTests {
         #expect(near(TranscriptFontScale.points(.caption2, base: 18), 12.96))
         #expect(near(TranscriptFontScale.points(.caption, base: 14), 11.2))
     }
+
+    /// View › Bigger and Smaller step one slot; nil at either end (SU.6f).
+    @Test func steps() {
+        #expect(TranscriptFontScale.bigger(18) == 20)
+        #expect(TranscriptFontScale.smaller(18) == 16)
+        #expect(TranscriptFontScale.bigger(24) == nil)
+        #expect(TranscriptFontScale.smaller(14) == nil)
+        // An off-scale value steps from the slot it clamps to (21 → 20).
+        #expect(TranscriptFontScale.bigger(21) == 24)
+        #expect(TranscriptFontScale.smaller(21) == 18)
+    }
 }
