@@ -94,6 +94,15 @@ Deferred, each with the condition that reopens it.
   to run the app without a terminal.*
 - **A shell toggle.** Tool policy is the engine's. *Reopens if ds4-engine
   adds a spawn-time tool-policy flag worth a Settings control.*
+- **Watching prefix effectiveness.** Whether the prompt-prefix cache is
+  earning its keep. Today the inspector shows only the latest `prefix_cache`
+  event (`hit`/`miss`, tokens, load or fill time), and the AN report counts
+  outcomes per session. Wanted: hits and misses over a session and across
+  sessions (from `operator-events.jsonl`), the time a hit saved (its load
+  against a miss's fill for the same model), and a miss's cause, once the
+  engine reports it; perhaps a status-bar or inspector trend, perhaps a
+  `just` report first. *Reopens when the owner picks it up (filed
+  2026-10-14); the two gaps are under Engine requests.*
 - **The power throttle knob.** The P-era app had a power-saving switch:
   on by default, it spawned the engine at `--power 70`, off at the
   engine's 100, never for the SSD-streaming Laguna variants, which refuse
@@ -112,6 +121,14 @@ there.
   Look opens the checkout's copy, not the edited one. *Found 2026-10-14:
   the session directory's `receipt.json` names it (`worktree_path`); SU.16
   can use that, so this request is no longer needed.*
+- **A prefix-cache miss doesn't say why.** The key covers the engine, model
+  file, shaders, context size, DFlash and the prompt's tokens
+  (`docs/tui.md`); the `miss` event names none of them, so a miss after an
+  update can't be told from a cold cache.
+- **Live-prefix reuse between turns isn't recorded.** The engine's cost
+  panel assumes the live prefix was reused, and notes that a rebuild "is
+  not visible in the capture"; so its share of a turn's prefill can't be
+  shown.
 - **No power throttle.** The old engine's `--power` percent has no
   `tui` equivalent, so SwiftStar can't offer its power-saving switch again
   (the Front-end backlog's knob).
