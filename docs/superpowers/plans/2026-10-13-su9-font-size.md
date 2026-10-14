@@ -88,3 +88,38 @@ them; `points` at 18 and at 14; the raw value `fontSize`.
   "after 7b" bullets.
 - This plan gains `## Result`.
 - `just lint-docs`, `just test`, `just integration`.
+
+## Result
+
+Done 2026-10-13 on `su-ui`, in three commits: Task 1 (`c43143a`), Task 2
+(`a53f9cd`) and this close.
+
+**Suites:** `just test` and `just integration` (147 and 75 passed, in its
+two test products), with no other test run going. Task 1's tests were
+written first and failed to build without `points`.
+
+**Previews:** all twenty in the touched files rendered without errors and
+were looked at: `MainView`'s "Running", `InspectorView`'s "Running",
+`SettingsView`'s "Settings" (five slots, the thumb in the middle),
+`SessionView`'s "Large font" (24 pt), and `ConversationList`'s three,
+`MemoryStatusView`'s one, `ToolCardView`'s four and `TranscriptRowView`'s
+seven. They were tiled into one image to compare.
+
+**Diverged:**
+- **The `points` tests compare within 0.001.** 18 × 0.8 isn't exactly
+  14.4 in a `Double`.
+- **The sidebar's and inspector's body text takes the base size too,** not
+  only their captions: under D1, their system-sized row titles and labels
+  were fixed sizes as well.
+- **The Swift name stays `transcriptFontSize`.** Renaming it touches
+  `SessionView`, so it joins the "after 7b" bullets with the shortcuts.
+
+**Seen, not changed:**
+- **The status line truncates in the middle** at 18 pt in `MainView`'s
+  preview width (it was already at the body size).
+- **The toolbar overflows into `>>`** at 24 pt; the toolbar is 7b's.
+- **The sidebar's empty state** is a system `ContentUnavailableView` and
+  keeps its own size.
+
+**For the owner in the app:** the first launch opens at 18 pt, because
+the key is new; the slider's other four sizes.
