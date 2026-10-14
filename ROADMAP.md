@@ -52,6 +52,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6d, 6a, 6b, 6c and 6e done 2026-10-13: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md), [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md), [6b](docs/superpowers/plans/2026-10-13-su6b-session-card.md), [6c](docs/superpowers/plans/2026-10-13-su6c-remembering.md), [6e](docs/superpowers/plans/2026-10-13-su6e-native-look.md). The punch list below waits |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | 7a done 2026-10-13: a sidebar of this project's conversations; clicking one resumes it. [Spec](docs/superpowers/specs/2026-10-13-su7a-sessions-and-resume-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-su7a-sessions-and-resume.md). Next 7b (switching); more than one window (7c) waits on the engine |
 | SU.8 | Prompt history | ↑/↓ in the composer steps through earlier prompts | done 2026-10-13: this conversation's typed prompts, while the field is empty or unedited. [Plan and Result](docs/superpowers/plans/2026-10-13-su8-prompt-history.md) |
+| SU.9 | Font size | One setting scales every text in the window: 5 sizes, the middle the default; ⌘+ and ⌘− after 7b lands | not brainstormed |
 
 ### SU.6 punch list
 
