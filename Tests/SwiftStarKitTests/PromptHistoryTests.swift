@@ -57,6 +57,21 @@ struct PromptHistoryTests {
         #expect(h.up(current: "", entries: entries) == "third")
     }
 
+    /// SU.17, the review's missed idea: a `/rewind` shrinks the entries under
+    /// a recall in progress. ↑ clamps to what's left; ↓ past it clears.
+    @Test func aRewindShrinksTheHistoryUnderARecall() {
+        var h = PromptHistory()
+        let before = ["a", "b", "c", "d", "e"]
+        _ = h.up(current: "", entries: before)                // e
+        #expect(h.up(current: "e", entries: before) == "d")   // index 3, past the two left
+        let after = ["a", "b"]
+        #expect(h.up(current: "d", entries: after) == "b")
+        #expect(h.down(current: "b", entries: after) == "")
+        _ = h.up(current: "", entries: before)
+        _ = h.up(current: "e", entries: before)               // index 3
+        #expect(h.down(current: "d", entries: after) == "")   // nothing newer is left
+    }
+
     @Test func noEntriesMovesTheCursor() {
         var h = PromptHistory()
         #expect(h.up(current: "", entries: []) == nil)

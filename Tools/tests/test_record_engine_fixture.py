@@ -4,8 +4,10 @@ No engine: the recordings are files made here, and the one subprocess is
 `/bin/echo`.
 """
 
+import gc
 import importlib.util
 import tempfile
+import warnings
 import unittest
 from pathlib import Path
 
@@ -46,6 +48,25 @@ class Recordings(unittest.TestCase):
         with self.assertRaises(ValueError):
             recorder.run("/bin/echo", ["not json"], None, out, lambda line, send: None)
         self.assertFalse(Path(out + ".tmp").exists())
+
+    def test_a_raising_resume_drops_the_first_half_too(self):
+        # SU.17: the first recording's .tmp went nowhere when the resumed run raised.
+        with self.assertRaises(ValueError):
+            recorder.run_resumed("/bin/echo", ["not json"], None, self.out, self.resumed)
+        self.assertFalse(Path(self.out + ".tmp").exists())
+        self.assertFalse(Path(self.resumed + ".tmp").exists())
+        self.assertEqual(Path(self.out).read_text(), "old\n")
+
+    def test_a_run_closes_its_pipes(self):
+        # SU.17: no ResourceWarning for an unclosed pipe, on success or failure.
+        out = str(self.dir / "pipes.ndjson")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            recorder.run("/bin/echo", ['{"kind": "input"}'], None, out, lambda line, send: None)
+            with self.assertRaises(ValueError):
+                recorder.run("/bin/echo", ["not json"], None, out, lambda line, send: None)
+            gc.collect()
+        self.assertEqual([w for w in caught if issubclass(w.category, ResourceWarning)], [])
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ public final class EngineController {
     var workspace: URL? {
         didSet {
             guard let workspace else { return }
-            UserDefaults.standard.set(workspace.path, forKey: DefaultsKey.workspace.rawValue)
+            persist(workspace.path, .workspace)
         }
     }
 
@@ -188,7 +188,7 @@ public final class EngineController {
     /// File › Open Recent › Clear Menu. The current workspace stays.
     public func clearRecents() {
         recentWorkspaces = []
-        UserDefaults.standard.removeObject(forKey: DefaultsKey.recentWorkspaces.rawValue)
+        persist(nil, .recentWorkspaces)
     }
 
     /// Ends the current session and starts a fresh one with Settings.
@@ -288,6 +288,8 @@ public final class EngineController {
     init(model: EngineSessionModel, conversations: [Conversation] = [], workspace: URL? = nil,
          workspaceFiles: [String] = []) {
         self.graces = .standard
+        // First: `workspace`'s `didSet` runs in this init and must not persist.
+        isFixture = true
         self.model = model
         self.conversations = conversations
         self.workspaceFiles = workspaceFiles
@@ -295,7 +297,14 @@ public final class EngineController {
         modelID = ""
         contextSize = 0
         recentWorkspaces = []
-        isFixture = true
+    }
+
+    /// Every write to the app's defaults. A fixture controller (a preview's,
+    /// the gallery's, a test's) persists nothing (SU.17).
+    private func persist(_ value: Any?, _ key: DefaultsKey) {
+        guard !isFixture else { return }
+        if let value { UserDefaults.standard.set(value, forKey: key.rawValue) }
+        else { UserDefaults.standard.removeObject(forKey: key.rawValue) }
     }
 
     /// The checkout the app runs from, if any: anchored to the executable,
@@ -377,7 +386,7 @@ public final class EngineController {
     private func remember(_ url: URL) {
         let list = RecentWorkspaces.updated(recentWorkspaces, adding: url.path)
         recentWorkspaces = list
-        UserDefaults.standard.set(list, forKey: DefaultsKey.recentWorkspaces.rawValue)
+        persist(list, .recentWorkspaces)
     }
 
     func select(workspace url: URL) {
@@ -412,7 +421,7 @@ public final class EngineController {
             return
         }
         modelID = id
-        UserDefaults.standard.set(id, forKey: DefaultsKey.modelID.rawValue)
+        persist(id, .modelID)
         restartIfRunning()
     }
 
@@ -421,7 +430,7 @@ public final class EngineController {
         let size = max(0, size)
         guard size != contextSize else { return }
         contextSize = size
-        UserDefaults.standard.set(size, forKey: DefaultsKey.contextSize.rawValue)
+        persist(size, .contextSize)
         restartIfRunning()
     }
 
@@ -540,7 +549,7 @@ public final class EngineController {
             let checked = ModelMenu.validated(saved: modelID, list: catalog)
             if checked.modelID != modelID {
                 modelID = checked.modelID
-                UserDefaults.standard.set(modelID, forKey: DefaultsKey.modelID.rawValue)
+                persist(modelID, .modelID)
             }
             notice = checked.notice
         }
@@ -649,7 +658,7 @@ public final class EngineController {
         }
         if r.kind == .model, let id = r.modelID {
             modelID = id
-            UserDefaults.standard.set(id, forKey: DefaultsKey.modelID.rawValue)
+            persist(id, .modelID)
         }
         await start(relaunch: r)
     }
@@ -713,7 +722,7 @@ public final class EngineController {
         pendingModelCommand = nil
         if let directory {
             lastSessionDirectory = directory
-            UserDefaults.standard.set(directory.path, forKey: DefaultsKey.lastSessionDirectory.rawValue)
+            persist(directory.path, .lastSessionDirectory)
         }
         // A resume the engine refused to start (its `.resumed` never came):
         // a model it no longer offers can still give back the files.

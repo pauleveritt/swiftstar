@@ -18,9 +18,17 @@ struct ProcessRunnerTests {
     /// A child that exits while a background grandchild holds its stdout
     /// returns its output after the drain, not at the timeout.
     @Test func aGrandchildHoldingThePipeDoesNotStretchTheCall() async throws {
+        // The grandchild outlives the call; the test kills it (SU.17).
+        let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent("runner-\(UUID().uuidString).pid")
+        defer {
+            if let pid = (try? String(contentsOf: pidFile, encoding: .utf8))
+                .flatMap({ Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }) { kill(pid, SIGKILL) }
+            try? FileManager.default.removeItem(at: pidFile)
+        }
         let start = ContinuousClock.now
         let result = await ProcessRunner.run(
-            executable: "/bin/sh", arguments: ["-c", "echo hi; sleep 30 & exit 0"], timeout: .seconds(10))
+            executable: "/bin/sh", arguments: ["-c", "echo hi; sleep 30 & echo $! > '\(pidFile.path)'; exit 0"],
+            timeout: .seconds(10))
         let elapsed = ContinuousClock.now - start
         let output = try #require(result.successValue)
         #expect(String(decoding: output.stdout, as: UTF8.self) == "hi\n")

@@ -60,6 +60,13 @@ struct MetricsFormattingTests {
         #expect(MetricsFormatting.prefixCacheLine(p, locale: Locale(identifier: "en_US")) == line)
     }
 
+    /// SU.17: the fill time follows the locale too, as the token count does.
+    @Test func prefixCacheLineDurationFollowsTheLocale() {
+        let miss = EnginePrefixCache(outcome: "miss", tokens: 1944, loadMs: nil, fillMs: 3880)
+        #expect(MetricsFormatting.prefixCacheLine(miss, locale: Locale(identifier: "de_DE"))
+            == "miss · 1.944 tokens filled in 3,9s")
+    }
+
     @Test func contextTooltipMatchesTodaysWording() {
         #expect(MetricsFormatting.contextTooltip(used: 512, size: 2048, locale: Locale(identifier: "en_US"))
             == "Context window: 512 of 2,048 tokens (25% used).")

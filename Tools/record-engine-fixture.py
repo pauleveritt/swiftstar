@@ -48,27 +48,43 @@ def run(exe, argv, env, out, on_line):
     `on_line(line, send)` for each parsed line; return the exit code. The
     caller keeps the recording (`keep`) or drops it, so a failed attempt
     never overwrites a committed fixture."""
-    proc = subprocess.Popen(
+    # The `with` closes the pipes and reaps the process, however it ends (SU.17).
+    with subprocess.Popen(
         [exe, *argv], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL, text=True, bufsize=1, env=env,
-    )
+    ) as proc:
 
-    def send(message: dict) -> None:
-        proc.stdin.write(json.dumps(message) + "\n")
-        proc.stdin.flush()
+        def send(message: dict) -> None:
+            proc.stdin.write(json.dumps(message) + "\n")
+            proc.stdin.flush()
+
+        try:
+            with open(out + ".tmp", "w") as sink:
+                for raw in proc.stdout:
+                    sink.write(raw)
+                    on_line(json.loads(raw), send)
+        except BaseException:
+            # A failed recording leaves nothing behind (SU.6g, D5).
+            proc.kill()
+            Path(out + ".tmp").unlink(missing_ok=True)
+            raise
+        return proc.wait()
+
+
+def run_resumed(exe, argv, env, out, resumed):
+    """Record the relaunch's resumed half, quitting at its first `input`.
+    If it raises, the first half's recording goes too (SU.17): the two are
+    kept together or not at all (`settle_pair`)."""
+
+    def quit_at_input(line, send):
+        if line.get("kind") == "input":
+            send({"kind": "quit"})
 
     try:
-        with open(out + ".tmp", "w") as sink:
-            for raw in proc.stdout:
-                sink.write(raw)
-                on_line(json.loads(raw), send)
+        return run(exe, argv, env, resumed, quit_at_input)
     except BaseException:
-        # A failed recording leaves nothing behind (SU.6g, D5).
-        proc.kill()
-        proc.wait()
-        Path(out + ".tmp").unlink(missing_ok=True)
+        keep(out, False)
         raise
-    return proc.wait()
 
 
 def main() -> int:
@@ -124,12 +140,7 @@ def main() -> int:
             print("relaunch-rewind: no rewind_refused with relaunch", file=sys.stderr)
             return 3
         resumed = str(Path(out).with_name("resumed.ndjson"))
-
-        def quit_at_input(line, send):
-            if line.get("kind") == "input":
-                send({"kind": "quit"})
-
-        resumed_code = run(exe, state["relaunch"], env, resumed, quit_at_input)
+        resumed_code = run_resumed(exe, state["relaunch"], env, out, resumed)
         print(f"resumed: exit {resumed_code}, argv {state['relaunch']}", file=sys.stderr)
         settle_pair(out, resumed, code, resumed_code)
         return code or resumed_code

@@ -10,11 +10,12 @@ extension EngineController {
     }
 
     /// A running session, mid-conversation: one answered turn with a tool
-    /// call, metrics populated, awaiting the next prompt.
+    /// call, metrics populated, awaiting the next prompt. Its workspace has
+    /// files, so the gallery's `@` picker opens (SU.17).
     static var previewRunning: EngineController {
         EngineController(
             model: runningModel(withGPU: true), conversations: .preview,
-            workspace: URL(fileURLWithPath: "/Users/example/projects/swiftstar"))
+            workspace: URL(fileURLWithPath: "/Users/example/projects/swiftstar"), workspaceFiles: .previewFiles)
     }
 
     /// The running session without GPU metrics, as before the engine's first

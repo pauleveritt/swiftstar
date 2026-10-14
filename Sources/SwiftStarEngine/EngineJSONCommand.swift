@@ -19,7 +19,7 @@ enum EngineJSONCommand {
             guard out.code == 0 else {
                 let text = String(decoding: out.stderr.suffix(EngineSessionConstants.stderrTailLimit), as: UTF8.self)
                 if out.code == 2, text.contains("invalid choice") || text.contains("unknown command") {
-                    return .failure(.commandMissing)
+                    return .failure(.commandMissing(arguments.first ?? ""))
                 }
                 let last = text.split(whereSeparator: \.isNewline).last.map { String($0.prefix(200)) }
                 return .failure(.failed("exit code \(out.code)" + (last.map { ": \($0)" } ?? "")))

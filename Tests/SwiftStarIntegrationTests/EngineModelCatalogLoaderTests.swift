@@ -74,7 +74,7 @@ struct EngineModelCatalogLoaderTests {
     @Test func loaderReportsMissingCommand() async {
         let result = await EngineModelCatalogLoader.load(
             executable: Self.fake, environment: env(["FAKE_ENGINE_MODELS_UNKNOWN": "1"]))
-        #expect(result == .failure(.commandMissing))
+        #expect(result == .failure(.commandMissing("models")))
         if case .failure(let e) = result {
             #expect(e.reason == "this ds4-dogfood has no `models` command (needs ds4-engine TUI.35 or later)")
         }
@@ -123,6 +123,10 @@ struct SessionListLoaderTests {
     @Test func sessionListLoaderReportsMissingCommand() async {
         let result = await SessionListLoader.load(
             executable: Self.fake, source: URL(fileURLWithPath: "/r"), environment: env([:]))
-        #expect(result == .failure(.commandMissing))
+        // SU.17: the note names the command that's missing, not `models`.
+        #expect(result == .failure(.commandMissing("sessions")))
+        if case .failure(let e) = result {
+            #expect(e.reason == "this ds4-dogfood has no `sessions` command (update ds4-engine)")
+        }
     }
 }

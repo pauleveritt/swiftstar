@@ -11,7 +11,8 @@ public enum CatalogError: Error, Equatable, Sendable {
     case failed(String)
     case timedOut
     /// An engine older than ds4-engine TUI.35: the subcommand does not exist.
-    case commandMissing
+    /// The engine has no such subcommand; the name is the one asked for.
+    case commandMissing(String)
 
     /// One line for the transcript note.
     public var reason: String {
@@ -20,8 +21,9 @@ public enum CatalogError: Error, Equatable, Sendable {
         case .malformed(let m): "unreadable output (\(m))"
         case .failed(let m): m
         case .timedOut: "timed out"
-        case .commandMissing:
-            "this ds4-dogfood has no `models` command (needs ds4-engine TUI.35 or later)"
+        case .commandMissing(let name):
+            "this ds4-dogfood has no `\(name)` command ("
+                + (name == "models" ? "needs ds4-engine TUI.35 or later" : "update ds4-engine") + ")"
         }
     }
 }

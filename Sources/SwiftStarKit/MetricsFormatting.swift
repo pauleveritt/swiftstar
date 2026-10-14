@@ -77,7 +77,7 @@ public enum MetricsFormatting {
         case "hit":
             return "hit\(tokens)" + (p.loadMs.map { " in \(Int($0.rounded())) ms" } ?? "")
         case "miss":
-            return "miss\(tokens)" + (p.fillMs.map { " filled in \(duration(seconds: $0 / 1000))" } ?? "")
+            return "miss\(tokens)" + (p.fillMs.map { " filled in \(duration(seconds: $0 / 1000, locale: locale))" } ?? "")
         default:
             return "\(p.outcome)\(tokens)"
         }

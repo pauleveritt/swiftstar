@@ -859,6 +859,29 @@ struct EngineControllerTests {
         #expect(controller.transcript.rows.last == .system(exit.message))
     }
 
+    /// SU.17: a fixture controller (a preview's, the gallery's) never writes
+    /// the app's saved workspace.
+    @Test func aFixtureControllerPersistsNothing() {
+        let keys: [DefaultsKey] = [.workspace, .modelID, .contextSize]
+        var values: [DefaultsKey: Any?] = Dictionary(uniqueKeysWithValues: keys.map { ($0, nil) })
+        values[.recentWorkspaces] = ["/kept"]  // so Clear Recents' removal would show
+        let defaults = DefaultsScope(values)
+        defer { defaults.restore() }
+        let controller = EngineController(
+            model: EngineSessionModel(), workspace: URL(fileURLWithPath: "/tmp/fixture-workspace"))
+        controller.workspace = URL(fileURLWithPath: "/tmp/fixture-workspace-2")
+        controller.select(modelID: "fixture-model")
+        controller.select(contextSize: 4096)
+        controller.clearRecents()
+        for key in keys { #expect(UserDefaults.standard.object(forKey: key.rawValue) == nil, "\(key)") }
+        #expect(UserDefaults.standard.stringArray(forKey: DefaultsKey.recentWorkspaces.rawValue) == ["/kept"])
+    }
+
+    /// SU.17, the review's missed idea: the gallery's `@` picker has files.
+    @Test func theGalleryOffersFixtureFiles() {
+        #expect(!FileMentions.match("sess", in: EngineController.gallery().workspaceFiles).isEmpty)
+    }
+
     @Test func fixtureStartStaysIdle() async {
         let controller = EngineController.previewIdle
         await controller.start()
