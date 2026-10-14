@@ -79,25 +79,15 @@ struct SessionToolbar: ToolbarContent {
     }
 
     private var folderMenu: some View {
-        let current = controller.workspace?.path
-        return Menu {
-            ForEach(
-                RecentWorkspaces.items(
-                    controller.recentWorkspaces, current: current,
-                    exists: { FileManager.default.fileExists(atPath: $0) }),
-                id: \.value
-            ) { item in
-                choiceRow(title: item.title, checked: item.isChecked, disabledReason: item.disabledReason) {
-                    controller.select(workspace: URL(fileURLWithPath: item.value))
-                }
-            }
+        Menu {
+            RecentProjectRows(controller: controller)
             if !controller.recentWorkspaces.isEmpty { Divider() }
             Button("Choose Folder…", action: pickWorkspace)
         } label: {
             menuLabel(controller.workspace?.leafName ?? "Choose folder", icon: "folder")
         }
         .menuStyle(.borderlessButton)
-        .help("Workspace: its git repository is the engine's source. Choosing another restarts a running session.")
+        .help("Workspace: its git repository is the engine's source. Choosing another ends a running session; mid-turn, it asks first.")
     }
 
     private var modelMenu: some View {
@@ -145,7 +135,7 @@ struct SessionToolbar: ToolbarContent {
 
     private func pickWorkspace() {
         if let url = WorkspacePicker.run(from: controller.workspace) {
-            controller.select(workspace: url)
+            controller.requestSwitch(to: url)
         }
     }
 

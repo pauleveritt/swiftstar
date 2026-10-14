@@ -485,7 +485,9 @@ struct EngineControllerTests {
         let defaults = DefaultsScope([.workspace: repo, .recentWorkspaces: [repo, "/elsewhere"]])
         defer { defaults.restore() }
         let controller = EngineController()
+        #expect(controller.hasRecents)
         controller.clearRecents()
+        #expect(!controller.hasRecents)
         #expect(controller.recentWorkspaces.isEmpty)
         #expect(UserDefaults.standard.object(forKey: DefaultsKey.recentWorkspaces.rawValue) == nil)
         #expect(controller.workspace?.path == repo)
@@ -655,6 +657,63 @@ struct EngineControllerTests {
         controller.requestSwitch(to: here)
         try? await Task.sleep(for: .milliseconds(300))
         #expect(f.spawnArgv.count == 1)
+        await controller.quit()
+    }
+
+    // SU.7b final review fixes
+
+    @Test func confirmSwitchTakesThePresentedRequest() async throws {
+        // The alert's binding may reset (cancelSwitch) before "Switch" runs.
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let b = try tempRepo()
+        defer { try? FileManager.default.removeItem(atPath: b) }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.send("Use the read tool on Package.swift")
+        let busy = await eventually { controller.transcript.isBusy }
+        #expect(busy)
+        controller.requestSwitch(to: URL(fileURLWithPath: b))
+        let request = try #require(controller.pendingSwitch)
+        controller.cancelSwitch()
+        controller.confirmSwitch(request)
+        #expect(controller.workspace?.path == b)
+        await controller.quit()
+    }
+
+    @Test func switchToTheCurrentFolderMidTurnDoesNotAsk() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.send("Use the read tool on Package.swift")
+        let busy = await eventually { controller.transcript.isBusy }
+        #expect(busy)
+        let here = try #require(controller.workspace)
+        controller.requestSwitch(to: here)
+        #expect(controller.pendingSwitch == nil)
+        await controller.quit()
+    }
+
+    @Test func performingASwitchClearsAPendingOne() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let b = try tempRepo(), c = try tempRepo()
+        defer { for p in [b, c] { try? FileManager.default.removeItem(atPath: p) } }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .workspace: nil, .recentWorkspaces: nil])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        controller.send("Use the read tool on Package.swift")
+        let busy = await eventually { controller.transcript.isBusy }
+        #expect(busy)
+        controller.requestSwitch(to: URL(fileURLWithPath: b))
+        let idle = await eventually(within: .seconds(10)) { !controller.transcript.isBusy }
+        #expect(idle)
+        controller.requestSwitch(to: URL(fileURLWithPath: c))
+        #expect(controller.workspace?.path == c)
+        #expect(controller.pendingSwitch == nil)
         await controller.quit()
     }
 

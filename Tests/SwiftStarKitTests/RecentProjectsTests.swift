@@ -88,4 +88,12 @@ struct RecentProjectsTests {
         let label = Self.items([Self.alpha], entries: [entry]).first?.latestLabel ?? ""
         #expect(label.hasPrefix(String(title.prefix(40)) + "… · "))
     }
+
+    @Test func menuTitlesReadAsSpecified() throws {
+        let rows = Self.items([Self.beta, Self.gamma], entries: try Self.fixture())
+        #expect(rows.map(\.menuTitle) == ["beta · Add a menu · 12m ago", "gamma"])
+        #expect(rows.map(\.resumeTitle) == ["Resume \"Add a menu\" · 12m ago", nil])
+        let gone = Self.items([Self.gamma], entries: [], exists: { _ in false })
+        #expect(gone.first?.menuTitle == "gamma — folder not found")
+    }
 }

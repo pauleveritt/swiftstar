@@ -138,18 +138,6 @@ public enum RecentWorkspaces {
     public static func updated(_ list: [String], adding path: String, cap: Int = 5) -> [String] {
         Array(([path] + list.filter { $0 != path }).prefix(max(0, cap)))
     }
-
-    /// Menu rows for the recent folders; one that no longer exists is disabled.
-    public static func items(
-        _ list: [String], current: String?, exists: (String) -> Bool
-    ) -> [MenuChoice<String>] {
-        list.map { path in
-            MenuChoice(
-                title: URL(fileURLWithPath: path).leafName, value: path,
-                isChecked: path == current,
-                disabledReason: exists(path) ? nil : "folder not found")
-        }
-    }
 }
 
 /// A Recent folder, with its project's newest conversation it can resume
@@ -165,6 +153,20 @@ public struct RecentProject: Equatable, Sendable, Identifiable {
     public let latest: Conversation?
     /// "Hello · 12m ago".
     public let latestLabel: String?
+
+    /// The project row: "beta · Add a menu · 12m ago", or "beta — folder
+    /// not found".
+    public var menuTitle: String {
+        let base = latestLabel.map { "\(title) · \($0)" } ?? title
+        return disabledReason.map { "\(base) — \($0)" } ?? base
+    }
+
+    /// The resume item under it: `Resume "Add a menu" · 12m ago`.
+    public var resumeTitle: String? {
+        guard let label = latestLabel else { return nil }
+        guard let dot = label.range(of: " · ", options: .backwards) else { return "Resume \"\(label)\"" }
+        return "Resume \"\(label[..<dot.lowerBound])\" · \(label[dot.upperBound...])"
+    }
 
     public init(path: String, title: String, isCurrent: Bool, disabledReason: String?,
                 latest: Conversation?, latestLabel: String?) {
