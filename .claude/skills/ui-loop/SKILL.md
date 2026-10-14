@@ -58,8 +58,11 @@ testing.
   `.onAppear`, timed or not, does not show. Interaction checks (toggles,
   transitions) need the live canvas, which is the owner's to run.
 - **`.menuStyle(.borderlessButton)` toolbar menus ignore `.font` and the
-  label's `.padding`** (SU.4, SU.6f probes). The default toolbar menu style
-  draws native insets; the toolbar's menus use it since SU.6f.
+  label's `.padding`** (SU.4, SU.6f probes).
+- **The canvas lies about toolbars.** With the default menu style, previews
+  showed the menus' text with native insets; the running app showed only
+  the label's image, so the model and context menus were blank (SU.6f,
+  reverted). A toolbar change needs the owner's look in the app.
 - Snapshot filenames contain a narrow no-break space before AM/PM; copy them
   with a glob, not a typed name.
 - To look at many renders at once, tile them into one image (a small AppKit

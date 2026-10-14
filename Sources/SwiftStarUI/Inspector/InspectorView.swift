@@ -62,7 +62,9 @@ struct InspectorView: View {
             }
             .padding(16)
         }
-        .frame(minWidth: 280, idealWidth: 320)
+        // The inspector column's own width rule, so its divider drags; a
+        // plain `.frame` here pinned it near the ideal (owner, 2026-10-14).
+        .inspectorColumnWidth(min: 280, ideal: 320, max: 640)
     }
 
     /// Label and value on one line when they fit; otherwise the value goes

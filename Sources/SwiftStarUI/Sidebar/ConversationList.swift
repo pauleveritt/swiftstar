@@ -22,8 +22,8 @@ struct ConversationList: View {
                 // previews (TableViewListCore_Mac2.swift:5538), SU.7a Task 4.
                 List(controller.conversations, selection: selection) { c in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(c.title).font(.system(size: fontSize)).lineLimit(1)
-                        Text(Conversations.subtitle(c, now: Date())).font(.scaled(.caption, base: fontSize)).foregroundStyle(.secondary)
+                        Text(c.title).font(.scaled(.caption, base: fontSize)).lineLimit(1)
+                        Text(Conversations.subtitle(c, now: Date())).font(.scaled(.caption2, base: fontSize)).foregroundStyle(.secondary)
                     }
                     .foregroundStyle(c.resumable ? .primary : .tertiary)
                     .help(c.resumable ? c.title

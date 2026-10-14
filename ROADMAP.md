@@ -64,6 +64,10 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
   - the engine's stderr start notices
   - model sizes from `plan_gib` and `size_bytes`; drop the catalog fields
     the engine never sends
+- **Toolbar menus' padding** (SU.6f tried and reverted): their text sits on
+  the capsule's edge under `.borderlessButton`. The default menu style
+  pads them but, in the app, shows only the label's image. Try it with
+  `windowToolbarLabelStyle(fixed: .titleAndIcon)` and check in the app.
 - **Left from SU.5a** (each plan's Result):
   - rate, duration, the status line and the ctx label ignore the locale; the
     inspector mixes GB and GiB
