@@ -104,6 +104,15 @@ public struct Conversation: Identifiable, Equatable, Sendable {
 }
 
 public enum Conversations {
+    /// The running session's conversation: the first that holds its most
+    /// precise id, then the next (`EngineSessionModel.sessionIDs`).
+    public static func current(sessionIDs: [String], in conversations: [Conversation]) -> Conversation? {
+        for id in sessionIDs {
+            if let c = conversations.first(where: { $0.sessionIDs.contains(id) }) { return c }
+        }
+        return nil
+    }
+
     /// A running session's id that no listed conversation holds: the list
     /// is behind it and should reload (SU.11, D4).
     public static func isUnlisted(sessionID: String?, in conversations: [Conversation]) -> Bool {

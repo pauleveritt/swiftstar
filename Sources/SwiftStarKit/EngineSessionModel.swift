@@ -87,10 +87,20 @@ public struct EngineSessionModel: Equatable, Sendable {
     /// An analysis in progress (AN.2), from Analyze until Done's return.
     public private(set) var analysis: EngineAnalysis?
 
-    /// The session directory this conversation is known by (SU.7a): the one
-    /// a `.resumed` names, else this process's own, from the first pause's
-    /// capture path. Cleared by a fresh start.
+    /// The session directory this conversation is known by (SU.7a): this
+    /// process's own, from a pause's capture path, else the one a `.resumed`
+    /// names until the first pause (SU.17, finding 2). Cleared by a fresh start.
     public private(set) var currentSessionID: String?
+    /// The id a `.resumed` named. A shared ancestor of two branches names
+    /// neither, so it's only the fallback while the own directory is unlisted.
+    public private(set) var resumedFromID: String?
+
+    /// The ids to find this conversation by, most precise first.
+    public var sessionIDs: [String] {
+        var ids = currentSessionID.map { [$0] } ?? []
+        if let resumedFromID, resumedFromID != currentSessionID { ids.append(resumedFromID) }
+        return ids
+    }
 
     public init() {}
 
@@ -163,6 +173,7 @@ public struct EngineSessionModel: Equatable, Sendable {
         sessionDirectory = nil
         analysis = nil
         currentSessionID = nil
+        resumedFromID = nil
         phase = .starting
     }
 
@@ -196,7 +207,10 @@ public struct EngineSessionModel: Equatable, Sendable {
         case .resumed(let r):
             transcript.rebuild(from: r, divider: divider(for: r))
             pendingRelaunch = nil
-            if !r.sessionID.isEmpty { currentSessionID = r.sessionID }
+            if !r.sessionID.isEmpty {
+                currentSessionID = r.sessionID
+                resumedFromID = r.sessionID
+            }
         case .pause(let m):
             if sessionDirectory == nil, let path = m.capturePath {
                 sessionDirectory = URL(fileURLWithPath: path).deletingLastPathComponent()
@@ -212,7 +226,7 @@ public struct EngineSessionModel: Equatable, Sendable {
         default:
             transcript.apply(event)
         }
-        if case .pause(let p) = event, currentSessionID == nil,
+        if case .pause(let p) = event,
            let path = p.capturePath, let id = EngineSessionEntry.directoryID(fromCapturePath: path) {
             currentSessionID = id
         }

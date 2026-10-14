@@ -80,8 +80,8 @@ public final class EngineController {
     /// The conversation the running session belongs to, if it's listed;
     /// nil once it has ended, so that conversation can be resumed again.
     var currentConversationID: String? {
-        guard isActive, let id = model.currentSessionID else { return nil }
-        return conversations.first { $0.sessionIDs.contains(id) }?.id
+        guard isActive else { return nil }
+        return Conversations.current(sessionIDs: model.sessionIDs, in: conversations)?.id
     }
 
     /// The running conversation, for the window's title (SU.11, D2).

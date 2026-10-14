@@ -145,10 +145,29 @@ struct EngineSessionModelTests {
         var m = running()
         m.apply(.resumed(EngineResumed(sessionID: "a", turns: [], rewoundTo: nil, filesChanged: nil, contextUsed: nil)))
         #expect(m.currentSessionID == "a")
-        // A later pause names this process's own directory; the chain's id stays.
+        // A later pause names this process's own directory, which takes over;
+        // the resumed-from id stays as the fallback (SU.17, finding 2).
         m.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1,
                                     capturePath: "/s/sessions/c/run-1.partial.json")))
-        #expect(m.currentSessionID == "a")
+        #expect(m.currentSessionID == "c")
+        #expect(m.sessionIDs == ["c", "a"])
+    }
+
+    /// SU.17, finding 2: two branches share an ancestor, B → M and N → M.
+    /// Resuming M names M, which both chains hold; the first checkpoint's
+    /// directory (N) picks this one. Before N is listed, M stands in.
+    @Test func theCheckpointPicksTheBranchOverASharedAncestor() {
+        func chain(_ ids: [String]) -> Conversation {
+            Conversation(id: ids[0], title: ids[0], updated: nil, modelID: nil, resumable: true,
+                         problems: [], sessionIDs: ids)
+        }
+        let b = chain(["B", "M"]), n = chain(["N", "M"])
+        var m = running()
+        m.apply(.resumed(EngineResumed(sessionID: "M", turns: [], rewoundTo: nil, filesChanged: nil, contextUsed: nil)))
+        m.apply(.pause(PauseMetrics(prefillTokens: 1, prefillMs: 1, evalCount: 1, evalMs: 1,
+                                    capturePath: "/s/sessions/N/run-1.partial.json")))
+        #expect(Conversations.current(sessionIDs: m.sessionIDs, in: [b, n]) == n)
+        #expect(Conversations.current(sessionIDs: m.sessionIDs, in: [b]) == b)
     }
 
     @Test func currentSessionIDFromFirstPause() {
