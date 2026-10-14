@@ -19,6 +19,8 @@ struct MemoryStatusView: View {
                 .font(.scaled(.caption2, base: fontSize))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                // One line: it wrapped beside the rates in a narrow window.
+                .lineLimit(1)
         }
         .padding(.horizontal, 4)
         .contentShape(Rectangle())

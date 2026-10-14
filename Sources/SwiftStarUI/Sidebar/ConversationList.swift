@@ -13,35 +13,37 @@ struct ConversationList: View {
             if controller.workspace == nil {
                 Color.clear
             } else if controller.conversations.isEmpty {
-                ContentUnavailableView(
-                    "No conversations yet in \(controller.workspace?.leafName ?? "this project")",
-                    systemImage: "bubble.left.and.bubble.right")
+                ContentUnavailableView {
+                    Label("No conversations yet in \(controller.workspace?.leafName ?? "this project")",
+                          systemImage: "bubble.left.and.bubble.right")
+                } actions: {
+                    Button("New Conversation", action: startNew)
+                }
             } else {
-                // The row is built inline: as a separate `View` type or
+                // The rows are built inline: as a separate `View` type or
                 // `@ViewBuilder` method it crashed SwiftUI's outline list in
                 // previews (TableViewListCore_Mac2.swift:5538), SU.7a Task 4.
-                List(controller.conversations, selection: selection) { c in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(c.title).font(.scaled(.caption, base: fontSize)).lineLimit(1)
-                        Text(Conversations.subtitle(c, now: Date())).font(.scaled(.caption2, base: fontSize)).foregroundStyle(.secondary)
+                List(selection: selection) {
+                    // SU.11, D3: first in the list, where it can't overflow.
+                    Button(action: startNew) {
+                        Label("New Conversation", systemImage: "square.and.pencil")
+                            .font(.scaled(.caption, base: fontSize))
                     }
-                    .foregroundStyle(c.resumable ? .primary : .tertiary)
-                    .help(c.resumable ? c.title
-                          : (c.problems.isEmpty ? "This conversation can't be resumed"
-                             : c.problems.joined(separator: "; ")))
-                    .selectionDisabled(!c.resumable)
+                    .buttonStyle(.borderless)
+                    .help("New Conversation (⌘N): ends this session and starts a fresh one")
+                    .selectionDisabled()
+                    ForEach(controller.conversations) { c in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(c.title).font(.scaled(.caption, base: fontSize)).lineLimit(1)
+                            Text(Conversations.subtitle(c, now: Date())).font(.scaled(.caption2, base: fontSize)).foregroundStyle(.secondary)
+                        }
+                        .foregroundStyle(c.resumable ? .primary : .tertiary)
+                        .help(c.resumable ? c.title
+                              : (c.problems.isEmpty ? "This conversation can't be resumed"
+                                 : c.problems.joined(separator: "; ")))
+                        .selectionDisabled(!c.resumable)
+                    }
                 }
-            }
-        }
-        .toolbar {
-            ToolbarItem {
-                Button {
-                    Task { await controller.newConversation() }
-                } label: {
-                    Label("New Conversation", systemImage: "square.and.pencil")
-                }
-                .keyboardShortcut("n")
-                .help("New Conversation (⌘N): ends this session and starts a fresh one")
             }
         }
         .task { await controller.reloadConversations() }
@@ -56,6 +58,10 @@ struct ConversationList: View {
         } message: {
             Text(confirming?.title ?? "")
         }
+    }
+
+    private func startNew() {
+        Task { await controller.newConversation() }
     }
 
     /// The selection follows the running conversation; choosing another one

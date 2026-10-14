@@ -84,6 +84,15 @@ public final class EngineController {
         return conversations.first { $0.sessionIDs.contains(id) }?.id
     }
 
+    /// The running conversation, for the window's title (SU.11, D2).
+    var currentConversation: Conversation? {
+        currentConversationID.flatMap { id in conversations.first { $0.id == id } }
+    }
+
+    /// The session id the list last reloaded for, so an unlisted one reloads
+    /// it once, not on every event.
+    @ObservationIgnored private var listReloadedFor: String?
+
     /// Resuming mid-turn ends the turn: the view asks first.
     var resumeNeedsConfirmation: Bool { transcript.isBusy }
 
@@ -557,6 +566,13 @@ public final class EngineController {
 
     private func handle(_ event: EngineEvent) {
         model.apply(event)
+        // SU.11, D4: a new conversation's id is in, but the list is behind:
+        // reload once for it, so its row appears and is selected.
+        if let id = model.currentSessionID, id != listReloadedFor,
+           Conversations.isUnlisted(sessionID: id, in: conversations) {
+            listReloadedFor = id
+            Task { await reloadConversations() }
+        }
         switch event {
         case .relaunch(let r): Task { await relaunch(r) }
         case .refused: pendingModelCommand = nil

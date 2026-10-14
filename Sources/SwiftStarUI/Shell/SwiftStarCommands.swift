@@ -11,6 +11,11 @@ public struct SwiftStarCommands: Commands {
 
     public var body: some Commands {
         ToolbarCommands()
+        // SU.11, D3: New Conversation, from the list's first row.
+        CommandGroup(replacing: .newItem) {
+            Button("New Conversation") { Task { await engine.newConversation() } }
+                .keyboardShortcut("n")
+        }
         // SU.7b: the Recent projects, as in the toolbar's folder menu.
         CommandGroup(after: .newItem) {
             Menu("Open Recent") {

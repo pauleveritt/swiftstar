@@ -104,6 +104,13 @@ public struct Conversation: Identifiable, Equatable, Sendable {
 }
 
 public enum Conversations {
+    /// A running session's id that no listed conversation holds: the list
+    /// is behind it and should reload (SU.11, D4).
+    public static func isUnlisted(sessionID: String?, in conversations: [Conversation]) -> Bool {
+        guard let sessionID else { return false }
+        return !conversations.contains { $0.sessionIDs.contains(sessionID) }
+    }
+
     /// One row per chain head (an entry nothing listed resumed from), titled
     /// by the oldest listed entry's first prompt, newest first. A session
     /// that can't be resumed and has no prompt (a resume opened and left) is

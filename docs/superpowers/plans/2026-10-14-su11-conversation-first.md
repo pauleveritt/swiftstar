@@ -83,3 +83,37 @@ secondary.
   reads as done or still open, by the owner's look.
 - This plan gains `## Result`.
 - `just lint-docs`, `just test`, `just integration`; then the owner looks.
+
+## Result
+
+Done 2026-10-14 on `su-ui`, in two commits: the plan (`e072226`) and this
+one, which holds all three tasks. Checked in the SU.12 gallery, a real
+window over fixtures, by screenshot, with the inspector closed and open.
+
+**Suites:** `just test` and `just integration` (149 and 78 passed), with no
+other test run going. `windowTitle` and `unlistedSession` were written
+first and failed to build without the new signatures.
+
+**Previews:** `ConversationList`'s three, `InspectorView`'s "Narrow" and
+`MemoryStatusView`'s rendered and were looked at.
+
+**Seen in the gallery:** each menu's icon and text in its capsule, with
+the same left inset; the title "Answer in one short senten…", the running
+conversation; "New Conversation" first in the list; the running row
+selected; no overflow.
+
+**Diverged:**
+- **A crash, found in the gallery, from `a22fcdd`:** with the inspector
+  open in a window under about 1100 pt, `.inspectorColumnWidth` looped
+  AppKit's layout until it threw ("more Update Constraints in Window passes
+  than there are views"). It's back to the plain `.frame`, which doesn't
+  crash but keeps the divider stiff; the punch list holds what the probes
+  ruled out.
+- **The GPU figures stay on one line:** at 900 pt with the inspector open
+  they wrapped beside the rates.
+- **The inspector's type** is the labels' font with fixed-width digits;
+  the DFlash reason is at the same size, secondary.
+
+**For the owner in the app:** the toolbar against Xcode's; a new
+conversation's row appearing and selected after its first answer; File ›
+New Conversation (⌘N).

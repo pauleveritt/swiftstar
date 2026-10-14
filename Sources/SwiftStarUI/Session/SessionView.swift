@@ -31,7 +31,9 @@ struct SessionView: View {
                 }
                 .scrollEdgeEffectStyle(.soft, for: .bottom)
         }
-        .navigationTitle(WindowTitle.text(workspace: controller.workspace))
+        .navigationTitle(WindowTitle.text(
+            workspace: controller.workspace, conversation: controller.currentConversation,
+            active: controller.isActive))
         .toolbar {
             SessionToolbar(
                 askingModel: $askingModel, askingContext: $askingContext,

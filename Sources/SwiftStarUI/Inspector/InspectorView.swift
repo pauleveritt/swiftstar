@@ -17,7 +17,7 @@ struct InspectorView: View {
                     if let dflash = session?.dflash {
                         // The engine's reason, word for word (SU.6b, D2).
                         Text(dflash.reason)
-                            .font(.scaled(.caption, base: fontSize))
+                            .font(.system(size: fontSize))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                         if dflash.on, let drafter = dflash.drafter {
@@ -62,9 +62,11 @@ struct InspectorView: View {
             }
             .padding(16)
         }
-        // The inspector column's own width rule, so its divider drags; a
-        // plain `.frame` here pinned it near the ideal (owner, 2026-10-14).
-        .inspectorColumnWidth(min: 280, ideal: 320, max: 640)
+        // Not `.inspectorColumnWidth`: with the inspector open in a window
+        // narrower than about 1100 pt, it looped AppKit's layout until it
+        // threw (SU.11, found in the gallery). This frame keeps the divider
+        // stiff; see the punch list.
+        .frame(minWidth: 280, idealWidth: 320)
     }
 
     /// Label and value on one line when they fit; otherwise the value goes
@@ -72,7 +74,8 @@ struct InspectorView: View {
     /// line) doesn't wrap into a column beside it at large font sizes.
     private func metricRow(_ title: String, value: String) -> some View {
         let label = Text(title).font(.system(size: fontSize)).foregroundStyle(.secondary)
-        let shown = Text(value).font(.system(size: fontSize, design: .monospaced))
+        // The label's font, digits fixed-width (SU.11, D5).
+        let shown = Text(value).font(.system(size: fontSize)).monospacedDigit()
         return ViewThatFits(in: .horizontal) {
             HStack {
                 label

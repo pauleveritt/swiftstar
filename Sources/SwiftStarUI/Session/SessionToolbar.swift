@@ -51,16 +51,15 @@ struct SessionToolbar: ToolbarContent {
         menu.disabled(!controller.canChoose)
     }
 
-    private func menuLabel(_ text: String, icon: String? = nil) -> some View {
+    private func menuLabel(_ text: String, icon: String) -> some View {
         HStack(spacing: 4) {
-            if let icon { Image(systemName: icon) }
+            Image(systemName: icon)
             Text(text)
         }
         // Keep the item at its natural width as the transcript font grows.
         .fixedSize(horizontal: true, vertical: false)
-        // `.borderlessButton` menus draw no content inset of their own inside the
-        // glass capsule, so give the label the inset the icon buttons have.
-        .padding(.horizontal, 8)
+        // `.borderlessButton` menus ignore the label's padding (SU.6f probes);
+        // the leading icon gives every menu the same left inset (SU.11, D1).
     }
 
     @ViewBuilder
@@ -94,7 +93,7 @@ struct SessionToolbar: ToolbarContent {
         let loaded = controller.transcript.session?.modelID
         let items = ModelMenu.items(list: controller.catalog, settingsID: controller.modelID, loadedID: loaded)
         let label = ModelMenu.label(loaded: loaded, chosen: controller.modelID)
-        return choiceMenu(items, label: label, more: "Other…", select: { controller.select(modelID: $0) }) {
+        return choiceMenu(items, label: label, icon: "cpu", more: "Other…", select: { controller.select(modelID: $0) }) {
             entry = ""; askingModel = true
         }
         .help("Model: choosing another switches a running session with /model, keeping its files")
@@ -106,7 +105,7 @@ struct SessionToolbar: ToolbarContent {
             list: controller.catalog, modelID: session?.modelID ?? controller.modelID,
             settingsContext: controller.contextSize, loaded: session?.contextSize)
         let label = ContextMenu.label(loaded: session?.contextSize, chosen: controller.contextSize)
-        return choiceMenu(items, label: label, more: "Custom…", select: { controller.select(contextSize: $0) }) {
+        return choiceMenu(items, label: label, icon: "gauge.with.needle", more: "Custom…", select: { controller.select(contextSize: $0) }) {
             entry = ""; askingContext = true
         }
         .help("Context size: choosing another restarts a running session")
@@ -115,7 +114,7 @@ struct SessionToolbar: ToolbarContent {
     /// A menu of choices: the first (the engine default) set off by a
     /// divider, then the rest, then an entry for a value typed by hand.
     private func choiceMenu<Value: Equatable & Sendable>(
-        _ items: [MenuChoice<Value>], label: String, more: String,
+        _ items: [MenuChoice<Value>], label: String, icon: String, more: String,
         select: @escaping (Value) -> Void, onMore: @escaping () -> Void
     ) -> some View {
         Menu {
@@ -128,7 +127,7 @@ struct SessionToolbar: ToolbarContent {
             Divider()
             Button(more, action: onMore)
         } label: {
-            menuLabel(label)
+            menuLabel(label, icon: icon)
         }
         .menuStyle(.borderlessButton)
     }
