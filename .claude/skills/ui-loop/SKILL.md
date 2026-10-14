@@ -57,7 +57,9 @@ testing.
 - **`RenderPreview` snapshots the first frame.** State changed in `.task` or
   `.onAppear`, timed or not, does not show. Interaction checks (toggles,
   transitions) need the live canvas, which is the owner's to run.
-- **Toolbar menus ignore `.font`.** A 30 pt probe rendered unchanged.
+- **`.menuStyle(.borderlessButton)` toolbar menus ignore `.font` and the
+  label's `.padding`** (SU.4, SU.6f probes). The default toolbar menu style
+  draws native insets; the toolbar's menus use it since SU.6f.
 - Snapshot filenames contain a narrow no-break space before AM/PM; copy them
   with a glob, not a typed name.
 - To look at many renders at once, tile them into one image (a small AppKit

@@ -49,7 +49,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.3 | Preview adoption | A fixture-backed `#Preview` on every view | done 2026-10-04: views moved to the `SwiftStarUI` library so Xcode can preview them. [spec](docs/superpowers/specs/2026-10-03-su3-preview-adoption-design.md), [plan](docs/superpowers/plans/2026-10-03-su3-preview-adoption.md) |
 | SU.4 | Xcode-first UI loop | Xcode 27 and its agent as the place UI work happens: feature folders, previewable parts, `RenderPreview` before a UI change is done | done 2026-10-04: [spec](docs/superpowers/specs/2026-10-04-su4-xcode-first-ui-loop-design.md), [plan](docs/superpowers/plans/2026-10-04-su4-xcode-first-ui-loop.md), [handoff](docs/superpowers/research/2026-10-04-su4-handoff-brief.md) |
 | SU.5 | Cleanup and test consolidation | Remove dead code, fossils and the audit's bugs; move view logic into Kit; fold tests into tables with shared support | done 2026-10-13: 230 tests → 130; integration 13–19 s, from ~29. [5a1](docs/superpowers/plans/2026-10-13-su5a1-bugs-and-plumbing.md), [5a2](docs/superpowers/plans/2026-10-13-su5a2-kit-moves-and-tidy.md), [5b](docs/superpowers/plans/2026-10-13-su5b-test-consolidation.md), each with its Result. [Spec](docs/superpowers/specs/2026-10-04-su5-cleanup-and-test-modernisation-design.md) as revised |
-| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6d, 6a, 6b, 6c and 6e done 2026-10-13: [6d](docs/superpowers/plans/2026-10-13-su6d-markdown-renderer.md), [6a](docs/superpowers/plans/2026-10-13-su6a-what-you-read.md), [6b](docs/superpowers/plans/2026-10-13-su6b-session-card.md), [6c](docs/superpowers/plans/2026-10-13-su6c-remembering.md), [6e](docs/superpowers/plans/2026-10-13-su6e-native-look.md). The punch list below waits |
+| SU.6 | UI tweaks | A punch list of small UI fixes and engine information worth showing (below) | 6a–6f done 2026-10-13, each with its plan and Result: `docs/superpowers/plans/2026-10-13-su6*.md`. The punch list below waits |
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | 7a and 7b done 2026-10-13: this project's conversations in a sidebar; switching asks first mid-turn; the Recent menus (toolbar, Open Recent, Dock) resume a project's newest conversation. Plans: [7a](docs/superpowers/plans/2026-10-13-su7a-sessions-and-resume.md), [7b](docs/superpowers/plans/2026-10-13-su7b-switching-projects.md). 7c (windows) waits on the engine |
 | SU.8 | Prompt history | ↑/↓ in the composer steps through earlier prompts | done 2026-10-13: this conversation's typed prompts, while the field is empty or unedited. [Plan and Result](docs/superpowers/plans/2026-10-13-su8-prompt-history.md) |
 | SU.9 | Font size | One setting scales every text in the window: 5 sizes, the middle the default; ⌘+ and ⌘− after 7b lands | done 2026-10-13: 14–24 pt, 18 the default, under a new key; the shortcuts wait in the punch list. [Plan and Result](docs/superpowers/plans/2026-10-13-su9-font-size.md) |
@@ -64,17 +64,6 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
   - the engine's stderr start notices
   - model sizes from `plan_gib` and `size_bytes`; drop the catalog fields
     the engine never sends
-- **Native look, after 7b lands** (SU.6e did the rest; these touch
-  `SessionToolbar` and `SessionView`):
-  - toolbar buttons sit tight against their borders; match Xcode's padding
-  - a `ToolbarSpacer` between the session and Inspector buttons
-  - transcript rows fade under the composer: `safeAreaBar` and
-    `scrollEdgeEffectStyle` in `SessionView`
-- **Font size, after 7b lands** (SU.9, D3):
-  - View › Bigger (⌘+), Smaller (⌘−) and Actual Size in `SwiftStarApp`'s
-    commands, stepping `TranscriptFontScale`'s slots
-  - rename `transcriptFontSize` (identifier and environment value) to
-    `fontSize`, now that it sizes the whole window; `SessionView` uses it
 - **Left from SU.5a** (each plan's Result):
   - rate, duration, the status line and the ctx label ignore the locale; the
     inspector mixes GB and GiB
