@@ -48,3 +48,22 @@ the highlighter's ranges as SwiftUI colors on an `AttributedString`),
 - `ROADMAP.md`: SU.15's row.
 - This plan gains `## Result`; `just lint-docs`, `just test`,
   `just integration`.
+
+## Result
+
+Done 2026-10-14 on `su-ui`, in two commits after the plan (`c2a9b59`):
+Task 1 (`880797c`) and Tasks 2 and 3 together.
+
+**Suites:** `just test` and `just integration` (158 and 82), with no other
+test run going. `CodeLanguageTests` was written first and failed to build
+without `CodeLanguage`.
+
+**Previews:** `ToolCardView`'s five, the new "Python, Markdown, TOML" in
+dark and light: Python's keywords, comments and strings; Markdown raw,
+its heading and inline code colored; TOML's sections, keys and strings.
+"Succeeded" (Swift) is colored too; "Failed" (a `bash` card, no path) stays
+plain.
+
+**Diverged:**
+- **The three-card preview needed a height:** in a shorter window SwiftUI
+  squeezed each card to its first line, which looked like a coloring bug.

@@ -89,6 +89,14 @@ extension EngineToolCard {
         return EngineToolCard(tool: EngineTool(op: "read", path: "Package.swift"), rejection: rejection)
     }
 
+    /// A finished `read` of `path` returning `preview` (SU.15's languages).
+    static func previewRead(_ path: String, _ preview: String) -> EngineToolCard {
+        let tool = EngineTool(op: "read", path: path)
+        return EngineToolCard(
+            tool: tool, ok: true, durationMs: 12,
+            result: EngineToolResult(tool: tool, preview: preview, truncated: false))
+    }
+
     static var previewFailed: EngineToolCard {
         EngineToolCard(
             tool: EngineTool(op: "bash", path: nil),

@@ -42,6 +42,24 @@ struct MarkdownText: View {
 extension MarkdownText {
 }
 
+/// Code colored as answers' code blocks are (SU.15): the fork's highlighter,
+/// its Xcode-theme ranges as SwiftUI colors that follow light and dark. Here
+/// because this is the one file that imports the renderer. A nil language,
+/// or one Highlightr doesn't know, leaves the text plain.
+enum CodeColoring {
+    static func attributed(_ text: String, language: String?) -> AttributedString {
+        var result = AttributedString(text)
+        guard let language else { return result }
+        let map = CodeHighlighter.current.highlight(key: nil, content: text, language: language)
+        for (range, color) in map {
+            guard let stringRange = Range(range, in: text),
+                  let attributedRange = Range(stringRange, in: result) else { continue }
+            result[attributedRange].foregroundColor = Color(nsColor: color)
+        }
+        return result
+    }
+}
+
 /// Renders one preprocessed markdown string through the library's raw AppKit
 /// `MarkdownTextView`, reporting its height **synchronously** for the proposed
 /// width via `sizeThatFits`. This is the freeze-safe sizing contract: SwiftUI

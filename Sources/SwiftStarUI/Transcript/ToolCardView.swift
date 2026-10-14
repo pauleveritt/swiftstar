@@ -25,7 +25,9 @@ struct ToolCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let result = card.result, !result.preview.isEmpty {
-                Text(result.preview)
+                // Colored by the file's language (SU.15); a Markdown file as
+                // colored raw text, what the model read.
+                Text(CodeColoring.attributed(result.preview, language: card.tool.path.flatMap(CodeLanguage.forPath)))
                     .font(.scaled(.caption, base: fontSize, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,4 +109,36 @@ struct ToolCardView: View {
     ToolCardView(card: .previewDeclined, source: nil)
         .padding()
         .frame(width: 420)
+}
+
+// SU.15: one card per language the owner's screenshots showed.
+#Preview("Python, Markdown, TOML") {
+    VStack(spacing: 8) {
+        ToolCardView(card: .previewRead("app.py", """
+            from fastapi import FastAPI
+
+            app = FastAPI()  # the complaints app
+
+            @app.get("/")
+            def index() -> dict[str, str]:
+                return {"status": "ok"}
+            """), source: nil)
+        ToolCardView(card: .previewRead("specs/roadmap.md", """
+            # AgentClinic roadmap
+
+            Four ordered phases. See `AGENTS.md`.
+
+            - `app.py` — the FastAPI application
+            """), source: nil)
+        ToolCardView(card: .previewRead("pyproject.toml", """
+            [project]
+            name = "agentclinic"
+            version = "0.1.0"
+            dependencies = ["fastapi[standard]==0.115.10"]
+            """), source: nil)
+    }
+    .padding()
+    // Tall enough for all three: a shorter window squeezed each card to its
+    // first line.
+    .frame(width: 520, height: 720, alignment: .top)
 }
