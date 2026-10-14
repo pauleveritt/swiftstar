@@ -16,7 +16,7 @@ struct GalleryApp: App {
                 .environment(engine)
         }
         .commands { SwiftStarCommands(engine: engine) }
-        .defaultSize(width: 900, height: 640)
+        .defaultSize(width: 1000, height: 640)
         .restorationBehavior(.disabled)
 
         Settings {

@@ -117,3 +117,17 @@ selected; no overflow.
 **For the owner in the app:** the toolbar against Xcode's; a new
 conversation's row appearing and selected after its first answer; File ›
 New Conversation (⌘N).
+
+**The owner's look in the gallery, 2026-10-14, and what changed:**
+- **The inspector uses the conversation list's size,** which the owner
+  liked: labels, values and the DFlash reason at the caption size, card
+  headings bold at it.
+- **The inspector is a fixed 300 pt column** (`.inspectorColumnWidth(300)`),
+  the owner's suggestion: an info panel needn't resize, so the stiff
+  divider is gone. A `.frame(width:)` on its content clipped instead.
+- **The crash's cause, found by width:** the session column needs about
+  380 pt, and when the sidebar and inspector left it less, AppKit's split
+  view looped. It was never `.inspectorColumnWidth` itself. The window's
+  minimum is now 1000 pt (sidebar at most 300, inspector 300), and both
+  apps open at 1000 pt. Checked in the gallery at 1000 pt with all three
+  columns.

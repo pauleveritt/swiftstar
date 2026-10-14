@@ -16,14 +16,18 @@ public struct MainView: View {
             set: { sidebarVisible = $0 != .detailOnly }
         )) {
             ConversationList()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 360)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
         } detail: {
             SessionView()
                 .inspector(isPresented: $inspectorPresented) {
                     InspectorView()
                 }
         }
-        .frame(minWidth: 800, minHeight: 560)
+        // Wide enough that the session column keeps its minimum (about
+        // 380 pt) beside the widest sidebar (300) and the inspector (300).
+        // Squeezed below it, AppKit's split view looped its layout until it
+        // threw (SU.11, found in the gallery at 900 pt).
+        .frame(minWidth: 1000, minHeight: 560)
         // The sidebar and the inspector sit outside SessionView, which sets
         // its own copy; both read the one setting (SU.9).
         .environment(\.fontSize, CGFloat(TranscriptFontScale.clamp(fontSize)))

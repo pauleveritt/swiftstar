@@ -11,13 +11,13 @@ struct InspectorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Session").font(.scaled(.headline, base: fontSize))
+                    Text("Session").font(.scaled(.caption, base: fontSize).bold())
                     metricRow("Model", value: session?.modelID ?? "—")
                     metricRow("DFlash", value: session?.dflash.map { $0.on ? "On" : "Off" } ?? "—")
                     if let dflash = session?.dflash {
                         // The engine's reason, word for word (SU.6b, D2).
                         Text(dflash.reason)
-                            .font(.system(size: fontSize))
+                            .font(.scaled(.caption, base: fontSize))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                         if dflash.on, let drafter = dflash.drafter {
@@ -29,7 +29,7 @@ struct InspectorView: View {
                 .inspectorCard()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Context").font(.scaled(.headline, base: fontSize))
+                    Text("Context").font(.scaled(.caption, base: fontSize).bold())
                     HStack(spacing: 10) {
                         if let used = state.contextUsed, let size = state.contextSize, size > 0 {
                             ValueGaugeView(
@@ -46,14 +46,14 @@ struct InspectorView: View {
                 .inspectorCard()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Throughput").font(.scaled(.headline, base: fontSize))
+                    Text("Throughput").font(.scaled(.caption, base: fontSize).bold())
                     metricRow("Prefill avg", value: MetricsFormatting.rate(state.prefillTPS))
                     metricRow("Generation avg", value: MetricsFormatting.rate(state.generationTPS))
                 }
                 .inspectorCard()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("GPU memory").font(.scaled(.headline, base: fontSize))
+                    Text("GPU memory").font(.scaled(.caption, base: fontSize).bold())
                     metricRow("Allocated", value: MetricsFormatting.bytes(state.gpuAllocatedBytes))
                     metricRow("Budget", value: MetricsFormatting.bytes(state.gpuBudgetBytes))
                     metricRow("Plan", value: state.planGiB.map { MetricsFormatting.gib($0) } ?? "—")
@@ -62,20 +62,21 @@ struct InspectorView: View {
             }
             .padding(16)
         }
-        // Not `.inspectorColumnWidth`: with the inspector open in a window
-        // narrower than about 1100 pt, it looped AppKit's layout until it
-        // threw (SU.11, found in the gallery). This frame keeps the divider
-        // stiff; see the punch list.
-        .frame(minWidth: 280, idealWidth: 320)
+        // A fixed column width, the owner's call (2026-10-14): a narrow info
+        // panel needn't resize. A `.frame` on the content doesn't size the
+        // column (it clipped); MainView's minimum keeps the session column
+        // from being squeezed, which looped AppKit's layout (SU.11).
+        .inspectorColumnWidth(300)
     }
 
     /// Label and value on one line when they fit; otherwise the value goes
     /// under its label, so a long one (a drafter file, the prefix cache
     /// line) doesn't wrap into a column beside it at large font sizes.
     private func metricRow(_ title: String, value: String) -> some View {
-        let label = Text(title).font(.system(size: fontSize)).foregroundStyle(.secondary)
-        // The label's font, digits fixed-width (SU.11, D5).
-        let shown = Text(value).font(.system(size: fontSize)).monospacedDigit()
+        // The conversation list's size (owner, 2026-10-14); values in the
+        // labels' font, digits fixed-width (SU.11, D5).
+        let label = Text(title).font(.scaled(.caption, base: fontSize)).foregroundStyle(.secondary)
+        let shown = Text(value).font(.scaled(.caption, base: fontSize)).monospacedDigit()
         return ViewThatFits(in: .horizontal) {
             HStack {
                 label

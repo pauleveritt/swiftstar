@@ -67,12 +67,6 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
   - the engine's stderr start notices
   - model sizes from `plan_gib` and `size_bytes`; drop the catalog fields
     the engine never sends
-- **The inspector's divider is stiff:** its plain `.frame` barely lets it
-  move. `.inspectorColumnWidth` frees it, but with the inspector open in a
-  window under about 1100 pt it loops AppKit's layout until it throws
-  (SU.11, in the gallery). Not the cause, by probe: the inspector's min or
-  max, its content, the status bar's rates, the toolbar's menus, a fixed
-  session-column minimum. Reproduce in the gallery at 900 pt.
 - **Left from SU.5a** (each plan's Result):
   - rate, duration, the status line and the ctx label ignore the locale; the
     inspector mixes GB and GiB
