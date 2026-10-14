@@ -260,6 +260,13 @@ public final class EngineController {
     /// Preview/test fixture construction: starts from a given model state,
     /// skipping `init()`'s `UserDefaults` reads and the live catalog-reload
     /// observer (previews don't restart a session).
+    /// Swaps a fixture controller's state (the gallery's GPU flips, SU.13);
+    /// a real controller ignores it.
+    func replaceFixtureModel(_ model: EngineSessionModel) {
+        guard isFixture else { return }
+        self.model = model
+    }
+
     init(model: EngineSessionModel, conversations: [Conversation] = [], workspace: URL? = nil) {
         self.graces = .standard
         self.model = model

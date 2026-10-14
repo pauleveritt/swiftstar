@@ -14,6 +14,12 @@ struct GalleryApp: App {
         Window("SwiftStar Gallery", id: "main") {
             MainView()
                 .environment(engine)
+                // `defaults write SwiftStarGallery galleryFlipGPU -int 6`: flip
+                // GPU metrics that many times at launch (SU.13).
+                .task {
+                    let flips = UserDefaults.standard.integer(forKey: "galleryFlipGPU")
+                    if flips > 0 { await engine.galleryFlipGPU(times: flips) }
+                }
         }
         .commands { SwiftStarCommands(engine: engine) }
         .defaultSize(width: 1000, height: 640)
