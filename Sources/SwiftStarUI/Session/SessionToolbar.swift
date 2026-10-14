@@ -46,8 +46,8 @@ struct SessionToolbar: ToolbarContent {
     /// different value restarts a running session, so all are disabled while
     /// one starts or quits.
     private func menuButton(_ menu: some View) -> some View {
-        // No `.font` here: toolbar menus ignore it (a 30 pt probe rendered
-        // unchanged in SU.4).
+        // No `.font` here: these menus ignored it (a 30 pt probe rendered
+        // unchanged in SU.4, under the `.borderlessButton` style since dropped).
         menu.disabled(!controller.canChoose)
     }
 
@@ -56,11 +56,11 @@ struct SessionToolbar: ToolbarContent {
             if let icon { Image(systemName: icon) }
             Text(text)
         }
-        // Keep the item at its natural width as the transcript font grows.
+        // Keep the item at its natural width as the font size grows.
         .fixedSize(horizontal: true, vertical: false)
-        // `.borderlessButton` menus draw no content inset of their own inside the
-        // glass capsule, so give the label the inset the icon buttons have.
-        .padding(.horizontal, 8)
+        // No padding and no menu style: the toolbar's own pop-up style gives
+        // even insets, chevron included, as in Xcode. `.borderlessButton`
+        // drew none and dropped the label's padding (SU.6f).
     }
 
     @ViewBuilder
@@ -86,7 +86,6 @@ struct SessionToolbar: ToolbarContent {
         } label: {
             menuLabel(controller.workspace?.leafName ?? "Choose folder", icon: "folder")
         }
-        .menuStyle(.borderlessButton)
         .help("Workspace: its git repository is the engine's source. Choosing another ends a running session; mid-turn, it asks first.")
     }
 
@@ -130,7 +129,6 @@ struct SessionToolbar: ToolbarContent {
         } label: {
             menuLabel(label)
         }
-        .menuStyle(.borderlessButton)
     }
 
     private func pickWorkspace() {

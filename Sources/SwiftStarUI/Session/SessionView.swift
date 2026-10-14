@@ -22,10 +22,14 @@ struct SessionView: View {
                 transcript: controller.transcript, source: controller.source,
                 analyze: controller.canAnalyze ? { Task { await controller.analyze() } } : nil,
                 analysisFirstRow: controller.analysis?.firstRow)
-            Divider()
-            ComposerView()
-            Divider()
-            StatusBarView(phase: controller.phase, composerLabel: controller.composer.label, metrics: controller.metrics)
+                // The rows scroll on under the composer and fade (SU.6f).
+                .safeAreaBar(edge: .bottom, spacing: 0) {
+                    VStack(spacing: 0) {
+                        ComposerView()
+                        StatusBarView(phase: controller.phase, composerLabel: controller.composer.label, metrics: controller.metrics)
+                    }
+                }
+                .scrollEdgeEffectStyle(.soft, for: .bottom)
         }
         .navigationTitle(WindowTitle.text(workspace: controller.workspace))
         .toolbar {
