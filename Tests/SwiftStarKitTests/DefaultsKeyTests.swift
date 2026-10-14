@@ -9,7 +9,8 @@ struct DefaultsKeyTests {
         #expect(DefaultsKey.contextSize.rawValue == "engineContextSize")
         #expect(DefaultsKey.recentWorkspaces.rawValue == "recentWorkspaces")
         #expect(DefaultsKey.inspectorPresented.rawValue == "appShellInspectorPresented")
-        #expect(DefaultsKey.transcriptFontSize.rawValue == "transcriptFontSize")
+        // SU.9, D4: a new key, so a saved old default doesn't hold the size at 16.
+        #expect(DefaultsKey.transcriptFontSize.rawValue == "fontSize")
         #expect(DefaultsKey.lastSessionDirectory.rawValue == "lastSessionDirectory")
         #expect(DefaultsKey.sidebarVisible.rawValue == "sidebarVisible")
     }

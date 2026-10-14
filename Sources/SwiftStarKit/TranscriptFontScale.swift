@@ -1,12 +1,12 @@
 import Foundation
 
-/// The transcript's four body-font sizes, as discrete slider slots. The third
-/// slot (16 pt) is the default — one below the largest (20), per the product
-/// decision. Lives in Kit so the slider (Settings) and the clamp (stored
-/// values that drift out of range) share one definition.
+/// The window's five body-font sizes, as discrete slider slots; the middle
+/// one (18 pt) is the default (SU.9). Every text in the window scales from
+/// it. Lives in Kit so the slider (Settings) and the clamp (stored values
+/// that drift out of range) share one definition.
 public enum TranscriptFontScale {
-    public static let sizes: [Int] = [12, 14, 16, 20]
-    public static let defaultSize: Int = 16
+    public static let sizes: [Int] = [14, 16, 18, 20, 24]
+    public static let defaultSize: Int = 18
 
     /// Clamps an arbitrary value to the nearest defined slot (a hand-edited or
     /// stale UserDefaults value must not fall off the slider). Ties resolve to
@@ -27,4 +27,19 @@ public enum TranscriptFontScale {
             (abs(a - size), a) < (abs(b - size), b)
         } ?? defaultSize
     }
+
+    /// A smaller text's size for a body size `base`, in macOS's own
+    /// proportions to its 13 pt body.
+    public static func points(_ role: TextRole, base: Double) -> Double {
+        switch role {
+        case .headline: base
+        case .caption: base * 0.8
+        case .caption2: base * 0.72
+        }
+    }
+}
+
+/// The text styles that scale with the window's font size.
+public enum TextRole: Sendable {
+    case headline, caption, caption2
 }
