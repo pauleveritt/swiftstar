@@ -58,7 +58,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.13 | Two leftovers | The memory widget's crash check, in a gallery Debug run (SU.3's leftover); the report card's wide tables at narrow widths (from AN.2) | done 2026-10-14: no crash in 41 flips; wide tables scroll with a scroller, via `pauleveritt/MarkdownView`. [Plan and Result](docs/superpowers/plans/2026-10-14-su13-two-leftovers.md) |
 | SU.14 | The `@` file picker | Typing `@` in the composer offers the workspace's files; choosing one inserts `@path`, which the engine expands; the `mentions` event shows what was attached | done 2026-10-14: `@` offers the workspace's files as the TUI ranks them; the engine attaches; an attached/missing line under the prompt; the owner tried it. [Plan and Result](docs/superpowers/plans/2026-10-14-su14-file-picker.md) |
 | SU.15 | Colored code in tool cards | A tool card's result preview colored by its file's language, with the highlighter answers' code blocks already use; Markdown as colored raw text | done 2026-10-14: a card's result colored by its file's language, light and dark; Markdown as colored raw text. [Plan and Result](docs/superpowers/plans/2026-10-14-su15-colored-code.md) |
-| SU.16 | Files as links | Every file reference opens Quick Look and looks like a link: tool card headers (today a plain button), `@` attachments, paths in answers that name a real file; engine-worktree files wait on the engine | not brainstormed |
+| SU.16 | Files as links | Every file reference opens Quick Look and looks like a link: tool card headers (today a plain button), `@` attachments, paths in answers that name a real file; engine-worktree files via the receipt's `worktree_path` | not brainstormed |
 
 ### SU.6 punch list
 
@@ -78,6 +78,14 @@ Deferred, each with the condition that reopens it.
 - **An Apply button.** Applying stays a terminal step:
   `ds4-dogfood apply <id>`. *Reopens if copying that command becomes daily
   friction and the engine offers a machine-readable apply.*
+- **Changed files after each turn.** Most agents end a turn with the files
+  it changed, often with `+`/`−` counts and a link to the diff. SwiftStar
+  could list them under the answer, each opening a colored Quick Look of
+  the changed copy; diffs only if they come cheap. No engine change needed:
+  the session directory's `receipt.json` (refreshed at every pause) names
+  the candidate worktree, and `candidate.diff` holds the changes since the
+  session began, so a turn's files are the difference from the last pause.
+  *Reopens when the owner picks it up (filed 2026-10-14).*
 - **Token streaming.** The engine's seam is the pause, never a per-token
   callback. *Reopens only if ds4-engine changes that.*
 - **Packaging ds4-engine inside the `.app`.** Today the user installs it
@@ -94,7 +102,9 @@ Things SwiftStar can't show or do until ds4-engine changes. Raise them
 there.
 
 - **The `session` event doesn't report the candidate worktree.** So Quick
-  Look opens the checkout's copy, not the edited one.
+  Look opens the checkout's copy, not the edited one. *Found 2026-10-14:
+  the session directory's `receipt.json` names it (`worktree_path`); SU.16
+  can use that, so this request is no longer needed.*
 - **`models --json` sends no `default_model_id`.** So "Engine default"
   can't name the model it means.
 - **`prefill_tokens` isn't prefill.** It's the transcript length minus evals
