@@ -54,6 +54,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.8 | Prompt history | ↑/↓ in the composer steps through earlier prompts | done 2026-10-13: this conversation's typed prompts, while the field is empty or unedited. [Plan and Result](docs/superpowers/plans/2026-10-13-su8-prompt-history.md) |
 | SU.9 | Font size | One setting scales every text in the window: 5 sizes, the middle the default; ⌘+ and ⌘− after 7b lands | done 2026-10-13: 14–24 pt, 18 the default, under a new key; the shortcuts wait in the punch list. [Plan and Result](docs/superpowers/plans/2026-10-13-su9-font-size.md) |
 | SU.10 | Status bar rates | The two token rates as steady numbers, explained by a tooltip | done 2026-10-14: prefill / generation as bare numbers in fixed slots; the tooltip names them as session averages. [Plan and Result](docs/superpowers/plans/2026-10-14-su10-status-rates.md) |
+| SU.11 | The conversation first | Toolbar menus with icons, the window titled and the list selected by the conversation, New Conversation in the list, even inspector type | in progress: [plan](docs/superpowers/plans/2026-10-14-su11-conversation-first.md) |
 
 ### SU.6 punch list
 
