@@ -53,6 +53,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.7 | Project focus, switching and resume | The project as the window's identity; its past sessions in the sidebar, resumable; quick, deliberate switching between projects | 7a and 7b done 2026-10-13: this project's conversations in a sidebar; switching asks first mid-turn; the Recent menus (toolbar, Open Recent, Dock) resume a project's newest conversation. Plans: [7a](docs/superpowers/plans/2026-10-13-su7a-sessions-and-resume.md), [7b](docs/superpowers/plans/2026-10-13-su7b-switching-projects.md). 7c (windows) waits on the engine |
 | SU.8 | Prompt history | ↑/↓ in the composer steps through earlier prompts | done 2026-10-13: this conversation's typed prompts, while the field is empty or unedited. [Plan and Result](docs/superpowers/plans/2026-10-13-su8-prompt-history.md) |
 | SU.9 | Font size | One setting scales every text in the window: 5 sizes, the middle the default; ⌘+ and ⌘− after 7b lands | done 2026-10-13: 14–24 pt, 18 the default, under a new key; the shortcuts wait in the punch list. [Plan and Result](docs/superpowers/plans/2026-10-13-su9-font-size.md) |
+| SU.10 | Status bar rates | The two token rates as steady numbers, explained by a tooltip | in progress: [plan](docs/superpowers/plans/2026-10-14-su10-status-rates.md) |
 
 ### SU.6 punch list
 
