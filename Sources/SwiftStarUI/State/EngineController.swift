@@ -104,6 +104,9 @@ public final class EngineController {
     /// why once per root.
     func reloadConversations() async {
         guard !isFixture else { return }
+        // The `@` picker's files reload with the list, at the same moments
+        // (SU.14, D5): the list's first show, a switch, a session's end.
+        Task { await reloadWorkspaceFiles() }
         guard let root = conversationRoot, let path = resolveExecutablePath() else {
             conversations = []
             return
@@ -118,6 +121,21 @@ public final class EngineController {
             sessionListNote = "Session list unavailable: \(error.reason)"
             if session != nil { showSessionListNote() }
         }
+    }
+
+    /// The workspace's files for the `@` picker (SU.14); empty outside git.
+    private(set) var workspaceFiles: [String] = []
+
+    func reloadWorkspaceFiles() async {
+        guard !isFixture else { return }
+        guard let root = conversationRoot else {
+            workspaceFiles = []
+            return
+        }
+        let files = await WorkspaceFileLister.list(root: root)
+        // A result for a workspace that has since changed is dropped.
+        guard conversationRoot?.standardizedFileURL.path == root.standardizedFileURL.path else { return }
+        workspaceFiles = files
     }
 
     private func showSessionListNote() {
@@ -267,10 +285,12 @@ public final class EngineController {
         self.model = model
     }
 
-    init(model: EngineSessionModel, conversations: [Conversation] = [], workspace: URL? = nil) {
+    init(model: EngineSessionModel, conversations: [Conversation] = [], workspace: URL? = nil,
+         workspaceFiles: [String] = []) {
         self.graces = .standard
         self.model = model
         self.conversations = conversations
+        self.workspaceFiles = workspaceFiles
         self.workspace = workspace
         modelID = ""
         contextSize = 0
