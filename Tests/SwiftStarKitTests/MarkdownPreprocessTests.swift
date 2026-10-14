@@ -32,6 +32,11 @@ struct MarkdownPreprocessTests {
               output: "1. Run:\n\n    ```\necho $$\n    ```\n\nThen x."),
         // A lazy continuation (indented, straight after paragraph text) is prose.
         .init(testDescription: "indentedLazyContinuationIsProse", input: "Text\n    \\(x\\)", output: "Text\n    x"),
+        // SU.17: markers alone open nothing; the prose after a closed fence converts.
+        .init(testDescription: "quotedProseStillDeLaTeXed", input: "> $$x$$ and - \\pi", output: "> x and - π"),
+        .init(testDescription: "proseAfterAListFenceConverts",
+              input: "- ```\n  $$\n  ```\n\nThen $$x$$.", output: "- ```\n  $$\n  ```\n\nThen x."),
+        .init(testDescription: "emphasisIsNotAListMarker", input: "*a* $$b$$", output: "*a* b"),
     ]
 
     @Test(arguments: proseCases) func prose(_ c: ProseCase) {
@@ -53,6 +58,13 @@ struct MarkdownPreprocessTests {
         // An indented fence marker opens a fence; unclosed, the rest stays as
         // written (D4: when unsure, leave it). Replaced indentedFenceMarkerOpensNoFence.
         "Intro.\n\n    ```\n\nThen $$x$$.",                 // indentedFenceMarkerOpensAFence
+        // SU.17, finding 7: a fence opened on a list or quote line.
+        "- ```sh\n  echo $$\n  ```",                        // fenceOnABulletLine
+        "1. ```\n   x \\times y\n   ```",                    // fenceOnANumberedLine
+        "> ```\n> grep '\\(a\\)'\n> ```",                   // fenceInAQuote
+        "> - ```\n>   echo $$\n>   ```",                     // fenceInAQuotedList
+        ">     echo $$",                                    // indentedCodeInAQuote
+        "> Intro.\n>\n>     echo $$",                      // indentedCodeInAQuote (after a quoted blank)
     ]) func codeIsVerbatim(_ md: String) {
         #expect(MarkdownPreprocess.deLaTeXed(md) == md)
     }

@@ -11,7 +11,9 @@ public enum MarkdownPreprocess {
     /// line counts as code after a blank line or more indented code; straight
     /// after paragraph text it's a lazy continuation and stays prose. An
     /// indented paragraph inside a list item is kept raw too, and an indented
-    /// fence marker opens a fence, as under a list item (SU.6a, D4).
+    /// fence marker opens a fence, as under a list item (SU.6a, D4). Block
+    /// quote and list markers are looked past, so `- ```sh` and `> ```` open
+    /// fences too (SU.17, finding 7).
     public static func deLaTeXed(_ s: String) -> String {
         var out: [String] = []
         var prose: [String] = []
@@ -24,7 +26,8 @@ public enum MarkdownPreprocess {
             prose = []
         }
         for line in s.components(separatedBy: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let body = blockBody(line)
+            let trimmed = body.trimmingCharacters(in: .whitespaces)
             if let open = fence {
                 out.append(line)
                 // CommonMark: a closing fence is the same character, at least
@@ -41,21 +44,44 @@ public enum MarkdownPreprocess {
                 fence = run
                 out.append(line)
                 afterBreak = false
-            } else if afterBreak, line.hasPrefix("    ") || line.hasPrefix("\t") {
+            } else if afterBreak, body.hasPrefix("    ") || body.hasPrefix("\t") {
                 flush()
                 out.append(line)
             } else {
                 prose.append(line)
-                afterBreak = trimmed.isEmpty
+                afterBreak = trimmed.isEmpty  // `>` alone is a blank line in a quote
             }
         }
         flush()
         return out.joined(separator: "\n")
     }
 
+    /// The line past its block quote (`>`) and list (`-`, `*`, `+`, `1.`,
+    /// `1)`) markers, each with the space after it: where a fence or indented
+    /// code inside them starts. A marker needs that space, so `*a*` is text.
+    static func blockBody(_ line: String) -> Substring {
+        var rest = Substring(line)
+        while true {
+            let lead = rest.prefix { $0 == " " }
+            guard lead.count < 4 else { return rest }
+            let after = rest.dropFirst(lead.count)
+            if after.first == ">" {
+                let inner = after.dropFirst()
+                rest = inner.first == " " ? inner.dropFirst() : inner
+                continue
+            }
+            let digits = after.prefix(while: \.isNumber)
+            let marker = digits.isEmpty ? after.prefix(1) : after.prefix(digits.count + 1)
+            let isBullet = digits.isEmpty && ["-", "*", "+"].contains(marker)
+            let isNumber = !digits.isEmpty && digits.count <= 9 && [".", ")"].contains(marker.last)
+            guard isBullet || isNumber, after.dropFirst(marker.count).first == " " else { return rest }
+            rest = after.dropFirst(marker.count + 1)
+        }
+    }
+
     /// A fence's opening run: three or more backticks or tildes (a backtick
     /// fence's info string can't contain a backtick).
-    private static func fenceRun(_ line: String) -> (char: Character, count: Int)? {
+    private static func fenceRun(_ line: some StringProtocol) -> (char: Character, count: Int)? {
         guard let c = line.first, c == "`" || c == "~" else { return nil }
         let n = line.prefix { $0 == c }.count
         guard n >= 3 else { return nil }
