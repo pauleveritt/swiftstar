@@ -6,6 +6,7 @@ import SwiftStarKit
 struct ComposerView: View {
     @Environment(EngineController.self) private var controller
     @State private var input = ""
+    @State private var history = PromptHistory()
     @FocusState private var inputFocused: Bool
     @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
@@ -36,6 +37,12 @@ struct ComposerView: View {
                         // tint turns the field solid and hides the placeholder.
                         .glassEffect(analyzing ? .regular.tint(.accentColor.opacity(0.25)) : .regular,
                                      in: .rect(cornerRadius: 20))
+                        .onKeyPress(.upArrow) {
+                            recall(history.up(current: input, entries: promptEntries))
+                        }
+                        .onKeyPress(.downArrow) {
+                            recall(history.down(current: input, entries: promptEntries))
+                        }
                         .onSubmit { send() }
                         .disabled(!composerState.canSend)
                     let button = composerState.button(forInput: input)
@@ -68,6 +75,17 @@ struct ComposerView: View {
         .onChange(of: composerState.canStop) { _, stoppable in
             if !stoppable { inputFocused = true }
         }
+    }
+
+    private var promptEntries: [String] {
+        PromptHistory.entries(from: controller.transcript.rows)
+    }
+
+    /// A recalled prompt fills the field; nil leaves the arrow to the field.
+    private func recall(_ text: String?) -> KeyPress.Result {
+        guard let text else { return .ignored }
+        input = text
+        return .handled
     }
 
     private func send() {
