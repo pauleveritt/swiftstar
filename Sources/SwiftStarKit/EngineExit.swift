@@ -27,7 +27,8 @@ public struct EngineExit: Equatable, Sendable {
         afterProtocolError: Bool = false
     ) -> EngineExit {
         if forced {
-            return EngineExit(code: code, message: "ended by force after the quit timed out")
+            let after = afterProtocolError ? "a protocol error" : "the quit timed out"
+            return EngineExit(code: code, message: "ended by force after \(after)")
         }
         // Only our own SIGTERM's outcome reads as ours; an engine that exits on
         // its own after a bad line keeps its reason.

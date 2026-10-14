@@ -253,7 +253,14 @@ public final class EngineSession {
         case .protocolError:
             failedProtocol = true
             onEvent?(event)
-            if let process, !exited { process.terminate() }
+            // The quit's bounded shutdown, at once: SIGTERM now, SIGKILL
+            // `killGrace` later for an engine that ignores it (SU.17, finding 4).
+            if process != nil, !exited, !quitting {
+                quitting = true
+                try? stdin?.close()
+                stdin = nil
+                quitTask = Task { @MainActor [self] in await escalate(after: .zero) }
+            }
             return
         default:
             break

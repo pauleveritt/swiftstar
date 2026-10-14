@@ -200,6 +200,19 @@ struct EngineSessionTests {
         #expect(rec.exits.count == 1)
     }
 
+    /// SU.17, finding 4: an engine that ignores the protocol error's SIGTERM
+    /// gets the quit's SIGKILL, and the exit still names the protocol error.
+    @Test func aProtocolErrorEscalatesToSigkill() async throws {
+        let (session, rec) = make(
+            fixture: "bad-handshake", extra: ["FAKE_ENGINE_IGNORE_QUIT": "1", "FAKE_ENGINE_IGNORE_SIGTERM": "1"],
+            grace: shortGrace)
+        try session.start()
+        #expect(await eventually { rec.has(isProtocolError) })
+        #expect(await eventually(within: .seconds(5)) { rec.exit != nil })
+        #expect(rec.exit?.message == "ended by force after a protocol error")
+        #expect(rec.exits.count == 1)
+    }
+
     @Test func garbageAfterReadyIsNoticeNotFatal() async throws {
         let (session, rec) = make(fixture: "garbage-after-ready")
         try session.start()
