@@ -64,11 +64,17 @@ struct MetricsFormattingTests {
         #expect(EngineSessionConstants.stderrTailLimit == 4096)
     }
 
-    @Test func statusLineRunningAndNot() {
+    /// SU.10: the status bar's two numbers, and the tooltip that names them.
+    @Test func statusRates() {
         var m = EngineMetricsState()
+        #expect(MetricsFormatting.rateNumber(m.prefillTPS) == "—")
+        #expect(MetricsFormatting.ratesTooltip(prefill: nil, generation: nil)
+            == "Prefill and generation, in tokens per second: averages over this session, once a turn has run.")
         EngineMetricsReducer.reduce(&m, .pause(PauseMetrics(prefillTokens: 100, prefillMs: 1000, evalCount: 10, evalMs: 1000)))
-        #expect(MetricsFormatting.statusLine(phase: .running, label: "Ready", metrics: m)
-            == "Prefill avg 100.0 tok/s · Generation avg 10.0 tok/s · Ready")
-        #expect(MetricsFormatting.statusLine(phase: .idle, label: "Not started", metrics: m) == "Not started")
+        #expect(MetricsFormatting.rateNumber(m.prefillTPS) == "100.0")
+        #expect(MetricsFormatting.rateNumber(m.generationTPS) == "10.0")
+        #expect(MetricsFormatting.ratesTooltip(prefill: m.prefillTPS, generation: m.generationTPS)
+            == "Prefill 100.0 tok/s, generation 10.0 tok/s: averages over this session.")
+        #expect(MetricsFormatting.rateSlot == "8888.8")
     }
 }

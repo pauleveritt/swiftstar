@@ -64,3 +64,26 @@ measurements; `statusLineRunningAndNot` is replaced.
   item goes.
 - This plan gains `## Result`.
 - `just lint-docs`, `just test`, `just integration`.
+
+## Result
+
+Done 2026-10-14 on `su-ui`, in two commits: the plan (`1d56bd2`) and this
+one, which holds Tasks 1 to 3. Task 1 couldn't build alone: removing
+`statusLine` broke the view until Task 2 replaced it.
+
+**Suites:** `just test` and `just integration` (148 and 78 passed), with no
+other test run going. `statusRates` was written first and failed to build
+without `rateNumber`.
+
+**Previews:** `StatusBarView`'s four and `SessionView`'s "Large font"
+rendered and were looked at.
+
+**Diverged:**
+- **The two numbers hug the slash:** prefill trailing-aligned in its slot,
+  generation leading-aligned. With both trailing, a gap opened between "/"
+  and the generation number.
+- **The rates are at the caption size,** under the label's body size, so
+  they read as a readout beside "Ready".
+
+**For the owner in the app:** hover the numbers for the tooltip; watch
+them through a turn for movement.

@@ -1,8 +1,8 @@
 import SwiftUI
 import SwiftStarKit
 
-/// Bottom readout bar: left = fixed-width prefill/generation rates and the
-/// phase, right = memory and the context-fill ring.
+/// Bottom readout bar: left = the composer's label; right = the two token
+/// rates while running, memory and the context-fill ring.
 struct StatusBarView: View {
     let phase: EngineSessionPhase
     /// The composer's status label (it carries the exit message once the
@@ -22,6 +22,9 @@ struct StatusBarView: View {
                 .contentTransition(.numericText())
                 .animation(.default, value: statusText)
             Spacer(minLength: 12)
+            if phase == .running {
+                RatesView(prefill: metrics.prefillTPS, generation: metrics.generationTPS)
+            }
             if let allocated = metrics.gpuAllocatedBytes,
                let budget = metrics.gpuBudgetBytes, budget > 0 {
                 MemoryStatusView(allocatedBytes: allocated, budgetBytes: budget)
@@ -47,8 +50,45 @@ struct StatusBarView: View {
         .padding(.vertical, 6)
     }
 
-    private var statusText: String {
-        MetricsFormatting.statusLine(phase: phase, label: composerLabel, metrics: metrics)
+    /// The composer's label alone (it carries the exit message once ended).
+    private var statusText: String { composerLabel }
+}
+
+/// The two session-average rates as bare numbers, prefill then generation
+/// (SU.10). Each sits in a slot sized for the widest expected number, so
+/// they hold still as digits come and go; the tooltip names them.
+private struct RatesView: View {
+    let prefill: Double?
+    let generation: Double?
+    @Environment(\.fontSize) private var fontSize: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // Both hug the slash; the slots' spare width falls outside.
+            number(prefill, alignment: .trailing)
+            Text("/").foregroundStyle(.tertiary)
+            number(generation, alignment: .leading)
+        }
+        .font(.scaled(.caption, base: fontSize))
+        .foregroundStyle(.secondary)
+        .monospacedDigit()
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+        .help(MetricsFormatting.ratesTooltip(prefill: prefill, generation: generation))
+        .accessibilityElement()
+        .accessibilityLabel("Token rates")
+        .accessibilityValue(MetricsFormatting.ratesTooltip(prefill: prefill, generation: generation))
+    }
+
+    /// The number in a hidden slot of the widest width.
+    private func number(_ value: Double?, alignment: Alignment) -> some View {
+        Text(MetricsFormatting.rateSlot)
+            .hidden()
+            .overlay(alignment: alignment) {
+                Text(MetricsFormatting.rateNumber(value))
+                    .contentTransition(.numericText())
+                    .animation(.default, value: value)
+            }
     }
 }
 

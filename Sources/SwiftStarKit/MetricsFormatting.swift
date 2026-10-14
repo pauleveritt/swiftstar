@@ -18,11 +18,22 @@ public enum MetricsFormatting {
                       number(used, locale: locale), number(size, locale: locale), percent)
     }
 
-    /// The status bar's text: rates and the composer's label while the session
-    /// runs, else just the label (it carries the exit message once ended).
-    public static func statusLine(phase: EngineSessionPhase, label: String, metrics: EngineMetricsState) -> String {
-        guard phase == .running else { return label }
-        return "Prefill avg \(rate(metrics.prefillTPS)) · Generation avg \(rate(metrics.generationTPS)) · \(label)"
+    /// One of the status bar's two rates, bare: "189.8", or "—" before a
+    /// measurement (SU.10).
+    public static func rateNumber(_ value: Double?) -> String {
+        value.map { String(format: "%.1f", $0) } ?? "—"
+    }
+
+    /// The widest number a status bar slot is sized for, so the rates hold
+    /// still as digits come and go.
+    public static let rateSlot = "8888.8"
+
+    /// What the status bar's two numbers are.
+    public static func ratesTooltip(prefill: Double?, generation: Double?) -> String {
+        guard let prefill, let generation else {
+            return "Prefill and generation, in tokens per second: averages over this session, once a turn has run."
+        }
+        return "Prefill \(rate(prefill)), generation \(rate(generation)): averages over this session."
     }
 
     /// A count with the locale's grouping ("8,192", "8.192").
