@@ -5,12 +5,25 @@ import SwiftStarKit
 /// notice above them.
 struct ComposerView: View {
     @Environment(EngineController.self) private var controller
-    @State private var input = ""
+    @State private var input: String
     @State private var history = PromptHistory()
+    /// The `@` picker's highlighted row, and the query Esc closed it for
+    /// (SU.14): it stays shut until the `@word` changes.
+    @State private var pick = 0
+    @State private var dismissedQuery: String?
     @FocusState private var inputFocused: Bool
     @Environment(\.fontSize) private var fontSize: CGFloat
 
+    /// `initialInput` is for previews: the "@ picker" one opens with a query.
+    init(initialInput: String = "") { _input = State(initialValue: initialInput) }
+
     private var composerState: EngineComposer { controller.composer }
+
+    private var mentionQuery: String? { FileMentions.activeQuery(in: input) }
+    private var candidates: [String] {
+        guard let query = mentionQuery, query != dismissedQuery else { return [] }
+        return FileMentions.match(query, in: controller.workspaceFiles)
+    }
 
     var body: some View {
         VStack(spacing: 4) {
@@ -22,6 +35,10 @@ struct ComposerView: View {
                         .textSelection(.enabled)
                     Spacer()
                 }
+            }
+            let files = candidates
+            if !files.isEmpty {
+                FilePickerList(files: files, selected: min(pick, files.count - 1), choose: choose)
             }
             GlassEffectContainer {
                 HStack(alignment: .bottom, spacing: 8) {
@@ -37,11 +54,22 @@ struct ComposerView: View {
                         // tint turns the field solid and hides the placeholder.
                         .glassEffect(analyzing ? .regular.tint(.accentColor.opacity(0.25)) : .regular,
                                      in: .rect(cornerRadius: 20))
+                        // The `@` picker has the arrows while it's open; then
+                        // prompt history (SU.14, D1).
                         .onKeyPress(.upArrow) {
-                            recall(history.up(current: input, entries: promptEntries))
+                            if !candidates.isEmpty { pick = max(pick - 1, 0); return .handled }
+                            return recall(history.up(current: input, entries: promptEntries))
                         }
                         .onKeyPress(.downArrow) {
-                            recall(history.down(current: input, entries: promptEntries))
+                            if !candidates.isEmpty { pick = min(pick + 1, candidates.count - 1); return .handled }
+                            return recall(history.down(current: input, entries: promptEntries))
+                        }
+                        .onKeyPress(.return) { chooseHighlighted() }
+                        .onKeyPress(.tab) { chooseHighlighted() }
+                        .onKeyPress(.escape) {
+                            guard !candidates.isEmpty else { return .ignored }
+                            dismissedQuery = mentionQuery
+                            return .handled
                         }
                         .onSubmit { send() }
                         .disabled(!composerState.canSend)
@@ -71,10 +99,25 @@ struct ComposerView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .onChange(of: mentionQuery) { pick = 0 }
         .task { inputFocused = true }
         .onChange(of: composerState.canStop) { _, stoppable in
             if !stoppable { inputFocused = true }
         }
+    }
+
+    /// Return or Tab with the picker open inserts its highlighted file;
+    /// closed, Return sends as before.
+    private func chooseHighlighted() -> KeyPress.Result {
+        let files = candidates
+        guard !files.isEmpty else { return .ignored }
+        choose(files[min(pick, files.count - 1)])
+        return .handled
+    }
+
+    private func choose(_ path: String) {
+        input = FileMentions.insert(path, into: input)
+        dismissedQuery = nil
     }
 
     private var promptEntries: [String] {
@@ -92,6 +135,58 @@ struct ComposerView: View {
         guard composerState.canSend, let message = input.trimmedOrNil else { return }
         input = ""
         controller.send(message)
+    }
+}
+
+/// The `@` picker's suggestions, above the field: the file name, then its
+/// folder, the highlighted row tinted (SU.14, D1). Clicking one inserts it.
+private struct FilePickerList: View {
+    let files: [String]
+    let selected: Int
+    let choose: (String) -> Void
+    @Environment(\.fontSize) private var fontSize: CGFloat
+
+    var body: some View {
+        // About eight rows, then it scrolls: sixteen at once ran off the top
+        // and hid the best matches. The highlighted row stays in view.
+        ScrollViewReader { proxy in
+            ScrollView {
+                rows
+            }
+            .frame(maxHeight: fontSize * 14)
+            .fixedSize(horizontal: false, vertical: true)
+            .onChange(of: selected) { _, row in proxy.scrollTo(row) }
+        }
+        .padding(6)
+        .glassEffect(.regular, in: .rect(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("File suggestions")
+    }
+
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(files.enumerated()), id: \.offset) { index, path in
+                Button { choose(path) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.text").foregroundStyle(.secondary)
+                        Text((path as NSString).lastPathComponent)
+                        Text((path as NSString).deletingLastPathComponent)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.scaled(.caption, base: fontSize))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                    .background(index == selected ? Color.accentColor.opacity(0.25) : .clear,
+                                in: RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .id(index)
+            }
+        }
     }
 }
 
@@ -119,4 +214,20 @@ struct ComposerView: View {
     return ComposerView()
         .environment(EngineController(model: model))
         .frame(width: 600)
+}
+
+// SU.14: the `@` picker. Open with a query, for RenderPreview; and empty,
+// for typing `@` in the live canvas (↑/↓, Return or Tab, Esc).
+#Preview("@ picker") {
+    ComposerView(initialInput: "Compare @sess")
+        .environment(EngineController(
+            model: EngineController.runningModel(withGPU: true), workspaceFiles: .previewFiles))
+        .frame(width: 600, height: 420, alignment: .bottom)
+}
+
+#Preview("@ picker, type here") {
+    ComposerView()
+        .environment(EngineController(
+            model: EngineController.runningModel(withGPU: true), workspaceFiles: .previewFiles))
+        .frame(width: 600, height: 420, alignment: .bottom)
 }

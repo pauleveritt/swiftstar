@@ -96,3 +96,39 @@ preview), `TranscriptRowView.swift` (the mentions line, a preview),
 - This plan gains `## Result`.
 - `just lint-docs`, `just test`, `just integration`; the owner's one live
   check in the app: a picked file is attached.
+
+## Result
+
+Done 2026-10-14 on `su-ui`, in three commits after the plan (`5230aa8`): Task 1 (`67cbf74`), Task 2
+(`a49eb96`), and Tasks 3 and 4 together.
+
+**Suites:** `just test` and `just integration` (156 and 80 passed), with no
+other test run going. Each task's tests were written first and failed to
+build without the new code. `fuzzy` is pinned to the engine's own scores:
+`fuzzy_match` was run on the same paths and the tests hold its tiers,
+ordering and three of its scores.
+
+**Previews:** `ComposerView`'s six (its four, "@ picker" and "@ picker,
+type here") and `TranscriptRowView`'s eight ("Mentions" new), tiled and
+looked at. "@ picker" opens on "Compare @sess" with `SessionView.swift`
+first and highlighted.
+
+**Diverged:**
+- **The pop-up shows about eight rows and scrolls,** keeping the
+  highlighted row in view. With all sixteen at once it ran off the top of
+  the window and hid the best matches.
+- **The file list is the controller's, not an environment value (D6):**
+  `EngineController(model:workspaceFiles:)` takes it for fixtures, which
+  is what previews and the gallery already build; the canvas still never
+  runs git.
+- **The mentions row replaces the parser's notice and refusal,** and,
+  unlike a refusal, leaves the prompt pending: the engine still sends it.
+- **Two renders failed in Xcode's preview pipeline** ("already been
+  invalidated") when run in parallel on one file; each rendered alone.
+
+**For the owner:**
+- In the live canvas, `ComposerView.swift`'s "@ picker, type here": type
+  `@sv`, ↑/↓, Return or Tab, Esc. Whether `onKeyPress(.return)` wins over
+  `.onSubmit` with the pop-up open is only seen there.
+- In the app, once: pick a file and send; the engine should attach it, and
+  the line under the prompt should say so.
