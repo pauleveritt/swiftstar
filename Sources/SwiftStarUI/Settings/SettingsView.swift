@@ -18,12 +18,12 @@ public struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section("Transcript") {
+            Section("Text") {
                 Slider(value: fontSliderValue, in: 0...Double(TranscriptFontScale.sizes.count - 1), step: 1) {
-                    Text("Transcript font size")
+                    Text("Font size")
                 }
                 HStack {
-                    Text("Transcript font size: \(TranscriptFontScale.sizes[fontSizeIndex]) pt")
+                    Text("Font size: \(TranscriptFontScale.sizes[fontSizeIndex]) pt")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()

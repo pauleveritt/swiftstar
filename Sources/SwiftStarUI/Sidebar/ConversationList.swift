@@ -5,6 +5,7 @@ import SwiftStarKit
 /// it; mid-turn, an alert asks first.
 struct ConversationList: View {
     @Environment(EngineController.self) private var controller
+    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
     @State private var confirming: Conversation?
 
     var body: some View {
@@ -21,8 +22,8 @@ struct ConversationList: View {
                 // previews (TableViewListCore_Mac2.swift:5538), SU.7a Task 4.
                 List(controller.conversations, selection: selection) { c in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(c.title).lineLimit(1)
-                        Text(Conversations.subtitle(c, now: Date())).font(.caption).foregroundStyle(.secondary)
+                        Text(c.title).font(.system(size: transcriptFontSize)).lineLimit(1)
+                        Text(Conversations.subtitle(c, now: Date())).font(.scaled(.caption, base: transcriptFontSize)).foregroundStyle(.secondary)
                     }
                     .foregroundStyle(c.resumable ? .primary : .tertiary)
                     .help(c.resumable ? c.title

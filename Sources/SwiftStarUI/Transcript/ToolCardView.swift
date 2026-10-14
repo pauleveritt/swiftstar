@@ -19,24 +19,24 @@ struct ToolCardView: View {
             headerView
             if let rejection = card.rejection {
                 Text(rejection.text)
-                    .font(.caption)
+                    .font(.scaled(.caption, base: transcriptFontSize))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let result = card.result, !result.preview.isEmpty {
                 Text(result.preview)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.scaled(.caption, base: transcriptFontSize, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if card.result?.truncated == true {
                 Text("Preview truncated")
-                    .font(.caption2)
+                    .font(.scaled(.caption2, base: transcriptFontSize))
                     .foregroundStyle(.secondary)
             }
             Text(card.metadataLine)
-                .font(.caption2)
+                .font(.scaled(.caption2, base: transcriptFontSize))
                 .foregroundStyle(card.ok == false ? Color(nsColor: .systemRed) : .secondary)
                 .monospacedDigit()
                 .textSelection(.enabled)

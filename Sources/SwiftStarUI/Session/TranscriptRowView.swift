@@ -37,7 +37,7 @@ struct TranscriptRowView: View {
                         // Engine telemetry, styled small and secondary so it never
                         // reads as part of the answer.
                         Text(line)
-                            .font(.caption2)
+                            .font(.scaled(.caption2, base: transcriptFontSize))
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                             .textSelection(.enabled)
@@ -45,7 +45,7 @@ struct TranscriptRowView: View {
                     if let analyze {
                         Button("Analyze", action: analyze)
                             .buttonStyle(.link)
-                            .font(.caption2)
+                            .font(.scaled(.caption2, base: transcriptFontSize))
                             .help("Report on this session, then ask about it in a copy")
                     }
                 }
@@ -84,12 +84,13 @@ struct TranscriptRowView: View {
 /// pasted to another agent for a deeper look.
 private struct ReportCard: View {
     let markdown: String
+    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Label("Session report", systemImage: "doc.text.magnifyingglass")
-                    .font(.caption.weight(.semibold))
+                    .font(.scaled(.caption, base: transcriptFontSize).weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Copy Markdown") {
@@ -97,7 +98,7 @@ private struct ReportCard: View {
                     NSPasteboard.general.setString(markdown, forType: .string)
                 }
                 .buttonStyle(.link)
-                .font(.caption)
+                .font(.scaled(.caption, base: transcriptFontSize))
             }
             MarkdownText(markdown)
         }

@@ -6,6 +6,7 @@ import SwiftStarKit
 struct MemoryStatusView: View {
     let allocatedBytes: Int64
     let budgetBytes: Int64
+    @Environment(\.transcriptFontSize) private var transcriptFontSize: CGFloat
 
     var body: some View {
         let tooltip = "GPU memory: \(MetricsFormatting.bytes(allocatedBytes)) allocated of \(MetricsFormatting.bytes(budgetBytes)) budget."
@@ -15,7 +16,7 @@ struct MemoryStatusView: View {
                 trackColor: .green,
                 diameter: 15)
             Text("\(MetricsFormatting.bytes(allocatedBytes)) / \(MetricsFormatting.bytes(budgetBytes))")
-                .font(.caption2)
+                .font(.scaled(.caption2, base: transcriptFontSize))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
