@@ -85,7 +85,7 @@ struct FakeEngine {
 
     init(
         fixture: String = "tool-read.ndjson", resumeFixture: String = "resumed.ndjson",
-        models: String = "models-real.json", sessions: String? = nil, refuseResume: Bool = false,
+        models: String = "models-real.json", sessions: String? = nil, report: String? = nil, refuseResume: Bool = false,
         extra: [String: String] = [:]
     ) throws {
         var lines = [
@@ -98,6 +98,7 @@ struct FakeEngine {
             "export FAKE_ENGINE_PACE_MS=50",
         ]
         if let sessions { lines.append("export FAKE_ENGINE_SESSIONS=\(Fixtures.path(sessions))") }
+        if let report { lines.append("export FAKE_ENGINE_REPORT=\(Fixtures.path(report))") }
         if refuseResume { lines.append(#"case "$*" in *--resume*) export FAKE_ENGINE_REFUSE=1;; esac"#) }
         for (k, v) in extra.sorted(by: { $0.key < $1.key }) { lines.append("export \(k)=\(v)") }
         lines.append(#"case "$1" in tui) echo $$ >> "# + pids + ";; esac")

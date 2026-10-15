@@ -42,10 +42,9 @@ public enum EngineCommand {
         ["tui", "--ndjson", "--resume", id, "--source", source.path]
     }
 
-    /// The session report (AN.1's `session_last.py`) for one session. At
-    /// AN.4 this becomes `ds4-dogfood last --session`.
-    public static func reportArguments(script: URL, sessionDirectory: URL) -> (executable: String, arguments: [String]) {
-        ("/usr/bin/python3", ["-I", "-B", script.path, "--session", sessionDirectory.path])
+    /// ds4-engine's report on one session, as its JSON contract (AN.4).
+    public static func reportArguments(sessionDirectory: URL) -> [String] {
+        ["report", sessionDirectory.path, "--json"]
     }
 
     /// The shell command that takes a finished session's changes.

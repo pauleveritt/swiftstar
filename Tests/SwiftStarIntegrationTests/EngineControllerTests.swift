@@ -985,7 +985,7 @@ struct EngineControllerTests {
         defer { defaults.restore() }
         let controller = await answered(f)
         #expect(controller.model.canAnalyze)
-        controller.reportLoader = { _ in .success("R-REPORT") }
+        controller.reportLoader = { _, _ in .success("R-REPORT") }
         await controller.analyze()
         await eventually(within: .seconds(15)) { f.prompts.contains { $0.contains("R-REPORT") } }
         #expect(f.spawnArgv.count == 2)
@@ -1001,7 +1001,7 @@ struct EngineControllerTests {
         let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
         defer { defaults.restore() }
         let controller = await answered(f)
-        controller.reportLoader = { _ in .failure(SessionReportFailure(message: "boom")) }
+        controller.reportLoader = { _, _ in .failure(SessionReportFailure(message: "boom")) }
         await controller.analyze()
         #expect(f.spawnArgv.count == 1)
         #expect(controller.transcript.rows.contains {
@@ -1021,7 +1021,7 @@ struct EngineControllerTests {
         let controller = await answered(f)
         let release = AsyncStream<Void>.makeStream()
         let entered = AsyncStream<Void>.makeStream()
-        controller.reportLoader = { _ in
+        controller.reportLoader = { _, _ in
             entered.continuation.yield()
             for await _ in release.stream { break }
             return succeeds ? .success("R-STALE") : .failure(SessionReportFailure(message: "stale-boom"))
@@ -1057,7 +1057,7 @@ struct EngineControllerTests {
         controller.send("Read a file")
         await eventually(within: .seconds(10)) { controller.model.canAnalyze }
         let main = try #require(controller.model.sessionDirectory)
-        controller.reportLoader = { _ in .success("R-REPORT") }
+        controller.reportLoader = { _, _ in .success("R-REPORT") }
         await controller.analyze()
         #expect(f.spawnArgv.count == 1)
         #expect(controller.model.analysis == nil)

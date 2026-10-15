@@ -3,36 +3,27 @@ import Testing
 @testable import SwiftStarEngine
 import SwiftStarKit
 
-/// Runs the bundled `session_last.py` (AN.2) against a recorded session.
+/// `report <dir> --json` (AN.4) through the fake engine, which prints the
+/// recorded `fixtures/engine/report.json`.
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["SWIFTSTAR_INTEGRATION"] == "1"))
 struct SessionReportLoaderTests {
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    private static let session = repoRoot.appendingPathComponent("fixtures/sessions/20261013-123136-swiftstar")
+    private static let session = URL(fileURLWithPath: "/sessions/20261013-123136-swiftstar")
 
-    @Test func reportFromFixtureSession() async throws {
-        let text = try await SessionReportLoader.load(sessionDirectory: Self.session).get()
-        #expect(text.hasPrefix("**last**: 20261013-123136-swiftstar"))
+    @Test func reportFromFakeEngine() async throws {
+        let argv = tempPath("report-argv")
+        let f = try FakeEngine(report: "report.json", extra: ["FAKE_ENGINE_ARGV_LOG": argv])
+        defer { f.remove(); try? FileManager.default.removeItem(atPath: argv) }
+        let text = try await SessionReportLoader.load(executable: f.script, sessionDirectory: Self.session).get()
+        #expect(text.hasPrefix("**report**: 20261013-123136-swiftstar"))
+        let logged = try String(contentsOfFile: argv, encoding: .utf8).split(separator: "\n").map(String.init)
+        #expect(logged == ["report", Self.session.path, "--json"])
     }
 
-    @Test func bundledScriptExists() throws {
-        let script = try #require(SessionReportLoader.bundledScript)
-        #expect(FileManager.default.fileExists(atPath: script.path))
-    }
-
-    @Test func missingScriptFails() async {
-        let r = await SessionReportLoader.load(
-            sessionDirectory: Self.session, script: URL(fileURLWithPath: "/nonexistent/session_last.py"))
-        guard case .failure(let f) = r else { Issue.record("expected failure: \(r)"); return }
-        #expect(f.message.contains("not found"))
-    }
-
-    @Test func badSessionFails() async throws {
-        let empty = FileManager.default.temporaryDirectory.appendingPathComponent("an2-empty-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: empty) }
-        let r = await SessionReportLoader.load(sessionDirectory: empty)
-        guard case .failure(let f) = r else { Issue.record("expected failure: \(r)"); return }
-        #expect(f.message.contains("receipt.json"))
+    @Test func engineWithoutReportSaysUpdate() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let r = await SessionReportLoader.load(executable: f.script, sessionDirectory: Self.session)
+        guard case .failure(let failure) = r else { Issue.record("expected failure: \(r)"); return }
+        #expect(failure.message.contains("no `report` command"))
     }
 }

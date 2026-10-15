@@ -30,6 +30,8 @@ engine); FAKE_ENGINE_MODELS_SLEEP_MS delays first.
 `sessions --json` mode (argv[1] == "sessions"): prints the FAKE_ENGINE_SESSIONS
 file after FAKE_ENGINE_SESSIONS_SLEEP_MS, or exits 2 with "invalid choice"
 when it is unset.
+`report <dir> --json` mode (argv[1] == "report"): prints the FAKE_ENGINE_REPORT
+file, or exits 2 with "invalid choice" when it is unset.
 Replays the fixture up to and including each `input` line, pausing after every
 `tool_start` until a stdin line arrives or the pace elapses.
 """
@@ -81,6 +83,17 @@ if sys.argv[1:2] == ["models"]:
         sys.stderr.flush()
         sys.exit(2)
     with open(env["FAKE_ENGINE_MODELS"]) as f:
+        sys.stdout.write(f.read())
+    sys.exit(0)
+
+if sys.argv[1:2] == ["report"]:
+    # AN.4: prints the FAKE_ENGINE_REPORT file; unset, exits 2 like an
+    # engine without the command.
+    if not env.get("FAKE_ENGINE_REPORT"):
+        sys.stderr.write("ds4-dogfood: error: argument command: invalid choice: 'report'\n")
+        sys.stderr.flush()
+        sys.exit(2)
+    with open(env["FAKE_ENGINE_REPORT"]) as f:
         sys.stdout.write(f.read())
     sys.exit(0)
 

@@ -130,12 +130,10 @@ struct EngineCommandTests {
                 == ["tui", "--ndjson", "--resume", "20261013-1-x", "--source", "/r"])
     }
 
-    // AN.2: AN.1's report for one session; ds4-dogfood last at AN.4.
+    // AN.4: ds4-engine's report for one session, as JSON.
     @Test func reportArgumentsAreExact() {
-        let (exe, args) = EngineCommand.reportArguments(
-            script: URL(fileURLWithPath: "/b/session_last.py"), sessionDirectory: URL(fileURLWithPath: "/s/x"))
-        #expect(exe == "/usr/bin/python3")
-        #expect(args == ["-I", "-B", "/b/session_last.py", "--session", "/s/x"])
+        #expect(EngineCommand.reportArguments(sessionDirectory: URL(fileURLWithPath: "/s/x"))
+                == ["report", "/s/x", "--json"])
     }
 
     @Test func applyCommandUsesDirectoryName() {

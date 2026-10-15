@@ -30,9 +30,10 @@ public final class EngineController {
     var canAnalyze: Bool { model.canAnalyze }
     var analysis: EngineAnalysis? { model.analysis }
     public var isActive: Bool { model.phase.isActive }
-    /// Makes the session report (AN.2); tests replace it.
-    @ObservationIgnored var reportLoader: (URL) async -> Result<String, SessionReportFailure> = {
-        await SessionReportLoader.load(sessionDirectory: $0)
+    /// Makes the session report from the executable and a session
+    /// directory (AN.2, AN.4); tests replace it.
+    @ObservationIgnored var reportLoader: (String, URL) async -> Result<String, SessionReportFailure> = {
+        await SessionReportLoader.load(executable: $0, sessionDirectory: $1)
     }
     /// The git root the current or last session worked from (its `--source`),
     /// kept after the session ends so its tool cards still resolve.
@@ -624,7 +625,11 @@ public final class EngineController {
     /// resume the session as a fork to talk about it there.
     func analyze() async {
         guard let target = model.analysisTarget, let source else { return }
-        let result = await reportLoader(target.directory)
+        guard let executable = resolveExecutablePath() else {
+            model.apply(.error("Analyze: \(EngineCommand.executableName) not found"))
+            return
+        }
+        let result = await reportLoader(executable, target.directory)
         // A report for a session that has moved on is dropped (SU.17, finding 1).
         guard model.analysisTarget == target else { return }
         switch result {

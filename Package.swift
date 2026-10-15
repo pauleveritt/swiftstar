@@ -48,8 +48,6 @@ let package = Package(
         .target(
             name: "SwiftStarEngine",
             dependencies: ["SwiftStarKit"],
-            // The session report (AN.1); `just last` runs the same file.
-            resources: [.copy("Resources/session_last.py")],
             swiftSettings: common
         ),
         // The views live in a library target, not the executable: Xcode cannot
