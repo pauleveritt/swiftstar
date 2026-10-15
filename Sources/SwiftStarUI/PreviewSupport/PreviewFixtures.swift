@@ -134,24 +134,34 @@ extension EngineTranscript {
         return t
     }
 
-    /// AN.1's report on `fixtures/sessions/20261013-123136-swiftstar`, trimmed.
+    /// ds4-engine's report (AN.4) on `fixtures/sessions/20261013-123136-swiftstar`,
+    /// as `SessionReport.markdown` renders `fixtures/engine/report.json`, trimmed.
     static let previewReport = """
-        **last**: 20261013-123136-swiftstar, qwen3.8-flash-next, ctx 20,000, 3 m 7 s, answered
+        **report**: 20261013-123136-swiftstar, qwen3.8-flash-next, ctx 20,000, 188s, answered
 
         ### Flagged steps
 
-        | Prompt | Step | Did | Rule | Evidence |
-        |---|---|---|---|---|
-        | 1 | 17 | run | F1 | Tool error: unknown tool: run. There is no shell, so nothing can be run. |
-        | 3 | 36 | read Sources/SwiftStarKit/Severity.swift | U1 | already_shown |
-        | 3 | 37 | read Sources/SwiftStarKit/PathAbbreviation.swift | U1 | already_shown |
+        | Prompt | Did | Why |
+        |---|---|---|
+        | 2 | run | failed: Tool error: unknown tool: run. There is no shell, so nothing can be ru… |
+        | 2 | run | refused: unknown-tool |
+        | — | — | loop guard fired: already_shown x2 |
 
-        ### Summary
+        ### Session
 
         | Row | Value |
         |---|---|
-        | Context and speed | ctx 1,021 → 7,300; prefill tok/s first / median / last 490 / 359 / 345 |
-        | Work | 4 prompts, 40 steps; tools: read 10, edit 4, ls 3, grep 2, run 1; rejected: run (unknown-tool) |
+        | Rates | prefill 439.8 tok/s · decode 48.8 tok/s, over the session |
+        | Prefix cache | prefix-cache miss: 944 tokens filled, 1.7s |
+
+        ### Prefill
+
+        | Prompt | Step | After | Tokens | Time | Rate | Label |
+        |---|---|---|---|---|---|---|
+        | 2 | 1 | user | 45 | 794 ms | 56.7 tok/s | — |
+        | 2 | 5 | host_results | 32 | 104 ms | 306.3 tok/s | short batch, fixed cost |
+
+        19 syncs with nothing new to prefill are not listed.
         """
 }
 

@@ -80,3 +80,38 @@ runs against the installed engine, built from the top of the stack
    - ROADMAP, CHANGELOG, `just lint-docs`, both tiers.
 
 ## Result
+
+Built 2026-10-15 on the branch `an4-engine-report` and not merged: the
+engine's `report` lives on ds4-engine's open stack (#231, #233).
+
+- **Commits:**
+  - `e1bceb4`, Task 1: `SessionReport` and the `report.json` fixture
+  - `10fe3a5`, Task 2: the loader, the controller and the fake engine's
+    `report` mode; `session_last.py` and its tests deleted
+  - this commit, Task 3: tools, docs and close
+- **Tests:**
+  - Every new test failed when the behavior it pins was broken: the seven
+    Kit tests, `reportArgumentsAreExact`, `reportFromFakeEngine` and
+    `engineWithoutReportSaysUpdate`.
+  - `just test`: 177 tests. `just integration`: 86, in 65 s, against the
+    usual 13–19 s. The machine was busy, and no test failed.
+- **Previews:**
+  - TranscriptRowView's "Report card" renders the new report, with the
+    Prefill table scrolling sideways (SU.13).
+  - TranscriptView's "Analyzing" renders its tables with empty cells. That
+    is old: the same render with `main`'s fixture is empty too.
+  - SessionView's "Analyzing" shows the first frame of a bottom-anchored
+    stack, which is blank (AN.2).
+- **`just last`:**
+  - Works on a directory, and with `--turn 2`.
+  - Without an argument in this worktree, it says no session was found,
+    because sessions are kept by checkout.
+  - From the main checkout, the newest session (`20261014-090744`) is
+    empty, and the engine refuses it ("holds neither operator-events.jsonl
+    nor a run-*.json capture"). Telling #246 about it is an option.
+- **Diverged from the plan:** none.
+- **For the owner:**
+  - D2's cuts: R1, the per-pause spread, F3 and U2's write rule.
+  - A live Analyze, once the stack merges.
+  - Merging the branch.
+

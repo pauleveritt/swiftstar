@@ -339,6 +339,13 @@ If a gate fails, AN.2 stops there, and the failure becomes an engine request.
   It opens on the owner's call, once the flag rules and summary rows have
   stopped changing. It owes a recapture only if `last` reaches the wire.
 
+  **Revision, 2026-10-15.** ds4-engine built its own command,
+  `ds4-dogfood report <dir> [--json] [--turn N]` (`ds4-session-report/1`,
+  ds4-engine #231). It's built on its digest and cost readers, not on this
+  script. SwiftStar renders that report and drops its own rules and math.
+  The rows the report lacks are filed as ds4-engine#246, not kept here.
+  [AN.4's plan](../plans/2026-10-15-an4-engine-report.md) has the decisions.
+
 ## 5. Done when
 
 - **AN.1:** the tests in §2.5 pass and were each shown to fail; `just last`,

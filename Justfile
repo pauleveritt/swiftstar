@@ -44,13 +44,22 @@ install-hooks:
     git config core.hooksPath .githooks
     @echo "pre-commit will now run 'just lint-docs' on every commit."
 
-# The newest ds4-engine session of this repository as a report: flagged
-# steps, summary, signals (AN.1). `--session DIR` picks one; `--json`.
+# ds4-engine's report on the newest session of this repository (AN.4):
+# time, rates, prompts, syncs and proposals. A session id or directory
+# first picks one; `--json` gives the contract, `--turn N` one prompt.
 last *ARGS:
-    python3 -I -B Sources/SwiftStarEngine/Resources/session_last.py {{ARGS}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    args=({{ARGS}})
+    if [[ ${#args[@]} -eq 0 || ${args[0]} == -* ]]; then
+        newest=$(ds4-dogfood sessions --json --source "$PWD" --limit 1 \
+            | python3 -I -c 'import json, sys; s = json.load(sys.stdin); print(s[0]["path"] if s else "")')
+        [[ -n $newest ]] || { echo "last: no session found for $PWD" >&2; exit 1; }
+        args=("$newest" ${args[@]+"${args[@]}"})
+    fi
+    exec ds4-dogfood report "${args[@]}"
 
-# The session report's tests (AN.1), against fixtures/sessions. -B keeps
-# __pycache__ out of the SwiftStarEngine target, where SwiftPM would warn.
+# The fixture recorder's tests. -B keeps __pycache__ out of the tree.
 test-tools:
     python3 -I -B -m unittest discover -s Tools/tests
 
