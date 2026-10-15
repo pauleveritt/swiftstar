@@ -18,4 +18,9 @@ enum Fixtures {
     static func modelList(_ name: String) throws -> EngineModelList {
         try EngineModelList.decode(Data(contentsOf: root.appendingPathComponent(name))).get()
     }
+
+    /// The `report --json` fixture (AN.4), decoded.
+    static func sessionReport(_ name: String = "report.json") throws -> SessionReport {
+        try SessionReport.decode(Data(contentsOf: root.appendingPathComponent(name))).get()
+    }
 }
