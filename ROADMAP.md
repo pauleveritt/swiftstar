@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** the owner's live checks of SU.6f-SU.11 in the app (prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip) and of SU.7b's menus and alert; then the punch list's last item, engine information worth showing (not brainstormed).
+- **Next:** the punch list's last item, engine information worth showing, folded into EN.2's catch-up to ds4-engine `a84b79bd`. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
 - **Waiting to merge:** [AN.4](#phase-an-analyze) on the branch `an4-engine-report`, until ds4-engine's stack with `report` merges.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
