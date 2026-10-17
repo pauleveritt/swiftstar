@@ -7,10 +7,13 @@
 
 ## Now
 
-- **Next:** the owner's acceptance of [EN.2](#phase-en-the-engine-contract)'s spec, which takes in the punch list's last item, engine information worth showing. Its recordings wait for the owner's go on the GPU. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
+- **Next:** [EN.2](#phase-en-the-engine-contract)'s recordings on the 27B (Task 6), which wait for the owner's go on the GPU; then EN.2 merges. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
-  worktree), and more than one window.
+  worktree), and more than one window. *EN.2's check (2026-10-17): the
+  engine allows one engine per process, not per machine, so windows may be
+  limited only by GPU memory ([spec §5](docs/superpowers/specs/2026-10-17-en2-engine-catch-up-design.md#5-risks-and-a-finding)).
+  Reopening SU.7c is the owner's call.*
 
 ## Phase EN: the engine contract
 
@@ -19,7 +22,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | # | Cycle | Direction | Status |
 |---|---|---|---|
 | EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | done 2026-10-13: live on the 27B, the stale model, `/rewind 1` and a model switch worked through the controller (no window clicks). [spec](docs/superpowers/specs/2026-10-13-en1-engine-catch-up-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-en1-engine-catch-up.md) |
-| EN.2 | Catch up to `a84b79bd` | Show the startup lines (baseline, env sync, AGENTS.md), conversation-state loads, what a prefix miss changed, `git`/`test` cards, a typed `/analyze`, and the catalog's sizes; re-check engine requests; re-record on the 27B | spec written 2026-10-17, awaiting the owner. [Spec](docs/superpowers/specs/2026-10-17-en2-engine-catch-up-design.md) |
+| EN.2 | Catch up to `a84b79bd` | Show the startup lines (baseline, env sync, AGENTS.md), conversation-state loads, what a prefix miss changed, `git`/`test` cards, a typed `/analyze`, and the catalog's sizes; re-check engine requests; re-record on the 27B | Tasks 1–5 built 2026-10-17 on `en2-catch-up`; the recordings (Task 6) wait for the owner's GPU go. [Spec](docs/superpowers/specs/2026-10-17-en2-engine-catch-up-design.md), [plan](docs/superpowers/plans/2026-10-17-en2-engine-catch-up.md) |
 
 ## Phase AN: Analyze
 
@@ -73,6 +76,8 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
   - model sizes from `plan_gib` and `size_bytes`; drop the catalog fields
     the engine never sends
 
+  *Taken into EN.2 (2026-10-17): its D2, D7 and D8. SU.6 closes with EN.2.*
+
 ## Backlog
 
 Deferred, each with the condition that reopens it.
@@ -105,7 +110,9 @@ Deferred, each with the condition that reopens it.
   against a miss's fill for the same model), and a miss's cause, once the
   engine reports it; perhaps a status-bar or inspector trend, perhaps a
   `just` report first. *Reopens when the owner picks it up (filed
-  2026-10-14); the two gaps are under Engine requests.*
+  2026-10-14); the two gaps are under Engine requests. Since 2026-10-17,
+  a miss's cause is live (EN.2), and the report has each event's time saved
+  or spent (AN.4); across sessions is still open.*
 - **The power throttle knob.** The P-era app had a power-saving switch:
   on by default, it spawned the engine at `--power 70`, off at the
   engine's 100, never for the SSD-streaming Laguna variants, which refuse
@@ -127,16 +134,21 @@ there.
 - **A prefix-cache miss doesn't say why.** The key covers the engine, model
   file, shaders, context size, DFlash and the prompt's tokens
   (`docs/tui.md`); the `miss` event names none of them, so a miss after an
-  update can't be told from a cold cache.
+  update can't be told from a cold cache. *Answered (ds4-engine `3db6dcaf`):
+  each entry keeps its key parts, and a miss's `changed` names the ones that
+  differ, live and in the report (`prefix_cache.rs:75-86`). EN.2 shows it.*
 - **Live-prefix reuse between turns isn't recorded.** The engine's cost
   panel assumes the live prefix was reused, and notes that a rebuild "is
   not visible in the capture"; so its share of a turn's prefill can't be
-  shown.
+  shown. *Re-checked at `a84b79bd`: still open (`capture.rs:339`). Resume
+  alone is now recorded, as `conversation_state`.*
 - **No power throttle.** The old engine's `--power` percent has no
   `tui` equivalent, so SwiftStar can't offer its power-saving switch again
-  (the Front-end backlog's knob).
+  (the Front-end backlog's knob). *Re-checked at `a84b79bd`: still open.*
 - **`models --json` sends no `default_model_id`.** So "Engine default"
-  can't name the model it means.
+  can't name the model it means. *Re-checked at `a84b79bd`: still open; the
+  default is internal (`models.py:170`). EN.2 names the context and plan
+  instead.*
 - **`prefill_tokens` isn't prefill.** It's the transcript length minus evals
   (`operator_telemetry.py:101-113`), so tokens the engine didn't prefill
   count as prefilled:
@@ -160,6 +172,9 @@ there.
   and `-153456`, suffix `-session-last`): `rewound_to 0`, and the resumed
   turns included a prompt the first rewind had removed. It stopped AN.2's
   first attempt; the second avoids `/rewind`. Filed as [ds4-engine#219](https://github.com/pauleveritt/ds4-engine/issues/219).
+  *Fixed by #226 (2026-10-15): the resumed turns now stop where each rewind
+  cut its parent (`sessions.py:296-321`). The `--rewind-to 0` argv is by
+  design: the count is the session's own prompts (EN.2, D9).*
 - **What `report --json` lacked** ([ds4-engine#246](https://github.com/pauleveritt/ds4-engine/issues/246),
   AN.4). *Answered by #247 as `ds4-session-report/2` (2026-10-16); AN.4
   reads it:*
@@ -174,11 +189,11 @@ there.
   - the raw signals
 - **`resumed.turns` carries no narration.** So a 27B turn rebuilt after a
   rewind or resume shows only its one-line summary, not the full reply
-  (SU.6a).
+  (SU.6a). *Re-checked at `a84b79bd`: still open (`sessions.py:45-50`).*
 - **Watch, not a request: the Satyrn rename.** `ds4-dogfood` and the
   `~/.local/state/ds4-engine` paths may be renamed. SwiftStar would need to
   change `EngineCommand.executableName`, and probing both names is the
-  likely fix.
+  likely fix. *Not happened at `a84b79bd` (`pyproject.toml:13`).*
 
 Closed 2026-10-13: both were already answered upstream before 2026-10-04,
 found by the [audit §1](docs/superpowers/research/2026-10-13-engine-catch-up-and-repo-audit.md).

@@ -97,3 +97,42 @@ The spec's D1–D10, with one addition:
    - `provenance.md` pinned. Then the close: ROADMAP, Result, merge.
 
 ## Result
+
+Tasks 1–5, 2026-10-17. Task 6 waits for the owner's GPU go, so the cycle
+isn't closed and the branch isn't merged.
+
+- **Commits:**
+  - `79e7273`: Task 1
+  - `cc71390`: Task 2
+  - `77f1812`: Task 3
+  - `af72ea1`: Task 4
+  - the Task 5 commit
+- **Tests:**
+  - `just test` (195) and `just integration` (86) pass.
+  - Every new behavior was broken and its test failed. That's 11 in Task 1,
+    3 in Task 2 and 4 in Task 3. A few mutants first failed to build
+    (warnings are errors here), and were caught once rewritten so they did.
+- **Diverged:**
+  - **D7a:** `saved_model_id` also went.
+  - **The model menu's title** is "Qwen3.8 27B (15.7 GiB, plans 24.7 GiB)",
+    in parentheses, not after an em dash. The gallery showed a second em
+    dash on a disabled row: "… 137.1 GiB — not on this Mac".
+  - **The Session card's "Saved state"** drops the line's subject, which
+    its label already says.
+  - **The Task 1 tests** are in a new `EngineStartupEventsTests.swift`, not
+    in `EngineWireParserTests`.
+  - **Fixture controllers take a `catalog`**, so the gallery's menus have
+    titles to show.
+- **Previews and gallery:**
+  - Rendered and looked at:
+    - InspectorView's "Running", "Narrow" and the new "Resumed"
+    - ToolCardView's new "git and test"
+    - SessionView's "Running"
+  - In the gallery's real window, opened through System Events: the model
+    menu and the context menu, with "Engine default (131,072 · 24.7 GiB)".
+- **For the owner:**
+  - The `test` card reads "succeeded · … exit 1": the tool ran, and the
+    tests failed. That's accurate, but a reader may take it for a pass.
+  - D1 adds up to three rows before the first prompt.
+  - SU.7c may not be blocked (spec §5).
+

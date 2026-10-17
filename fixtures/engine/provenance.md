@@ -107,3 +107,14 @@ it was given. The fake engine's `report` mode prints it
 (`FAKE_ENGINE_REPORT`).
 
 Re-capture it if the report's schema or labels change.
+
+## EN.2's interim payloads (until Task 6's recordings)
+
+`Tests/SwiftStarKitTests/EngineStartupEventsTests.swift` and
+`PreviewFixtures.runningModel` use `baseline`, `candidate_ready`, `env_sync`,
+`project_instructions`, `index_primed`, `conversation_state`, `analysis` and
+the new `prefix_cache` fields, all taken from ds4-engine `a84b79bd`'s own
+tests and code. Each line cites its source. The `env_sync` and
+`project_instructions` summaries are illustrative wording, not the engine's.
+EN.2's Task 6 re-records every scenario at `a84b79bd` on the 27B, and then
+replaces them.
