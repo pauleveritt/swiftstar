@@ -176,7 +176,7 @@ struct EngineModelCatalogTests {
 
     @Test func modelTitleNamesSizeAndPlan() throws {
         let items = ModelMenu.items(list: try Self.real(), settingsID: "", loadedID: nil, locale: Locale(identifier: "en_US"))
-        #expect(items.first { $0.value == "qwen3.8-27b" }?.title == "Qwen3.8 27B — 15.7 GiB, plans 24.7 GiB")
+        #expect(items.first { $0.value == "qwen3.8-27b" }?.title == "Qwen3.8 27B (15.7 GiB, plans 24.7 GiB)")
         let mellum = ModelMenu.items(list: try Self.sample(), settingsID: "", loadedID: nil)
         #expect(mellum.first { $0.value == "mellum-2" }?.title == "Mellum 2")
     }

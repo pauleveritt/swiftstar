@@ -287,11 +287,13 @@ public final class EngineController {
     }
 
     init(model: EngineSessionModel, conversations: [Conversation] = [], workspace: URL? = nil,
-         workspaceFiles: [String] = []) {
+         workspaceFiles: [String] = [], catalog: EngineModelList? = nil) {
         self.graces = .standard
         // First: `workspace`'s `didSet` runs in this init and must not persist.
         isFixture = true
         self.model = model
+        // A fixture's catalog, given rather than loaded (EN.2: the menus' titles).
+        self.catalog = catalog
         self.conversations = conversations
         self.workspaceFiles = workspaceFiles
         self.workspace = workspace

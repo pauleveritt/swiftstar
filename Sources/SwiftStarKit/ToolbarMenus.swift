@@ -82,14 +82,15 @@ public enum ModelMenu {
         return out
     }
 
-    /// "Qwen3.8 27B — 15.7 GiB, plans 24.7 GiB": the file and what the engine
+    /// "Qwen3.8 27B (15.7 GiB, plans 24.7 GiB)": the file and what the engine
     /// plans to load it in (EN.2, D7); the name alone when it sends neither.
+    /// In parentheses, since the menu adds a disabled row's reason after " — ".
     static func title(_ m: EngineModelList.Model, locale: Locale) -> String {
         let parts = [
             m.sizeBytes.map { MetricsFormatting.gib(bytes: $0, locale: locale) },
             m.planGiB.map { "plans \(MetricsFormatting.gib($0, locale: locale))" },
         ].compactMap { $0 }
-        return parts.isEmpty ? m.displayName : "\(m.displayName) — " + parts.joined(separator: ", ")
+        return parts.isEmpty ? m.displayName : "\(m.displayName) (\(parts.joined(separator: ", ")))"
     }
 }
 

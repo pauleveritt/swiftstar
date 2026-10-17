@@ -142,3 +142,13 @@ struct ToolCardView: View {
     // first line.
     .frame(width: 520, height: 720, alignment: .top)
 }
+
+// EN.2, D5: `git` colored as a diff; `test` with pytest's line in its metadata.
+#Preview("git and test") {
+    VStack(spacing: 8) {
+        ToolCardView(card: .previewGit, source: nil)
+        ToolCardView(card: .previewTest, source: nil)
+    }
+    .padding()
+    .frame(width: 520, height: 420, alignment: .top)
+}

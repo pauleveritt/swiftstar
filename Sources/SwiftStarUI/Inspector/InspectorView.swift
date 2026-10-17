@@ -25,8 +25,24 @@ struct InspectorView: View {
                         }
                     }
                     metricRow("Prefix cache", value: state.prefixCache.map { MetricsFormatting.prefixCacheLine($0) } ?? "—")
+                    // Sent only on resume (EN.2, D4).
+                    if let saved = state.conversationState {
+                        metricRow("Saved state", value: MetricsFormatting.conversationStateLine(saved, subject: false))
+                    }
                 }
                 .inspectorCard()
+
+                // The engine's start-up reports, as it sent them (EN.2, D2).
+                let startup = MetricsFormatting.startupRows(state.startup)
+                if !startup.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Start-up").font(.scaled(.caption, base: fontSize).bold())
+                        ForEach(startup, id: \.0) { row in
+                            metricRow(row.0, value: row.1)
+                        }
+                    }
+                    .inspectorCard()
+                }
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Context").font(.scaled(.caption, base: fontSize).bold())
@@ -112,4 +128,14 @@ private extension View {
 #Preview("Narrow", traits: .runningSession) {
     InspectorView()
         .frame(width: 280, height: 900)
+}
+
+// EN.2, D4: a resumed conversation's saved state, loaded.
+#Preview("Resumed") {
+    var model = EngineController.runningModel(withGPU: true)
+    model.apply(.conversationState(EngineConversationState(
+        outcome: "loaded", bytes: 365_000_000, loadMs: 1200, error: nil)))
+    return InspectorView()
+        .environment(EngineController(model: model))
+        .frame(height: 900)
 }

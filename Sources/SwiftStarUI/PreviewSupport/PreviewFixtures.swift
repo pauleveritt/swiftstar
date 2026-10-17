@@ -15,7 +15,8 @@ extension EngineController {
     static var previewRunning: EngineController {
         EngineController(
             model: runningModel(withGPU: true), conversations: .preview,
-            workspace: URL(fileURLWithPath: "/Users/example/projects/swiftstar"), workspaceFiles: .previewFiles)
+            workspace: URL(fileURLWithPath: "/Users/example/projects/swiftstar"), workspaceFiles: .previewFiles,
+            catalog: .preview)
     }
 
     /// The running session without GPU metrics, as before the engine's first
@@ -36,7 +37,15 @@ extension EngineController {
             dflash: EngineDFlash(
                 on: true, reason: "plan 19.27 GiB <= budget 107.52 GiB",
                 drafter: "/Users/example/models/dflash-Qwen3.8-27B-Q4_0.gguf"))))
-        model.apply(.prefixCache(EnginePrefixCache(outcome: "hit", tokens: 944, loadMs: 20, fillMs: nil)))
+        // EN.2's start-up reports, in the engine's order (ds4-engine tests/test_baseline.py:136-141).
+        model.apply(.startup(.baseline(commit: "5cc0836aa1", excludedCount: 1), summary:
+            "The model works on a clean copy of commit 5cc0836; 1 uncommitted file in your checkout is not included: app.py."))
+        model.apply(.startup(.candidateReady(createdMs: 812, waitedMs: 40), summary: nil))
+        model.apply(.startup(.envSync(outcome: "ok", durationMs: 2300), summary: nil))
+        model.apply(.startup(.projectInstructions(file: "AGENTS.md", tokens: 1000, cut: false), summary:
+            "Loaded AGENTS.md (40 lines, about 1,000 tokens)."))
+        model.apply(.prefixCache(EnginePrefixCache(
+            outcome: "hit", tokens: 944, loadMs: 20, fillMs: nil, entryFillMs: 1729)))
         _ = model.send("Summarize SessionView.swift")
         model.apply(.prompt("Summarize SessionView.swift"))
         let tool = EngineTool(op: "read", path: "Sources/SwiftStarUI/Session/SessionView.swift")
@@ -52,12 +61,30 @@ extension EngineController {
         model.apply(.pause(PauseMetrics(
             prefillTokens: 1146, prefillMs: 1084, evalCount: 64, evalMs: 980,
             capturePath: "/Users/example/.local/state/ds4-engine/sessions/20261013-121126-swiftstar/run-1.partial.json")))
+        model.apply(.startup(.indexPrimed(sinceStartMs: 3336), summary: nil))
         if withGPU {
             model.apply(.memory(EngineMemory(allocatedBytes: 6_400_000_000, budgetBytes: 21_000_000_000, planGiB: 9.4)))
         }
         model.apply(.awaitingInput)
         return model
     }
+}
+
+extension EngineModelList {
+    /// `fixtures/engine/models-real.json`'s three models (ds4-engine
+    /// `models --json`, EN.2): sizes and plans for the menus' titles.
+    static let preview: EngineModelList? = try? EngineModelList.decode(Data("""
+        {"gpu_budget_bytes": 115448725504, "models": [
+          {"id": "qwen3.8-27b", "display_name": "Qwen3.8 27B", "on_this_mac": true,
+           "path": "/Users/example/models/Qwen3.8-27B-Q4_K_M.gguf", "size_bytes": 16810714336,
+           "downloadable": true, "fits": true, "context": 131072, "plan_gib": 24.74},
+          {"id": "qwen3.8-flash-next", "display_name": "Qwen3.8 Flash Next", "on_this_mac": true,
+           "path": "/Users/example/models/flash-next.gguf", "size_bytes": 177280286720,
+           "downloadable": true, "fits": true, "context": 20000, "plan_gib": 77.91},
+          {"id": "qwen3.8-flash-next-q2", "display_name": "Qwen3.8 Flash Next Q2", "on_this_mac": false,
+           "path": null, "size_bytes": 147207127040, "downloadable": true, "fits": null,
+           "context": null, "plan_gib": null}]}
+        """.utf8)).get()
 }
 
 extension EngineMetricsState {
@@ -88,6 +115,30 @@ extension EngineToolCard {
             name: "read", reason: "repeated-call", path: "Package.swift",
             text: "Tool error: the same read was called three times in a row")
         return EngineToolCard(tool: EngineTool(op: "read", path: "Package.swift"), rejection: rejection)
+    }
+
+    /// EN.2's `git` and `test` calls: no path on the wire, so no link.
+    static var previewGit: EngineToolCard {
+        let tool = EngineTool(op: "git", path: "")
+        return EngineToolCard(
+            tool: tool, ok: true, durationMs: 40,
+            result: EngineToolResult(tool: tool, preview: """
+                diff --git a/Sources/SwiftStarKit/Severity.swift b/Sources/SwiftStarKit/Severity.swift
+                @@ -3,7 +3,7 @@
+                -    case warning
+                +    case caution
+                """, truncated: false))
+    }
+
+    static var previewTest: EngineToolCard {
+        let tool = EngineTool(op: "test", path: "")
+        return EngineToolCard(
+            tool: tool, ok: true, durationMs: 2300,
+            result: EngineToolResult(tool: tool, preview: """
+                [pytest with the project's .venv: exit 1 in 2.3 s]
+                FAILED tests/test_app.py::test_start - AssertionError
+                1 failed, 12 passed
+                """, truncated: false))
     }
 
     /// A finished `read` of `path` returning `preview` (SU.15's languages).

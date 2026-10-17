@@ -88,15 +88,19 @@ public enum MetricsFormatting {
         }
     }
 
-    /// The resumed conversation's state row (EN.2, D4).
-    public static func conversationStateLine(_ c: EngineConversationState, locale: Locale = .current) -> String {
+    /// The resumed conversation's state row (EN.2, D4). Without the subject
+    /// for the Session card, whose label already says "Saved state".
+    public static func conversationStateLine(
+        _ c: EngineConversationState, subject: Bool = true, locale: Locale = .current
+    ) -> String {
+        let lead = subject ? "Saved conversation state " : ""
         guard c.outcome == "loaded" else {
-            return "Saved conversation state not loaded: \(c.outcome)" + (c.error.map { " (\($0))" } ?? "")
+            return lead + "not loaded: \(c.outcome)" + (c.error.map { " (\($0))" } ?? "")
         }
         let size = c.bytes.map { gib(bytes: $0, locale: locale) }
         let time = c.loadMs.map { duration(seconds: $0 / 1000, locale: locale) }
         let detail = [size, time.map { "in \($0)" }].compactMap { $0 }.joined(separator: " ")
-        return "Saved conversation state loaded" + (detail.isEmpty ? "" : " · \(detail)")
+        return lead + "loaded" + (detail.isEmpty ? "" : " · \(detail)")
     }
 
     /// The Session card's start-up rows (EN.2, D2), as label and value; a

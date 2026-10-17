@@ -84,6 +84,8 @@ struct EngineStartupEventsTests {
             Issue.record("not a conversation state: \(Self.parse(body))"); return
         }
         #expect(MetricsFormatting.conversationStateLine(state, locale: Self.locale) == line)
+        #expect(MetricsFormatting.conversationStateLine(state, subject: false, locale: Self.locale)
+                == String(line.dropFirst("Saved conversation state ".count)))
         var t = EngineTranscript()
         t.apply(.conversationState(state))
         #expect(t.rows == [.system(line)])
