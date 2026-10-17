@@ -14,6 +14,28 @@ inner loop for views. Rule from `CLAUDE.md`: a UI change is done only when
 each preview it touches has been rendered and looked at, and both test tiers
 are green.
 
+## The inner loop: cheapest check first
+
+SU.17's afternoon lost most of its time to the shell: 58 `swift build`/`test`
+runs to see if one file compiled, 55 python string-replace edits, and a
+never-ending test that sat at the 10-minute shell cap. Per edit, in order:
+
+1. **Edit with `Edit`**, not python or `sed -i`. Read and search with
+   `Read`/`XcodeRead`/`XcodeGrep`, not `sed -n`/`cat`/`grep`.
+2. **`XcodeRefreshCodeIssuesInFile`** on each changed file (about 2s). This
+   is the compile check; don't build to find a typo.
+3. **`RunCodeSnippet`** for any "how does this API behave" question (URL
+   path handling, formatter output) before writing code or tests on a guess.
+4. **`RenderPreview`** for every view change (about 2s each).
+5. **`just focus <Suite>`**: the suite you touched, both tiers' tests
+   enabled, capped at 60s.
+6. **`just test` and `just integration` once per task**, before the commit,
+   not per edit. Both cap the run at 180s (`SWIFTSTAR_TEST_SECS`) via
+   `Tools/with-timeout.sh`.
+
+Keep a step to one file or behavior, with its own preview or focused test.
+A task that changes Kit, Engine and UI together is three steps.
+
 ## Scheme and paths
 
 - Previews need the **`SwiftStarUI` scheme** active (`XcodeListSchemes`,
@@ -120,7 +142,12 @@ Two traps, both checked 2026-10-04:
 
 - `just test`: fast tier. `just integration`: also runs the integration
   tests, which a plain `swift test` (or Xcode's test tools) skips because
-  they are env-gated. Run both through the shell.
+  they are env-gated. Run both through the shell. `just focus <filter>`
+  runs one suite or test with both tiers' tests enabled.
+- Each recipe builds first, unlimited, then runs the tests under
+  `Tools/with-timeout.sh`, which kills the whole process tree. A
+  "with-timeout: killed" line means a test hung; find it with
+  `just focus`, don't raise the cap.
 - Builds treat warnings as errors on our own targets.
 
 ## Committing

@@ -63,17 +63,29 @@ last *ARGS:
 test-tools:
     python3 -I -B -m unittest discover -s Tools/tests
 
+# Test runs are capped at TEST_SECS (the build before them is not), so a
+# test that never ends fails fast instead of hanging the shell.
+TEST_SECS := env("SWIFTSTAR_TEST_SECS", "180")
+
 # Fast tier: SwiftStarKit against fixtures. No model, no network, no
 # subprocess; the grep below refuses them in Tests/SwiftStarKitTests.
 test: test-tools
     ! grep -rn 'Process(\|URLSession\|NWConnection\|posix_spawn\|Darwin\.\|socket(' Tests/SwiftStarKitTests
-    swift test
+    swift build --build-tests
+    Tools/with-timeout.sh {{TEST_SECS}} swift test --skip-build
 
 # Integration tier: real processes and files against the fake ds4-dogfood
 # (fixtures/engine/fake-ds4-dogfood), which replays committed fixtures. Same
 # suite, with the SWIFTSTAR_INTEGRATION-gated tests enabled.
 integration:
-    SWIFTSTAR_INTEGRATION=1 swift test
+    swift build --build-tests
+    SWIFTSTAR_INTEGRATION=1 Tools/with-timeout.sh {{TEST_SECS}} swift test --skip-build
+
+# One suite or test, both tiers' tests enabled, capped at 60s: the inner
+# loop's check. `just focus ProjectRootTests`.
+focus FILTER:
+    swift build --build-tests
+    SWIFTSTAR_INTEGRATION=1 Tools/with-timeout.sh 60 swift test --skip-build --filter '{{FILTER}}'
 
 # Live tier: record one engine fixture (tool-read, stop, error,
 # relaunch-rewind or tool-rejected) from the real `ds4-dogfood tui --ndjson`
