@@ -55,11 +55,10 @@ public enum ModelMenu {
     /// is the Settings choice ("" = engine default); `loadedID` is shown only in
     /// the fallback so the running model is reachable when no list is known.
     public static func items(
-        list: EngineModelList?, settingsID: String, loadedID: String?
+        list: EngineModelList?, settingsID: String, loadedID: String?, locale: Locale = .current
     ) -> [MenuChoice<String>] {
         let current = trimmed(settingsID)
-        let defaultTitle = list?.defaultModelID.map { "Engine default (\($0))" } ?? "Engine default"
-        var out = [MenuChoice(title: defaultTitle, value: "", isChecked: current.isEmpty)]
+        var out = [MenuChoice(title: "Engine default", value: "", isChecked: current.isEmpty)]
         guard let list else {
             if !current.isEmpty {
                 out.append(MenuChoice(title: current, value: current, isChecked: true))
@@ -72,16 +71,25 @@ public enum ModelMenu {
         for m in list.models {
             let reason: String? =
                 if !m.onThisMac { "not on this Mac" }
-                else if !m.runsInTUI { "not usable in the TUI" }
                 else if m.fits == false { "doesn't fit" }
                 else { nil }
             out.append(MenuChoice(
-                title: m.displayName, value: m.id, isChecked: m.id == current, disabledReason: reason))
+                title: title(m, locale: locale), value: m.id, isChecked: m.id == current, disabledReason: reason))
         }
         if !current.isEmpty, list.model(id: current) == nil {
             out.append(MenuChoice(title: current, value: current, isChecked: true))
         }
         return out
+    }
+
+    /// "Qwen3.8 27B — 15.7 GiB, plans 24.7 GiB": the file and what the engine
+    /// plans to load it in (EN.2, D7); the name alone when it sends neither.
+    static func title(_ m: EngineModelList.Model, locale: Locale) -> String {
+        let parts = [
+            m.sizeBytes.map { MetricsFormatting.gib(bytes: $0, locale: locale) },
+            m.planGiB.map { "plans \(MetricsFormatting.gib($0, locale: locale))" },
+        ].compactMap { $0 }
+        return parts.isEmpty ? m.displayName : "\(m.displayName) — " + parts.joined(separator: ", ")
     }
 }
 
@@ -103,31 +111,30 @@ public enum ContextMenu {
     public static let roundSizes = [8192, 16384, 32768, 65536, 131072]
     public static let fallbackLimit = 65536
 
-    /// The first item ("Engine default", value 0) is always present. Measured
-    /// sizes are always listed; round sizes only up to twice the largest
-    /// measured size (up to 65,536 without measurements). `settingsContext`
+    /// The first item ("Engine default", value 0) is always present, naming
+    /// the model's context and plan when the engine sends them (EN.2, D7).
+    /// Round sizes up to 65,536 are listed, plus the model's context. `settingsContext`
     /// <= 0 means engine default. `loaded` is shown only in the fallback.
     public static func items(
         list: EngineModelList?, modelID: String?, settingsContext: Int, loaded: Int?,
         locale: Locale = .current
     ) -> [MenuChoice<Int>] {
         let grouped = { (n: Int) in MetricsFormatting.number(n, locale: locale) }
-        let id = trimmed(modelID).isEmpty ? list?.defaultModelID : trimmed(modelID)
-        let model = id.flatMap { list?.model(id: $0) }
-        let measured = model?.measuredContexts ?? []
-        let defaultTitle = model?.defaultContext.map { "Engine default (\(grouped($0)))" } ?? "Engine default"
+        let id = trimmed(modelID)
+        let model = id.isEmpty ? nil : list?.model(id: id)
+        let named = [
+            model?.context.map(grouped),
+            model?.planGiB.map { MetricsFormatting.gib($0, locale: locale) },
+        ].compactMap { $0 }
+        let defaultTitle = named.isEmpty ? "Engine default" : "Engine default (\(named.joined(separator: " · ")))"
         var out = [MenuChoice(title: defaultTitle, value: 0, isChecked: settingsContext <= 0)]
 
-        let limit = measured.map(\.context).max().map { $0 * 2 } ?? fallbackLimit
-        var sizes = Set(measured.map(\.context))
-        sizes.formUnion(roundSizes.filter { $0 <= limit })
+        var sizes = Set(roundSizes.filter { $0 <= fallbackLimit })
+        if let context = model?.context, context > 0 { sizes.insert(context) }
         if settingsContext > 0 { sizes.insert(settingsContext) }
         if list == nil, let loaded, loaded > 0 { sizes.insert(loaded) }
         for size in sizes.sorted() {
-            let plan = measured.first { $0.context == size }
-            let title = plan.map { "\(grouped(size)) (\(MetricsFormatting.gib($0.planGiB, locale: locale)))" }
-                ?? grouped(size)
-            out.append(MenuChoice(title: title, value: size, isChecked: size == settingsContext))
+            out.append(MenuChoice(title: grouped(size), value: size, isChecked: size == settingsContext))
         }
         return out
     }

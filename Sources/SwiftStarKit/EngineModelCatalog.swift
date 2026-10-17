@@ -28,67 +28,53 @@ public enum CatalogError: Error, Equatable, Sendable {
     }
 }
 
+/// `models --json`: the models the engine knows, as ds4-engine sends them
+/// (`tui_cli.py:196-222` at `a84b79bd`, EN.2 D7). Keys it never sent
+/// (`family`, `default_context`, `measured_contexts`, `runs_in_tui`,
+/// `saved_model_id`, `default_model_id`) were dropped in EN.2.
 public struct EngineModelList: Decodable, Equatable, Sendable {
-    public struct MeasuredContext: Equatable, Sendable {
-        public let context: Int
-        public let planGiB: Double
-        public init(context: Int, planGiB: Double) {
-            self.context = context; self.planGiB = planGiB
-        }
-    }
-
     public struct Model: Decodable, Equatable, Sendable {
         public let id: String
         public let displayName: String
-        public let family: String
         public let onThisMac: Bool
         public let path: String?
         public let downloadable: Bool
         public let fits: Bool?
-        public let defaultContext: Int?
-        public let measuredContexts: [MeasuredContext]
-        public let runsInTUI: Bool
+        /// The context the engine would load it at, the one `planGiB` is for.
+        public let context: Int?
+        /// The pinned download's size, else the file's.
+        public let sizeBytes: Int64?
+        /// GPU memory the engine plans for it at `context`.
+        public let planGiB: Double?
 
         enum CodingKeys: String, CodingKey {
-            case id, family, path, downloadable, fits, context
-            case runsInTUI = "runs_in_tui"
+            case id, path, downloadable, fits, context
             case displayName = "display_name"
             case onThisMac = "on_this_mac"
-            case defaultContext = "default_context"
-            case measuredContexts = "measured_contexts"
+            case sizeBytes = "size_bytes"
+            case planGiB = "plan_gib"
         }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(String.self, forKey: .id)
             displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? id
-            family = try c.decodeIfPresent(String.self, forKey: .family) ?? ""
             onThisMac = try c.decodeIfPresent(Bool.self, forKey: .onThisMac) ?? false
             path = try c.decodeIfPresent(String.self, forKey: .path)
             downloadable = try c.decodeIfPresent(Bool.self, forKey: .downloadable) ?? false
             fits = try c.decodeIfPresent(Bool.self, forKey: .fits)
-            // ds4-engine main (TUI.35) sends the model's context as `context`,
-            // not `default_context`; prefer the richer key, fall back to it.
-            defaultContext = try c.decodeIfPresent(Int.self, forKey: .defaultContext)
-                ?? c.decodeIfPresent(Int.self, forKey: .context)
-            runsInTUI = try c.decodeIfPresent(Bool.self, forKey: .runsInTUI) ?? true
-            let pairs = try c.decodeIfPresent([[Double]].self, forKey: .measuredContexts) ?? []
-            measuredContexts = pairs.compactMap {
-                $0.count == 2 ? MeasuredContext(context: Int($0[0]), planGiB: $0[1]) : nil
-            }
+            context = try c.decodeIfPresent(Int.self, forKey: .context)
+            sizeBytes = try c.decodeIfPresent(Int64.self, forKey: .sizeBytes)
+            planGiB = try c.decodeIfPresent(Double.self, forKey: .planGiB)
         }
     }
 
     public let gpuBudgetBytes: Int?
-    public let savedModelID: String?
-    public let defaultModelID: String?
     public let models: [Model]
 
     enum CodingKeys: String, CodingKey {
         case models
         case gpuBudgetBytes = "gpu_budget_bytes"
-        case savedModelID = "saved_model_id"
-        case defaultModelID = "default_model_id"
     }
 
     public static let supportedSchemaVersion = 1
