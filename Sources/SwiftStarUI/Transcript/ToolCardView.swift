@@ -27,7 +27,7 @@ struct ToolCardView: View {
             if let result = card.result, !result.preview.isEmpty {
                 // Colored by the file's language (SU.15); a Markdown file as
                 // colored raw text, what the model read.
-                Text(CodeColoring.attributed(result.preview, language: card.tool.path.flatMap(CodeLanguage.forPath)))
+                Text(CodeColoring.attributed(result.preview, language: card.resultLanguage))
                     .font(.scaled(.caption, base: fontSize, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)

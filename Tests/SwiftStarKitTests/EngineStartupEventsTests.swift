@@ -116,3 +116,33 @@ struct EngineStartupEventsTests {
         #expect(t.rows == [.report("```\nsession  x · m\nrates    prefill 440 tok/s\n```")])
     }
 }
+
+/// EN.2, D5: the `git` and `test` tools (ds4-engine SC.1), whose calls carry
+/// no path on the wire (`operator.py:385-393`).
+struct GitAndTestCardTests {
+    private static func card(_ op: String, preview: String? = nil) -> EngineToolCard {
+        let tool = EngineTool(op: op, path: "")
+        return EngineToolCard(
+            tool: tool, ok: true, durationMs: 2300,
+            result: preview.map { EngineToolResult(tool: tool, preview: $0, truncated: false) })
+    }
+
+    @Test func gitAndTestIcons() {
+        #expect(Self.card("git").icon == "arrow.triangle.branch")
+        #expect(Self.card("test").icon == "checkmark.seal")
+        #expect(Self.card("git").headerText == "git")
+    }
+
+    @Test func gitResultIsDiff() {
+        #expect(Self.card("git").resultLanguage == "diff")
+        let read = EngineToolCard(tool: EngineTool(op: "read", path: "a.py"))
+        #expect(read.resultLanguage == "python")
+    }
+
+    // test_tool.py:113-126.
+    @Test func testCardShowsPytestLine() {
+        let card = Self.card("test", preview: "[pytest with the project's .venv: exit 0 in 2.3 s]\n5 passed")
+        #expect(card.metadataLine == "succeeded · 2.3s · pytest with the project's .venv: exit 0 in 2.3 s")
+        #expect(Self.card("test", preview: "no bracket line").metadataLine == "succeeded · 2.3s")
+    }
+}

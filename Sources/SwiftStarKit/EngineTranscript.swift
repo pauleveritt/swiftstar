@@ -42,7 +42,23 @@ public struct EngineToolCard: Equatable, Sendable {
         if let ms = durationMs, ms.isFinite, ms >= 0 {
             parts.append(MetricsFormatting.duration(seconds: ms / 1000))
         }
+        if let line = testRunLine { parts.append(line) }
         return parts.joined(separator: " · ")
+    }
+
+    /// A `test` result's first line, without its brackets: which Python ran
+    /// pytest, its exit code and time (ds4-engine `test_tool.py:113-126`).
+    private var testRunLine: String? {
+        guard tool.op == "test", let first = result?.preview.split(separator: "\n").first,
+              first.hasPrefix("["), first.hasSuffix("]") else { return nil }
+        return String(first.dropFirst().dropLast())
+    }
+
+    /// The highlight.js language for the result: `diff` for `git`, whose
+    /// results are mostly diffs and logs; else the file's (SU.15).
+    public var resultLanguage: String? {
+        if tool.op == "git" { return "diff" }
+        return tool.path.flatMap(CodeLanguage.forPath)
     }
 
     /// The file the card names, for Quick Look: an absolute path as is, a
@@ -66,6 +82,8 @@ public struct EngineToolCard: Equatable, Sendable {
         case "ls": return "folder"
         case "read", "more": return "doc.text.magnifyingglass"
         case "grep": return "magnifyingglass"
+        case "git": return "arrow.triangle.branch"
+        case "test": return "checkmark.seal"
         default: return "wrench.and.screwdriver"
         }
     }
