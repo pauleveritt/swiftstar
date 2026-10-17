@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** the punch list's last item, engine information worth showing, folded into EN.2's catch-up to ds4-engine `a84b79bd`. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
+- **Next:** the owner's acceptance of [EN.2](#phase-en-the-engine-contract)'s spec, which takes in the punch list's last item, engine information worth showing. Its recordings wait for the owner's go on the GPU. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
@@ -19,6 +19,7 @@ One cycle per ds4-engine landing that SwiftStar catches up to.
 | # | Cycle | Direction | Status |
 |---|---|---|---|
 | EN.1 | Catch up to `5451cd7d` | Drop a saved model the engine no longer offers; show `tool_rejected` as a declined card; honour `relaunch` for `/model`, `/rewind` and `/resume`; dedupe narration and answer if they repeat; fix `just capture` and re-record on the 27B | done 2026-10-13: live on the 27B, the stale model, `/rewind 1` and a model switch worked through the controller (no window clicks). [spec](docs/superpowers/specs/2026-10-13-en1-engine-catch-up-design.md), [plan and Result](docs/superpowers/plans/2026-10-13-en1-engine-catch-up.md) |
+| EN.2 | Catch up to `a84b79bd` | Show the startup lines (baseline, env sync, AGENTS.md), conversation-state loads, what a prefix miss changed, `git`/`test` cards, a typed `/analyze`, and the catalog's sizes; re-check engine requests; re-record on the 27B | spec written 2026-10-17, awaiting the owner. [Spec](docs/superpowers/specs/2026-10-17-en2-engine-catch-up-design.md) |
 
 ## Phase AN: Analyze
 
