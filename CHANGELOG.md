@@ -35,7 +35,8 @@ cycle; the cycle's plan in `docs/superpowers/plans/` has the detail.
   can't start the fork says the main session is unchanged (SU.17)
 - Analyze's report comes from ds4-engine (`ds4-dogfood report`), with the
   engine's own labels next to its figures, such as "short batch, fixed
-  cost" (AN.4)
+  cost". It names the sessions a conversation continues, and each call a
+  loop guard caught (AN.4)
 
 ### Status bar and inspector
 

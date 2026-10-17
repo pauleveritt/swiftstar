@@ -99,9 +99,10 @@ The integration tests rewrite beta's `source` to a temporary repository.
 ## `report.json` (AN.4)
 
 Raw stdout of `ds4-dogfood report fixtures/sessions/20261013-123136-swiftstar
---json` (`schema` `ds4-session-report/1`). It was recorded on 2026-10-15
-with the installed engine, built from ds4-engine `1732611c`, the top of the
-stack that holds `report` (#231, #233). The `dir` field is the relative path
+--json` (`schema` `ds4-session-report/2`). It was first recorded on
+2026-10-15 as `/1`, at ds4-engine `1732611c`. It was re-recorded on
+2026-10-17 as `/2`, with the installed engine built from ds4-engine
+`a84b79bd` (`main`). The `dir` field is the relative path
 it was given. The fake engine's `report` mode prints it
 (`FAKE_ENGINE_REPORT`).
 

@@ -115,3 +115,72 @@ engine's `report` lives on ds4-engine's open stack (#231, #233).
   - A live Analyze, once the stack merges.
   - Merging the branch.
 
+## Revision, 2026-10-17: `ds4-session-report/2`
+
+The stack merged (#225 through #244), and #247 answered #246 as
+`ds4-session-report/2`, which is `/1` with keys added. So AN.4 finishes on
+`/2` before it merges.
+
+- **D4, revised.** SwiftStar reads only `/2`. Koudai's schema rule is that a
+  reader needing the new keys checks for `/2`, so a `/1` engine now fails
+  with a clear message.
+- **D2, revised.** These flags are back, as the engine's data:
+  - a prompt with no answer (`answered`, with `interrupted` or `reason`)
+  - engine errors per prompt (`errors[]`)
+  - the call each loop-guard notice hit (`loop_guard`)
+- **D7.** The session table gains:
+  - Start-up: candidate ready and index primed
+  - Continues: `earlier[]`, nearest first, with how many prompts are kept.
+    This closes the AN follow-up "the report follows `resumed_from`".
+  - Rewound
+  - Ending: files changed, closed, telemetry and engine errors
+  - DFlash: the label
+  - Conversation state: per event, with its size and load time
+  - Prefix cache: per event, with its prompt. The engine's label already
+    carries the time saved or spent and, on a miss, what changed.
+
+  A raw Signals section and the notes follow the prefill table.
+- **D8. No slow-sync threshold.** The engine's spec leaves one to
+  SwiftStar, but the owner's call is to drop SwiftStar's own math. A slow
+  sync with no label shows as one.
+- **Fixture.** `report.json` was re-recorded on `a84b79bd`. It now carries
+  the two-tile label (45, 55 and 33 tokens). Its session predates key
+  records, so its miss says "what changed was not recorded".
+  `conversation_state`, an unanswered prompt and an engine error are
+  tested on edited copies of it in the tests.
+
+### Task 4: `/2`
+
+- **Files:**
+  - `Sources/SwiftStarKit/SessionReport.swift`: the new keys and rows
+  - `Tests/SwiftStarKitTests/SessionReportTests.swift`: 14 tests
+  - `fixtures/engine/report.json`
+  - `PreviewFixtures.previewReport`
+- **New tests, each with its assertion:**
+  - `loopGuardNoticesAreFlaggedOnTheirCalls`: the Severity read under
+    prompt 4.
+  - `unansweredPromptIsFlagged`: `no answer (interrupted)`.
+  - `engineErrorsAreFlagged`: the error's label.
+  - `sessionRowsShowChainStartupAndState`: the Continues, Start-up, Ending
+    and DFlash rows.
+  - `prefixCacheRowIsTheEngineLabel`: the label, with its prompt.
+  - `conversationStateIsShown`: label, size and load time.
+  - `signalsAreRaw`: the result bytes and constraint lines.
+  - `notesAreShown`: the engine's note.
+  - `otherSchemaFails`: `/1` is refused.
+
+### Result, Task 4
+
+- **Mutation checks:** each new behavior was broken and its test failed,
+  11 of 11. The errors and signals mutants first failed to compile, and
+  were caught once rewritten so they did.
+- **Tests:** `just test` (184) and `just integration` (86) pass.
+- **Correction:** Task 3's Result put the 65 s integration run down to a busy
+  machine. It is the same with nothing else running. The time is in older
+  tests, such as SU.17's `aStaleReportIsDropped` at 12 s. AN.4's own tests
+  take under 2 s. ROADMAP's "13–19 s" dates from SU.5.
+- **Orphan:** a fake engine from a test run three days earlier had ignored
+  SIGTERM. It was killed with SIGKILL. `FakeEngine.remove()` kills only
+  `tui` processes, so this is worth a look if it happens again.
+- **Previews:** the Report card renders the `/2` rows. The two "Analyzing"
+  previews show the same first-frame limits as before.

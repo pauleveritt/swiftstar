@@ -145,20 +145,21 @@ extension EngineTranscript {
         |---|---|---|
         | 2 | run | failed: Tool error: unknown tool: run. There is no shell, so nothing can be ru… |
         | 2 | run | refused: unknown-tool |
+        | 4 | read Sources/SwiftStarKit/Severity.swift | loop guard: already_shown |
         | — | — | loop guard fired: already_shown x2 |
 
         ### Session
 
         | Row | Value |
         |---|---|
-        | Rates | prefill 439.8 tok/s · decode 48.8 tok/s, over the session |
-        | Prefix cache | prefix-cache miss: 944 tokens filled, 1.7s |
+        | Continues | 20261013-122439-swiftstar (3 prompts), 20261013-122106-swiftstar (1 of 4 prompts kept) |
+        | Prefix cache | prompt 1: prefix-cache miss: 944 tokens filled, 1.75 s spent; what changed was not recorded |
 
         ### Prefill
 
         | Prompt | Step | After | Tokens | Time | Rate | Label |
         |---|---|---|---|---|---|---|
-        | 2 | 1 | user | 45 | 794 ms | 56.7 tok/s | — |
+        | 2 | 1 | user | 45 | 794 ms | 56.7 tok/s | short batch, two tiles, fixed cost |
         | 2 | 5 | host_results | 32 | 104 ms | 306.3 tok/s | short batch, fixed cost |
 
         19 syncs with nothing new to prefill are not listed.

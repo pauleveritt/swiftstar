@@ -5,17 +5,30 @@ import Foundation
 /// model is asked about. Every figure and label is the engine's; nothing
 /// here computes a rate or decides a flag (what's missing is ds4-engine#246).
 public struct SessionReport: Decodable, Equatable, Sendable {
-    public static let schema = "ds4-session-report/1"
+    public static let schema = "ds4-session-report/2"
 
     public struct Session: Decodable, Equatable, Sendable {
+        /// A session this one continues; `kept` is how many of its prompts
+        /// the conversation keeps (nil: all).
+        public struct Earlier: Decodable, Equatable, Sendable {
+            public let id: String
+            public let prompts, kept: Int?
+        }
+
         public let id: String
         public let modelId: String?
         public let contextSize: Int?
         public let outcome: String?
+        public let earlier: [Earlier]?
+        public let rewoundTo, filesChanged, errors: Int?
+        public let closed, telemetryOk: Bool?
+        /// The `session` event's DFlash label, such as "off (no drafter)".
+        public let dflash: String?
 
         enum CodingKeys: String, CodingKey {
-            case id, outcome
-            case modelId = "model_id", contextSize = "context_size"
+            case id, outcome, earlier, closed, dflash, errors
+            case modelId = "model_id", contextSize = "context_size", rewoundTo = "rewound_to"
+            case filesChanged = "files_changed", telemetryOk = "telemetry_ok"
         }
     }
 
@@ -23,8 +36,11 @@ public struct SessionReport: Decodable, Equatable, Sendable {
     public struct Time: Decodable, Equatable, Sendable {
         public let wallMs, startupMs, prefixCacheMs, promptSyncMs, decodeMs: Double?
         public let otherEngineMs, toolsMs, receiptMs, idleMs: Double?
+        /// Outside the split above.
+        public let candidateReadyMs, indexPrimedMs: Double?
 
         enum CodingKeys: String, CodingKey {
+            case candidateReadyMs = "candidate_ready_ms", indexPrimedMs = "index_primed_ms"
             case wallMs = "wall_ms", startupMs = "startup_ms", prefixCacheMs = "prefix_cache_ms"
             case promptSyncMs = "prompt_sync_ms", decodeMs = "decode_ms", otherEngineMs = "other_engine_ms"
             case toolsMs = "tools_ms", receiptMs = "receipt_ms", idleMs = "idle_ms"
@@ -35,12 +51,48 @@ public struct SessionReport: Decodable, Equatable, Sendable {
         public let prefill, decode: Double?
     }
 
+    /// One prefix-cache event; its label carries the time saved or spent,
+    /// and on a miss what changed.
     public struct PrefixCache: Decodable, Equatable, Sendable {
+        public let prompt: Int?
         public let label: String?
-        public let loadMs, fillMs: Double?
+    }
+
+    /// One load of a resumed conversation's saved state.
+    public struct ConversationState: Decodable, Equatable, Sendable {
+        public let prompt: Int?
+        public let bytes: Int64?
+        public let loadMs: Double?
+        public let label, error: String?
 
         enum CodingKeys: String, CodingKey {
-            case label, loadMs = "load_ms", fillMs = "fill_ms"
+            case prompt, bytes, label, error, loadMs = "load_ms"
+        }
+    }
+
+    /// Counters printed raw, as the engine sends them.
+    public struct Signals: Decodable, Equatable, Sendable {
+        public struct Constraint: Decodable, Equatable, Sendable {
+            public let maskedTokenCount, forbiddenArgmax: Int?
+            public let removedProbabilityMass: [Double]?
+
+            enum CodingKeys: String, CodingKey {
+                case maskedTokenCount = "masked_token_count", forbiddenArgmax = "forbidden_argmax"
+                case removedProbabilityMass = "removed_probability_mass"
+            }
+        }
+
+        public struct ResultBytes: Decodable, Equatable, Sendable {
+            public let total, shown: Int?
+        }
+
+        public let constraint: Constraint?
+        public let thinkInertOpeners, citationCorrections: Int?
+        public let resultBytes: ResultBytes?
+
+        enum CodingKeys: String, CodingKey {
+            case constraint, thinkInertOpeners = "think_inert_openers"
+            case citationCorrections = "citation_corrections", resultBytes = "result_bytes"
         }
     }
 
@@ -95,6 +147,17 @@ public struct SessionReport: Decodable, Equatable, Sendable {
             public let detail: String?
             public let ok: Bool
             public let flags: [String]?
+            /// The guard notice the call got: `already_shown`, `repeated_call`, `call_cycle`.
+            public let loopGuard: String?
+
+            enum CodingKeys: String, CodingKey {
+                case tool, detail, ok, flags, loopGuard = "loop_guard"
+            }
+        }
+
+        /// A failed native span or an `error` event after this prompt.
+        public struct TurnError: Decodable, Equatable, Sendable {
+            public let label: String?
         }
 
         public struct Compaction: Decodable, Equatable, Sendable {
@@ -105,6 +168,10 @@ public struct SessionReport: Decodable, Equatable, Sendable {
         public let prompt: Int
         public let text: String?
         public let seconds: Double?
+        /// Nil without events.
+        public let answered, interrupted: Bool?
+        public let reason: String?
+        public let errors: [TurnError]?
         public let context: Context?
         public let syncs: [Sync]?
         public let decode: Decode?
@@ -150,6 +217,8 @@ public struct SessionReport: Decodable, Equatable, Sendable {
     public let time: Time?
     public let rates: Rates?
     public let prefixCache: [PrefixCache]?
+    public let conversationState: [ConversationState]?
+    public let signals: Signals?
     public let turns: [Turn]?
     public let dflash: DFlash?
     public let loopGuards: LoopGuards?
@@ -158,8 +227,8 @@ public struct SessionReport: Decodable, Equatable, Sendable {
     public let notes: [String]?
 
     enum CodingKeys: String, CodingKey {
-        case schema, session, time, rates, turns, dflash, gpu, suggestions, notes
-        case prefixCache = "prefix_cache", loopGuards = "loop_guards"
+        case schema, session, time, rates, turns, dflash, gpu, signals, suggestions, notes
+        case prefixCache = "prefix_cache", conversationState = "conversation_state", loopGuards = "loop_guards"
     }
 
     private struct Envelope: Decodable {
@@ -186,7 +255,7 @@ public struct SessionReport: Decodable, Equatable, Sendable {
 
     /// The report as Markdown: flagged steps first, which the analysis
     /// instruction asks about, then the session, its prompts, the prefill
-    /// syncs, suggestions and notes.
+    /// syncs, raw signals, suggestions and notes.
     public func markdown(locale: Locale = .current) -> String {
         let f = Format(locale: locale)
         let turns = turns ?? []
@@ -237,6 +306,11 @@ public struct SessionReport: Decodable, Equatable, Sendable {
             }
         }
 
+        if let signals {
+            lines += ["", "### Signals", ""]
+            lines += signalLines(signals, f)
+        }
+
         if let suggestions, !suggestions.isEmpty {
             lines += ["", "### Suggestions", ""]
             lines += suggestions.map { s in
@@ -258,7 +332,8 @@ public struct SessionReport: Decodable, Equatable, Sendable {
     }
 
     /// The report's own judgments: failed calls, the digest's call flags,
-    /// refused calls, compactions, then the session's loop-guard labels.
+    /// loop-guard notices, refused calls, engine errors, a prompt with no
+    /// answer and compactions, then the session's loop-guard labels.
     private func flaggedRows(_ turns: [Turn]) -> [Flagged] {
         var rows: [Flagged] = []
         for turn in turns {
@@ -270,12 +345,22 @@ public struct SessionReport: Decodable, Equatable, Sendable {
                 if !call.ok {
                     rows.append(Flagged(prompt: prompt, did: did, why: "failed: \(result)"))
                 }
+                if let loopGuard = call.loopGuard {
+                    rows.append(Flagged(prompt: prompt, did: did, why: "loop guard: \(loopGuard)"))
+                }
                 for flag in call.flags ?? [] {
                     rows.append(Flagged(prompt: prompt, did: did, why: flag))
                 }
             }
             for refused in turn.tools?.refused ?? [] {
                 rows.append(Flagged(prompt: prompt, did: refused.name ?? "—", why: refused.label ?? "refused"))
+            }
+            for error in turn.errors ?? [] {
+                rows.append(Flagged(prompt: prompt, did: "—", why: error.label ?? "engine error"))
+            }
+            if turn.answered == false {
+                let why = turn.interrupted == true ? "interrupted" : turn.reason
+                rows.append(Flagged(prompt: prompt, did: "—", why: "no answer" + (why.map { " (\($0))" } ?? "")))
             }
             for c in turn.compactions ?? [] {
                 rows.append(Flagged(
@@ -298,24 +383,69 @@ public struct SessionReport: Decodable, Equatable, Sendable {
             ]
             rows.append(("Time", parts.map { "\($0.0) \($0.1.map(f.duration) ?? "—")" }.joined(separator: " · ")))
         }
+        if let t = time, t.candidateReadyMs != nil || t.indexPrimedMs != nil {
+            rows.append(("Start-up", "candidate ready \(t.candidateReadyMs.map(f.duration) ?? "—") · "
+                + "index primed \(t.indexPrimedMs.map(f.duration) ?? "—")"))
+        }
+        if let earlier = session.earlier, !earlier.isEmpty {
+            rows.append(("Continues", earlier.map { e in
+                let prompts = e.prompts.map { p in e.kept.map { "\($0) of \(p) prompts kept" } ?? "\(p) prompts" }
+                return e.id + (prompts.map { " (\($0))" } ?? "")
+            }.joined(separator: ", ")))
+        }
+        if let rewound = session.rewoundTo {
+            rows.append(("Rewound", "to prompt \(rewound)"))
+        }
         if let r = rates {
             rows.append(("Rates", "prefill \(MetricsFormatting.rate(r.prefill, locale: f.locale)) · "
                 + "decode \(MetricsFormatting.rate(r.decode, locale: f.locale)), over the session"))
         }
         for p in prefixCache ?? [] {
-            let ms = p.loadMs ?? p.fillMs
-            rows.append(("Prefix cache", (p.label ?? "—") + (ms.map { ", \(f.duration($0))" } ?? "")))
+            rows.append(("Prefix cache", (p.prompt.map { "prompt \($0): " } ?? "") + (p.label ?? "—")))
+        }
+        for c in conversationState ?? [] {
+            let size = c.bytes.map { f.gib(bytes: $0) }
+            let load = c.loadMs.map { " in \(f.duration($0))" } ?? ""
+            rows.append(("Conversation state", (c.prompt.map { "prompt \($0): " } ?? "") + (c.label ?? "—")
+                + (size.map { ", \($0)\(load)" } ?? load) + (c.error.map { "; \($0)" } ?? "")))
         }
         if let g = gpu {
             rows.append(("GPU", "peak \(g.peakGib.map(f.gib) ?? "—") of \(g.budgetGib.map(f.gib) ?? "—")"
                 + (g.planGib.map { "; plan \(f.gib($0))" } ?? "")))
         }
+        let ending = [
+            session.filesChanged.map { "\($0) files changed" },
+            session.closed.map { $0 ? "closed" : "not closed" },
+            session.telemetryOk.map { $0 ? "telemetry ok" : "telemetry not ok" },
+            session.errors.map { "\($0) engine errors" },
+        ].compactMap { $0 }
+        if !ending.isEmpty {
+            rows.append(("Ending", ending.joined(separator: " · ")))
+        }
+        if let label = session.dflash, dflash == nil {
+            rows.append(("DFlash", label))
+        }
         if let d = dflash {
             let per = d.acceptedPerBlock.map { $0.formatted(.number.precision(.fractionLength(2)).locale(f.locale)) }
-            rows.append(("DFlash", "\(d.blocks.map(String.init) ?? "—") blocks · \(per ?? "—") accepted per block"
+            rows.append(("DFlash", (session.dflash.map { "\($0) · " } ?? "") + "\(d.blocks.map(String.init) ?? "—") blocks · \(per ?? "—") accepted per block"
                 + (d.nMax.map { " of \($0)" } ?? "")))
         }
         return rows
+    }
+
+    private func signalLines(_ s: Signals, _ f: Format) -> [String] {
+        var lines: [String] = []
+        if let c = s.constraint {
+            let mass = (c.removedProbabilityMass ?? []).map { String($0) }.joined(separator: ", ")
+            lines.append("- constraint: masked_token_count \(c.maskedTokenCount.map(String.init) ?? "—") · "
+                + "forbidden_argmax \(c.forbiddenArgmax.map(String.init) ?? "—") · removed_probability_mass [\(mass)]")
+        }
+        if let n = s.thinkInertOpeners { lines.append("- think_inert_openers: \(n)") }
+        if let n = s.citationCorrections { lines.append("- citation_corrections: \(n)") }
+        if let b = s.resultBytes {
+            lines.append("- result bytes: \(b.total.map(f.number) ?? "—") total, \(b.shown.map(f.number) ?? "—") shown")
+        }
+        return lines
     }
 
     private func promptRow(_ t: Turn, _ f: Format) -> String {
@@ -351,6 +481,7 @@ public struct SessionReport: Decodable, Equatable, Sendable {
 
         func number(_ n: Int) -> String { MetricsFormatting.number(n, locale: locale) }
         func gib(_ v: Double) -> String { MetricsFormatting.gib(v, locale: locale) }
+        func gib(bytes: Int64) -> String { MetricsFormatting.gib(bytes: bytes, locale: locale) }
         func duration(_ ms: Double) -> String { MetricsFormatting.duration(seconds: ms / 1000, locale: locale) }
 
         /// A sync's time: whole ms under ten seconds, where most fall.

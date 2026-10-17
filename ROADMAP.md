@@ -9,7 +9,6 @@
 
 - **Next:** the punch list's last item, engine information worth showing, folded into EN.2's catch-up to ds4-engine `a84b79bd`. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
-- **Waiting to merge:** [AN.4](#phase-an-analyze) on the branch `an4-engine-report`, until ds4-engine's stack with `report` merges.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window.
 
@@ -31,14 +30,14 @@ useful into ds4-engine. [Spec](docs/superpowers/specs/2026-10-13-an-session-anal
 | AN.1 | The report | `just last` and `/last`: the newest session's failed and useless steps, time, per-pause rates and raw signals, from the session directory with no model call | done 2026-10-13: [plan and Result](docs/superpowers/plans/2026-10-13-an1-session-report.md) |
 | AN.2 | Analyze and Done | Analyze on the last answer resumes the session as a fork, shows the report and asks about it there; Done resumes the original, so the main context returns as it was | done 2026-10-13: live, fork 3 s and Done 2.9 s, twice. [Plan and Result](docs/superpowers/plans/2026-10-13-an2-fork-and-return.md); the `/rewind` attempt [stopped](docs/superpowers/plans/2026-10-13-an2-analyze-and-done.md#result) |
 | AN.3 | Remedies | Suggest and apply fixes from the flags, applied after Done in the main session | not brainstormed |
-| AN.4 | Into ds4-engine | Analyze renders ds4-engine's `ds4-dogfood report --json`. `session_last.py`, its rules and its math go; what the report lacks is [ds4-engine#246](https://github.com/pauleveritt/ds4-engine/issues/246) | built 2026-10-15 on the branch `an4-engine-report`, unmerged until the engine's #231 and #233 merge. [Plan and Result](docs/superpowers/plans/2026-10-15-an4-engine-report.md) |
+| AN.4 | Into ds4-engine | Analyze renders ds4-engine's `ds4-dogfood report --json`. `session_last.py`, its rules and its math go; what the report lacks is [ds4-engine#246](https://github.com/pauleveritt/ds4-engine/issues/246) | done 2026-10-17 on `ds4-session-report/2` (#247): SwiftStar's own rules and math are gone, and the report shows the earlier-sessions chain and per-call loop guards. [Plan and Result](docs/superpowers/plans/2026-10-15-an4-engine-report.md) |
 
 AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 - **The report follows `resumed_from`.** After one Analyze and Done, the
   main session is a new directory, and a second Analyze reported "no flagged
   steps" for a session whose earlier turns had one (live, 2026-10-13).
-  Since AN.4, the report is the engine's, so this is asked of the engine in
-  ds4-engine#246.
+  *Closed by AN.4 on `/2` (2026-10-17):* the report names the chain
+  (`earlier[]`), but it doesn't merge the earlier sessions' flags.
 - **A resumed-then-answered fixture,** so Done's return can be tested over
   the fake engine.
 
@@ -160,8 +159,9 @@ there.
   and `-153456`, suffix `-session-last`): `rewound_to 0`, and the resumed
   turns included a prompt the first rewind had removed. It stopped AN.2's
   first attempt; the second avoids `/rewind`. Filed as [ds4-engine#219](https://github.com/pauleveritt/ds4-engine/issues/219).
-- **What `report --json` lacks** ([ds4-engine#246](https://github.com/pauleveritt/ds4-engine/issues/246),
-  AN.4):
+- **What `report --json` lacked** ([ds4-engine#246](https://github.com/pauleveritt/ds4-engine/issues/246),
+  AN.4). *Answered by #247 as `ds4-session-report/2` (2026-10-16); AN.4
+  reads it:*
   - a label on 33 to 64-token syncs, which read as slow
   - `resumed_from` and `rewound_to`
   - whether each prompt was answered
