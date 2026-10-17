@@ -11,6 +11,10 @@ public struct EngineMetricsState: Equatable, Sendable {
     /// This process's prefix-cache outcome; a hit is left out of the prefill
     /// rate, since the engine counts its tokens as prefilled (SU.6b, D3).
     public var prefixCache: EnginePrefixCache?
+    /// This process's start-up reports (EN.2).
+    public var startup = EngineStartupInfo()
+    /// A resumed conversation's saved-state load (EN.2).
+    public var conversationState: EngineConversationState?
 
     public init(prefillTPS: Double? = nil, generationTPS: Double? = nil,
                 contextUsed: Int? = nil, contextSize: Int? = nil,
@@ -49,6 +53,12 @@ public enum EngineMetricsReducer {
         case .session(let info):
             state.contextSize = info.contextSize ?? state.contextSize
             state.prefixCache = nil  // a new process: new counters
+            state.startup = EngineStartupInfo()
+            state.conversationState = nil
+        case .startup(let part, _):
+            state.startup.fold(part)
+        case .conversationState(let c):
+            state.conversationState = c
         case .prefixCache(let p):
             state.prefixCache = p
         case .resumed(let r):

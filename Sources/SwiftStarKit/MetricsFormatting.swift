@@ -71,16 +71,58 @@ public enum MetricsFormatting {
 
     /// The Session card's prefix-cache line: "hit · 944 tokens in 20 ms",
     /// "miss · 944 tokens filled in 3.9s", or the engine's word and the count.
+    /// On a miss, what the engine says changed (EN.2, D3); on a hit, the
+    /// fill that made the entry. No "saved" figure: that's the report's.
     public static func prefixCacheLine(_ p: EnginePrefixCache, locale: Locale = .current) -> String {
         let tokens = p.tokens.map { " · \(number($0, locale: locale)) tokens" } ?? ""
+        let seconds = { (ms: Double) in duration(seconds: ms / 1000, locale: locale) }
         switch p.outcome {
         case "hit":
             return "hit\(tokens)" + (p.loadMs.map { " in \(Int($0.rounded())) ms" } ?? "")
+                + (p.entryFillMs.map { " (filled in \(seconds($0)))" } ?? "")
         case "miss":
-            return "miss\(tokens)" + (p.fillMs.map { " filled in \(duration(seconds: $0 / 1000, locale: locale))" } ?? "")
+            let why = p.changed.map { $0.isEmpty ? " · its entry did not load" : " · changed: " + $0.joined(separator: ", ") }
+            return "miss\(tokens)" + (p.fillMs.map { " filled in \(seconds($0))" } ?? "") + (why ?? "")
         default:
             return "\(p.outcome)\(tokens)"
         }
+    }
+
+    /// The resumed conversation's state row (EN.2, D4).
+    public static func conversationStateLine(_ c: EngineConversationState, locale: Locale = .current) -> String {
+        guard c.outcome == "loaded" else {
+            return "Saved conversation state not loaded: \(c.outcome)" + (c.error.map { " (\($0))" } ?? "")
+        }
+        let size = c.bytes.map { gib(bytes: $0, locale: locale) }
+        let time = c.loadMs.map { duration(seconds: $0 / 1000, locale: locale) }
+        let detail = [size, time.map { "in \($0)" }].compactMap { $0 }.joined(separator: " ")
+        return "Saved conversation state loaded" + (detail.isEmpty ? "" : " · \(detail)")
+    }
+
+    /// The Session card's start-up rows (EN.2, D2), as label and value; a
+    /// report the engine didn't send has no row.
+    public static func startupRows(_ s: EngineStartupInfo, locale: Locale = .current) -> [(String, String)] {
+        let short = { (ms: Double) in ms < 1000 ? "\(Int(ms.rounded())) ms" : duration(seconds: ms / 1000, locale: locale) }
+        var rows: [(String, String)] = []
+        if let commit = s.commit {
+            let excluded = s.excludedCount ?? 0
+            rows.append(("Commit", String(commit.prefix(7))
+                + (excluded > 0 ? " · \(number(excluded, locale: locale)) uncommitted file\(excluded == 1 ? "" : "s") left out" : "")))
+        }
+        if let created = s.candidateCreatedMs {
+            rows.append(("Candidate", "ready in \(short(created))" + (s.candidateWaitedMs.map { " (waited \(short($0)))" } ?? "")))
+        }
+        if let outcome = s.envSyncOutcome {
+            rows.append(("Environment", outcome + (s.envSyncMs.map { " in \(short($0))" } ?? "")))
+        }
+        if let file = s.instructionsFile {
+            rows.append(("Instructions", file + (s.instructionsTokens.map { " · \(number($0, locale: locale)) tokens" } ?? "")
+                + (s.instructionsCut == true ? " · cut" : "")))
+        }
+        if let ms = s.indexPrimedMs {
+            rows.append(("Index primed", short(ms)))
+        }
+        return rows
     }
 
     /// One style for every duration: tenths under ten seconds, whole seconds

@@ -216,12 +216,104 @@ public struct EnginePrefixCache: Equatable, Sendable {
     public let tokens: Int?
     public let loadMs: Double?
     public let fillMs: Double?
+    /// On a miss, the key parts that differ from the nearest recorded entry;
+    /// `[]` when this key's own entry failed to load; nil when nothing could
+    /// be compared (ds4-engine `prefix_cache.rs:75-86`, EN.2).
+    public let changed: [String]?
+    /// On a hit, the fill that made the entry, when it was recorded.
+    public let entryFillMs: Double?
 
-    public init(outcome: String, tokens: Int?, loadMs: Double?, fillMs: Double?) {
+    public init(
+        outcome: String, tokens: Int?, loadMs: Double?, fillMs: Double?,
+        changed: [String]? = nil, entryFillMs: Double? = nil
+    ) {
         self.outcome = outcome
         self.tokens = tokens
         self.loadMs = loadMs
         self.fillMs = fillMs
+        self.changed = changed
+        self.entryFillMs = entryFillMs
+    }
+}
+
+/// One of the engine's start-up reports (EN.2), in the order it sends them:
+/// the commit the model works on, the candidate worktree, its environment
+/// sync, the project's instructions, and the index primer at the first pause.
+public enum EngineStartupPart: Equatable, Sendable {
+    case baseline(commit: String?, excludedCount: Int?)
+    case candidateReady(createdMs: Double?, waitedMs: Double?)
+    case envSync(outcome: String, durationMs: Double?)
+    case projectInstructions(file: String?, tokens: Int?, cut: Bool)
+    case indexPrimed(sinceStartMs: Double?)
+}
+
+/// The start-up reports of this process, folded (the Session card's rows).
+public struct EngineStartupInfo: Equatable, Sendable {
+    public var commit: String?
+    public var excludedCount: Int?
+    public var candidateCreatedMs: Double?
+    public var candidateWaitedMs: Double?
+    public var envSyncOutcome: String?
+    public var envSyncMs: Double?
+    public var instructionsFile: String?
+    public var instructionsTokens: Int?
+    public var instructionsCut: Bool?
+    public var indexPrimedMs: Double?
+
+    public init(
+        commit: String? = nil, excludedCount: Int? = nil,
+        candidateCreatedMs: Double? = nil, candidateWaitedMs: Double? = nil,
+        envSyncOutcome: String? = nil, envSyncMs: Double? = nil,
+        instructionsFile: String? = nil, instructionsTokens: Int? = nil, instructionsCut: Bool? = nil,
+        indexPrimedMs: Double? = nil
+    ) {
+        self.commit = commit
+        self.excludedCount = excludedCount
+        self.candidateCreatedMs = candidateCreatedMs
+        self.candidateWaitedMs = candidateWaitedMs
+        self.envSyncOutcome = envSyncOutcome
+        self.envSyncMs = envSyncMs
+        self.instructionsFile = instructionsFile
+        self.instructionsTokens = instructionsTokens
+        self.instructionsCut = instructionsCut
+        self.indexPrimedMs = indexPrimedMs
+    }
+
+    public mutating func fold(_ part: EngineStartupPart) {
+        switch part {
+        case .baseline(let commit, let excluded):
+            self.commit = commit
+            excludedCount = excluded
+        case .candidateReady(let created, let waited):
+            candidateCreatedMs = created
+            candidateWaitedMs = waited
+        case .envSync(let outcome, let ms):
+            envSyncOutcome = outcome
+            envSyncMs = ms
+        case .projectInstructions(let file, let tokens, let cut):
+            instructionsFile = file
+            instructionsTokens = tokens
+            instructionsCut = cut
+        case .indexPrimed(let ms):
+            indexPrimedMs = ms
+        }
+    }
+}
+
+/// A resumed conversation's saved state, loaded or not (`conversation_state`,
+/// ds4-engine `driver.rs:469-500`): sent once, on resume.
+public struct EngineConversationState: Equatable, Sendable {
+    /// `loaded`, `unsupported`, `failed` or `absent`.
+    public let outcome: String
+    public let bytes: Int64?
+    public let loadMs: Double?
+    public let error: String?
+
+    public init(outcome: String, bytes: Int64?, loadMs: Double?, error: String?) {
+        self.outcome = outcome
+        self.bytes = bytes
+        self.loadMs = loadMs
+        self.error = error
     }
 }
 
@@ -241,6 +333,12 @@ public enum EngineEvent: Equatable, Sendable {
     case pause(PauseMetrics)
     case memory(EngineMemory)
     case prefixCache(EnginePrefixCache)
+    /// A start-up report; a non-empty `summary` is the line the engine means
+    /// to show (its TUI shows it, `tui.py:250`).
+    case startup(EngineStartupPart, summary: String?)
+    case conversationState(EngineConversationState)
+    /// A typed `/analyze`'s answer: the engine's report as text lines.
+    case analysis([String])
     /// Stop took effect; carries the context after the interrupt.
     case interrupted(contextUsed: Int?, contextSize: Int?)
     /// The engine ended the session's turn (`terminal`): followed by `close`.

@@ -231,6 +231,13 @@ public struct EngineTranscript: Equatable, Sendable {
             rebuild(from: r, divider: r.divider(after: nil))
         case .session(let info):
             session = info
+        case .startup(_, let summary):
+            if let summary = summary?.trimmedOrNil { rows.append(.system(summary)) }
+        case .conversationState(let state):
+            rows.append(.system(MetricsFormatting.conversationStateLine(state)))
+        case .analysis(let lines):
+            // Column-aligned text, not Markdown: fenced, so it keeps its spacing.
+            rows.append(.report("```\n" + lines.joined(separator: "\n") + "\n```"))
         case .closed:
             end()
         case .ready, .pause, .memory, .prefixCache, .protocolError, .ignored:

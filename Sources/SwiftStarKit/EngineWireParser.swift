@@ -73,7 +73,30 @@ public struct EngineWireParser: Sendable {
                 outcome: e["outcome"] as? String ?? "",
                 tokens: int(e["prefix_tokens"]),
                 loadMs: double(e["load_ms"]),
-                fillMs: double(e["fill_ms"])))
+                fillMs: double(e["fill_ms"]),
+                changed: e["changed"] as? [String],
+                entryFillMs: double(e["entry_fill_ms"])))
+        case "baseline":
+            return .startup(.baseline(commit: e["resolved"] as? String, excludedCount: int(e["excluded_count"])),
+                            summary: e["summary"] as? String)
+        case "candidate_ready":
+            return .startup(.candidateReady(createdMs: double(e["created_ms"]), waitedMs: double(e["waited_ms"])),
+                            summary: nil)
+        case "env_sync":
+            return .startup(.envSync(outcome: e["outcome"] as? String ?? "", durationMs: double(e["duration_ms"])),
+                            summary: e["summary"] as? String)
+        case "project_instructions":
+            return .startup(.projectInstructions(
+                file: e["file"] as? String, tokens: int(e["tokens"]), cut: e["cut"] as? Bool ?? false),
+                            summary: e["summary"] as? String)
+        case "index_primed":
+            return .startup(.indexPrimed(sinceStartMs: double(e["since_start_ms"])), summary: nil)
+        case "conversation_state":
+            return .conversationState(EngineConversationState(
+                outcome: e["outcome"] as? String ?? "", bytes: int64(e["bytes"]),
+                loadMs: double(e["load_ms"]), error: e["error"] as? String))
+        case "analysis":
+            return .analysis(e["lines"] as? [String] ?? [])
         case "prompt":
             return .prompt(e["text"] as? String ?? "")
         case "narration":
