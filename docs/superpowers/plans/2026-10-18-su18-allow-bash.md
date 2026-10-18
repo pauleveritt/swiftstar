@@ -100,9 +100,15 @@ That's exactly what the code said, and what #260 asks the engine to change.
 - **Test:** `BashRunRecordingTests` pins both cards to the recording, and
   was broken once and failed.
 - **An unexplained failure:** the first `just capture bash-run` exited 2
-  within a second, before loading the model. The recorder hides the
-  engine's stderr, so I couldn't see why. Run again with stderr shown, the
-  same argv recorded cleanly.
+  within a second, before loading the model. The recorder hid the engine's
+  stderr, so I couldn't see why.
+  - **Tried again (the owner asked):** four more runs, three from the
+    recorder and one from `just capture`, all exited 0. The failure didn't
+    come back.
+  - **Recorder change:** it now writes the engine's stderr to
+    `<out>.stderr.log`. A failed run keeps the log and prints its tail; a
+    clean run deletes it.
+  - **The fixture** stays the first clean recording.
 - **A stray session:** a probe outside the recorder left a short, empty
   session in the owner's state directory, `20261018-140136-su-ui`.
 

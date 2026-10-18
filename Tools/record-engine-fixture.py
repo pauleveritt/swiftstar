@@ -105,10 +105,14 @@ def run(exe, argv, env, out, on_line):
     `on_line(line, send)` for each parsed line; return the exit code. The
     caller keeps the recording (`keep`) or drops it, so a failed attempt
     never overwrites a committed fixture."""
+    # The engine's stderr goes to a log beside the recording, so a run that
+    # fails says why (SU.18: one exited 2 with nothing to show). A pipe could
+    # fill and block the engine; a file can't.
+    log = open(out + ".stderr.log", "w")
     # The `with` closes the pipes and reaps the process, however it ends (SU.17).
-    with subprocess.Popen(
+    with log, subprocess.Popen(
         [exe, *argv], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL, text=True, bufsize=1, env=env,
+        stderr=log, text=True, bufsize=1, env=env,
     ) as proc:
 
         def send(message: dict) -> None:
@@ -125,7 +129,15 @@ def run(exe, argv, env, out, on_line):
             proc.kill()
             Path(out + ".tmp").unlink(missing_ok=True)
             raise
-        return proc.wait()
+        code = proc.wait()
+    # Kept only for a failed run, whose last lines are printed.
+    log_path = Path(out + ".stderr.log")
+    if code:
+        tail = log_path.read_text(errors="replace").splitlines()[-8:]
+        print(f"engine stderr (exit {code}), in {log_path}:", *tail, sep="\n  ", file=sys.stderr)
+    else:
+        log_path.unlink(missing_ok=True)
+    return code
 
 
 def run_resumed(exe, argv, env, out, resumed):
