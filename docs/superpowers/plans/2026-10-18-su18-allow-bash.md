@@ -89,3 +89,20 @@ At the owner's request, an unsaved setting now means on
   - Both were broken once each and failed.
   - Two exact-argv resume tests expect the default.
 
+### D5: the recording, 2026-10-18
+
+On the owner's GPU go: `just capture bash-run` on the 27B at `a84b79bd`.
+- **The `cat Package.swift`** arrived as a plain `read Package.swift`.
+- **`ls Sources | wc -l`** arrived as `op: "run"`, `path: ""`, with the header
+  `[exit 0 in 0.0 s]`.
+
+That's exactly what the code said, and what #260 asks the engine to change.
+- **Test:** `BashRunRecordingTests` pins both cards to the recording, and
+  was broken once and failed.
+- **An unexplained failure:** the first `just capture bash-run` exited 2
+  within a second, before loading the model. The recorder hides the
+  engine's stderr, so I couldn't see why. Run again with stderr shown, the
+  same argv recorded cleanly.
+- **A stray session:** a probe outside the recorder left a short, empty
+  session in the owner's state directory, `20261018-140136-su-ui`.
+

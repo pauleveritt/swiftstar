@@ -17,6 +17,8 @@ Scenarios:
                    `resumed.ndjson` beside <out.ndjson>
   tool-rejected    asks for the same read three times, to trip the loop
                    guard; exits 3 if no call was rejected (try another seed)
+  bash-run         under --allow-bash (SU.18), a `cat` the engine maps onto
+                   `read` and a piped command it runs as bash
   resumed-answered three sessions in one scratch state (EN.2): a prompt at
                    context 20000; a prompt at 16384, recorded to
                    `prefix-changed.ndjson` beside <out.ndjson> (its prefix
@@ -38,6 +40,10 @@ PROMPTS = {
     "what targets does it declare?",
     "stop": "Read every file under Sources/SwiftStarKit/ one at a time, from "
     "the first to the last, then summarize each one in a paragraph.",
+    # SU.18, D5: under --allow-bash, one `run` the engine maps onto `read`
+    # and one it can only run as bash (a pipe).
+    "bash-run": "Use the run tool twice: first run `cat Package.swift`, then run "
+    "`ls Sources | wc -l`. Then answer in one sentence: how many entries does Sources have?",
     # The 27B won't call a tool that doesn't exist (seeds 1-6, 2026-10-13),
     # so this provokes the loop guard's `repeated-call` instead.
     "tool-rejected": "Use the read tool on Package.swift three times in a "
@@ -47,7 +53,7 @@ REWIND_PROMPTS = [
     "Answer in one short sentence, without tools: what is 2 + 2?",
     "Answer in one short sentence, without tools: what is 3 + 3?",
 ]
-SCENARIOS = ("tool-read", "stop", "error", "relaunch-rewind", "tool-rejected", "resumed-answered")
+SCENARIOS = ("tool-read", "stop", "error", "relaunch-rewind", "tool-rejected", "resumed-answered", "bash-run")
 
 
 def one_prompt(text, seen):
@@ -152,7 +158,7 @@ def main() -> int:
     argv = [
         "tui", "--ndjson", "--model-id", model, "--context-size", "20000",
         "--seed", seed, "--source", source, "--commit", "HEAD",
-    ]
+    ] + (["--allow-bash"] if scenario == "bash-run" else [])
     state = {"inputs": 0, "stopped": False, "relaunch": None, "rejected": False}
 
     def on_line(line, send):

@@ -26,6 +26,7 @@ as `EngineWireParser` reads it. Recorded by `Tools/record-engine-fixture.py`
 | `relaunch-rewind.ndjson` | two prompts, then `/rewind 1` | `rewind_refused` with a `relaunch` argv that starts `tui` and ends `--ndjson` |
 | `resumed.ndjson` | that `relaunch` argv, run as is | `session` with `rewound_to` 1, then `resumed` with one turn |
 | `prefix-changed.ndjson` | `resumed-answered`'s second session: a fresh one at context 16,384 after one at 20,000, in the same scratch state | a `prefix_cache` miss with `changed` `["context"]` |
+| `bash-run.ndjson` | SU.18: under `--allow-bash`, "run `cat Package.swift`, then run `ls Sources \| wc -l`" (2026-10-18) | a `read` of `Package.swift` (the engine mapped the `cat`, and nothing on the wire says so), then `op` `run` with an empty `path` and a `[exit 0 in 0.0 s]` header, then an `answer` |
 | `resumed-answered.ndjson` | that second session resumed, with one more prompt | `resumed` with one turn, `conversation_state` `loaded`, then an `answer` |
 
 Every recording at `a84b79bd` also carries the start-up reports: `baseline`,

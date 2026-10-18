@@ -53,3 +53,21 @@ struct BashRunCardTests {
         #expect(!EngineToolCard(tool: EngineTool(op: "read", path: "a.py"), ok: true, durationMs: 10).failed)
     }
 }
+
+/// SU.18, D5: the live recording, `fixtures/engine/bash-run.ndjson` (the 27B
+/// at ds4-engine `a84b79bd`, `--allow-bash`).
+struct BashRunRecordingTests {
+    @Test func theRecordingMakesAReadCardAndABashCard() throws {
+        var t = EngineTranscript()
+        try Fixtures.events("bash-run.ndjson").forEach { t.apply($0) }
+        let cards = t.rows.compactMap { row -> EngineToolCard? in if case .tool(let c) = row { c } else { nil } }
+        // `cat Package.swift`, mapped by the engine: on the wire, a plain read.
+        #expect(cards.first?.headerText == "read Package.swift")
+        #expect(cards.first?.isBashRun == false)
+        // `ls Sources | wc -l`, a pipe: run as bash.
+        let bash = try #require(cards.last)
+        #expect(bash.headerText == "bash")
+        #expect(bash.metadataLine == "ran as bash in the sandbox · exit 0 · 0.0 s")
+        #expect(!bash.failed)
+    }
+}
