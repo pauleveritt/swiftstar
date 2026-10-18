@@ -19,7 +19,7 @@ struct SessionView: View {
                 Divider()
             }
             TranscriptView(
-                transcript: controller.transcript, source: controller.source,
+                transcript: controller.transcript, links: controller.fileLinks,
                 analyze: controller.canAnalyze ? { Task { await controller.analyze() } } : nil,
                 analysisFirstRow: controller.analysis?.firstRow)
                 // The rows scroll on under the composer and fade (SU.6f).

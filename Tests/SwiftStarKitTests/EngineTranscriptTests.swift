@@ -434,29 +434,7 @@ struct EngineTranscriptTests {
         #expect(c.card.icon == c.icon)
     }
 
-    // MARK: Quick Look file URLs
-
-    struct FileURLCase: Sendable, CustomTestStringConvertible {
-        let testDescription: String
-        let path: String?
-        let source: String?
-        let expected: String?
-    }
-
-    static let fileURLCases: [FileURLCase] = [
-        .init(testDescription: "fileURLResolvesAgainstSource", path: "Sources/a.swift", source: "/r",
-              expected: "/r/Sources/a.swift"),
-        .init(testDescription: "fileURLResolvesAgainstSource (trailing slash)", path: "Sources/a.swift", source: "/r/",
-              expected: "/r/Sources/a.swift"),
-        .init(testDescription: "fileURLKeepsAbsolutePaths", path: "/etc/hosts", source: "/r", expected: "/etc/hosts"),
-        .init(testDescription: "fileURLNilWithoutPathOrSource (no path)", path: nil, source: "/r", expected: nil),
-        .init(testDescription: "fileURLNilWithoutPathOrSource (no source)", path: "a", source: nil, expected: nil),
-    ]
-
-    @Test(arguments: fileURLCases) func fileURL(_ c: FileURLCase) {
-        let card = EngineToolCard(tool: EngineTool(op: "read", path: c.path))
-        #expect(card.fileURL(source: c.source.map { URL(fileURLWithPath: $0) })?.path == c.expected)
-    }
+    // Quick Look's file URLs moved to `FileLinkResolver` (SU.16): FileLinkTests.
 
     // MARK: the divider over a rebuilt transcript
 

@@ -7,8 +7,6 @@ struct TranscriptRowView: View {
     let row: TranscriptRow
     /// The engine reported this (user) row's prompt as queued.
     let queued: Bool
-    /// Where the tool cards' relative paths resolve (Quick Look).
-    let source: URL?
     /// Offered on the last answer when the session can be analyzed (AN.2).
     var analyze: (() -> Void)? = nil
     @Environment(\.fontSize) private var fontSize: CGFloat
@@ -20,11 +18,12 @@ struct TranscriptRowView: View {
         case .thinking(let text):
             ThinkingDisclosure(text: text)
         case .narration(let text):
-            MarkdownText(text)
+            // Answers and narration link the files they name (SU.16, D4).
+            MarkdownText(text, linksFiles: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .answer(let answer, let reply):
             VStack(alignment: .leading, spacing: 4) {
-                MarkdownText(reply ?? answer.text)
+                MarkdownText(reply ?? answer.text, linksFiles: true)
                 if reply != nil {
                     // The 27B's `finish` summary, under the full reply (SU.6a).
                     Text("Summary: \(answer.text)")
@@ -52,7 +51,7 @@ struct TranscriptRowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case .tool(let card):
-            ToolCardView(card: card, source: source)
+            ToolCardView(card: card)
         case .system(let text):
             Text(text)
                 .font(.system(size: fontSize))
@@ -83,17 +82,22 @@ struct TranscriptRowView: View {
 }
 
 /// What a prompt's `@` mentions attached, small and secondary, and what they
-/// missed, in red (SU.14, D3); under the prompt bubble, on its side.
+/// missed, in red (SU.14, D3); under the prompt bubble, on its side. Each
+/// attached file is its own link (SU.16, D4).
 private struct MentionsLine: View {
     let attached: [String]
     let missing: [String]
     @Environment(\.fontSize) private var fontSize: CGFloat
+    @Environment(\.fileLinkAction) private var links
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
             if !attached.isEmpty {
-                Label("Attached \(attached.joined(separator: ", "))", systemImage: "paperclip")
-                    .foregroundStyle(.secondary)
+                // On one line when they fit, else one per line.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) { attachments }
+                    VStack(alignment: .trailing, spacing: 2) { attachments }
+                }
             }
             ForEach(missing, id: \.self) { line in
                 Label(line, systemImage: "exclamationmark.triangle")
@@ -104,6 +108,20 @@ private struct MentionsLine: View {
         .multilineTextAlignment(.trailing)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    /// Secondary text, but a linked name in the link color (D5).
+    @ViewBuilder
+    private var attachments: some View {
+        Label("Attached", systemImage: "paperclip")
+            .foregroundStyle(.secondary)
+        ForEach(attached, id: \.self) { name in
+            if let link = links?.resolve(name) {
+                FileLinkButton(link: link) { Text(name) }
+            } else {
+                Text(name).foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -136,13 +154,13 @@ private struct ReportCard: View {
 }
 
 #Preview("System") {
-    TranscriptRowView(row: .system("Conversation cleared"), queued: false, source: nil)
+    TranscriptRowView(row: .system("Conversation cleared"), queued: false)
         .padding()
         .frame(width: 420, alignment: .leading)
 }
 
 #Preview("Error") {
-    TranscriptRowView(row: .error("ds4-dogfood exited with status 1"), queued: false, source: nil)
+    TranscriptRowView(row: .error("ds4-dogfood exited with status 1"), queued: false)
         .padding()
         .frame(width: 420, alignment: .leading)
 }
@@ -154,7 +172,7 @@ private struct ReportCard: View {
                 text: "Six targets: three libraries, one executable, two test targets.",
                 contextUsed: 512, contextSize: 8192, durationMs: 1830),
             reply: "`Package.swift` declares **six targets**:\n\n1. `SwiftStarKit`\n2. `SwiftStarEngine`\n3. `SwiftStarUI`"),
-        queued: false, source: nil)
+        queued: false)
         .padding()
         .frame(width: 420)
 }
@@ -164,13 +182,13 @@ private struct ReportCard: View {
         row: .answer(EngineAnswer(
             text: "`SessionView` renders the transcript, composer, and status bar for one engine session.",
             contextUsed: 512, contextSize: 8192, durationMs: 1830)),
-        queued: false, source: nil, analyze: {})
+        queued: false, analyze: {})
         .padding()
         .frame(width: 420)
 }
 
 #Preview("Report card") {
-    TranscriptRowView(row: .report(EngineTranscript.previewReport), queued: false, source: nil)
+    TranscriptRowView(row: .report(EngineTranscript.previewReport), queued: false)
         .padding()
         .frame(width: 560)
 }
@@ -178,7 +196,7 @@ private struct ReportCard: View {
 #Preview("Rebuilt after rewind") {
     VStack(alignment: .leading, spacing: 12) {
         ForEach(Array(EngineTranscript.previewRewound.rows.enumerated()), id: \.offset) { _, row in
-            TranscriptRowView(row: row, queued: false, source: nil)
+            TranscriptRowView(row: row, queued: false)
         }
     }
     .padding()
@@ -188,18 +206,39 @@ private struct ReportCard: View {
 #Preview("Switched model") {
     TranscriptRowView(
         row: .divider("Switched to qwen3.8-flash-next: new conversation, files kept"),
-        queued: false, source: nil)
+        queued: false)
         .padding()
         .frame(width: 420, alignment: .leading)
 }
 
 #Preview("Mentions") {
     VStack(spacing: 4) {
-        TranscriptRowView(row: .user("Compare @Package.swift and @README.md with @nope.swift"), queued: false, source: nil)
+        TranscriptRowView(row: .user("Compare @Package.swift and @README.md with @nope.swift"), queued: false)
         TranscriptRowView(
             row: .mentions(attached: ["Package.swift", "README.md"], missing: ["nope.swift: no such file"]),
-            queued: false, source: nil)
+            queued: false)
     }
     .padding()
     .frame(width: 600)
+    .previewFileLinks()
+}
+
+// SU.16: code spans that name a file link; one naming none, or a bare name
+// two files share, stays plain.
+#Preview("Answer with file links") {
+    TranscriptRowView(
+        row: .answer(EngineAnswer(
+            text: """
+                `Package.swift` declares the targets, and `EngineSession.swift` runs the engine \
+                (`Sources/SwiftStarEngine/EngineSession.swift:42`). `missing.swift` isn't in the repository.
+
+                | File | Role |
+                |---|---|
+                | `README.md` | the front door |
+                """,
+            contextUsed: 512, contextSize: 8192, durationMs: 1830)),
+        queued: false)
+        .padding()
+        .frame(width: 520)
+        .previewFileLinks()
 }

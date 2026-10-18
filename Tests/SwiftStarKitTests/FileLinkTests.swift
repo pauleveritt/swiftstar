@@ -47,6 +47,14 @@ struct FileLinkTests {
         #expect(Self.resolver(worktree: nil, onDisk: both).resolve("Package.swift")?.isEngineCopy == false)
     }
 
+    // From the old `fileURL(source:)` tests: a root with a trailing slash.
+    @Test func sourceWithATrailingSlash() {
+        let r = FileLinkResolver(source: URL(fileURLWithPath: "/repo/"), worktree: nil, known: Self.known) {
+            $0.standardizedFileURL.path == "/repo/Package.swift"
+        }
+        #expect(r.resolve("Package.swift")?.url.standardizedFileURL.path == "/repo/Package.swift")
+    }
+
     @Test func newFileInWorktreeLinks() {
         let r = Self.resolver(onDisk: Self.inCheckout.union(["/tmp/candidate/Sources/New.swift"]))
         #expect(r.resolve("Sources/New.swift")?.url == URL(fileURLWithPath: "/tmp/candidate/Sources/New.swift"))

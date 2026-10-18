@@ -16,8 +16,14 @@ extension EngineController {
         EngineController(
             model: runningModel(withGPU: true), conversations: .preview,
             workspace: URL(fileURLWithPath: "/Users/example/projects/swiftstar"), workspaceFiles: .previewFiles,
-            catalog: .preview)
+            catalog: .preview, source: previewCheckout)
     }
+
+    /// This repository, where the previews' file names exist, so their
+    /// links resolve (SU.16). A path on the machine that built the preview.
+    static let previewCheckout = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
 
     /// The running session without GPU metrics, as before the engine's first
     /// `memory` event: the status bar shows no memory widget.
@@ -55,7 +61,7 @@ extension EngineController {
             tool: tool, preview: "struct SessionView: View {\n    @Environment(EngineController.self)...",
             truncated: true)))
         model.apply(.answer(EngineAnswer(
-            text: "`SessionView` renders the transcript, composer, and status bar for one engine session.",
+            text: "`SessionView.swift` renders the transcript, composer, and status bar for one engine session.",
             contextUsed: 512, contextSize: 8192, durationMs: 1830)))
         // Session 20261013-154825's first checkpoint, after its 944-token cache hit.
         model.apply(.pause(PauseMetrics(

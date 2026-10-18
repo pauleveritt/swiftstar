@@ -1,17 +1,31 @@
+import QuickLook
 import SwiftUI
 import SwiftStarKit
 
 /// The session's transcript, scrolled to the newest row.
 struct TranscriptView: View {
     let transcript: EngineTranscript
-    /// Where the tool cards' relative paths resolve (Quick Look).
-    let source: URL?
+    /// How the rows' file names resolve (SU.16); nil before a session has a
+    /// checkout, and then nothing links.
+    let links: FileLinkLookup?
     /// Analyze, offered on the last answer only (AN.2); nil when not offered.
     var analyze: (() -> Void)? = nil
     /// Rows from here on belong to an analysis, and carry its tint.
     var analysisFirstRow: Int? = nil
 
+    /// The one Quick Look every row's links open (SU.16, D6).
+    @State private var quickLook: URL?
+
     var body: some View {
+        rows
+            .environment(\.fileLinkAction, links.map { lookup in
+                FileLinkAction(resolve: lookup.resolve, open: { quickLook = $0.url })
+            })
+            .quickLookPreview($quickLook)
+    }
+
+    @ViewBuilder
+    private var rows: some View {
         let lastAnswer = transcript.rows.lastIndex { if case .answer = $0 { true } else { false } }
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
@@ -20,7 +34,7 @@ struct TranscriptView: View {
                 // stable identity for a row's whole lifetime.
                 ForEach(Array(transcript.rows.enumerated()), id: \.offset) { index, row in
                     TranscriptRowView(
-                        row: row, queued: transcript.isQueued(rowAt: index), source: source,
+                        row: row, queued: transcript.isQueued(rowAt: index),
                         analyze: index == lastAnswer ? analyze : nil)
                         .modifier(AnalysisRule(active: analysisFirstRow.map { index >= $0 } ?? false))
                 }
@@ -50,18 +64,18 @@ private struct AnalysisRule: ViewModifier {
 }
 
 #Preview("Running") {
-    TranscriptView(transcript: EngineController.previewRunning.transcript, source: nil)
+    TranscriptView(transcript: EngineController.previewRunning.transcript, links: nil)
         .frame(width: 600, height: 400)
 }
 
 #Preview("Empty") {
-    TranscriptView(transcript: EngineTranscript(), source: nil)
+    TranscriptView(transcript: EngineTranscript(), links: nil)
         .frame(width: 600, height: 200)
 }
 
 #Preview("Analyzing") {
     TranscriptView(
-        transcript: EngineSessionModel.previewAnalyzing.transcript, source: nil,
+        transcript: EngineSessionModel.previewAnalyzing.transcript, links: nil,
         analysisFirstRow: EngineSessionModel.previewAnalyzing.analysis?.firstRow)
         .frame(width: 600, height: 1000)
 }

@@ -61,17 +61,6 @@ public struct EngineToolCard: Equatable, Sendable {
         return tool.path.flatMap(CodeLanguage.forPath)
     }
 
-    /// The file the card names, for Quick Look: an absolute path as is, a
-    /// relative one under `source` (the git root the engine works from).
-    /// Nil without a path or a source.
-    public func fileURL(source: URL?) -> URL? {
-        guard let source, let path = tool.path, !path.isEmpty else { return nil }
-        if path.hasPrefix("/") { return URL(fileURLWithPath: path) }
-        // `appending(path:)`, not `relativeTo:`, which drops the base's last
-        // component when it has no trailing slash.
-        return source.appending(path: path)
-    }
-
     /// SF Symbol name for the tool's op.
     public var icon: String {
         if rejection != nil { return "xmark.circle" }

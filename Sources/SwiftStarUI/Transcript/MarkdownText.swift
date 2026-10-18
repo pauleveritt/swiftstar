@@ -23,9 +23,16 @@ import SwiftStarKit
 /// disclosure. Rows arrive whole (the engine reports per pause, not per token).
 struct MarkdownText: View {
     let source: String
+    /// Inline code spans that name a file become links to it (SU.16, D4):
+    /// answers and narration, not the report card or thinking.
+    let linksFiles: Bool
     @Environment(\.fontSize) private var fontSize: CGFloat
+    @Environment(\.fileLinkAction) private var links
 
-    init(_ source: String) { self.source = source }
+    init(_ source: String, linksFiles: Bool = false) {
+        self.source = source
+        self.linksFiles = linksFiles
+    }
 
     public var body: some View {
         // `.default` theme: its colors are `NSColor.labelColor` / system dynamic
@@ -33,9 +40,23 @@ struct MarkdownText: View {
         // aligned to the environment's transcript size, so the Settings slider
         // re-typesets the prose live (a size change rebuilds the theme and
         // re-parses — see `MarkdownNSText.updateNSView`).
+        let text = MarkdownPreprocess.deLaTeXed(source)
+        let links = linksFiles ? links : nil
         MarkdownNSText(
-            markdown: MarkdownPreprocess.deLaTeXed(source),
-            fontSize: fontSize)
+            markdown: links.map { action in MarkdownPreprocess.fileLinks(text) { action.resolve($0)?.path } } ?? text,
+            fontSize: fontSize,
+            onLink: { destination in
+                // A file link opens Quick Look (D7); a web link, the browser.
+                if let path = FileLink.path(fromDestination: destination), let link = links?.resolve(path) {
+                    // The label made itself first responder on the click, and
+                    // Quick Look finds its controller through the responder
+                    // chain, where the label isn't: open after letting go of it.
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                    DispatchQueue.main.async { links?.open(link) }
+                } else if let url = URL(string: destination), ["http", "https"].contains(url.scheme) {
+                    NSWorkspace.shared.open(url)
+                }
+            })
     }
 }
 
@@ -68,17 +89,26 @@ enum CodeColoring {
 private struct MarkdownNSText: NSViewRepresentable {
     let markdown: String
     let fontSize: CGFloat
+    /// A clicked link's destination, as the parser stored it (a String).
+    let onLink: (String) -> Void
 
     /// A theme with the conversation's body font aligned to `size`. `align(to:)`
     /// scales body/code/bold/italic/largeTitle/title from the fork's defaults.
     static func theme(for size: CGFloat) -> MarkdownTheme {
         var theme = MarkdownTheme.default
         theme.align(to: size)
+        // Links in the system link color, as the tool cards' and attachments'
+        // are (SU.16, D5); the fork's default highlight is orange.
+        theme.colors.highlight = .linkColor
         return theme
     }
 
     func makeNSView(context _: Context) -> MarkdownTextView {
         let view = MarkdownTextView()
+        // The fork's AppKit init never makes the view its label's delegate
+        // (its UIKit init does), so a link click found its region and told
+        // no one: `linkHandler` never ran (SU.16, found in the gallery).
+        view.textView.delegate = view
         view.theme = Self.theme(for: fontSize)
         view.setContentHuggingPriority(.required, for: .vertical)
         view.setContentCompressionResistancePriority(.required, for: .vertical)
@@ -88,6 +118,15 @@ private struct MarkdownNSText: NSViewRepresentable {
     }
 
     func updateNSView(_ view: MarkdownTextView, context: Context) {
+        // Before any content is set: a table's cells copy the handler when
+        // they're built (the fork's `TextBuilder+Do.swift:190`), SU.16.
+        let onLink = onLink
+        view.linkHandler = { payload, _, _ in
+            switch payload {
+            case .url(let url): onLink(url.absoluteString)
+            case .string(let string): onLink(string)
+            }
+        }
         // Re-apply when either the text OR the font size changed — a size
         // change alone must re-typeset (the Settings slider). The theme is
         // rebuilt so `setMarkdownManually` picks up the new fonts.
