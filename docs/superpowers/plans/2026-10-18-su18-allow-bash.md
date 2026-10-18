@@ -109,6 +109,8 @@ That's exactly what the code said, and what #260 asks the engine to change.
     `<out>.stderr.log`. A failed run keeps the log and prints its tail; a
     clean run deletes it.
   - **The fixture** stays the first clean recording.
-- **A stray session:** a probe outside the recorder left a short, empty
-  session in the owner's state directory, `20261018-140136-su-ui`.
+- **Stray sessions:** two probes outside the recorder left short, empty
+  sessions in the owner's state directory: `20261018-140047-su-ui` and
+  `20261018-140136-su-ui`. Each held startup events and `closed`, with no
+  prompt. Both were deleted on the owner's word (2026-10-18).
 
