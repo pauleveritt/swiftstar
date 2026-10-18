@@ -9,8 +9,8 @@
 
 - **Next:** not set; open for the owner: SU.7c (below), AN.3 after the AN.2 click-through, and the Backlog's `--allow-bash` entry. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
-- **Blocked on the engine:** showing the edited copy of a file (the candidate
-  worktree), and more than one window. *EN.2's check (2026-10-17): the
+- **Blocked on the engine:** more than one window. (Showing the edited copy
+  of a file is done: SU.16 reads the receipt's `worktree_path`.) *EN.2's check (2026-10-17): the
   engine allows one engine per process, not per machine, so windows may be
   limited only by GPU memory ([spec §5](docs/superpowers/specs/2026-10-17-en2-engine-catch-up-design.md#5-risks-and-a-finding)).
   Reopening SU.7c is the owner's call.*
