@@ -58,8 +58,8 @@ owner's go.
 
 - **Commits:**
   - `afaf98f`: Task 1
-  - Task 2
-  - this close
+  - `d4ca0eb`: Task 2
+  - `6e01080`: the close
 - **The engine request** is [ds4-engine#260](https://github.com/pauleveritt/ds4-engine/issues/260).
 - **Tests:**
   - `just test` (218) and `just integration` (91) pass.
