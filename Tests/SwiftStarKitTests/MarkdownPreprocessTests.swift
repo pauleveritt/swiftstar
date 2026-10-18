@@ -69,3 +69,47 @@ struct MarkdownPreprocessTests {
         #expect(MarkdownPreprocess.deLaTeXed(md) == md)
     }
 }
+
+/// SU.16, D7: inline code spans that name a file become `swiftstar-file:` links.
+struct MarkdownFileLinkTests {
+    /// Links `Package.swift`, `docs/My Notes.md` and nothing else.
+    private static func linked(_ md: String) -> String {
+        MarkdownPreprocess.fileLinks(md) { ["Package.swift", "docs/My Notes.md"].contains($0) ? $0 : nil }
+    }
+
+    @Test func spanBecomesALink() {
+        #expect(Self.linked("See `Package.swift` and `other.swift`.")
+                == "See [`Package.swift`](swiftstar-file:Package.swift) and `other.swift`.")
+        #expect(Self.linked("``Package.swift``") == "[``Package.swift``](swiftstar-file:Package.swift)")
+        // CommonMark drops one space each side: `` ` Package.swift ` `` shows "Package.swift".
+        #expect(Self.linked("` Package.swift `") == "[` Package.swift `](swiftstar-file:Package.swift)")
+    }
+
+    @Test(arguments: [
+        "```\n`Package.swift`\n```",
+        "Intro\n\n    `Package.swift`",
+        "Package.swift in prose",
+        "- ```\n  `Package.swift`\n  ```",
+    ]) func codeBlockAndProseStayPlain(_ md: String) {
+        #expect(Self.linked(md) == md)
+    }
+
+    @Test func spanInsideALinkStays() {
+        let md = "[`Package.swift`](https://example.com)"
+        #expect(Self.linked(md) == md)
+    }
+
+    @Test func tableCellSpanLinks() {
+        #expect(Self.linked("| File |\n|---|\n| `Package.swift` |")
+                == "| File |\n|---|\n| [`Package.swift`](swiftstar-file:Package.swift) |")
+    }
+
+    @Test func spacedPathIsEncoded() {
+        #expect(Self.linked("`docs/My Notes.md`") == "[`docs/My Notes.md`](swiftstar-file:docs/My%20Notes.md)")
+    }
+
+    @Test func listAndQuoteSpansLink() {
+        #expect(Self.linked("- `Package.swift`\n> `Package.swift`")
+                == "- [`Package.swift`](swiftstar-file:Package.swift)\n> [`Package.swift`](swiftstar-file:Package.swift)")
+    }
+}

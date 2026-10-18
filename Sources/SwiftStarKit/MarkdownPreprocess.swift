@@ -15,15 +15,47 @@ public enum MarkdownPreprocess {
     /// quote and list markers are looked past, so `- ```sh` and `> ```` open
     /// fences too (SU.17, finding 7).
     public static func deLaTeXed(_ s: String) -> String {
+        walk(s, prose: prose, span: { _, span in span })
+    }
+
+    /// Inline code spans whose text `resolve` maps to a file become links to
+    /// it (SU.16, D7): `` `Package.swift` `` becomes
+    /// `` [`Package.swift`](swiftstar-file:Package.swift) ``. Code blocks,
+    /// prose and a span already inside a link stay as written. `resolve`
+    /// returns the relative path to link, or nil.
+    public static func fileLinks(_ s: String, resolve: (String) -> String?) -> String {
+        walk(s, prose: { $0 }, span: { context, span in
+            guard !context.inLink else { return span }
+            let ticks = span.prefix { $0 == "`" }.count
+            var text = String(span.dropFirst(ticks).dropLast(ticks))
+            // CommonMark strips one space each side when both are there.
+            if text.count >= 2, text.first == " ", text.last == " " { text = String(text.dropFirst().dropLast()) }
+            guard let path = resolve(text) else { return span }
+            return "[\(span)](\(FileLink.destination(path)))"
+        })
+    }
+
+    /// Where a code span sits: right after `[` and right before `](`, it's
+    /// already a link's text.
+    struct SpanContext {
+        let inLink: Bool
+    }
+
+    /// The block walk both passes share: `prose` rewrites text outside code
+    /// spans, `span` rewrites each whole span (backticks included). Code
+    /// blocks pass through untouched.
+    private static func walk(
+        _ s: String, prose: (String) -> String, span: (SpanContext, String) -> String
+    ) -> String {
         var out: [String] = []
-        var prose: [String] = []
+        var lines: [String] = []
         var fence: (char: Character, count: Int)?
         /// The previous line ended a block: blank, kept code, or the start.
         var afterBreak = true
         func flush() {
-            guard !prose.isEmpty else { return }
-            out.append(paragraphs(prose))
-            prose = []
+            guard !lines.isEmpty else { return }
+            out.append(paragraphs(lines, prose: prose, span: span))
+            lines = []
         }
         for line in s.components(separatedBy: "\n") {
             let body = blockBody(line)
@@ -48,7 +80,7 @@ public enum MarkdownPreprocess {
                 flush()
                 out.append(line)
             } else {
-                prose.append(line)
+                lines.append(line)
                 afterBreak = trimmed.isEmpty  // `>` alone is a blank line in a quote
             }
         }
@@ -91,12 +123,14 @@ public enum MarkdownPreprocess {
 
     /// Prose lines, one paragraph at a time: a code span never pairs across a
     /// blank line. Blank lines pass through.
-    private static func paragraphs(_ lines: [String]) -> String {
+    private static func paragraphs(
+        _ lines: [String], prose: (String) -> String, span: (SpanContext, String) -> String
+    ) -> String {
         var result: [String] = []
         var paragraph: [String] = []
         func end() {
             guard !paragraph.isEmpty else { return }
-            result.append(outsideInlineCode(paragraph.joined(separator: "\n")))
+            result.append(inlineCode(paragraph.joined(separator: "\n"), prose: prose, span: span))
             paragraph = []
         }
         for line in lines {
@@ -111,10 +145,12 @@ public enum MarkdownPreprocess {
         return result.joined(separator: "\n")
     }
 
-    /// Applies `prose(_:)` outside code spans. A span opens with a run of
-    /// backticks and closes at the next run of the same length; an opening
-    /// run with no closer is literal text (CommonMark).
-    private static func outsideInlineCode(_ s: String) -> String {
+    /// Applies `prose` outside code spans and `span` to each span. A span
+    /// opens with a run of backticks and closes at the next run of the same
+    /// length; an opening run with no closer is literal text (CommonMark).
+    private static func inlineCode(
+        _ s: String, prose: (String) -> String, span: (SpanContext, String) -> String
+    ) -> String {
         let chars = Array(s)
         var out = ""
         var pending = ""
@@ -143,7 +179,9 @@ public enum MarkdownPreprocess {
                 }
             }
             if let close {
-                out += prose(pending) + String(chars[i..<(close + n)])
+                let after = String(chars[(close + n)...].prefix(2))
+                let context = SpanContext(inLink: pending.hasSuffix("[") && after == "](")
+                out += prose(pending) + span(context, String(chars[i..<(close + n)]))
                 pending = ""
                 i = close + n
             } else {
