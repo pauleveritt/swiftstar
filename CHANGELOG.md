@@ -46,7 +46,11 @@ cycle; the cycle's plan in `docs/superpowers/plans/` has the detail.
   attachment, and code spans in answers that name a real file. While a
   session runs, a file the engine edited opens as its copy (SU.16)
 - Links in answers open: web links in the browser (SU.16)
-- A command the model ran as bash says so on its card, with its exit and time, red when it failed (SU.18)
+- Every link is the system link blue; answers' links were orange (SU.16)
+- A tool card that names a file outside the repository no longer opens it
+  in Quick Look (SU.16)
+- A command the model ran as bash says so on its card, with its exit and
+  time, red when it failed (SU.18)
 
 ### Status bar and inspector
 
@@ -85,3 +89,7 @@ cycle; the cycle's plan in `docs/superpowers/plans/` has the detail.
 - An engine that sends bad output is stopped, by force if it must be (SU.17)
 - A missing engine command is named in its note (SU.17)
 - The prefix-cache fill time follows your locale (SU.17)
+- Analyze needs a ds4-engine whose `report` speaks `ds4-session-report/2`;
+  an older one is named as the reason (AN.4)
+- `just last` and `/last` print ds4-engine's own report (AN.4)
+- A resume and Analyze's fork keep the session's shell setting (SU.18)
