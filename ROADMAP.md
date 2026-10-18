@@ -102,7 +102,24 @@ Deferred, each with the condition that reopens it.
   with `uv tool install`. *Reopens when someone other than the author needs
   to run the app without a terminal.*
 - **A shell toggle.** Tool policy is the engine's. *Reopens if ds4-engine
-  adds a spawn-time tool-policy flag worth a Settings control.*
+  adds a spawn-time tool-policy flag worth a Settings control.* It may have
+  one now: `--allow-bash` (next entry).
+- **Run with `--allow-bash`, and show when a call fell back to bash.**
+  - **The flag:** `tui --allow-bash` is ds4-engine's RUN.2 experiment. `run`
+    maps a simple `cat`, `ls` or `grep` onto that tool, and runs anything
+    else as `bash -c` in the sandbox (`tui_cli.py:623-630`,
+    `driver.rs:3312-3316` at `a84b79bd`). Its default is `config.toml`'s
+    `run_bash`, else off.
+  - **Wanted:**
+    - SwiftStar can spawn with it, from Settings or a toggle.
+    - A tool card shows which path a call took. A `run` the engine mapped
+      onto a tool looks like that tool. A `run` that fell back to bash says
+      so, with its command.
+  - **To check first:** whether the NDJSON tells a mapped call from a
+    direct one, and a bash run from a refused `run`. If it doesn't, that's
+    an engine request.
+  - *Reopens when the owner picks it up (filed 2026-10-18). A live check
+    needs the GPU, and the owner's go.*
 - **Watching prefix effectiveness.** Whether the prompt-prefix cache is
   earning its keep. Today the inspector shows only the latest `prefix_cache`
   event (`hit`/`miss`, tokens, load or fill time), and the AN report counts
