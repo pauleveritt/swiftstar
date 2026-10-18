@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** the owner's acceptance of [SU.18](#phase-su-swiftui)'s spec, `--allow-bash`. Also open: SU.7c (below), AN.3 after the AN.2 click-through. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
+- **Next:** SU.18's recording on the owner's GPU go, and #260's answer. Also open: SU.7c (below), AN.3 after the AN.2 click-through. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
 - **Blocked on the engine:** more than one window. (Showing the edited copy
   of a file is done: SU.16 reads the receipt's `worktree_path`.) *EN.2's check (2026-10-17): the
@@ -67,7 +67,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.15 | Colored code in tool cards | A tool card's result preview colored by its file's language, with the highlighter answers' code blocks already use; Markdown as colored raw text | done 2026-10-14: a card's result colored by its file's language, light and dark; Markdown as colored raw text. [Plan and Result](docs/superpowers/plans/2026-10-14-su15-colored-code.md) |
 | SU.16 | Files as links | Every file reference opens Quick Look and looks like a link: tool card headers, `@` attachments, code spans in answers that name a real file; the engine's edited copy while its session runs | done 2026-10-18: links in the link color everywhere; the fork's AppKit link clicks never reached a handler, fixed in SwiftStar. [Spec](docs/superpowers/specs/2026-10-18-su16-files-as-links-design.md), [plan and Result](docs/superpowers/plans/2026-10-18-su16-files-as-links.md) |
 | SU.17 | The review's fixes | An external review of `main` at `6f1eac0`: nine correctness findings, smaller defects, cuts and stale docs | done 2026-10-14: [plan and Result](docs/superpowers/plans/2026-10-14-su17-review-fixes.md) |
-| SU.18 | Run with `--allow-bash` | A Settings toggle spawns the engine with `--allow-bash`; a `run` that fell back to bash says so on its card, with its exit and time; the Session card says bash is on; what the wire lacks goes to the engine | spec written 2026-10-18, awaiting the owner. [Spec](docs/superpowers/specs/2026-10-18-su18-allow-bash-design.md) |
+| SU.18 | Run with `--allow-bash` | A Settings toggle spawns the engine with `--allow-bash`; a `run` that fell back to bash says so on its card, with its exit and time; the Session card says bash is on; what the wire lacks goes to the engine | built 2026-10-18: the toggle, bash cards with exit and time, the Shell row; [ds4-engine#260](https://github.com/pauleveritt/ds4-engine/issues/260) for the rest. A live recording waits for the owner's GPU go. [Spec](docs/superpowers/specs/2026-10-18-su18-allow-bash-design.md), [plan and Result](docs/superpowers/plans/2026-10-18-su18-allow-bash.md) |
 
 ### SU.6 punch list
 
@@ -207,6 +207,7 @@ there.
   - files changed
   - `closed` and `telemetry_ok`
   - the raw signals
+- **`--allow-bash` on the wire** ([ds4-engine#260](https://github.com/pauleveritt/ds4-engine/issues/260), SU.18): mark calls that came from `run`, carry a bash run's command and exit, report the tool policy at startup, keep `converted_from` in the report.
 - **`resumed.turns` carries no narration.** So a 27B turn rebuilt after a
   rewind or resume shows only its one-line summary, not the full reply
   (SU.6a). *Re-checked at `a84b79bd`: still open (`sessions.py:45-50`).*

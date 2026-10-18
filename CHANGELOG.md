@@ -46,6 +46,7 @@ cycle; the cycle's plan in `docs/superpowers/plans/` has the detail.
   attachment, and code spans in answers that name a real file. While a
   session runs, a file the engine edited opens as its copy (SU.16)
 - Links in answers open: web links in the browser (SU.16)
+- A command the model ran as bash says so on its card, with its exit and time, red when it failed (SU.18)
 
 ### Status bar and inspector
 
@@ -58,6 +59,7 @@ cycle; the cycle's plan in `docs/superpowers/plans/` has the detail.
 - A "Session averages" card in the inspector (SU.6g)
 - A "Start-up" card: commit, candidate, environment, instructions, index (EN.2)
 - The prefix-cache line says what changed on a miss (EN.2)
+- The Session card says when bash is on (SU.18)
 
 ### Toolbar, sidebar and menus
 
@@ -71,6 +73,10 @@ cycle; the cycle's plan in `docs/superpowers/plans/` has the detail.
   selects the right one (SU.17)
 - The model menu shows each model's size and planned memory; "Engine
   default" in the context menu names the model's context and plan (EN.2)
+
+### Settings
+
+- Let the model run shell commands (experimental), ds4-engine's `--allow-bash` (SU.18)
 
 ### Under the hood
 

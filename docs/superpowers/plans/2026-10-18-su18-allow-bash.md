@@ -52,3 +52,30 @@ The spec's D1–D3, plus:
    both tiers.
 
 ## Result
+
+D1–D4 done 2026-10-18, with no GPU. D5, the recording, waits for the
+owner's go.
+
+- **Commits:**
+  - `afaf98f`: Task 1
+  - Task 2
+  - this close
+- **The engine request** is [ds4-engine#260](https://github.com/pauleveritt/ds4-engine/issues/260).
+- **Tests:**
+  - `just test` (218) and `just integration` (91) pass.
+  - Every new behavior was broken, and its test failed: 8 in Task 1 and 3
+    in Task 2. Two mutants first failed to build, and were caught once
+    rewritten so they did.
+- **Previews:** these were rendered and looked at:
+  - ToolCardView's "bash runs": exit 0 gray; exit 1 and the limit red
+  - Settings, with its Shell section (the window is 480 high now)
+  - InspectorView's "Bash fallback on"
+- **Diverged:**
+  - **The seconds are the engine's text:** "exit 1 · 0.4 s", as sent, not
+    reformatted.
+  - **Analyze's fork takes the running session's policy,** not the
+    toggle's: a fork continues that session.
+- **Not checked live:** no bash run has gone through the app. The card
+  reads the engine's own header format (`run_tool.py:119-124`). D5's
+  recording is what pins it to a real stream.
+
