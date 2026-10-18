@@ -148,3 +148,40 @@ struct GitAndTestCardTests {
         #expect(Self.card("test", preview: "no bracket line").metadataLine == "succeeded · 2.3s")
     }
 }
+
+/// EN.2, Task 6: the same kinds in the recordings at `a84b79bd`
+/// (`fixtures/engine/provenance.md`).
+struct EngineStartupRecordingTests {
+    private static let locale = Locale(identifier: "en_US")
+
+    @Test func toolReadCarriesTheStartupReports() throws {
+        let events = try Fixtures.events("tool-read.ndjson")
+        let parts = events.compactMap { e -> EngineStartupPart? in
+            if case .startup(let part, _) = e { part } else { nil }
+        }
+        #expect(parts.contains(.envSync(outcome: "skipped", durationMs: parts.lazy.compactMap {
+            if case .envSync(_, let ms) = $0 { ms } else { nil }
+        }.first)))
+        #expect(parts.contains { if case .projectInstructions("CLAUDE.md", _, false) = $0 { true } else { false } })
+        var t = EngineTranscript()
+        events.forEach { t.apply($0) }
+        #expect(t.rows.contains(.system("Loaded CLAUDE.md, about 311 tokens.")))
+        #expect(t.rows.contains { if case .system(let s) = $0 { s.hasPrefix("The model works on a clean copy of commit 1866984") } else { false } })
+    }
+
+    @Test func prefixChangedNamesTheContext() throws {
+        let cache = try Fixtures.events("prefix-changed.ndjson").compactMap { e -> EnginePrefixCache? in
+            if case .prefixCache(let p) = e { p } else { nil }
+        }
+        #expect(cache.map(\.changed) == [["context"]])
+        #expect(MetricsFormatting.prefixCacheLine(cache[0], locale: Self.locale)
+                == "miss · 1,333 tokens filled in 6.0s · changed: context")
+    }
+
+    @Test func resumedAnsweredLoadsItsState() throws {
+        var t = EngineTranscript()
+        try Fixtures.events("resumed-answered.ndjson").forEach { t.apply($0) }
+        #expect(t.rows.contains(.system("Saved conversation state loaded · 0.3 GiB in 23 ms")))
+        #expect(t.rows.contains { if case .answer(let a, _) = $0 { a.text == "4 + 4 = 8." } else { false } })
+    }
+}

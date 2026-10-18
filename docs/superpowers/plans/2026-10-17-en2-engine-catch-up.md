@@ -98,15 +98,15 @@ The spec's D1–D10, with one addition:
 
 ## Result
 
-Tasks 1–5, 2026-10-17. Task 6 waits for the owner's GPU go, so the cycle
-isn't closed and the branch isn't merged.
+Done 2026-10-18. Tasks 1–5 ran on 2026-10-17 with no GPU, and Task 6 on
+2026-10-18 after the owner's go.
 
 - **Commits:**
   - `79e7273`: Task 1
   - `cc71390`: Task 2
   - `77f1812`: Task 3
   - `af72ea1`: Task 4
-  - the Task 5 commit
+  - `1866984`: Task 5
 - **Tests:**
   - `just test` (195) and `just integration` (86) pass.
   - Every new behavior was broken and its test failed. That's 11 in Task 1,
@@ -135,4 +135,40 @@ isn't closed and the branch isn't merged.
     tests failed. That's accurate, but a reader may take it for a pass.
   - D1 adds up to three rows before the first prompt.
   - SU.7c may not be blocked (spec §5).
+
+### Task 6: recordings
+
+- **Time:** about 2 minutes of GPU on the 27B, against my estimate of
+  10–15. Most of it was `tool-read` (22 s), `resumed-answered` (29 s, three
+  sessions) and nine `tool-rejected` attempts (about 20 s each).
+- **Re-recorded at `a84b79bd`:** `tool-read`, `stop`, `error`,
+  `relaunch-rewind` and `resumed`.
+- **New:** a `resumed-answered` scenario in `Tools/record-engine-fixture.py`.
+  It recorded:
+  - `prefix-changed.ndjson`: a real miss with `changed: ["context"]`
+  - `resumed-answered.ndjson`: `conversation_state` `loaded`, 0.3 GiB in
+    23 ms, then "4 + 4 = 8."
+  - the session directory `fixtures/sessions/20261018-112154-su-ui`, with
+    its `report-resumed.json`
+
+  This closes the AN follow-up's fixture. Done's return test over it is not
+  written.
+- **`tool-rejected` stays hand-written.** It always was (my earlier note
+  that it was recorded was wrong). At `a84b79bd` the 27B tripped no loop
+  guard on seeds 1–5 or 7–9. The event's shape is unchanged.
+- **What the real data changed:**
+  - **Sub-second times read in ms.** A 23 ms load read "0.0s", so
+    `shortDuration` now serves both the state line and the Start-up rows.
+  - **The report's Conversation state row** shows the engine's label alone.
+    The real `/2` label carries size and time ("conversation state loaded:
+    305 MiB in 0.02 s"). My synthetic test had a bare label, so it printed
+    them twice. That test is replaced by one over `report-resumed.json`.
+  - **"1 prompts"** in the Continues row is now "1 prompt".
+  - **Three pinned values moved:** the resumed answer ("2 + 2 is 4."), the
+    prefix's tokens (944 to 1,333, now that CLAUDE.md is in it) and the
+    session directory's name.
+- **Tests:** three `EngineStartupRecordingTests` over the recordings.
+  `just test` (198) and `just integration` (86) pass. The three new
+  behaviors were each broken, and their tests failed.
+- **Commits:** `1866984` (Task 5), then this close.
 

@@ -84,15 +84,12 @@ struct SessionReportTests {
             "| Prefix cache | prompt 1: prefix-cache miss: 944 tokens filled, 1.75 s spent; what changed was not recorded |"))
     }
 
-    @Test func conversationStateIsShown() throws {
-        let text = try Self.markdown {
-            $0["conversation_state"] = [[
-                "prompt": 1, "outcome": "loaded", "bytes": 365_000_000, "load_ms": 1200.0,
-                "label": "conversation state loaded",
-            ]]
-        }
-        #expect(Self.rows("Session", in: text).contains(
-            "| Conversation state | prompt 1: conversation state loaded, 0.3 GiB in 1.2s |"))
+    // EN.2's recording: `report-resumed.json`, a session resumed at `a84b79bd`.
+    @Test func conversationStateIsTheEngineLabel() throws {
+        let text = try Fixtures.sessionReport("report-resumed.json").markdown(locale: Self.locale)
+        let session = Self.rows("Session", in: text)
+        #expect(session.contains("| Conversation state | prompt 1: conversation state loaded: 305 MiB in 0.02 s |"))
+        #expect(session.contains("| Continues | 20261018-112142-su-ui (1 prompt) |"))
     }
 
     @Test func signalsAreRaw() throws {

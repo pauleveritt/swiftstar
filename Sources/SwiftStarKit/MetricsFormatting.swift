@@ -88,6 +88,12 @@ public enum MetricsFormatting {
         }
     }
 
+    /// Whole ms under a second ("23 ms", where tenths would read "0.0s"),
+    /// else `duration`'s style.
+    static func shortDuration(ms: Double, locale: Locale) -> String {
+        ms < 1000 ? "\(Int(ms.rounded())) ms" : duration(seconds: ms / 1000, locale: locale)
+    }
+
     /// The resumed conversation's state row (EN.2, D4). Without the subject
     /// for the Session card, whose label already says "Saved state".
     public static func conversationStateLine(
@@ -98,7 +104,7 @@ public enum MetricsFormatting {
             return lead + "not loaded: \(c.outcome)" + (c.error.map { " (\($0))" } ?? "")
         }
         let size = c.bytes.map { gib(bytes: $0, locale: locale) }
-        let time = c.loadMs.map { duration(seconds: $0 / 1000, locale: locale) }
+        let time = c.loadMs.map { shortDuration(ms: $0, locale: locale) }
         let detail = [size, time.map { "in \($0)" }].compactMap { $0 }.joined(separator: " ")
         return lead + "loaded" + (detail.isEmpty ? "" : " · \(detail)")
     }
@@ -106,7 +112,7 @@ public enum MetricsFormatting {
     /// The Session card's start-up rows (EN.2, D2), as label and value; a
     /// report the engine didn't send has no row.
     public static func startupRows(_ s: EngineStartupInfo, locale: Locale = .current) -> [(String, String)] {
-        let short = { (ms: Double) in ms < 1000 ? "\(Int(ms.rounded())) ms" : duration(seconds: ms / 1000, locale: locale) }
+        let short = { (ms: Double) in shortDuration(ms: ms, locale: locale) }
         var rows: [(String, String)] = []
         if let commit = s.commit {
             let excluded = s.excludedCount ?? 0

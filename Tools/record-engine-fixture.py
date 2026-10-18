@@ -17,6 +17,13 @@ Scenarios:
                    `resumed.ndjson` beside <out.ndjson>
   tool-rejected    asks for the same read three times, to trip the loop
                    guard; exits 3 if no call was rejected (try another seed)
+  resumed-answered three sessions in one scratch state (EN.2): a prompt at
+                   context 20000; a prompt at 16384, recorded to
+                   `prefix-changed.ndjson` beside <out.ndjson> (its prefix
+                   miss names `context`); then that session resumed with one
+                   more prompt, recorded to <out.ndjson> (its
+                   `conversation_state`). The resumed session's directory is
+                   printed for `fixtures/sessions/`.
 """
 
 import json
@@ -40,7 +47,51 @@ REWIND_PROMPTS = [
     "Answer in one short sentence, without tools: what is 2 + 2?",
     "Answer in one short sentence, without tools: what is 3 + 3?",
 ]
-SCENARIOS = ("tool-read", "stop", "error", "relaunch-rewind", "tool-rejected")
+SCENARIOS = ("tool-read", "stop", "error", "relaunch-rewind", "tool-rejected", "resumed-answered")
+
+
+def one_prompt(text, seen):
+    """An `on_line` that sends `text` at the first `input` and quits at the
+    next, noting the session's directory from a checkpoint's capture path."""
+    state = {"inputs": 0}
+
+    def on_line(line, send):
+        event = line.get("event") or {}
+        path = (event.get("snapshot") or {}).get("capture_path")
+        if event.get("kind") == "checkpoint" and path:
+            seen["directory"] = str(Path(path).parent)
+        if line.get("kind") == "input":
+            state["inputs"] += 1
+            send({"kind": "prompt", "text": text} if state["inputs"] == 1 else {"kind": "quit"})
+
+    return on_line
+
+
+def record_resumed_answered(exe, source, out, env, seed, model):
+    """The `resumed-answered` scenario (EN.2): returns its exit code."""
+    base = ["tui", "--ndjson", "--model-id", model, "--seed", seed, "--source", source, "--commit", "HEAD"]
+    scratch_out = str(Path(out).with_name("first-run.scratch.ndjson"))
+    changed_out = str(Path(out).with_name("prefix-changed.ndjson"))
+    first, second, third = {}, {}, {}
+    code = run(exe, [*base, "--context-size", "20000"], env, scratch_out, one_prompt(REWIND_PROMPTS[0], first))
+    keep(scratch_out, False)
+    if code:
+        return code
+    code = run(exe, [*base, "--context-size", "16384"], env, changed_out, one_prompt(REWIND_PROMPTS[1], second))
+    if code or "directory" not in second:
+        keep(changed_out, False)
+        return code or 3
+    resume = ["tui", "--ndjson", "--resume", Path(second["directory"]).name, "--source", source]
+    try:
+        code = run(exe, resume, env, out, one_prompt("Answer in one short sentence, without tools: what is 4 + 4?", third))
+    except BaseException:
+        keep(changed_out, False)
+        raise
+    ok = code == 0
+    keep(changed_out, ok)
+    keep(out, ok)
+    print(f"resumed-answered: exit {code}, resumed session {third.get('directory')}", file=sys.stderr)
+    return code
 
 
 def run(exe, argv, env, out, on_line):
@@ -96,6 +147,8 @@ def main() -> int:
     scratch = Path(tempfile.mkdtemp(prefix="engine-fixture-"))
     env = dict(os.environ, XDG_STATE_HOME=str(scratch / "state"),
                XDG_CONFIG_HOME=str(scratch / "config"))
+    if scenario == "resumed-answered":
+        return record_resumed_answered(exe, source, out, env, seed, model)
     argv = [
         "tui", "--ndjson", "--model-id", model, "--context-size", "20000",
         "--seed", seed, "--source", source, "--commit", "HEAD",

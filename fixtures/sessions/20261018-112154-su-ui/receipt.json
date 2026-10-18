@@ -1,0 +1,119 @@
+{
+  "source": "/Users/pauleveritt/projects/pauleveritt/swiftstar/.worktrees/su-ui",
+  "commit": "1866984e6e61b1f1cef2d5ea0b0c18d47156e0bb",
+  "worktree_path": "/var/folders/m4/jc_jynrj6z10mk0t80pkj8l80000gn/T/ds4-candidate-507l7b3n/candidate",
+  "capture_path": "/var/folders/m4/jc_jynrj6z10mk0t80pkj8l80000gn/T/engine-fixture-fqpk_cl_/state/ds4-engine/sessions/20261018-112154-su-ui/run-2682026648164563704-1792315317778.json",
+  "capture_status": "retained",
+  "diff_path": "/var/folders/m4/jc_jynrj6z10mk0t80pkj8l80000gn/T/engine-fixture-fqpk_cl_/state/ds4-engine/sessions/20261018-112154-su-ui/candidate.diff",
+  "baseline": {
+    "commit": "1866984e6e61b1f1cef2d5ea0b0c18d47156e0bb",
+    "resolved": "1866984e6e61b1f1cef2d5ea0b0c18d47156e0bb",
+    "source_head": "1866984e6e61b1f1cef2d5ea0b0c18d47156e0bb",
+    "at_source_head": true,
+    "excluded": [
+      {
+        "path": "Tools/record-engine-fixture.py",
+        "change": "modified",
+        "code": " M",
+        "staged": false
+      },
+      {
+        "path": "fixtures/engine/error.ndjson",
+        "change": "modified",
+        "code": " M",
+        "staged": false
+      },
+      {
+        "path": "fixtures/engine/relaunch-rewind.ndjson",
+        "change": "modified",
+        "code": " M",
+        "staged": false
+      },
+      {
+        "path": "fixtures/engine/resumed.ndjson",
+        "change": "modified",
+        "code": " M",
+        "staged": false
+      },
+      {
+        "path": "fixtures/engine/stop.ndjson",
+        "change": "modified",
+        "code": " M",
+        "staged": false
+      },
+      {
+        "path": "fixtures/engine/tool-read.ndjson",
+        "change": "modified",
+        "code": " M",
+        "staged": false
+      },
+      {
+        "path": "fixtures/engine/prefix-changed.ndjson.tmp",
+        "change": "untracked",
+        "code": "??",
+        "staged": false
+      },
+      {
+        "path": "fixtures/engine/resumed-answered.ndjson.tmp",
+        "change": "untracked",
+        "code": "??",
+        "staged": false
+      }
+    ],
+    "excluded_count": 8,
+    "earlier_changes": true,
+    "summary": "The model works on a copy of commit 1866984 with this session's earlier changes; 8 uncommitted files in your checkout were not copied: Tools/record-engine-fixture.py, fixtures/engine/error.ndjson, fixtures/engine/relaunch-rewind.ndjson and 5 more."
+  },
+  "project_instructions": {
+    "file": "CLAUDE.md",
+    "sha256": "50924de698db872b49b45ac53842b8603927f050be1b6178d520ab99c7462f5f",
+    "bytes": 931,
+    "lines": 22,
+    "tokens": 311,
+    "cut": false,
+    "given_bytes": 931,
+    "given_lines": 22,
+    "given_tokens": 311,
+    "cap_tokens": 2000,
+    "token_estimate": "1 token per 3 bytes",
+    "uncommitted": [],
+    "resumed": true,
+    "summary": "Loaded CLAUDE.md, about 311 tokens; not added again to the resumed conversation, only after /clear or a compaction."
+  },
+  "env_sync": {
+    "command": null,
+    "outcome": "skipped",
+    "reason": "no uv.lock",
+    "duration_ms": 0.13962492812424898,
+    "summary": null
+  },
+  "before": {
+    "head": "1866984e6e61b1f1cef2d5ea0b0c18d47156e0bb",
+    "status": [
+      " M Tools/record-engine-fixture.py",
+      " M fixtures/engine/error.ndjson",
+      " M fixtures/engine/relaunch-rewind.ndjson",
+      " M fixtures/engine/resumed.ndjson",
+      " M fixtures/engine/stop.ndjson",
+      " M fixtures/engine/tool-read.ndjson",
+      "?? fixtures/engine/prefix-changed.ndjson.tmp",
+      "?? fixtures/engine/resumed-answered.ndjson.tmp"
+    ]
+  },
+  "after": {
+    "head": "1866984e6e61b1f1cef2d5ea0b0c18d47156e0bb",
+    "status": [
+      " M Tools/record-engine-fixture.py",
+      " M fixtures/engine/error.ndjson",
+      " M fixtures/engine/relaunch-rewind.ndjson",
+      " M fixtures/engine/resumed.ndjson",
+      " M fixtures/engine/stop.ndjson",
+      " M fixtures/engine/tool-read.ndjson",
+      "?? fixtures/engine/prefix-changed.ndjson.tmp",
+      "?? fixtures/engine/resumed-answered.ndjson.tmp"
+    ]
+  },
+  "untouched": true,
+  "sha256_diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "sha256_capture": "5551b782ff1eeb373bafaaeba8be0bfc7e9a952849392c6f4afd42c2a2fd37f2"
+}

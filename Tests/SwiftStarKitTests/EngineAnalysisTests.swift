@@ -51,7 +51,7 @@ struct EngineAnalysisTests {
         var m = EngineSessionModel()
         m.didStart()
         for e in try Fixtures.events("tool-read.ndjson") { m.apply(e) }
-        #expect(m.sessionDirectory?.lastPathComponent == "20261013-112927-swiftstar")
+        #expect(m.sessionDirectory?.lastPathComponent == "20261018-112004-su-ui")
     }
 
     @Test func relaunchClearsDirectory() {

@@ -146,7 +146,7 @@ struct EngineWireParserTests {
         let r = try #require(resumed.first)
         #expect(r.turns.count == 1)
         #expect(r.rewoundTo == 1)
-        #expect(r.turns.first?.answer == "2 + 2 equals 4.")
+        #expect(r.turns.first?.answer == "2 + 2 is 4.")
     }
 
     @Test func relaunchModelIdFromArgv() {
@@ -190,7 +190,8 @@ struct EngineWireParserTests {
             if case .prefixCache(let p) = e { return p } else { return nil }
         }
         #expect(cache.map(\.outcome) == ["miss"])
-        #expect(cache.first?.tokens == 944)
+        // 1,333 at `a84b79bd`, from 944: the prefix now holds CLAUDE.md (TUI.48).
+        #expect(cache.first?.tokens == 1333)
         guard case .closed = events.last(where: { $0 != .ignored }) else {
             Issue.record("last non-ignored event is not closed"); return
         }

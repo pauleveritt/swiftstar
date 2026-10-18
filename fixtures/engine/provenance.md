@@ -4,14 +4,19 @@ Raw stdout of `ds4-dogfood tui --ndjson`, one JSON object per line, exactly
 as `EngineWireParser` reads it. Recorded by `Tools/record-engine-fixture.py`
 (`just capture <scenario>`).
 
-- **Recorded:** 2026-10-13 (EN.1)
-- **ds4-engine:** `5451cd7d` (its own `.venv/bin/ds4-dogfood`, an editable
-  build)
+- **Recorded:** 2026-10-18 (EN.2), replacing EN.1's of 2026-10-13
+- **ds4-engine:** `a84b79bd`, the installed `ds4-dogfood` (a `uv tool`
+  install from the ds4-engine checkout at `main`)
 - **Model:** `qwen3.8-27b`, context 20,000, `--seed 7`; state and config in
   a throwaway `XDG_STATE_HOME`/`XDG_CONFIG_HOME`
 - **Machine:** Apple M5 Max, 128 GiB, macOS 26 (Darwin 27.0, the kernel
   version — not the marketing name)
-- **Source:** this repository at `main` (`88bf1b2`)
+- **Source:** this repository's `su-ui` worktree at `1866984` (branch
+  `en2-catch-up`). The recorder's EN.2 edits were uncommitted, so the
+  `baseline` summaries name them as files left out. Sessions are named after
+  the worktree (`…-su-ui`).
+- **Time:** about 2 minutes of GPU for all six scenarios. Each loads the 27B
+  (`tool-read` took 22 s, `resumed-answered` 29 s for three sessions).
 
 | File | Scenario | What it must contain |
 | --- | --- | --- |
@@ -20,6 +25,14 @@ as `EngineWireParser` reads it. Recorded by `Tools/record-engine-fixture.py`
 | `error.ndjson` | `{"kind":"bogus"}` at the first `input` | one `{"kind":"error"}` line, then a clean quit |
 | `relaunch-rewind.ndjson` | two prompts, then `/rewind 1` | `rewind_refused` with a `relaunch` argv that starts `tui` and ends `--ndjson` |
 | `resumed.ndjson` | that `relaunch` argv, run as is | `session` with `rewound_to` 1, then `resumed` with one turn |
+| `prefix-changed.ndjson` | `resumed-answered`'s second session: a fresh one at context 16,384 after one at 20,000, in the same scratch state | a `prefix_cache` miss with `changed` `["context"]` |
+| `resumed-answered.ndjson` | that second session resumed, with one more prompt | `resumed` with one turn, `conversation_state` `loaded`, then an `answer` |
+
+Every recording at `a84b79bd` also carries the start-up reports: `baseline`,
+`candidate_ready`, `env_sync` (`skipped`, since this repository has no
+`uv.lock`), `project_instructions` (`CLAUDE.md`, about 311 tokens) and
+`index_primed`. The prefix grew from 944 to 1,333 tokens, because it now
+holds CLAUDE.md.
 
 `fake-ds4-dogfood` (the integration-tier stand-in) replays these files.
 
@@ -35,8 +48,8 @@ demand):
 | --- | --- |
 | `bad-handshake.ndjson` | a first line that isn't `ready` (`{"kind":"input"}`) |
 | `garbage-after-ready.ndjson` | `ready`, then a line that isn't JSON, then `input` |
-| `tool-rejected.ndjson` | `ready`, then one `tool_rejected` event copied from ds4-engine `docs/tui.md:1748`. The 27B wouldn't call a missing tool (seeds 1–6), nor trip the loop guard with three identical reads (seeds 1–6), on 2026-10-13 |
-| `models.json` | the richer catalog shape; see below |
+| `tool-rejected.ndjson` | `ready`, then one `tool_rejected` event copied from ds4-engine `docs/tui.md:1748`. The 27B wouldn't call a missing tool (seeds 1–6), nor trip the loop guard with three identical reads (seeds 1–6), on 2026-10-13. Nor would it at `a84b79bd`, seeds 1–5 and 7–9 (2026-10-18). The event's shape is unchanged |
+| `models.json` | five models in the engine's keys; see below |
 
 **Re-record rule:** re-record the recorded files whenever a ds4-engine change
 reaches the wire. That covers a `--ndjson` `protocol` or telemetry
@@ -55,15 +68,12 @@ from commit `4c432171` ("TUI.33"), a `feat/models-json` branch state that
 never reached `main` in that shape: the version that actually shipped (TUI.35,
 `e5823e81`) sends no `schema_version`, `default_model_id`, `saved_model_id`,
 `family`, `measured_contexts` or `runs_in_tui`, and names the per-model
-context field `context` rather than `default_context`. `EngineModelList`'s
-decoder treats a missing `schema_version` as 1 and reads `default_context`
-falling back to `context`; the other fields are already optional with
-graceful fallbacks (`ModelMenu`/`ContextMenu` degrade to an unlabeled "Engine
-default" without them). `models.json` is hand-written in the richer,
-forward-looking shape (per-model flag `runs_in_tui`, `family`,
-`measured_contexts`) to cover cases the real capture lacks and to exercise
-that shape if ds4-engine adds it later: a model that doesn't fit, one not
-usable in the TUI, unknown keys. Re-capture `models-real.json` if ds4-engine
+context field `context` rather than `default_context`. Since EN.2 (2026-10-17), `EngineModelList`
+decodes only the keys the engine sends (`tui_cli.py:196-222` at
+`a84b79bd`), and a missing `schema_version` means 1. `models.json` is
+hand-written in those same keys. It covers what the real capture lacks: a
+model that doesn't fit, one not on this Mac, one with no size or plan, and
+an unknown key. Re-capture `models-real.json` if ds4-engine
 starts sending `schema_version` again, or bumps it, or changes its model
 lineup.
 
@@ -108,13 +118,20 @@ it was given. The fake engine's `report` mode prints it
 
 Re-capture it if the report's schema or labels change.
 
-## EN.2's interim payloads (until Task 6's recordings)
+## `report-resumed.json` (EN.2)
 
-`Tests/SwiftStarKitTests/EngineStartupEventsTests.swift` and
-`PreviewFixtures.runningModel` use `baseline`, `candidate_ready`, `env_sync`,
-`project_instructions`, `index_primed`, `conversation_state`, `analysis` and
-the new `prefix_cache` fields, all taken from ds4-engine `a84b79bd`'s own
-tests and code. Each line cites its source. The `env_sync` and
-`project_instructions` summaries are illustrative wording, not the engine's.
-EN.2's Task 6 re-records every scenario at `a84b79bd` on the 27B, and then
-replaces them.
+Raw stdout of `ds4-dogfood report fixtures/sessions/20261018-112154-su-ui
+--json` at `a84b79bd`. That session is `resumed-answered`'s third: a
+resumed conversation whose state loaded. It names its earlier session in
+`earlier[]`, whose directory was a scratch one and is gone. The session's
+small files are under `fixtures/sessions/` (see its provenance).
+
+## The engine's own test lines
+
+`Tests/SwiftStarKitTests/EngineStartupEventsTests.swift`'s first suite and
+`PreviewFixtures.runningModel` use lines taken from ds4-engine `a84b79bd`'s
+tests and code, each with its source. They cover what the recordings
+can't: a `failed` or `absent` state, a hit with `entry_fill_ms`, and an
+`analysis`. The `env_sync` and `project_instructions` summaries in them are
+illustrative wording, not the engine's. The recordings are pinned by
+`EngineStartupRecordingTests`.

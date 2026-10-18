@@ -24,3 +24,18 @@ so a new fixture is added beside these rather than replacing one.
   and `rewind/`. The report doesn't read them.
 - The receipt's absolute paths are as the engine wrote them. The engine's
   report finds the capture by its file name.
+
+## `20261018-112154-su-ui` (EN.2)
+
+- **Recorded:** 2026-10-18, by `just capture resumed-answered`, in a
+  scratch state at ds4-engine `a84b79bd`. It's the resume of
+  `20261018-112142-su-ui`, whose prefix-cache miss is
+  `fixtures/engine/prefix-changed.ndjson`.
+- **Model:** `qwen3.8-27b`, context 16,384, `--seed 7`.
+- **What happened:** the resumed conversation's saved state loaded
+  (`conversation_state`, 319,346,360 bytes in 23 ms), then one prompt was
+  answered: "4 + 4 = 8."
+- **Kept:** `operator-events.jsonl`, `receipt.json`, the capture
+  `run-2682026648164563704-1792315317778.json` and the empty `candidate.diff`.
+- **Left out:** `conversation.json`, `conversation.kv` (325 MB),
+  `native.log` and `rewind/`.

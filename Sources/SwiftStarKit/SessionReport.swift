@@ -389,7 +389,9 @@ public struct SessionReport: Decodable, Equatable, Sendable {
         }
         if let earlier = session.earlier, !earlier.isEmpty {
             rows.append(("Continues", earlier.map { e in
-                let prompts = e.prompts.map { p in e.kept.map { "\($0) of \(p) prompts kept" } ?? "\(p) prompts" }
+                let prompts = e.prompts.map { p in
+                    e.kept.map { "\($0) of \(p) prompts kept" } ?? "\(p) prompt\(p == 1 ? "" : "s")"
+                }
                 return e.id + (prompts.map { " (\($0))" } ?? "")
             }.joined(separator: ", ")))
         }
@@ -403,11 +405,11 @@ public struct SessionReport: Decodable, Equatable, Sendable {
         for p in prefixCache ?? [] {
             rows.append(("Prefix cache", (p.prompt.map { "prompt \($0): " } ?? "") + (p.label ?? "—")))
         }
+        // The engine's label carries the size and load time already
+        // ("conversation state loaded: 305 MiB in 0.02 s").
         for c in conversationState ?? [] {
-            let size = c.bytes.map { f.gib(bytes: $0) }
-            let load = c.loadMs.map { " in \(f.duration($0))" } ?? ""
             rows.append(("Conversation state", (c.prompt.map { "prompt \($0): " } ?? "") + (c.label ?? "—")
-                + (size.map { ", \($0)\(load)" } ?? load) + (c.error.map { "; \($0)" } ?? "")))
+                + (c.error.map { "; \($0)" } ?? "")))
         }
         if let g = gpu {
             rows.append(("GPU", "peak \(g.peakGib.map(f.gib) ?? "—") of \(g.budgetGib.map(f.gib) ?? "—")"
@@ -481,7 +483,6 @@ public struct SessionReport: Decodable, Equatable, Sendable {
 
         func number(_ n: Int) -> String { MetricsFormatting.number(n, locale: locale) }
         func gib(_ v: Double) -> String { MetricsFormatting.gib(v, locale: locale) }
-        func gib(bytes: Int64) -> String { MetricsFormatting.gib(bytes: bytes, locale: locale) }
         func duration(_ ms: Double) -> String { MetricsFormatting.duration(seconds: ms / 1000, locale: locale) }
 
         /// A sync's time: whole ms under ten seconds, where most fall.
