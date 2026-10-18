@@ -66,3 +66,55 @@ The spec's D1–D9.
 5. **Docs.** ROADMAP, CHANGELOG and both tiers.
 
 ## Result
+
+Done 2026-10-18, with no GPU.
+
+- **Commits:**
+  - `8c708c4`: Task 1
+  - `ddc97f5`: Task 2
+  - `39d5520`: Task 3
+  - `65d9e05`: Task 4
+  - this close
+- **Tests:**
+  - `just test` (210) and `just integration` (90) pass.
+  - Every new Kit, Engine and controller behavior was broken, and its test
+    failed. Two cases got their tests fixed along the way:
+    - The `..` guard's test first missed: its fake disk didn't resolve
+      `..` the way a real one does.
+    - The one-space rule had no test, so it got one.
+- **The spec's risk was real, and it was two bugs.** A click on an answer's
+  link did nothing in the gallery. The debugger found why:
+  - **The fork's AppKit `MarkdownTextView` never makes itself its label's
+    delegate** (its UIKit init does, `MarkdownTextView.swift:44`). So
+    Litext found the link under the click and told no one, and no link in
+    an answer had ever worked on macOS. `MarkdownNSText` now sets
+    `view.textView.delegate = view`.
+  - **The label makes itself first responder on the click,** and Quick
+    Look finds its controller through the responder chain, where the label
+    isn't. The open now waits until the window lets go of it. Without that,
+    the panel never showed (checked twice).
+
+  With both, a click on `SessionView.swift` in the gallery's answer opens
+  Quick Look in about 2 s. The header's link opened it too. Attachments use
+  the same button as the header. These clicks were posted as mouse events,
+  and the panel was found by its window.
+- **Not covered by a test:** both Markdown fixes are AppKit wiring, checked
+  only in the gallery. A future fork bump should repeat that click.
+- **Diverged:**
+  - **Links are the system link blue everywhere.** The fork's default link
+    color is orange, so the theme's `highlight` (used only by links) is now
+    `.linkColor`.
+  - **`EngineToolCard.fileURL(source:)` and its tests went,** since nothing
+    called them. One behavior changed: an absolute path outside the
+    repository (`/etc/hosts`) no longer opens (D1). The trailing-slash case
+    moved to `FileLinkTests`.
+  - **The gallery's answer** names `SessionView.swift`, not `SessionView`,
+    so it has a file to link.
+  - **`fileLinks` controller tests** check that the engine's copy no longer
+    opens after the session ends. They don't check that the checkout's copy
+    does, since this test's checkout may lack the file.
+- **Previews:** these were rendered and looked at:
+  - ToolCardView's "Link header"
+  - TranscriptRowView's "Mentions" and "Answer with file links": a plain
+    `missing.swift`, a linked `:42` path and a linked table cell
+

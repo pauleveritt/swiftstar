@@ -42,6 +42,10 @@ cycle; the cycle's plan in `docs/superpowers/plans/` has the detail.
 - A resumed conversation says whether its saved state loaded (EN.2)
 - `git` and `test` tool cards: diffs colored, pytest's result line shown (EN.2)
 - A typed `/analyze` shows the engine's report (EN.2)
+- File names are links that open Quick Look: tool card headers, each `@`
+  attachment, and code spans in answers that name a real file. While a
+  session runs, a file the engine edited opens as its copy (SU.16)
+- Links in answers open: web links in the browser (SU.16)
 
 ### Status bar and inspector
 
