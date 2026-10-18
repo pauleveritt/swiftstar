@@ -118,6 +118,12 @@ struct EngineAnalysisTests {
         #expect(again == nil)
     }
 
+    // SU.18, D1: the fork keeps the session's `--allow-bash`.
+    @Test func forkCarriesAllowBash() {
+        var m = idle()
+        #expect(m.beginAnalysis(report: "R", source: Self.source, allowBash: true)?.argv.last == "--allow-bash")
+    }
+
     @Test func forkResumedStartsAnalyzing() {
         let m = forked()
         #expect(m.transcript.rows.first == .divider("Analysis — a copy of this session"))

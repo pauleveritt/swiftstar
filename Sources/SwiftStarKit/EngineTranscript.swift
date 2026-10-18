@@ -20,8 +20,10 @@ public struct EngineToolCard: Equatable, Sendable {
     }
 
     /// `op path`, or just `op` when the tool has no path; "a call" for a
-    /// declined call the engine stopped before its name.
+    /// declined call the engine stopped before its name; "bash" for a `run`
+    /// that fell back to bash (SU.18).
     public var headerText: String {
+        if isBashRun { return "bash" }
         let op = tool.op.isEmpty && rejection != nil ? "a call" : tool.op
         if let path = tool.path, !path.isEmpty {
             return "\(op) \(path)"
@@ -29,10 +31,41 @@ public struct EngineToolCard: Equatable, Sendable {
         return op
     }
 
+    /// A `run` with no path: under `--allow-bash`, the call the engine ran as
+    /// `bash -c` in its sandbox (SU.18, D2, D6). Its command isn't on the
+    /// wire (ds4-engine#260).
+    public var isBashRun: Bool {
+        rejection == nil && tool.op == "run" && (tool.path ?? "").isEmpty
+    }
+
+    /// A bash run's exit and time, from its result's first line
+    /// (`run_tool.py:119-124`); nil until the result arrives.
+    public var bashRun: BashRun? {
+        guard isBashRun, let first = result?.preview.split(separator: "\n").first.map(String.init) else { return nil }
+        return BashRun(header: first)
+    }
+
+    /// The facts line is red: the call failed, or a bash run exited non-zero
+    /// or hit its limit, which the engine still reports as ok.
+    public var failed: Bool {
+        if ok == false { return true }
+        guard let run = bashRun else { return false }
+        return run.timedOut || (run.exit ?? 0) != 0
+    }
+
     /// State and duration: `running`, or `succeeded`/`failed` with the time;
-    /// `declined` with the reason for a call the engine refused.
+    /// `declined` with the reason for a call the engine refused. A bash run
+    /// says so, with its exit and time as the engine wrote them.
     public var metadataLine: String {
         if let rejection { return "declined · \(rejection.label)" }
+        if isBashRun {
+            let ran = "ran as bash in the sandbox"
+            guard ok != nil else { return "\(ran) · running" }
+            guard let run = bashRun else { return ok == false ? "\(ran) · failed" : ran }
+            if run.timedOut { return "\(ran) · stopped at the 120 s limit" }
+            return [ran, run.exit.map { "exit \($0)" }, run.seconds.map { "\($0) s" }]
+                .compactMap { $0 }.joined(separator: " · ")
+        }
         var parts: [String] = []
         switch ok {
         case nil: parts.append("running")
@@ -64,6 +97,7 @@ public struct EngineToolCard: Equatable, Sendable {
     /// SF Symbol name for the tool's op.
     public var icon: String {
         if rejection != nil { return "xmark.circle" }
+        if isBashRun { return "terminal" }
         switch tool.op {
         case "bash", "bash_status", "bash_stop": return "terminal"
         case "write": return "doc.badge.plus"
@@ -74,6 +108,32 @@ public struct EngineToolCard: Equatable, Sendable {
         case "git": return "arrow.triangle.branch"
         case "test": return "checkmark.seal"
         default: return "wrench.and.screwdriver"
+        }
+    }
+}
+
+/// A bash run's header line, read as written: `[exit 1 in 2.3 s]`, or
+/// `[stopped after 120 s, the time limit]` (ds4-engine `run_tool.py:119-124`).
+public struct BashRun: Equatable, Sendable {
+    public let exit: Int?
+    /// The engine's seconds, as text ("2.3"): shown as sent.
+    public let seconds: String?
+    public let timedOut: Bool
+
+    public init(exit: Int?, seconds: String?, timedOut: Bool) {
+        self.exit = exit
+        self.seconds = seconds
+        self.timedOut = timedOut
+    }
+
+    /// Nil for a line in neither form.
+    init?(header: String) {
+        if header.hasPrefix("[stopped after "), header.hasSuffix("the time limit]") {
+            self.init(exit: nil, seconds: nil, timedOut: true)
+        } else if let m = header.firstMatch(of: /^\[exit (-?\d+) in ([\d.]+) s\]$/) {
+            self.init(exit: Int(m.1), seconds: String(m.2), timedOut: false)
+        } else {
+            return nil
         }
     }
 }

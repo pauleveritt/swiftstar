@@ -130,6 +130,22 @@ struct EngineCommandTests {
                 == ["tui", "--ndjson", "--resume", "20261013-1-x", "--source", "/r"])
     }
 
+    // SU.18, D1: the engine's `--allow-bash`, on a start and on a resume.
+    @Test func allowBashIsAppended() {
+        let r = URL(fileURLWithPath: "/r")
+        #expect(EngineCommand.arguments(source: r, allowBash: true).last == "--allow-bash")
+        #expect(!EngineCommand.arguments(source: r).contains("--allow-bash"))
+        #expect(EngineCommand.resumeArguments(id: "x", source: r, allowBash: true)
+                == ["tui", "--ndjson", "--resume", "x", "--source", "/r", "--allow-bash"])
+        #expect(!EngineCommand.resumeArguments(id: "x", source: r).contains("--allow-bash"))
+    }
+
+    // SU.18, D3: what a spawn's argv says, the engine's `relaunch` included.
+    @Test func allowsBashReadsTheArgv() {
+        #expect(EngineCommand.allowsBash(["tui", "--resume", "/s", "--allow-bash", "--ndjson"]))
+        #expect(!EngineCommand.allowsBash(["tui", "--ndjson"]))
+    }
+
     // AN.4: ds4-engine's report for one session, as JSON.
     @Test func reportArgumentsAreExact() {
         #expect(EngineCommand.reportArguments(sessionDirectory: URL(fileURLWithPath: "/s/x"))

@@ -140,13 +140,13 @@ public struct EngineSessionModel: Equatable, Sendable {
 
     /// Starts an analysis of this session: returns the relaunch that resumes
     /// it as a fork, or nil when Analyze isn't offered.
-    public mutating func beginAnalysis(report: String, source: URL) -> EngineRelaunch? {
+    public mutating func beginAnalysis(report: String, source: URL, allowBash: Bool = false) -> EngineRelaunch? {
         guard canAnalyze, let main = sessionDirectory else { return nil }
         analysis = EngineAnalysis(stage: .forking(main: main, report: report))
         transcript.appendSystem(EngineAnalysis.forkingNotice)
         return EngineRelaunch(
             kind: .resume,
-            argv: EngineCommand.resumeArguments(id: main.lastPathComponent, source: source),
+            argv: EngineCommand.resumeArguments(id: main.lastPathComponent, source: source, allowBash: allowBash),
             reason: "analysis")
     }
 
