@@ -295,17 +295,19 @@ struct EngineControllerTests {
             f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
         #expect(spawned)
         let root = FileManager.default.temporaryDirectory
-        #expect(f.spawnArgv.last == EngineCommand.resumeArguments(id: c.id, source: root))
+        #expect(f.spawnArgv.last == EngineCommand.resumeArguments(
+            id: c.id, source: root, allowBash: DefaultsKey.allowBashDefault))
         #expect(controller.transcript.rows.first == .divider("Resumed session \(c.id)"))
         await controller.quit()
     }
 
     // SU.18, D1, D3: the Settings toggle reaches the start and a sidebar
-    // resume, and the controller knows the session has bash.
+    // resume, and the controller knows the session has bash. Never set, it's
+    // on (the owner's call, 2026-10-18).
     @Test func allowBashSettingReachesTheSpawn() async throws {
         let f = try FakeEngine(sessions: "sessions.json")
         defer { f.remove() }
-        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .allowBash: true])
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .allowBash: nil])
         defer { defaults.restore() }
         let controller = await running(f)
         #expect(f.spawnArgv.first?.last == "--allow-bash")
@@ -316,6 +318,17 @@ struct EngineControllerTests {
         #expect(spawned)
         #expect(f.spawnArgv.last?.last == "--allow-bash")
         #expect(controller.bashFallbackOn)
+        await controller.quit()
+    }
+
+    @Test func allowBashOffKeepsTheFlagOut() async throws {
+        let f = try FakeEngine()
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .allowBash: false])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        #expect(f.spawnArgv.first?.contains("--allow-bash") == false)
+        #expect(!controller.bashFallbackOn)
         await controller.quit()
     }
 
@@ -641,7 +654,8 @@ struct EngineControllerTests {
         try? await Task.sleep(for: .milliseconds(300))
         #expect(f.spawnArgv.count == 2)
         let root = try #require(ProjectRoot.locate(anchor: bURL))
-        #expect(f.spawnArgv.last == EngineCommand.resumeArguments(id: c.id, source: root))
+        #expect(f.spawnArgv.last == EngineCommand.resumeArguments(
+            id: c.id, source: root, allowBash: DefaultsKey.allowBashDefault))
         #expect(controller.workspace?.path == b)
         await controller.quit()
     }

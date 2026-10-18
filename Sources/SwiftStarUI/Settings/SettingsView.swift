@@ -4,7 +4,7 @@ import SwiftStarKit
 public struct SettingsView: View {
     @AppStorage(DefaultsKey.executable.rawValue) private var engineExecutable = ""
     @AppStorage(DefaultsKey.fontSize.rawValue) private var fontSize = TranscriptFontScale.defaultSize
-    @AppStorage(DefaultsKey.allowBash.rawValue) private var allowBash = false
+    @AppStorage(DefaultsKey.allowBash.rawValue) private var allowBash = DefaultsKey.allowBashDefault
 
     public init() {}
 

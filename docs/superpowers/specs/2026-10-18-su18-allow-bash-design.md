@@ -1,6 +1,7 @@
 # SwiftStar SU.18 design: run with `--allow-bash`, and show the fallback
 
-Date: 2026-10-18. Status: **written, awaiting the owner's acceptance.**
+Date: 2026-10-18. Status: **accepted by the owner, 2026-10-18; revised
+below (on by default).**
 
 ## Goal
 
@@ -118,3 +119,12 @@ They go to the engine as a request (D4).
   `config.toml`, the toggle can't turn it off, so the help says that too.
 - **A mapped call can't be shown until D4.** Until then, a `cat` the model
   ran looks like a `read` it made.
+
+## Revision, 2026-10-18: on by default
+
+The owner's call, after the build: D1's toggle is **on** unless turned off.
+`DefaultsKey.allowBashDefault` is `true`, so a setting that was never saved
+means on. The toggle still turns it off. The Risks still hold: the engine
+calls RUN.2 an experiment, and its sandbox doesn't deny reads outside the
+worktree.
+

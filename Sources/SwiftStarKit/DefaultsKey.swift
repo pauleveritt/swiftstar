@@ -13,6 +13,10 @@ public enum DefaultsKey: String, Sendable {
     case lastSessionDirectory = "lastSessionDirectory"
     /// The conversation sidebar is shown (SU.7a).
     case sidebarVisible = "sidebarVisible"
-    /// Start the engine with `--allow-bash` (SU.18): off unless set.
+    /// Start the engine with `--allow-bash` (SU.18): on unless turned off,
+    /// `allowBashDefault`.
     case allowBash = "engineAllowBash"
+
+    /// `allowBash` when it was never set: on, the owner's call (2026-10-18).
+    public static let allowBashDefault = true
 }

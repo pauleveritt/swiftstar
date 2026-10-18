@@ -76,7 +76,7 @@ cycle; the cycle's plan in `docs/superpowers/plans/` has the detail.
 
 ### Settings
 
-- Let the model run shell commands (experimental), ds4-engine's `--allow-bash` (SU.18)
+- Let the model run shell commands (experimental), ds4-engine's `--allow-bash`: on by default (SU.18)
 
 ### Under the hood
 

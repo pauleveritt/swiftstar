@@ -79,3 +79,13 @@ owner's go.
   reads the engine's own header format (`run_tool.py:119-124`). D5's
   recording is what pins it to a real stream.
 
+### Revision, 2026-10-18: on by default
+
+At the owner's request, an unsaved setting now means on
+(`DefaultsKey.allowBashDefault`).
+- **Tests:**
+  - `allowBashSettingReachesTheSpawn` now runs with the key removed.
+  - `allowBashOffKeepsTheFlagOut` is new.
+  - Both were broken once each and failed.
+  - Two exact-argv resume tests expect the default.
+

@@ -173,9 +173,10 @@ public final class EngineController {
     }
 
     /// The Settings toggle (SU.18, D1): start the engine with `--allow-bash`.
-    /// Read at each spawn, as the model choice is.
+    /// Read at each spawn, as the model choice is. On unless turned off
+    /// (the owner's call, 2026-10-18).
     var allowBash: Bool {
-        UserDefaults.standard.bool(forKey: DefaultsKey.allowBash.rawValue)
+        UserDefaults.standard.object(forKey: DefaultsKey.allowBash.rawValue) as? Bool ?? DefaultsKey.allowBashDefault
     }
 
     /// The running session was spawned with `--allow-bash` (SU.18, D3), its
