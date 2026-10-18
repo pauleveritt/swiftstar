@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** SU.16, files as links (not brainstormed); the owner's call on SU.7c (below). The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
+- **Next:** the owner's acceptance of [SU.16](#phase-su-swiftui)'s spec, files as links; the owner's call on SU.7c (below). The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
 - **Blocked on the engine:** showing the edited copy of a file (the candidate
   worktree), and more than one window. *EN.2's check (2026-10-17): the
@@ -65,7 +65,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.13 | Two leftovers | The memory widget's crash check, in a gallery Debug run (SU.3's leftover); the report card's wide tables at narrow widths (from AN.2) | done 2026-10-14: no crash in 41 flips; wide tables scroll with a scroller, via `pauleveritt/MarkdownView`. [Plan and Result](docs/superpowers/plans/2026-10-14-su13-two-leftovers.md) |
 | SU.14 | The `@` file picker | Typing `@` in the composer offers the workspace's files; choosing one inserts `@path`, which the engine expands; the `mentions` event shows what was attached | done 2026-10-14: `@` offers the workspace's files as the TUI ranks them; the engine attaches; an attached/missing line under the prompt; the owner tried it. [Plan and Result](docs/superpowers/plans/2026-10-14-su14-file-picker.md) |
 | SU.15 | Colored code in tool cards | A tool card's result preview colored by its file's language, with the highlighter answers' code blocks already use; Markdown as colored raw text | done 2026-10-14: a card's result colored by its file's language, light and dark; Markdown as colored raw text. [Plan and Result](docs/superpowers/plans/2026-10-14-su15-colored-code.md) |
-| SU.16 | Files as links | Every file reference opens Quick Look and looks like a link: tool card headers (today a plain button), `@` attachments, paths in answers that name a real file; engine-worktree files via the receipt's `worktree_path` | not brainstormed |
+| SU.16 | Files as links | Every file reference opens Quick Look and looks like a link: tool card headers (today a plain button), `@` attachments, paths in answers that name a real file; engine-worktree files via the receipt's `worktree_path` | spec written 2026-10-18, awaiting the owner. [Spec](docs/superpowers/specs/2026-10-18-su16-files-as-links-design.md) |
 | SU.17 | The review's fixes | An external review of `main` at `6f1eac0`: nine correctness findings, smaller defects, cuts and stale docs | done 2026-10-14: [plan and Result](docs/superpowers/plans/2026-10-14-su17-review-fixes.md) |
 
 ### SU.6 punch list
