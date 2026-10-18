@@ -136,3 +136,16 @@ can't: a `failed` or `absent` state, a hit with `entry_fill_ms`, and an
 `analysis`. The `env_sync` and `project_instructions` summaries in them are
 illustrative wording, not the engine's. The recordings are pinned by
 `EngineStartupRecordingTests`.
+
+## `analysis-remedies.ndjson` (AN.3)
+
+Assembled from two recordings, for Analyze's fork over the fake engine:
+- **Start:** `resumed.ndjson` through its first `input` (the 27B at
+  `a84b79bd`).
+- **Turn:** a live 27B turn at `a84b79bd` (2026-10-18), from its `prompt` to
+  the next `input`. Its narration holds a three-line `agents-md` block.
+
+The live turn was a fresh session, given the fixture session's report and
+AN.3's instruction, against the main checkout; a fork only resumes one. The
+prompt line in it is that test's, not the app's. Re-record it if the
+analysis instruction changes much.

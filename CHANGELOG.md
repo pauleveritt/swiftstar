@@ -51,6 +51,11 @@ cycle; the cycle's plan in `docs/superpowers/plans/` has the detail.
   in Quick Look (SU.16)
 - A command the model ran as bash says so on its card, with its exit and
   time, red when it failed (SU.18)
+- Analyze ends with remedies: lines for AGENTS.md the analysis proposes,
+  plus the engine's own, each with a checkbox (AN.3)
+- Done adds the ticked remedies to the project's AGENTS.md (or CLAUDE.md),
+  and says to commit it for the engine to read it (AN.3)
+- The analysis answers from the report alone, without tools (AN.3)
 
 ### Status bar and inspector
 

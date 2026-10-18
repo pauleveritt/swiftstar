@@ -1,6 +1,6 @@
 # SwiftStar AN.3 design: remedies
 
-Date: 2026-10-18. Status: **written, awaiting the owner's acceptance.** The
+Date: 2026-10-18. Status: **accepted by the owner, 2026-10-18, with D4 (a); built.** The
 owner chose option 1 on 2026-10-18: the analysis model proposes, the owner
 picks, and SwiftStar applies after Done. How a remedy is applied wasn't
 chosen, so D4 takes (a) and keeps (b) as the alternative.

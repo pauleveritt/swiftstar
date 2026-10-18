@@ -80,3 +80,42 @@ The spec's D1–D6, with D4 (a), plus:
 4. **Docs.** ROADMAP, CHANGELOG, provenance and both tiers.
 
 ## Result
+
+Done 2026-10-18. The GPU was used only for the two live checks above.
+
+- **Commits:**
+  - `b1bad8c`: Task 1
+  - `323c3cc`: Tasks 2 and 3, in one commit, since the controller and the
+    views changed together
+  - this close
+- **Tests:**
+  - `just test` (228) and `just integration` (94) pass.
+  - **Kit:** every new behavior was broken, and its test failed: 9 in
+    `Remedies` and 1 for the instruction.
+  - **Controller:** applying on the return, the lines kept at Done, and the
+    clear on any other end were each broken, and `remediesAppliedAfterDone`
+    or `remediesNotAppliedWithoutDone` failed.
+- **Found while building:**
+  - **The block is in the answer's reply.** The live narration that holds it
+    is absorbed into the answer row as its `reply` (SU.6a), so the reply is
+    searched too.
+  - **Done's return over the fake engine.** The fake now refuses `/resume
+    ID` with a `resume_refused` relaunch, as the relay does, so the return
+    is tested end to end. That's the AN follow-up's path, with the fork's
+    fixture assembled from two recordings (`analysis-remedies.ndjson`).
+  - **My mutation script misread integration runs as build errors,** since
+    the fake engine's stderr says "error:". It now looks only for compiler
+    errors.
+- **Diverged:**
+  - **The card shows each line without its list marker** (`Remedy.label`).
+    The file gets the line as written.
+  - **The card sits after the last row** of the fork, not under the answer
+    that holds the block: a follow-up answer can replace the block.
+- **Previews:** these were rendered and looked at:
+  - the Remedies card: unticked, ticked with the engine's reason, and
+    "already there"
+  - the banner's "Done · add 2 lines to AGENTS.md"
+- **Not checked live:** the whole loop in the app, with an Analyze, ticks,
+  Done and the file written. That's the owner's AN.2 click-through, now with
+  AN.3 on top.
+
