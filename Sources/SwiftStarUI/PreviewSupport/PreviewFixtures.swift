@@ -123,6 +123,15 @@ extension EngineToolCard {
         return EngineToolCard(tool: EngineTool(op: "read", path: "Package.swift"), rejection: rejection)
     }
 
+    /// A `run` that fell back to bash (SU.18), its output headed as the
+    /// engine heads it (ds4-engine `run_tool.py:119-124`).
+    static func previewBash(_ preview: String) -> EngineToolCard {
+        let tool = EngineTool(op: "run", path: "")
+        return EngineToolCard(
+            tool: tool, ok: true, durationMs: 2400,
+            result: EngineToolResult(tool: tool, preview: preview, truncated: false))
+    }
+
     /// EN.2's `git` and `test` calls: no path on the wire, so no link.
     static var previewGit: EngineToolCard {
         let tool = EngineTool(op: "git", path: "")

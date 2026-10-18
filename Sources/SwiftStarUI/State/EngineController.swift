@@ -168,8 +168,19 @@ public final class EngineController {
         guard !isFixture, canChoose, c.resumable, c.id != currentConversationID,
               let root = conversationRoot else { return }
         await relaunch(EngineRelaunch(
-            kind: .resume, argv: EngineCommand.resumeArguments(id: c.id, source: root), reason: ""))
+            kind: .resume, argv: EngineCommand.resumeArguments(id: c.id, source: root, allowBash: allowBash),
+            reason: ""))
     }
+
+    /// The Settings toggle (SU.18, D1): start the engine with `--allow-bash`.
+    /// Read at each spawn, as the model choice is.
+    var allowBash: Bool {
+        UserDefaults.standard.bool(forKey: DefaultsKey.allowBash.rawValue)
+    }
+
+    /// The running session was spawned with `--allow-bash` (SU.18, D3), its
+    /// engine `relaunch` argv included. The engine reports no tool policy.
+    private(set) var bashFallbackOn = false
 
     // MARK: recent projects (SU.7b)
 
@@ -303,7 +314,9 @@ public final class EngineController {
     }
 
     init(model: EngineSessionModel, conversations: [Conversation] = [], workspace: URL? = nil,
-         workspaceFiles: [String] = [], catalog: EngineModelList? = nil, source: URL? = nil) {
+         workspaceFiles: [String] = [], catalog: EngineModelList? = nil, source: URL? = nil,
+         bashFallbackOn: Bool = false) {
+        self.bashFallbackOn = bashFallbackOn
         self.graces = .standard
         // First: `workspace`'s `didSet` runs in this init and must not persist.
         isFixture = true
@@ -587,11 +600,12 @@ public final class EngineController {
         let source = ProjectRoot.locate(anchor: folder) ?? folder
         self.source = source
 
+        let arguments = override ?? EngineCommand.arguments(
+            source: source, modelID: modelID, contextSize: contextSize, allowBash: allowBash)
+        bashFallbackOn = EngineCommand.allowsBash(arguments)
         let session = EngineSession(
             executable: executable,
-            arguments: override ?? EngineCommand.arguments(
-                source: source,
-                modelID: modelID, contextSize: contextSize),
+            arguments: arguments,
             workingDirectory: source,
             stopGrace: graces.stop, termGrace: graces.term, killGrace: graces.kill)
         // A session the safety bound gave up on may still exit or speak
@@ -662,7 +676,9 @@ public final class EngineController {
         case .failure(let failure):
             model.apply(.error("Analyze: \(failure.message)"))
         case .success(let report):
-            guard let fork = model.beginAnalysis(report: report, source: source) else { return }
+            // The fork keeps the running session's shell policy (SU.18).
+            guard let fork = model.beginAnalysis(report: report, source: source, allowBash: bashFallbackOn)
+            else { return }
             await relaunch(fork)
         }
     }

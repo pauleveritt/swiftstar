@@ -300,6 +300,25 @@ struct EngineControllerTests {
         await controller.quit()
     }
 
+    // SU.18, D1, D3: the Settings toggle reaches the start and a sidebar
+    // resume, and the controller knows the session has bash.
+    @Test func allowBashSettingReachesTheSpawn() async throws {
+        let f = try FakeEngine(sessions: "sessions.json")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil, .allowBash: true])
+        defer { defaults.restore() }
+        let controller = await running(f)
+        #expect(f.spawnArgv.first?.last == "--allow-bash")
+        #expect(controller.bashFallbackOn)
+        await controller.resume(resumable)
+        let spawned = await eventually(within: .seconds(10)) {
+            f.spawnArgv.count == 2 && controller.transcript.isAwaitingInput }
+        #expect(spawned)
+        #expect(f.spawnArgv.last?.last == "--allow-bash")
+        #expect(controller.bashFallbackOn)
+        await controller.quit()
+    }
+
     @Test func resumeAsksMidTurn() async throws {
         let f = try FakeEngine()
         defer { f.remove() }

@@ -25,6 +25,10 @@ struct InspectorView: View {
                         }
                     }
                     metricRow("Prefix cache", value: state.prefixCache.map { MetricsFormatting.prefixCacheLine($0) } ?? "—")
+                    // From the argv SwiftStar spawned (SU.18, D3).
+                    if engine.bashFallbackOn {
+                        metricRow("Shell", value: "bash fallback on")
+                    }
                     // Sent only on resume (EN.2, D4).
                     if let saved = state.conversationState {
                         metricRow("Saved state", value: MetricsFormatting.conversationStateLine(saved, subject: false))
@@ -128,6 +132,13 @@ private extension View {
 #Preview("Narrow", traits: .runningSession) {
     InspectorView()
         .frame(width: 280, height: 900)
+}
+
+// SU.18, D3: a session started with `--allow-bash`.
+#Preview("Bash fallback on") {
+    InspectorView()
+        .environment(EngineController(model: EngineController.runningModel(withGPU: true), bashFallbackOn: true))
+        .frame(height: 600)
 }
 
 // EN.2, D4: a resumed conversation's saved state, loaded.

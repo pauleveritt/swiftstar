@@ -36,7 +36,9 @@ struct ToolCardView: View {
             }
             Text(card.metadataLine)
                 .font(.scaled(.caption2, base: fontSize))
-                .foregroundStyle(card.ok == false ? Color(nsColor: .systemRed) : .secondary)
+                // Red for a failed call, and for a bash run that exited
+                // non-zero, which the engine reports as ok (SU.18, D2).
+                .foregroundStyle(card.failed ? Color(nsColor: .systemRed) : .secondary)
                 .monospacedDigit()
                 .textSelection(.enabled)
         }
@@ -132,6 +134,17 @@ struct ToolCardView: View {
     // Tall enough for all three: a shorter window squeezed each card to its
     // first line.
     .frame(width: 520, height: 720, alignment: .top)
+}
+
+// SU.18, D2: a `run` that fell back to bash, as exit 0, exit 1 and the limit.
+#Preview("bash runs") {
+    VStack(spacing: 8) {
+        ToolCardView(card: .previewBash("[exit 0 in 2.3 s]\nBuild complete!\n5 passed"))
+        ToolCardView(card: .previewBash("[exit 1 in 0.4 s]\nerror: no such module 'Foo'"))
+        ToolCardView(card: .previewBash("[stopped after 120 s, the time limit]\nCompiling…"))
+    }
+    .padding()
+    .frame(width: 520, height: 460, alignment: .top)
 }
 
 // EN.2, D5: `git` colored as a diff; `test` with pytest's line in its metadata.
