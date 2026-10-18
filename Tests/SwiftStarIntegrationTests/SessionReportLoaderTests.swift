@@ -13,7 +13,7 @@ struct SessionReportLoaderTests {
         let argv = tempPath("report-argv")
         let f = try FakeEngine(report: "report.json", extra: ["FAKE_ENGINE_ARGV_LOG": argv])
         defer { f.remove(); try? FileManager.default.removeItem(atPath: argv) }
-        let text = try await SessionReportLoader.load(executable: f.script, sessionDirectory: Self.session).get()
+        let text = try await SessionReportLoader.load(executable: f.script, sessionDirectory: Self.session).get().markdown
         #expect(text.hasPrefix("**report**: 20261013-123136-swiftstar"))
         let logged = try String(contentsOfFile: argv, encoding: .utf8).split(separator: "\n").map(String.init)
         #expect(logged == ["report", Self.session.path, "--json"])

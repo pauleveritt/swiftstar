@@ -249,6 +249,16 @@ public struct SessionReport: Decodable, Equatable, Sendable {
         }
     }
 
+    /// What Analyze takes from the report (AN.3, D8): the Markdown for the
+    /// card and the prompt, and the engine's suggestions for the remedies.
+    public var analysisReport: AnalysisReport {
+        AnalysisReport(
+            markdown: markdown(),
+            suggestions: (suggestions ?? []).compactMap { s in
+                s.diff.map { EngineSuggestion(line: $0, why: s.why ?? s.rule) }
+            })
+    }
+
     /// The label the engine puts on a sync with no new tokens; such syncs
     /// are counted, not listed.
     static let emptySyncLabel = "nothing new to prefill"
@@ -489,5 +499,28 @@ public struct SessionReport: Decodable, Equatable, Sendable {
         func milliseconds(_ ms: Double) -> String {
             ms < 10_000 ? "\(Int(ms.rounded())) ms" : duration(ms)
         }
+    }
+}
+
+/// One of the engine's suggestions, as Analyze's remedies take it (AN.3, D2):
+/// its one added line (`+- …`) and why it fired.
+public struct EngineSuggestion: Equatable, Sendable {
+    public let line: String
+    public let why: String
+
+    public init(line: String, why: String) {
+        self.line = line
+        self.why = why
+    }
+}
+
+/// The report as Analyze uses it (AN.3, D8).
+public struct AnalysisReport: Equatable, Sendable {
+    public let markdown: String
+    public let suggestions: [EngineSuggestion]
+
+    public init(markdown: String, suggestions: [EngineSuggestion] = []) {
+        self.markdown = markdown
+        self.suggestions = suggestions
     }
 }

@@ -32,8 +32,68 @@ public final class EngineController {
     public var isActive: Bool { model.phase.isActive }
     /// Makes the session report from the executable and a session
     /// directory (AN.2, AN.4); tests replace it.
-    @ObservationIgnored var reportLoader: (String, URL) async -> Result<String, SessionReportFailure> = {
+    @ObservationIgnored var reportLoader: (String, URL) async -> Result<AnalysisReport, SessionReportFailure> = {
         await SessionReportLoader.load(executable: $0, sessionDirectory: $1)
+    }
+
+    // MARK: remedies (AN.3)
+
+    /// The engine's suggestions from the report this analysis used.
+    private(set) var engineSuggestions: [EngineSuggestion] = []
+    /// The instructions file's name and text when the analysis began (D3, D4).
+    private(set) var instructionsFile = "AGENTS.md"
+    private(set) var instructionsText: String?
+    /// The remedies the owner ticked, by line.
+    private(set) var tickedRemedies: Set<String> = []
+    /// Lines Done will add once the main session is back (D4, D6).
+    @ObservationIgnored private var pendingRemedies: [String] = []
+
+    /// The fork's remedies: the analysis model's latest `agents-md` block,
+    /// then the engine's suggestions. Empty outside an analysis.
+    var remedies: [Remedy] {
+        guard let firstRow = model.analysis?.firstRow else { return [] }
+        return Remedies.merged(
+            model: Remedies.parse(rows: transcript.rows, from: firstRow),
+            engine: engineSuggestions.map { (line: $0.line, why: $0.why) },
+            existing: instructionsText)
+    }
+
+    /// The ticked remedies that aren't in the file yet: what Done adds.
+    var remediesToAdd: [String] {
+        remedies.filter { !$0.alreadyThere && tickedRemedies.contains($0.line) }.map(\.line)
+    }
+
+    var doneTitle: String { Remedies.doneTitle(count: remediesToAdd.count, file: instructionsFile) }
+
+    func toggleRemedy(_ line: String) {
+        if tickedRemedies.remove(line) == nil { tickedRemedies.insert(line) }
+    }
+
+    /// Reads the checkout's instructions file, as the engine would pick it.
+    private func loadInstructions() {
+        guard let source else { return }
+        let fm = FileManager.default
+        instructionsFile = Remedies.file(
+            agentsExists: fm.fileExists(atPath: source.appending(path: "AGENTS.md").path),
+            claudeExists: fm.fileExists(atPath: source.appending(path: "CLAUDE.md").path))
+        instructionsText = try? String(contentsOf: source.appending(path: instructionsFile), encoding: .utf8)
+    }
+
+    /// Done's lines, now that the main session is back (D4): appended to the
+    /// checkout's instructions file, with a row saying to commit it.
+    private func applyRemedies() {
+        let lines = pendingRemedies
+        pendingRemedies = []
+        tickedRemedies = []
+        guard !lines.isEmpty, let source else { return }
+        let url = source.appending(path: instructionsFile)
+        let text = Remedies.applied(to: try? String(contentsOf: url, encoding: .utf8), lines: lines)
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            model.apply(.notice(Remedies.appliedNotice(count: lines.count, file: instructionsFile)))
+        } catch {
+            model.apply(.error("Couldn't add the remedies to \(instructionsFile): \(error.localizedDescription)"))
+        }
     }
     /// The git root the current or last session worked from (its `--source`),
     /// kept after the session ends so its tool cards still resolve.
@@ -639,7 +699,12 @@ public final class EngineController {
     }
 
     private func handle(_ event: EngineEvent) {
+        let returning = if case .returning? = model.analysis?.stage { true } else { false }
         model.apply(event)
+        // AN.3, D4: Done's return has landed, the main session is back.
+        if returning, case .resumed = event, model.analysis == nil {
+            applyRemedies()
+        }
         // The engine refreshes its receipt at every pause (SU.16, D3).
         if case .pause = event, let directory = model.sessionDirectory {
             worktree = ReceiptReader.worktree(sessionDirectory: directory)
@@ -678,8 +743,13 @@ public final class EngineController {
             model.apply(.error("Analyze: \(failure.message)"))
         case .success(let report):
             // The fork keeps the running session's shell policy (SU.18).
-            guard let fork = model.beginAnalysis(report: report, source: source, allowBash: bashFallbackOn)
+            guard let fork = model.beginAnalysis(report: report.markdown, source: source, allowBash: bashFallbackOn)
             else { return }
+            // AN.3: the remedies start from this report and this file.
+            engineSuggestions = report.suggestions
+            tickedRemedies = []
+            pendingRemedies = []
+            loadInstructions()
             await relaunch(fork)
         }
     }
@@ -687,6 +757,8 @@ public final class EngineController {
     /// Done (AN.2): resume the main session; the engine sends the relaunch.
     func doneAnalyzing() {
         guard let command = model.analysisDoneCommand else { return }
+        // AN.3, D4: what Done adds, once the main session is back.
+        pendingRemedies = remediesToAdd
         model.markAnalysisReturning()
         send(command)
     }
@@ -780,6 +852,11 @@ public final class EngineController {
             return r.argv[i + 1]
         }
         model.didExit(exit, directory: directory)
+        // AN.3, D6: an analysis that ended any way but Done's return adds nothing.
+        if model.analysis == nil {
+            pendingRemedies = []
+            tickedRemedies = []
+        }
         if let id = refusedResume, exit.message.contains("model") {
             model.apply(.notice(
                 "Its files can still be recovered by starting a new conversation from it in Terminal: "

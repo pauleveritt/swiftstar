@@ -12,6 +12,8 @@ struct TranscriptView: View {
     var analyze: (() -> Void)? = nil
     /// Rows from here on belong to an analysis, and carry its tint.
     var analysisFirstRow: Int? = nil
+    /// AN.3: the fork's remedies, after its last row.
+    var remedies: RemediesCard? = nil
 
     /// The one Quick Look every row's links open (SU.16, D6).
     @State private var quickLook: URL?
@@ -37,6 +39,9 @@ struct TranscriptView: View {
                         row: row, queued: transcript.isQueued(rowAt: index),
                         analyze: index == lastAnswer ? analyze : nil)
                         .modifier(AnalysisRule(active: analysisFirstRow.map { index >= $0 } ?? false))
+                }
+                if let remedies {
+                    remedies.modifier(AnalysisRule(active: true))
                 }
             }
             .padding()

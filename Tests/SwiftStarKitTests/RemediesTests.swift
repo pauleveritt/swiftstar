@@ -53,6 +53,7 @@ struct RemediesTests {
         #expect(remedies[1].alreadyThere)
         #expect(!remedies[0].alreadyThere)
         #expect(remedies[2].fromEngine == "read 4 times")
+        #expect(remedies[1].label == "New rule.")
     }
 
     @Test func appliedAddsTheHeadingOnce() {

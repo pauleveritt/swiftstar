@@ -1046,6 +1046,65 @@ struct EngineControllerTests {
         #expect(controller.fileLinks?.resolve("Package.swift")?.isEngineCopy != true)
     }
 
+    // MARK: AN.3 remedies
+
+    /// A controller answered in its own workspace, then forked into an
+    /// analysis whose model answered with the live `agents-md` block.
+    private func analyzingWithRemedies(_ f: FakeEngine, workspace: URL) async -> EngineController {
+        let controller = EngineController()
+        controller.workspace = workspace
+        await controller.start()
+        await eventually { controller.phase == .running && controller.transcript.isAwaitingInput }
+        controller.send("Read a file")
+        await eventually(within: .seconds(10)) { controller.model.canAnalyze }
+        controller.reportLoader = { _, _ in
+            .success(AnalysisReport(markdown: "R-REPORT", suggestions: [
+                EngineSuggestion(line: "+- Run the tests with `swift test`.", why: "2 test runs failed first")]))
+        }
+        await controller.analyze()
+        await eventually(within: .seconds(15)) { controller.remedies.count == 4 && controller.model.canFinishAnalysis }
+        return controller
+    }
+
+    @Test func remediesAppliedAfterDone() async throws {
+        let workspace = FileManager.default.temporaryDirectory.appendingPathComponent("an3-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let f = try FakeEngine(resumeFixture: "analysis-remedies.ndjson")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await analyzingWithRemedies(f, workspace: workspace)
+        let lines = controller.remedies.map(\.line)
+        controller.toggleRemedy(lines[0])
+        controller.toggleRemedy(lines[3])  // the engine's
+        #expect(controller.doneTitle == "Done · add 2 lines to AGENTS.md")
+        controller.doneAnalyzing()
+        let file = workspace.appendingPathComponent("AGENTS.md")
+        let written = await eventually(within: .seconds(15)) { FileManager.default.fileExists(atPath: file.path) }
+        #expect(written)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        #expect(text == "## From Analyze\n\n\(lines[0])\n\(lines[3])\n")
+        #expect(controller.transcript.rows.contains(.system(Remedies.appliedNotice(count: 2, file: "AGENTS.md"))))
+        #expect(controller.model.analysis == nil)
+        await controller.quit()
+    }
+
+    @Test func remediesNotAppliedWithoutDone() async throws {
+        let workspace = FileManager.default.temporaryDirectory.appendingPathComponent("an3-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let f = try FakeEngine(resumeFixture: "analysis-remedies.ndjson")
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await analyzingWithRemedies(f, workspace: workspace)
+        controller.toggleRemedy(controller.remedies[0].line)
+        await controller.quit()
+        #expect(!FileManager.default.fileExists(atPath: workspace.appendingPathComponent("AGENTS.md").path))
+        #expect(controller.tickedRemedies.isEmpty)
+    }
+
     @Test func analyzeForksThenSendsPrompt() async throws {
         let f = try FakeEngine()
         defer { f.remove() }
@@ -1053,7 +1112,7 @@ struct EngineControllerTests {
         defer { defaults.restore() }
         let controller = await answered(f)
         #expect(controller.model.canAnalyze)
-        controller.reportLoader = { _, _ in .success("R-REPORT") }
+        controller.reportLoader = { _, _ in .success(AnalysisReport(markdown: "R-REPORT")) }
         await controller.analyze()
         await eventually(within: .seconds(15)) { f.prompts.contains { $0.contains("R-REPORT") } }
         #expect(f.spawnArgv.count == 2)
@@ -1092,7 +1151,7 @@ struct EngineControllerTests {
         controller.reportLoader = { _, _ in
             entered.continuation.yield()
             for await _ in release.stream { break }
-            return succeeds ? .success("R-STALE") : .failure(SessionReportFailure(message: "stale-boom"))
+            return succeeds ? .success(AnalysisReport(markdown: "R-STALE")) : .failure(SessionReportFailure(message: "stale-boom"))
         }
         let analyzing = Task { await controller.analyze() }
         for await _ in entered.stream { break }  // the report is being made
@@ -1125,7 +1184,7 @@ struct EngineControllerTests {
         controller.send("Read a file")
         await eventually(within: .seconds(10)) { controller.model.canAnalyze }
         let main = try #require(controller.model.sessionDirectory)
-        controller.reportLoader = { _, _ in .success("R-REPORT") }
+        controller.reportLoader = { _, _ in .success(AnalysisReport(markdown: "R-REPORT")) }
         await controller.analyze()
         #expect(f.spawnArgv.count == 1)
         #expect(controller.model.analysis == nil)

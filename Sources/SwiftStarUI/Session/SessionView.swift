@@ -15,13 +15,18 @@ struct SessionView: View {
     var body: some View {
         VStack(spacing: 0) {
             if controller.model.showsAnalysisBanner {
-                AnalysisBanner(canFinish: controller.model.canFinishAnalysis, done: controller.doneAnalyzing)
+                AnalysisBanner(
+                    canFinish: controller.model.canFinishAnalysis, title: controller.doneTitle,
+                    done: controller.doneAnalyzing)
                 Divider()
             }
             TranscriptView(
                 transcript: controller.transcript, links: controller.fileLinks,
                 analyze: controller.canAnalyze ? { Task { await controller.analyze() } } : nil,
-                analysisFirstRow: controller.analysis?.firstRow)
+                analysisFirstRow: controller.analysis?.firstRow,
+                remedies: controller.remedies.isEmpty ? nil : RemediesCard(
+                    remedies: controller.remedies, ticked: controller.tickedRemedies,
+                    file: controller.instructionsFile, toggle: controller.toggleRemedy))
                 // The rows scroll on under the composer and fade (SU.6f).
                 .safeAreaBar(edge: .bottom, spacing: 0) {
                     VStack(spacing: 0) {

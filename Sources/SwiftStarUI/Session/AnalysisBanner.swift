@@ -7,6 +7,8 @@ import SwiftStarKit
 struct AnalysisBanner: View {
     /// Done would act now (the fork is idle at `input`).
     let canFinish: Bool
+    /// "Done", or what Done will add (AN.3, D3).
+    var title = "Done"
     let done: () -> Void
     @Environment(\.fontSize) private var fontSize: CGFloat
 
@@ -17,7 +19,7 @@ struct AnalysisBanner: View {
             Text(EngineAnalysis.banner)
                 .font(.system(size: fontSize * 0.9))
             Spacer()
-            Button("Done", action: done)
+            Button(title, action: done)
                 .disabled(!canFinish)
         }
         .padding(.horizontal, 12)
@@ -33,5 +35,11 @@ struct AnalysisBanner: View {
 
 #Preview("Analysis banner, busy") {
     AnalysisBanner(canFinish: false, done: {})
+        .frame(width: 600)
+}
+
+// AN.3, D3: Done says what it will add.
+#Preview("Analysis banner, remedies ticked") {
+    AnalysisBanner(canFinish: true, title: Remedies.doneTitle(count: 2, file: "AGENTS.md"), done: {})
         .frame(width: 600)
 }

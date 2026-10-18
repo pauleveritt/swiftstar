@@ -11,6 +11,10 @@ public struct Remedy: Equatable, Sendable, Identifiable {
 
     public var id: String { line }
 
+    /// The line as a checkbox's label: without its list marker, which the
+    /// file keeps.
+    public var label: String { Remedies.normalized(line) }
+
     public init(line: String, fromEngine: String?, alreadyThere: Bool) {
         self.line = line
         self.fromEngine = fromEngine
