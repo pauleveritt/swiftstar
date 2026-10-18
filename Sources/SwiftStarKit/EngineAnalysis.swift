@@ -38,9 +38,15 @@ public struct EngineAnalysis: Equatable, Sendable {
     public static let promptShown = "Analyze the session report above"
     public static let banner = "Analyzing a copy — Done returns to the session as it was"
     public static let composerPlaceholder = "Ask about the analysis…"
+    /// AN.3, D7: the wording the 27B answered with a block on 2026-10-18.
+    /// Without "from the report alone, without tools" it explored the
+    /// repository instead, and ran out of context with no answer.
     public static let instruction = """
         Explain each flagged step: what the model was trying to do, and why it \
-        failed or was wasted. Then propose remedies. Don't edit files.
+        failed or was wasted. Then propose remedies: lines to add to this \
+        project's AGENTS.md that would prevent them, in one fenced code block \
+        tagged \(Remedies.tag), one line per remedy. Answer from the report \
+        alone, without tools.
         """
 
     public static func returnDivider(prompts: Int) -> String {

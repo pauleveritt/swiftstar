@@ -145,6 +145,9 @@ struct EngineAnalysisTests {
         let p = m.takeAnalysisPrompt()
         #expect(p?.text.contains("R") == true)
         #expect(p?.text.contains("Explain each flagged step") == true)
+        // AN.3, D7: the block it asks for, and no tools.
+        #expect(p?.text.contains("fenced code block tagged agents-md") == true)
+        #expect(p?.text.contains("without tools") == true)
         #expect(p?.shown == "Analyze the session report above")
         #expect(m.transcript.rows.last == .report("R"))
         let twice = m.takeAnalysisPrompt()

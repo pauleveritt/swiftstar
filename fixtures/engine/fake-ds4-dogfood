@@ -30,6 +30,7 @@ engine); FAKE_ENGINE_MODELS_SLEEP_MS delays first.
 `sessions --json` mode (argv[1] == "sessions"): prints the FAKE_ENGINE_SESSIONS
 file after FAKE_ENGINE_SESSIONS_SLEEP_MS, or exits 2 with "invalid choice"
 when it is unset.
+A prompt of `/resume ID` while idle is refused with a `resume_refused` relaunch (AN.3).
 `report <dir> --json` mode (argv[1] == "report"): prints the FAKE_ENGINE_REPORT
 file, or exits 2 with "invalid choice" when it is unset.
 Replays the fixture up to and including each `input` line, pausing after every
@@ -361,9 +362,17 @@ def relaunch_refusal(command):
     front-end restarts with (TUI.34), then `input` again. Anything else is
     an ordinary prompt."""
     words = command.split()
-    if len(words) != 2 or words[0] not in ("/rewind", "/model"):
+    if len(words) != 2 or words[0] not in ("/rewind", "/model", "/resume"):
         return False
     source = sys.argv[sys.argv.index("--source") + 1] if "--source" in sys.argv else "."
+    if words[0] == "/resume":
+        # AN.2's Done (AN.3's tests): resume the named session, as the relay
+        # refuses it under --ndjson (TUI.34).
+        argv = ["tui", "--resume", words[1], "--source", source, "--ndjson"]
+        reason = "the frontend restarts ds4-dogfood with this event's relaunch arguments to resume " + words[1]
+        emit(json.dumps({"kind": "event", "event": {"kind": "resume_refused", "reason": reason, "relaunch": argv}}))
+        emit('{"kind": "input"}')
+        return True
     argv = ["tui", "--resume", "/tmp/fake-ds4-session", "--source", source]
     if words[0] == "/rewind":
         kind, goal = "rewind_refused", "go back to after prompt %s" % words[1]
