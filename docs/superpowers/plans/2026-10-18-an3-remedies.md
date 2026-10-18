@@ -115,7 +115,7 @@ Done 2026-10-18. The GPU was used only for the two live checks above.
   - the Remedies card: unticked, ticked with the engine's reason, and
     "already there"
   - the banner's "Done · add 2 lines to AGENTS.md"
-- **Not checked live:** the whole loop in the app, with an Analyze, ticks,
-  Done and the file written. That's the owner's AN.2 click-through, now with
-  AN.3 on top.
+- **Checked live by the owner, 2026-10-18:** the whole loop in the app,
+  with an Analyze, ticks, Done and the file written, together with AN.2's
+  click-through.
 

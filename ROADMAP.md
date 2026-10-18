@@ -7,8 +7,8 @@
 
 ## Now
 
-- **Next:** #260's answer, for SU.18's mapped calls and bash commands. Also open: SU.7c (below), AN.3 after the AN.2 click-through. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
-- **Next in AN:** the owner's app click-through of AN.2 and AN.3 together (Analyze, tick a remedy, Done).
+- **Next:** #260's answer, for SU.18's mapped calls and bash commands. Also open: SU.7c (below). The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
+- **Live checks passed, 2026-10-18:** the owner's app click-through of EN.2, SU.16, SU.18, AN.2 and AN.3 (Analyze, tick a remedy, Done, `AGENTS.md` written). One gap, from Quick Look itself: "Colored file previews" (Backlog).
 - **Blocked on the engine:** more than one window. (Showing the edited copy
   of a file is done: SU.16 reads the receipt's `worktree_path`.) *EN.2's check (2026-10-17): the
   engine allows one engine per process, not per machine, so windows may be
@@ -98,6 +98,14 @@ Deferred, each with the condition that reopens it.
   the candidate worktree, and `candidate.diff` holds the changes since the
   session began, so a turn's files are the difference from the last pause.
   *Reopens when the owner picks it up (filed 2026-10-14).*
+- **Colored file previews.** SU.16's file links open Quick Look, which
+  shows source as plain text with no colors (Python), and has no preview
+  for a type that isn't `public.plain-text`: `public.toml` conforms only to
+  `public.text`, so Quick Look offers to open it in another app (found in
+  the owner's live check, 2026-10-18). Wanted: SwiftStar's own preview for
+  text files, colored with Highlightr as the tool cards are (SU.15), and
+  Quick Look kept for images, PDFs and the rest. *Reopens when the owner
+  picks it up (filed 2026-10-18).*
 - **Token streaming.** The engine's seam is the pause, never a per-token
   callback. *Reopens only if ds4-engine changes that.*
 - **Packaging ds4-engine inside the `.app`.** Today the user installs it
