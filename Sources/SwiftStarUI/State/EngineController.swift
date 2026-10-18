@@ -37,7 +37,21 @@ public final class EngineController {
     }
     /// The git root the current or last session worked from (its `--source`),
     /// kept after the session ends so its tool cards still resolve.
-    private(set) var source: URL?
+    private(set) var source: URL? {
+        didSet { rebuildFileLinks() }
+    }
+    /// The engine's candidate worktree while its session runs, from the
+    /// session's `receipt.json` at each pause (SU.16, D3); nil otherwise.
+    private(set) var worktree: URL? {
+        didSet { if worktree != oldValue { rebuildFileLinks() } }
+    }
+    /// The transcript's file links (SU.16): rebuilt, with a fresh cache,
+    /// whenever the checkout, the worktree or the tracked files change.
+    private(set) var fileLinks: FileLinkLookup?
+
+    private func rebuildFileLinks() {
+        fileLinks = source.map { FileLinkLookup(source: $0, worktree: worktree, files: workspaceFiles) }
+    }
     var workspace: URL? {
         didSet {
             guard let workspace else { return }
@@ -125,7 +139,9 @@ public final class EngineController {
     }
 
     /// The workspace's files for the `@` picker (SU.14); empty outside git.
-    private(set) var workspaceFiles: [String] = []
+    private(set) var workspaceFiles: [String] = [] {
+        didSet { rebuildFileLinks() }
+    }
 
     func reloadWorkspaceFiles() async {
         guard !isFixture else { return }
@@ -287,7 +303,7 @@ public final class EngineController {
     }
 
     init(model: EngineSessionModel, conversations: [Conversation] = [], workspace: URL? = nil,
-         workspaceFiles: [String] = [], catalog: EngineModelList? = nil) {
+         workspaceFiles: [String] = [], catalog: EngineModelList? = nil, source: URL? = nil) {
         self.graces = .standard
         // First: `workspace`'s `didSet` runs in this init and must not persist.
         isFixture = true
@@ -297,9 +313,12 @@ public final class EngineController {
         self.conversations = conversations
         self.workspaceFiles = workspaceFiles
         self.workspace = workspace
+        // A fixture's checkout, so its file links resolve (SU.16).
+        self.source = source
         modelID = ""
         contextSize = 0
         recentWorkspaces = []
+        rebuildFileLinks()  // `didSet`s don't run in an initializer
     }
 
     /// Every write to the app's defaults. A fixture controller (a preview's,
@@ -586,6 +605,7 @@ public final class EngineController {
             self.handleExit(exit, directory)
         }
         if let relaunch { model.didRelaunch(relaunch) } else { model.didStart() }
+        worktree = nil  // a new process: its receipt names its own
         // Per-session state: a bound or a pending /model from an earlier
         // session must not carry into this one.
         quitBoundFired = false
@@ -605,6 +625,10 @@ public final class EngineController {
 
     private func handle(_ event: EngineEvent) {
         model.apply(event)
+        // The engine refreshes its receipt at every pause (SU.16, D3).
+        if case .pause = event, let directory = model.sessionDirectory {
+            worktree = ReceiptReader.worktree(sessionDirectory: directory)
+        }
         // SU.11, D4: a new conversation's id is in, but the list is behind:
         // reload once for it, so its row appears and is selected.
         if let id = model.currentSessionID, id != listReloadedFor,
@@ -726,6 +750,7 @@ public final class EngineController {
 
     private func handleExit(_ exit: EngineExit, _ directory: URL?) {
         session = nil
+        worktree = nil  // the engine removes it as it ends (SU.16, D3)
         pendingModelCommand = nil
         if let directory {
             lastSessionDirectory = directory

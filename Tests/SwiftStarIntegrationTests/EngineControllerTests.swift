@@ -978,6 +978,41 @@ struct EngineControllerTests {
         return controller
     }
 
+    // SU.16, D3: the worktree a pause's receipt names is where links open,
+    // until the session ends.
+    @Test func pauseReadsTheWorktreeAndLinksOpenTheEnginesCopy() async throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("su16-\(UUID().uuidString)")
+        let sessionDir = tmp.appendingPathComponent("sessions/20261018-000000-x")
+        let worktree = tmp.appendingPathComponent("candidate")
+        try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try Data("// the engine's copy".utf8).write(to: worktree.appendingPathComponent("Package.swift"))
+        try JSONSerialization.data(withJSONObject: ["worktree_path": worktree.path])
+            .write(to: sessionDir.appendingPathComponent("receipt.json"))
+        // tool-read.ndjson, its checkpoints pointed at this session directory.
+        let recorded = try String(contentsOfFile: Fixtures.path("tool-read.ndjson"), encoding: .utf8)
+        let capture = try #require(recorded.firstMatch(of: /"capture_path": ?"([^"]+)"/)?.1)
+        let recordedDir = URL(fileURLWithPath: String(capture)).deletingLastPathComponent().path
+        let fixture = tmp.appendingPathComponent("tool-read.ndjson")
+        try recorded.replacingOccurrences(of: recordedDir, with: sessionDir.path)
+            .write(to: fixture, atomically: true, encoding: .utf8)
+
+        let f = try FakeEngine(extra: ["FAKE_ENGINE_FIXTURE": fixture.path])
+        defer { f.remove() }
+        let defaults = DefaultsScope([.executable: f.script, .modelID: nil])
+        defer { defaults.restore() }
+        let controller = await answered(f)
+        #expect(controller.worktree?.standardizedFileURL == worktree.standardizedFileURL)
+        let link = controller.fileLinks?.resolve("Package.swift")
+        #expect(link?.isEngineCopy == true)
+        #expect(link?.url.standardizedFileURL == worktree.appendingPathComponent("Package.swift").standardizedFileURL)
+        await controller.quit()
+        #expect(controller.worktree == nil)
+        // The checkout's copy now, if this test's checkout has one; never the engine's.
+        #expect(controller.fileLinks?.resolve("Package.swift")?.isEngineCopy != true)
+    }
+
     @Test func analyzeForksThenSendsPrompt() async throws {
         let f = try FakeEngine()
         defer { f.remove() }
