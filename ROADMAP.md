@@ -8,7 +8,7 @@
 ## Now
 
 - **Next:** #260's answer, for SU.18's mapped calls and bash commands. Also open: SU.7c (below), AN.3 after the AN.2 click-through. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
-- **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
+- **Next in AN:** the owner's acceptance of [AN.3](#phase-an-analyze)'s spec, remedies; the owner's app click-through of AN.2 is open.
 - **Blocked on the engine:** more than one window. (Showing the edited copy
   of a file is done: SU.16 reads the receipt's `worktree_path`.) *EN.2's check (2026-10-17): the
   engine allows one engine per process, not per machine, so windows may be
@@ -33,7 +33,7 @@ useful into ds4-engine. [Spec](docs/superpowers/specs/2026-10-13-an-session-anal
 |---|---|---|---|
 | AN.1 | The report | `just last` and `/last`: the newest session's failed and useless steps, time, per-pause rates and raw signals, from the session directory with no model call | done 2026-10-13: [plan and Result](docs/superpowers/plans/2026-10-13-an1-session-report.md) |
 | AN.2 | Analyze and Done | Analyze on the last answer resumes the session as a fork, shows the report and asks about it there; Done resumes the original, so the main context returns as it was | done 2026-10-13: live, fork 3 s and Done 2.9 s, twice. [Plan and Result](docs/superpowers/plans/2026-10-13-an2-fork-and-return.md); the `/rewind` attempt [stopped](docs/superpowers/plans/2026-10-13-an2-analyze-and-done.md#result) |
-| AN.3 | Remedies | Suggest and apply fixes from the flags, applied after Done in the main session | not brainstormed |
+| AN.3 | Remedies | The analysis model proposes `AGENTS.md` lines; the owner ticks them; Done adds them to the checkout's instructions file | spec written 2026-10-18 (option 1), awaiting the owner. [Spec](docs/superpowers/specs/2026-10-18-an3-remedies-design.md) |
 | AN.4 | Into ds4-engine | Analyze renders ds4-engine's `ds4-dogfood report --json`. `session_last.py`, its rules and its math go; what the report lacks is [ds4-engine#246](https://github.com/pauleveritt/ds4-engine/issues/246) | done 2026-10-17 on `ds4-session-report/2` (#247): SwiftStar's own rules and math are gone, and the report shows the earlier-sessions chain and per-call loop guards. [Plan and Result](docs/superpowers/plans/2026-10-15-an4-engine-report.md) |
 
 AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
