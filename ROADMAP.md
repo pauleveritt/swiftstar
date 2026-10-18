@@ -7,7 +7,7 @@
 
 ## Now
 
-- **Next:** not set; open for the owner: SU.7c (below), AN.3 after the AN.2 click-through, and the Backlog's `--allow-bash` entry. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
+- **Next:** the owner's acceptance of [SU.18](#phase-su-swiftui)'s spec, `--allow-bash`. Also open: SU.7c (below), AN.3 after the AN.2 click-through. The owner's live checks of SU.6f–SU.11 and SU.7b passed in the app on 2026-10-17: prompt history, ⌘+/⌘−, the fade, a new conversation's row, the rate tooltip, the Recent menus and the mid-turn alert.
 - **Next in AN:** [AN.3](#phase-an-analyze), remedies (not brainstormed); the owner's app click-through of AN.2 is open.
 - **Blocked on the engine:** more than one window. (Showing the edited copy
   of a file is done: SU.16 reads the receipt's `worktree_path`.) *EN.2's check (2026-10-17): the
@@ -67,6 +67,7 @@ AN follow-ups, from AN.2's Result and final review, for the next AN cycle:
 | SU.15 | Colored code in tool cards | A tool card's result preview colored by its file's language, with the highlighter answers' code blocks already use; Markdown as colored raw text | done 2026-10-14: a card's result colored by its file's language, light and dark; Markdown as colored raw text. [Plan and Result](docs/superpowers/plans/2026-10-14-su15-colored-code.md) |
 | SU.16 | Files as links | Every file reference opens Quick Look and looks like a link: tool card headers, `@` attachments, code spans in answers that name a real file; the engine's edited copy while its session runs | done 2026-10-18: links in the link color everywhere; the fork's AppKit link clicks never reached a handler, fixed in SwiftStar. [Spec](docs/superpowers/specs/2026-10-18-su16-files-as-links-design.md), [plan and Result](docs/superpowers/plans/2026-10-18-su16-files-as-links.md) |
 | SU.17 | The review's fixes | An external review of `main` at `6f1eac0`: nine correctness findings, smaller defects, cuts and stale docs | done 2026-10-14: [plan and Result](docs/superpowers/plans/2026-10-14-su17-review-fixes.md) |
+| SU.18 | Run with `--allow-bash` | A Settings toggle spawns the engine with `--allow-bash`; a `run` that fell back to bash says so on its card, with its exit and time; the Session card says bash is on; what the wire lacks goes to the engine | spec written 2026-10-18, awaiting the owner. [Spec](docs/superpowers/specs/2026-10-18-su18-allow-bash-design.md) |
 
 ### SU.6 punch list
 
@@ -118,8 +119,9 @@ Deferred, each with the condition that reopens it.
   - **To check first:** whether the NDJSON tells a mapped call from a
     direct one, and a bash run from a refused `run`. If it doesn't, that's
     an engine request.
-  - *Reopens when the owner picks it up (filed 2026-10-18). A live check
-    needs the GPU, and the owner's go.*
+  - *Picked up as [SU.18](#phase-su-swiftui) (2026-10-18). The wire tells a
+    bash run by `op: "run"` with no path, but carries neither its command
+    nor a mapped call's origin; see the spec.*
 - **Watching prefix effectiveness.** Whether the prompt-prefix cache is
   earning its keep. Today the inspector shows only the latest `prefix_cache`
   event (`hit`/`miss`, tokens, load or fill time), and the AN report counts
