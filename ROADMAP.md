@@ -209,6 +209,7 @@ there.
   - `closed` and `telemetry_ok`
   - the raw signals
 - **`--allow-bash` on the wire** ([ds4-engine#260](https://github.com/pauleveritt/ds4-engine/issues/260), SU.18): mark calls that came from `run`, carry a bash run's command and exit, report the tool policy at startup, keep `converted_from` in the report.
+- **Report suggestions almost never fire** ([ds4-engine#262](https://github.com/pauleveritt/ds4-engine/issues/262), AN.3, assigned to Koudai): none in the owner's 38 latest sessions. Two rule ideas from data the report has: refused unknown tools, and `already_shown` re-reads.
 - **`resumed.turns` carries no narration.** So a 27B turn rebuilt after a
   rewind or resume shows only its one-line summary, not the full reply
   (SU.6a). *Re-checked at `a84b79bd`: still open (`sessions.py:45-50`).*
